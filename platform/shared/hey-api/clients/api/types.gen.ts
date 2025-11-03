@@ -6889,8 +6889,9 @@ export type GetMcpServerLogsData = {
     };
     query?: {
         lines?: number;
+        follow?: boolean;
     };
-    url: '/mcp_proxy/{id}/logs';
+    url: '/api/mcp_server/{id}/logs';
 };
 
 export type GetMcpServerLogsErrors = {
@@ -6923,6 +6924,8 @@ export type GetMcpServerLogsResponses = {
     200: {
         logs: string;
         containerName: string;
+        command: string;
+        namespace: string;
     };
 };
 
@@ -7551,6 +7554,7 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+<<<<<<< HEAD
 export type UpdateOrganizationCleanupIntervalData = {
     body: {
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -7561,6 +7565,179 @@ export type UpdateOrganizationCleanupIntervalData = {
 };
 
 export type UpdateOrganizationCleanupIntervalErrors = {
+=======
+export type GetOrganizationAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
+
+export type GetOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
+
+export type UpdateOrganizationAppearanceData = {
+    body?: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
+
+export type UpdateOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+
+export type DeleteOrganizationLogoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type DeleteOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+
+export type DeleteOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
+
+export type UploadOrganizationLogoData = {
+    body: {
+        logo: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type UploadOrganizationLogoErrors = {
+>>>>>>> origin/main
     /**
      * Default Response
      */
@@ -7591,6 +7768,7 @@ export type UpdateOrganizationCleanupIntervalErrors = {
     /**
      * Default Response
      */
+<<<<<<< HEAD
     404: {
         error: string | {
             message: string;
@@ -7600,6 +7778,8 @@ export type UpdateOrganizationCleanupIntervalErrors = {
     /**
      * Default Response
      */
+=======
+>>>>>>> origin/main
     500: {
         error: string | {
             message: string;
@@ -7608,13 +7788,20 @@ export type UpdateOrganizationCleanupIntervalErrors = {
     };
 };
 
+<<<<<<< HEAD
 export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
 
 export type UpdateOrganizationCleanupIntervalResponses = {
+=======
+export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+
+export type UploadOrganizationLogoResponses = {
+>>>>>>> origin/main
     /**
      * Default Response
      */
     200: {
+<<<<<<< HEAD
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
     };
 };
@@ -7853,6 +8040,14 @@ export type GetOverviewStatisticsResponses = {
 };
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
+=======
+        success: boolean;
+        logo: string | null;
+    };
+};
+
+export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+>>>>>>> origin/main
 
 export type GetTeamsData = {
     body?: never;

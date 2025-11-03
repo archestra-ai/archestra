@@ -1,4 +1,11 @@
+import type { OrganizationAppearance } from "@shared";
 import { archestraApiSdk } from "@shared";
+import {
+  deleteOrganizationLogo,
+  getOrganizationAppearance,
+  updateOrganizationAppearance,
+  uploadOrganizationLogo,
+} from "@shared/hey-api/clients/api/sdk.gen";
 import {
   useMutation,
   useQuery,
@@ -21,6 +28,7 @@ export const organizationKeys = {
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
   details: () => [...organizationKeys.all, "details"] as const,
+  appearance: () => [...organizationKeys.all, "appearance"] as const,
 };
 
 /**
@@ -213,6 +221,22 @@ export function useOrganizationDetails() {
 }
 
 /**
+ * Fetch organization appearance settings
+ */
+export function useOrganizationAppearance() {
+  const session = authClient.useSession();
+
+  return useQuery({
+    queryKey: organizationKeys.appearance(),
+    queryFn: async () => {
+      const response = await getOrganizationAppearance();
+      return response.data;
+    },
+    enabled: !!session.data?.user,
+  });
+}
+
+/**
  * Update organization cleanup interval mutation
  */
 export function useUpdateOrganizationCleanupInterval() {
@@ -243,6 +267,70 @@ export function useUpdateOrganizationCleanupInterval() {
     },
     onError: (error) => {
       toast.error("Failed to update cleanup interval", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Update organization appearance settings
+ */
+export function useUpdateOrganizationAppearance() {
+  return useMutation({
+    mutationFn: async (data: Partial<OrganizationAppearance>) => {
+      const response = await updateOrganizationAppearance({
+        body: data,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Appearance settings updated");
+    },
+    onError: (error) => {
+      toast.error("Failed to update appearance settings", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Upload organization logo
+ */
+export function useUploadOrganizationLogo() {
+  return useMutation({
+    mutationFn: async (logo: string) => {
+      const response = await uploadOrganizationLogo({
+        body: { logo },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Logo uploaded successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to upload logo", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Delete organization logo
+ */
+export function useDeleteOrganizationLogo() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await deleteOrganizationLogo();
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Logo removed");
+    },
+    onError: (error) => {
+      toast.error("Failed to remove logo", {
         description: error.message,
       });
     },

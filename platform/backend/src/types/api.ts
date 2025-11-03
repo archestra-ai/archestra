@@ -231,5 +231,10 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  // Organization Routes
+  GetOrganizationAppearance: "getOrganizationAppearance",
+  UpdateOrganizationAppearance: "updateOrganizationAppearance",
+  UploadOrganizationLogo: "uploadOrganizationLogo",
+  DeleteOrganizationLogo: "deleteOrganizationLogo",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

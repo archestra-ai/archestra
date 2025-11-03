@@ -67,3 +67,58 @@ export const LocalConfigFormSchema = z
       path: [],
     },
   );
+
+// Organization Appearance Schemas
+export const OrganizationThemeSchema = z.enum([
+  // Single Color Themes
+  "cosmic-night",
+  "aubergine",
+  "clementine",
+  "banana",
+  "jade",
+  "lagoon",
+  "barbra",
+  "gray",
+  "mood-indigo",
+  // Vision Assistive Themes
+  "tritanopia",
+  "protanopia-deuteranopia",
+  // Fun and New Themes
+  "raspberry-beret",
+  "big-business",
+  "pog",
+  "mint-chip",
+  "pbj",
+  "chill-vibes",
+  "forest-floor",
+  "slackr",
+  "sea-glass",
+  "lemon-lime",
+  "falling-leaves",
+  "sunrise",
+]);
+
+export const OrganizationCustomFontSchema = z.enum([
+  "lato",
+  "inter",
+  "open-sans",
+  "roboto",
+  "source-sans-pro",
+]);
+
+export const OrganizationLogoTypeSchema = z.enum(["default", "custom"]);
+
+export const OrganizationLogoSchema = z.string();
+
+export const OrganizationAppearanceSchema = z.object({
+  theme: OrganizationThemeSchema.optional(),
+  customFont: OrganizationCustomFontSchema.optional(),
+  logoType: OrganizationLogoTypeSchema.optional(),
+  logo: OrganizationLogoSchema.optional().nullable(),
+});
+
+export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
+export type OrganizationCustomFont = z.infer<typeof OrganizationCustomFontSchema>;
+export type OrganizationLogoType = z.infer<typeof OrganizationLogoTypeSchema>;
+export type OrganizationLogo = z.infer<typeof OrganizationLogoSchema>;
+export type OrganizationAppearance = z.infer<typeof OrganizationAppearanceSchema>;

@@ -4,9 +4,10 @@ import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getObservableGenAI } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { getObservableGenAI } from "@/models/llm-metrics";
 import LimitValidationService from "@/services/limit-validation";
+
 import { type Agent, ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";

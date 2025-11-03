@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import {
   Building2,
+  FileText,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -30,6 +31,7 @@ import {
 import { WithRole } from "@/components/with-permission";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
+  useMcpServerLogs,
   useMcpServerTools,
   useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
@@ -37,6 +39,7 @@ import {
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
+import { McpLogsDialog } from "./mcp-logs-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
@@ -125,6 +128,7 @@ export function McpServerCard({
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [isManageTeamsDialogOpen, setIsManageTeamsDialogOpen] = useState(false);
+  const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [selectedToolForAssignment, setSelectedToolForAssignment] =
     useState<ToolForAssignment | null>(null);
   const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
@@ -133,6 +137,15 @@ export function McpServerCard({
     id: string;
     name: string;
   } | null>(null);
+
+  // Fetch logs when dialog is opened (only if server is installed and is local)
+  const shouldFetchLogs =
+    isLogsDialogOpen && installedServer?.id && variant === "local";
+  const {
+    data: logsData,
+    isLoading: isLoadingLogs,
+    error: logsError,
+  } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
   const needsReinstall = installedServer?.reinstallRequired ?? false;
   const userCount = installedServer?.users?.length ?? 0;
@@ -194,6 +207,26 @@ export function McpServerCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <DropdownMenuItem
+                    onClick={() => setIsLogsDialogOpen(true)}
+                    disabled={variant !== "local"}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Logs
+                  </DropdownMenuItem>
+                </div>
+              </TooltipTrigger>
+              {variant !== "local" && (
+                <TooltipContent>
+                  <p>Only available for local MCP servers</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="mr-2 h-4 w-4" />
             Edit
@@ -486,6 +519,19 @@ export function McpServerCard({
           setBulkAssignTools(tools);
         }}
       />
+
+      {logsData && (
+        <McpLogsDialog
+          open={isLogsDialogOpen}
+          onOpenChange={setIsLogsDialogOpen}
+          serverName={installedServer?.name ?? item.name}
+          serverId={installedServer?.id}
+          logs={logsData.logs}
+          command={logsData.command}
+          isLoading={isLoadingLogs}
+          error={logsError}
+        />
+      )}
 
       <BulkAssignAgentDialog
         tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}

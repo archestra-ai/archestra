@@ -302,6 +302,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerLogs]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
@@ -430,6 +433,17 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.GetOverviewStatistics]: {
     interaction: ["read"],
+  [RouteId.GetOrganizationAppearance]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationAppearance]: {
+    organization: ["update"],
+  },
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
   },
 };
 

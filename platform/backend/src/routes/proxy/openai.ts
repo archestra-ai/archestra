@@ -5,8 +5,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,

@@ -1,6 +1,6 @@
 import type { GoogleGenAI } from "@google/genai";
+import { AgentModel } from "@/models";
 import type { Agent } from "@/types";
-import AgentModel from "./agent";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();

@@ -1,3 +1,4 @@
+import type { OrganizationAppearance } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
@@ -53,6 +54,23 @@ class OrganizationModel {
     hasSeeded: boolean,
   ): Promise<Organization | null> {
     return OrganizationModel.update(id, { hasSeededMcpCatalog: hasSeeded });
+  }
+
+  static async getById(id: string): Promise<Organization | null> {
+    const [organization] = await db
+      .select()
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    return organization || null;
+  }
+
+  static async updateAppearance(
+    id: string,
+    appearance: OrganizationAppearance,
+  ): Promise<Organization | null> {
+    return OrganizationModel.update(id, appearance);
   }
 }
 

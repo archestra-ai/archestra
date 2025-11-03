@@ -2,7 +2,18 @@
 
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Plug, Plus, Tag, Trash2, Wrench, X } from "lucide-react";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import {
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Plug,
+  Plus,
+  Tag,
+  Trash2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -12,13 +23,7 @@ import { McpConnectionInstructions } from "@/components/mcp-connection-instructi
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -37,14 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -59,6 +56,7 @@ import {
   useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
+import { formatDate } from "@/lib/utils";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
@@ -73,6 +71,23 @@ export default function AgentsPage({
           <Agents initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
+    </div>
+  );
+}
+
+function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground/50 flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
 }
@@ -149,6 +164,9 @@ function Agents({
     },
   });
 
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "createdAt", desc: true },
+  ]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -164,6 +182,190 @@ function Agents({
     labels: AgentLabel[];
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+
+  type AgentData = archestraApiTypes.GetAgentsResponses["200"][number];
+
+  const columns: ColumnDef<AgentData>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Name
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="font-medium">
+            <div className="flex items-center gap-2">
+              {agent.name}
+              {agent.isDefault && (
+                <Badge
+                  variant="outline"
+                  className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
+                >
+                  DEFAULT
+                </Badge>
+              )}
+              {agent.labels && agent.labels.length > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="inline-flex">
+                        <Tag className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {agent.labels.map((label) => (
+                          <Badge
+                            key={label.key}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            <span className="font-semibold">{label.key}:</span>
+                            <span className="ml-1">{label.value}</span>
+                          </Badge>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      accessorKey: "createdAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Created
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono text-xs">
+          {formatDate({ date: row.original.createdAt })}
+        </div>
+      ),
+    },
+    {
+      id: "tools",
+      header: "Connected Tools",
+      cell: ({ row }) => <div>{row.original.tools.length}</div>,
+    },
+    {
+      id: "teams",
+      header: "Teams",
+      cell: ({ row }) => (
+        <AgentTeamsBadges teamIds={row.original.teams || []} teams={teams} />
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-1 justify-end">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConnectingAgent({
+                        id: agent.id,
+                        name: agent.name,
+                      });
+                    }}
+                  >
+                    <Plug className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Connect</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAssigningToolsAgent(agent);
+                    }}
+                  >
+                    <Wrench className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Assign Tools</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingAgent({
+                        id: agent.id,
+                        name: agent.name,
+                        teams: agent.teams || [],
+                        labels: agent.labels || [],
+                      });
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <WithPermission permissions={["agent:delete"]}>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingAgentId(agent.id);
+                      }}
+                      className="hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </WithPermission>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="w-full h-full">
@@ -202,175 +404,19 @@ function Agents({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
         {!agents || agents.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No agents found</CardTitle>
-              <CardDescription>
-                Create your first agent to get started with the Archestra
-                Platform.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="text-muted-foreground">No agents found</div>
         ) : (
-          <Card>
-            <CardContent className="px-6">
-              <Table data-testid={E2eTestId.AgentsTable}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Connected Tools</TableHead>
-                    <TableHead>Teams</TableHead>
-                    <WithPermission permissions={["agent:delete"]}>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </WithPermission>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agents.map((agent) => (
-                    <TableRow key={agent.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {agent.name}
-                          {agent.isDefault && (
-                            <Badge
-                              variant="outline"
-                              className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
-                            >
-                              DEFAULT
-                            </Badge>
-                          )}
-                          {agent.labels && agent.labels.length > 0 && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-flex">
-                                    <Tag className="h-4 w-4 text-muted-foreground" />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <div className="flex flex-wrap gap-1 max-w-xs">
-                                    {agent.labels.map((label) => (
-                                      <Badge
-                                        key={label.key}
-                                        variant="secondary"
-                                        className="text-xs"
-                                      >
-                                        <span className="font-semibold">
-                                          {label.key}:
-                                        </span>
-                                        <span className="ml-1">
-                                          {label.value}
-                                        </span>
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(agent.createdAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "numeric",
-                          day: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell>{agent.tools.length}</TableCell>
-                      <TableCell>
-                        <AgentTeamsBadges
-                          teamIds={agent.teams || []}
-                          teams={teams}
-                        />
-                      </TableCell>
-                      <WithPermission permissions={["agent:delete"]}>
-                        <TableCell>
-                          <div className="flex items-center gap-1 justify-end">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      setConnectingAgent({
-                                        id: agent.id,
-                                        name: agent.name,
-                                      })
-                                    }
-                                  >
-                                    <Plug className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Connect</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      setAssigningToolsAgent(agent)
-                                    }
-                                  >
-                                    <Wrench className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Assign Tools</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      setEditingAgent({
-                                        id: agent.id,
-                                        name: agent.name,
-                                        teams: agent.teams || [],
-                                        labels: agent.labels || [],
-                                      })
-                                    }
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                                    onClick={() => setDeletingAgentId(agent.id)}
-                                    className="hover:bg-destructive/10 hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </WithPermission>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div data-testid={E2eTestId.AgentsTable}>
+            <DataTable
+              columns={columns}
+              data={agents}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              manualSorting={true}
+            />
+          </div>
         )}
 
         <CreateAgentDialog

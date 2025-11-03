@@ -5,6 +5,7 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { OrganizationAppearance } from "@shared";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -19,6 +20,18 @@ const organizationsTable = pgTable("organization", {
   limitCleanupInterval: varchar("limit_cleanup_interval", {
     enum: ["1h", "12h", "24h", "1w", "1m"],
   }).default("1h"),
+  theme: text("theme")
+    .$type<OrganizationAppearance["theme"]>()
+    .notNull()
+    .default("cosmic-night"),
+  customFont: text("custom_font")
+    .$type<OrganizationAppearance["customFont"]>()
+    .notNull()
+    .default("lato"),
+  logoType: text("logo_type")
+    .$type<OrganizationAppearance["logoType"]>()
+    .notNull()
+    .default("default"),
 });
 
 export default organizationsTable;

@@ -10,7 +10,7 @@ import client from "prom-client";
 import logger from "@/logging";
 import type { Agent } from "@/types";
 import type { SupportedProvider } from "@/types/llm-providers";
-import * as utils from "../routes/proxy/utils";
+import * as utils from "./routes/proxy/utils";
 
 type Fetch = (
   input: string | URL | Request,

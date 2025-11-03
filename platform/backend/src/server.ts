@@ -12,10 +12,13 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
+import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
+import { AgentLabelModel } from "@/models";
 import * as routes from "@/routes";
+import { initializeTracing } from "@/tracing";
 import {
   Anthropic,
   Gemini,
@@ -23,9 +26,6 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { initializeMetrics } from "@/llm-metrics";
-import { AgentLabelModel } from "@/models";
-import { initializeTracing } from "@/tracing";
 
 const {
   api: {

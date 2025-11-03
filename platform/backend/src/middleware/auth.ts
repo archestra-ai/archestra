@@ -378,6 +378,9 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteChatConversation]: {
     conversation: ["delete"],
   },
+  [RouteId.GetChatMcpTools]: {
+    conversation: ["read"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

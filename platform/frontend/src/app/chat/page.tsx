@@ -9,6 +9,12 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   PromptInput,
   PromptInputBody,
   PromptInputSubmit,
@@ -29,6 +35,12 @@ interface Conversation {
 
 interface ConversationWithMessages extends Conversation {
   messages: UIMessage[];
+}
+
+interface McpTool {
+  name: string;
+  description?: string;
+  inputSchema: any;
 }
 
 export default function ChatPage() {
@@ -84,6 +96,19 @@ export default function ChatPage() {
     staleTime: 0, // Always refetch to ensure we have the latest messages
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
+  });
+
+  // Fetch available MCP tools
+  const { data: mcpTools = [] } = useQuery<McpTool[]>({
+    queryKey: ["mcp-tools"],
+    queryFn: async () => {
+      const res = await fetch("/api/chat/mcp-tools");
+      if (!res.ok) throw new Error("Failed to fetch MCP tools");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Create conversation mutation
@@ -188,6 +213,19 @@ export default function ChatPage() {
     });
   };
 
+  // Group tools by MCP server (prefix before "__")
+  const mcpServerGroups = mcpTools.reduce((acc, tool) => {
+    const prefix = tool.name.includes("__")
+      ? tool.name.split("__")[0]
+      : "other";
+
+    if (!acc[prefix]) {
+      acc[prefix] = [];
+    }
+    acc[prefix].push(tool);
+    return acc;
+  }, {} as Record<string, McpTool[]>);
+
   const isLoading = status === "submitted" || status === "streaming";
 
   return (
@@ -219,7 +257,49 @@ export default function ChatPage() {
               <ChatMessages messages={messages} />
             )}
             <div className="border-t p-4">
-              <div className="max-w-3xl mx-auto">
+              <div className="max-w-3xl mx-auto space-y-3">
+                {mcpTools.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    <TooltipProvider>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(mcpServerGroups).map(([serverName, tools]) => (
+                          <Tooltip key={serverName}>
+                            <TooltipTrigger asChild>
+                              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                                <span className="font-medium">{serverName}</span>
+                                <span className="text-muted-foreground">
+                                  ({tools.length} {tools.length === 1 ? "tool" : "tools"})
+                                </span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="max-w-sm max-h-64 overflow-y-auto"
+                            >
+                              <div className="space-y-1">
+                                {tools.map((tool) => (
+                                  <div
+                                    key={tool.name}
+                                    className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                  >
+                                    <div className="font-mono font-medium">
+                                      {tool.name.split("__")[1] || tool.name}
+                                    </div>
+                                    {tool.description && (
+                                      <div className="text-muted-foreground mt-0.5">
+                                        {tool.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </TooltipProvider>
+                  </div>
+                )}
                 <PromptInput onSubmit={handleSubmit}>
                   <PromptInputBody>
                     <PromptInputTextarea placeholder="Type a message..." />

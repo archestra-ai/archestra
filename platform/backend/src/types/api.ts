@@ -208,5 +208,6 @@ export const RouteId = {
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
+  GetChatMcpTools: "getChatMcpTools",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

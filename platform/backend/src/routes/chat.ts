@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getChatMcpTools } from "@/clients/chat-mcp-client";
+import { getChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import { ConversationModel, MessageModel } from "@/models";
 import {
@@ -764,6 +764,54 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send({ success: true });
+    },
+  );
+
+  // ========== MCP Tools ==========
+
+  // List available MCP tools
+  fastify.get(
+    "/api/chat/mcp-tools",
+    {
+      schema: {
+        operationId: RouteId.GetChatMcpTools,
+        description: "List available MCP tools for chat",
+        tags: ["Chat"],
+        response: {
+          200: z.array(
+            z.object({
+              name: z.string(),
+              description: z.string().optional(),
+              inputSchema: z.any(),
+            }),
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = await getUserFromRequest(request);
+      if (!user) {
+        return reply.status(401).send({
+          error: {
+            message: "Unauthorized",
+            type: "unauthorized",
+          },
+        });
+      }
+
+      const client = await getChatMcpClient();
+      if (!client) {
+        return reply.send([]);
+      }
+
+      try {
+        const { tools } = await client.listTools();
+        return reply.send(tools);
+      } catch (error) {
+        fastify.log.error({ error }, "Failed to list MCP tools");
+        return reply.send([]);
+      }
     },
   );
 };

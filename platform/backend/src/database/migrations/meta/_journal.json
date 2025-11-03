@@ -295,13 +295,6 @@
       "when": 1762100060719,
       "tag": "0041_deep_big_bertha",
       "breakpoints": true
-    },
-    {
-      "idx": 42,
-      "version": "7",
-      "when": 1762144502963,
-      "tag": "0042_yellow_peter_quill",
-      "breakpoints": true
     }
   ]
 }

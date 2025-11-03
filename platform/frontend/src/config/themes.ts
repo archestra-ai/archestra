@@ -543,11 +543,11 @@ export function getThemeCategories(): Array<{
 }
 
 export const fontFamilyMap: Record<OrganizationCustomFont, string> = {
-  lato: 'var(--font-lato), system-ui, sans-serif',
-  inter: 'var(--font-inter), system-ui, sans-serif',
-  "open-sans": 'var(--font-open-sans), system-ui, sans-serif',
-  roboto: 'var(--font-roboto), system-ui, sans-serif',
-  "source-sans-pro": 'var(--font-source-sans), system-ui, sans-serif',
+  lato: "var(--font-lato), system-ui, sans-serif",
+  inter: "var(--font-inter), system-ui, sans-serif",
+  "open-sans": "var(--font-open-sans), system-ui, sans-serif",
+  roboto: "var(--font-roboto), system-ui, sans-serif",
+  "source-sans-pro": "var(--font-source-sans), system-ui, sans-serif",
 };
 
 /**

@@ -39,6 +39,9 @@
     "codegen:api-client": {
       "cache": false
     },
+    "codegen:theme-css": {
+      "cache": false
+    },
     "db:generate": {
       "cache": false,
       "persistent": true

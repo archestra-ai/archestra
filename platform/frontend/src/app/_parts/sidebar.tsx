@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
-import { useOrganizationAppearance } from "@/lib/organization.query";
+import { useOrgTheme } from "@/lib/theme.hook";
 
 interface MenuItem {
   title: string;
@@ -115,9 +115,9 @@ export function AppSidebar() {
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
   const { data: starCount } = useGithubStars();
-  const { data: appearance } = useOrganizationAppearance();
+  const { logo, logoType } = useOrgTheme();
 
-  const hasCustomLogo = appearance?.logoType === "custom" && appearance?.logo;
+  const hasCustomLogo = logoType === "custom" && logo;
 
   return (
     <Sidebar>
@@ -126,7 +126,7 @@ export function AppSidebar() {
           <div className="relative flex justify-center">
             <div className="flex flex-col items-center gap-1">
               <Image
-                src={appearance.logo || "/logo.png"}
+                src={logo || "/logo.png"}
                 alt="Organization logo"
                 width={200}
                 height={60}

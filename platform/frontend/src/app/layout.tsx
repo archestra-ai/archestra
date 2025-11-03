@@ -8,13 +8,13 @@ import {
 } from "next/font/google";
 import { PublicEnvScript } from "next-runtime-env";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { OrganizationThemeProvider } from "./_parts/organization-theme-provider";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { EasterEgg } from "@/components/easter-egg";
+import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -75,24 +75,23 @@ export default function RootLayout({
           >
             <PostHogProviderWrapper>
               <ArchestraQueryClientProvider>
-                <OrganizationThemeProvider>
-                  <WithAuthCheck>
-                    <SidebarProvider>
-                      <AppSidebar />
-                      <main className="h-screen w-full flex flex-col bg-background min-w-0">
-                        <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-                          <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-                        </header>
-                        <div className="flex-1 min-w-0 overflow-auto flex flex-col">
-                          <div className="flex-1">{children}</div>
-                          <Version />
-                        </div>
-                      </main>
-                      <Toaster />
-                      <EasterEgg />
-                    </SidebarProvider>
-                  </WithAuthCheck>
-                </OrganizationThemeProvider>
+                <OrgThemeLoader />
+                <WithAuthCheck>
+                  <SidebarProvider>
+                    <AppSidebar />
+                    <main className="h-screen w-full flex flex-col bg-background min-w-0">
+                      <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
+                        <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                      </header>
+                      <div className="flex-1 min-w-0 overflow-auto flex flex-col">
+                        <div className="flex-1">{children}</div>
+                        <Version />
+                      </div>
+                    </main>
+                    <Toaster />
+                    <EasterEgg />
+                  </SidebarProvider>
+                </WithAuthCheck>
               </ArchestraQueryClientProvider>
             </PostHogProviderWrapper>
           </ThemeProvider>

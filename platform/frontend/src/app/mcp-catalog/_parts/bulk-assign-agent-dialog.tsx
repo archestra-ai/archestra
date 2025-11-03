@@ -46,7 +46,7 @@ export function BulkAssignAgentDialog({
     useState<string | null>(null);
 
   const filteredAgents = useMemo(() => {
-    if (!agents || !searchQuery.trim()) return agents || [];
+    if (!agents || !searchQuery.trim()) return agents;
 
     const query = searchQuery.toLowerCase();
     return agents.filter((agent) => agent.name.toLowerCase().includes(query));
@@ -174,7 +174,7 @@ export function BulkAssignAgentDialog({
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md">
-            {filteredAgents.length === 0 ? (
+            {!filteredAgents || filteredAgents.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
                   ? "No agents match your search"

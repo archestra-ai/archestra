@@ -95,6 +95,7 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
 export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
+  GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
   GetDefaultAgent: "getDefaultAgent",

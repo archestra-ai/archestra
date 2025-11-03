@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function LlmProxyLogsPageServer() {
   let initialData: {
     interactions: archestraApiTypes.GetInteractionsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   } = {
     interactions: {
       data: [],
@@ -53,7 +53,7 @@ export default async function LlmProxyLogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await archestraApiSdk.getAgents({ headers })).data || [],
+      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

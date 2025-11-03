@@ -4,17 +4,25 @@
 interface TokenPriceData {
   id?: string;
   model: string;
-  pricePerMillionInput: string | number;
-  pricePerMillionOutput: string | number;
+  pricePerMillionInput: string;
+  pricePerMillionOutput: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 interface LimitData {
   id?: string;
-  entityType: string;
+  entityType: "agent" | "organization" | "team";
   entityId: string;
-  limitType: string;
+  limitType: "tool_calls" | "token_cost" | "mcp_server_calls";
+  limitValue: number;
+  mcpServerName?: string | null;
+  toolName?: string | null;
+  model?: string | null;
+  name?: string;
+  description?: string;
+  currentUsageTokensIn?: number;
+  currentUsageTokensOut?: number;
   maxTokensPerHour?: number;
   maxTokensPerDay?: number;
   maxTokensPerMonth?: number;
@@ -174,8 +182,8 @@ function TokenPriceInlineForm({
 }) {
   const [formData, setFormData] = useState({
     model: initialData?.model || "",
-    pricePerMillionInput: initialData?.pricePerMillionInput || "",
-    pricePerMillionOutput: initialData?.pricePerMillionOutput || "",
+    pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
+    pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -431,7 +439,11 @@ function LimitInlineForm({
               <Select
                 value={formData.entityType}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, entityType: value, entityId: "" })
+                  setFormData({
+                    ...formData,
+                    entityType: value as "agent" | "organization" | "team",
+                    entityId: "",
+                  })
                 }
               >
                 <SelectTrigger className="w-48">
@@ -518,6 +530,7 @@ function LimitInlineForm({
                             hasOrganizationLimit(limitType, server.name)) ||
                             (formData.entityType === "team" &&
                               formData.entityId &&
+                              formData.entityId.trim() !== "" &&
                               getTeamsWithLimits(
                                 limitType,
                                 server.name,
@@ -527,7 +540,7 @@ function LimitInlineForm({
                           <SelectItem
                             key={server.id}
                             value={server.name}
-                            disabled={isDisabled}
+                            disabled={Boolean(isDisabled)}
                           >
                             {server.name}
                           </SelectItem>
@@ -662,7 +675,7 @@ function LimitRow({
     return (
       <LimitInlineForm
         initialData={limit}
-        limitType={limit.limitType}
+        limitType={limit.limitType as "token_cost" | "mcp_server_calls"}
         onSave={onSave}
         onCancel={onCancel}
         teams={teams}
@@ -675,8 +688,8 @@ function LimitRow({
   }
 
   const { percentage, status, actualUsage, actualLimit } = getUsageStatus(
-    limit.currentUsageTokensIn,
-    limit.currentUsageTokensOut,
+    limit.currentUsageTokensIn || 0,
+    limit.currentUsageTokensOut || 0,
     limit.limitValue,
     limit.limitType,
   );
@@ -716,7 +729,7 @@ function LimitRow({
             <span>
               {limit.limitType === "token_cost"
                 ? `$${actualUsage.toFixed(2)} / $${actualLimit.toFixed(2)}`
-                : `${limit.currentUsageTokensIn.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
+                : `${(limit.currentUsageTokensIn || 0).toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
             </span>
             <span>{percentage.toFixed(1)}%</span>
           </div>

@@ -14,6 +14,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { EasterEgg } from "@/components/easter-egg";
 import { Toaster } from "@/components/ui/sonner";
 import pjson from "../../../package.json";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -92,6 +93,7 @@ export default function RootLayout({
                         </div>
                       </main>
                       <Toaster />
+                      <EasterEgg />
                     </SidebarProvider>
                   </WithAuthCheck>
                 </OrganizationThemeProvider>

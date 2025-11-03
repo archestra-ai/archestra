@@ -79,8 +79,8 @@ ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 # Chat Feature Configuration (n8n automation expert)
-ARCHESTRA_CHAT_OPENAI_API_KEY=your-api-key-here  # Required for chat
-ARCHESTRA_CHAT_DEFAULT_MODEL=gpt-4o  # Optional, defaults to gpt-4o
+ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
+ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
 ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp  # Optional, for MCP tool integration
 ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer token"}  # Optional JSON headers
 

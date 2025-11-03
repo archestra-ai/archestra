@@ -204,12 +204,15 @@ export function useCreateInvitation(organizationId: string | undefined) {
  * Fetch organization appearance settings
  */
 export function useOrganizationAppearance() {
+  const session = authClient.useSession();
+
   return useQuery({
     queryKey: organizationKeys.appearance(),
     queryFn: async () => {
       const response = await getOrganizationAppearance();
       return response.data;
     },
+    enabled: !!session.data?.user,
   });
 }
 

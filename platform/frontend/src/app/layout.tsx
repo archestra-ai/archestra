@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { Lato } from "next/font/google";
+import {
+  Inter,
+  Lato,
+  Open_Sans,
+  Roboto,
+  Source_Sans_3,
+} from "next/font/google";
 import { PublicEnvScript } from "next-runtime-env";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { OrganizationThemeProvider } from "./_parts/organization-theme-provider";
@@ -13,10 +19,32 @@ import pjson from "../../../package.json";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { AuthProvider } from "./auth/auth-provider";
 
-const mainFont = Lato({
+// Load fonts for white-labeling
+const latoFont = Lato({
   subsets: ["latin"],
   weight: ["300", "400", "700", "900"],
-  variable: "--font-saira",
+  variable: "--font-lato",
+});
+
+const interFont = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const openSansFont = Open_Sans({
+  subsets: ["latin"],
+  variable: "--font-open-sans",
+});
+
+const robotoFont = Roboto({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "700", "900"],
+  variable: "--font-roboto",
+});
+
+const sourceSansFont = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source-sans",
 });
 
 export const metadata: Metadata = {
@@ -34,7 +62,9 @@ export default function RootLayout({
       <head>
         <PublicEnvScript />
       </head>
-      <body className={`${mainFont.className} antialiased`}>
+      <body
+        className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} font-sans antialiased`}
+      >
         <AuthProvider>
           <ThemeProvider
             attribute="class"

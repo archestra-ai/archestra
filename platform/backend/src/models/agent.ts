@@ -300,8 +300,8 @@ class AgentModel {
       case "createdAt":
         return direction(schema.agentsTable.createdAt);
       case "toolsCount":
-        // For tools count, we need to count in SQL
-        // This will be handled specially in the query
+        // toolsCount sorting uses a separate query path (see lines 167-232).
+        // This fallback should never be reached for toolsCount.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first

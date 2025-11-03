@@ -1,5 +1,6 @@
 "use client";
 
+import type { OrganizationTheme } from "@shared";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +17,8 @@ import {
 } from "@/config/themes";
 
 interface ThemeSelectorProps {
-  selectedTheme: string;
-  onThemeSelect: (themeId: string) => void;
+  selectedTheme: OrganizationTheme;
+  onThemeSelect: (themeId: OrganizationTheme) => void;
 }
 
 export function ThemeSelector({

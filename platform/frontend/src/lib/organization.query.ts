@@ -1,3 +1,10 @@
+import type { OrganizationAppearance } from "@shared";
+import {
+  deleteOrganizationLogo,
+  getOrganizationAppearance,
+  updateOrganizationAppearance,
+  uploadOrganizationLogo,
+} from "@shared/hey-api/clients/api/sdk.gen";
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
@@ -16,16 +23,6 @@ export const organizationKeys = {
     [...organizationKeys.activeOrg(), "member-role"] as const,
   appearance: () => [...organizationKeys.all, "appearance"] as const,
 };
-
-/**
- * Organization appearance settings type
- */
-export interface OrganizationAppearance {
-  theme?: string;
-  customFont?: string;
-  logoType?: "default" | "custom";
-  logo?: string | null;
-}
 
 /**
  * Fetch invitation details by ID
@@ -210,15 +207,8 @@ export function useOrganizationAppearance() {
   return useQuery({
     queryKey: organizationKeys.appearance(),
     queryFn: async () => {
-      const response = await fetch("/api/organization/appearance", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch organization appearance");
-      }
-
-      return response.json() as Promise<OrganizationAppearance>;
+      const response = await getOrganizationAppearance();
+      return response.data;
     },
   });
 }
@@ -229,20 +219,10 @@ export function useOrganizationAppearance() {
 export function useUpdateOrganizationAppearance() {
   return useMutation({
     mutationFn: async (data: Partial<OrganizationAppearance>) => {
-      const response = await fetch("/api/organization/appearance", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(data),
+      const response = await updateOrganizationAppearance({
+        body: data,
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to update organization appearance");
-      }
-
-      return response.json() as Promise<OrganizationAppearance>;
+      return response.data;
     },
     onSuccess: () => {
       toast.success("Appearance settings updated");
@@ -261,21 +241,10 @@ export function useUpdateOrganizationAppearance() {
 export function useUploadOrganizationLogo() {
   return useMutation({
     mutationFn: async (logo: string) => {
-      const response = await fetch("/api/organization/logo", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ logo }),
+      const response = await uploadOrganizationLogo({
+        body: { logo },
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || "Failed to upload logo");
-      }
-
-      return response.json() as Promise<{ success: boolean; logo: string }>;
+      return response.data;
     },
     onSuccess: () => {
       toast.success("Logo uploaded successfully");
@@ -294,16 +263,8 @@ export function useUploadOrganizationLogo() {
 export function useDeleteOrganizationLogo() {
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/organization/logo", {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete logo");
-      }
-
-      return response.json() as Promise<{ success: boolean }>;
+      const response = await deleteOrganizationLogo();
+      return response.data;
     },
     onSuccess: () => {
       toast.success("Logo removed");

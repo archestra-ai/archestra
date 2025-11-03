@@ -1,5 +1,6 @@
 "use client";
 
+import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { getThemeById } from "@/config/themes";
@@ -7,8 +8,12 @@ import { useOrganizationAppearance } from "@/lib/organization.query";
 
 export function OrganizationThemeProvider({
   children,
+  previewTheme,
+  previewFont,
 }: {
   children: React.ReactNode;
+  previewTheme?: OrganizationTheme;
+  previewFont?: OrganizationCustomFont;
 }) {
   const { data: appearance } = useOrganizationAppearance();
   const { theme: colorMode } = useTheme(); // light or dark
@@ -16,8 +21,8 @@ export function OrganizationThemeProvider({
   useEffect(() => {
     if (!appearance) return;
 
-    const themeId = appearance.theme || "cosmic-night";
-    const fontFamily = appearance.customFont || "lato";
+    const themeId = previewTheme || appearance.theme || "cosmic-night";
+    const fontFamily = previewFont || appearance.customFont || "lato";
     const theme = getThemeById(themeId);
 
     if (!theme) return;
@@ -42,7 +47,7 @@ export function OrganizationThemeProvider({
     }
 
     // Apply font family
-    const fontFamilyMap: Record<string, string> = {
+    const fontFamilyMap: Record<OrganizationCustomFont, string> = {
       lato: '"Lato", system-ui, sans-serif',
       inter: '"Inter", system-ui, sans-serif',
       "open-sans": '"Open Sans", system-ui, sans-serif',
@@ -52,7 +57,7 @@ export function OrganizationThemeProvider({
 
     const fontValue = fontFamilyMap[fontFamily] || fontFamilyMap.lato;
     root.style.setProperty("--font-sans", fontValue);
-  }, [appearance, colorMode]);
+  }, [appearance, colorMode, previewTheme, previewFont]);
 
   return <>{children}</>;
 }

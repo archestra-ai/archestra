@@ -1,5 +1,6 @@
 "use client";
 
+import type { OrganizationCustomFont } from "@shared";
 import {
   Card,
   CardContent,
@@ -17,8 +18,8 @@ import {
 import { fonts } from "@/config/themes";
 
 interface FontSelectorProps {
-  selectedFont: string;
-  onFontSelect: (fontId: string) => void;
+  selectedFont: OrganizationCustomFont;
+  onFontSelect: (fontId: OrganizationCustomFont) => void;
 }
 
 export function FontSelector({

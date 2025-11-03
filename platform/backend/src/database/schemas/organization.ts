@@ -1,5 +1,5 @@
+import type { OrganizationAppearance } from "@shared";
 import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import type { OrganizationAppearance } from "@/types/organization";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),

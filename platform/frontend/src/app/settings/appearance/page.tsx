@@ -1,8 +1,11 @@
 "use client";
 
+import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { getThemeById } from "@/config/themes";
 import {
   organizationKeys,
   useOrganizationAppearance,
@@ -16,11 +19,12 @@ export default function AppearanceSettingsPage() {
   const { data: appearance, isLoading } = useOrganizationAppearance();
   const updateMutation = useUpdateOrganizationAppearance();
   const queryClient = useQueryClient();
+  const { theme: colorMode } = useTheme();
 
-  const [selectedTheme, setSelectedTheme] = useState(
+  const [selectedTheme, setSelectedTheme] = useState<OrganizationTheme>(
     appearance?.theme || "cosmic-night",
   );
-  const [selectedFont, setSelectedFont] = useState(
+  const [selectedFont, setSelectedFont] = useState<OrganizationCustomFont>(
     appearance?.customFont || "lato",
   );
   const [hasChanges, setHasChanges] = useState(false);
@@ -38,6 +42,49 @@ export default function AppearanceSettingsPage() {
     const fontChanged = selectedFont !== (appearance?.customFont || "lato");
     setHasChanges(themeChanged || fontChanged);
   }, [selectedTheme, selectedFont, appearance]);
+
+  // Real-time preview effect
+  useEffect(() => {
+    if (!appearance) return;
+
+    const applyPreview = () => {
+      const theme = getThemeById(selectedTheme);
+      if (!theme) return;
+
+      // Get current color mode
+      const isDark = colorMode === "dark";
+      const colors = isDark ? theme.colors.dark : theme.colors.light;
+
+      // Apply theme colors as CSS variables
+      const root = document.documentElement;
+      root.style.setProperty("--primary", colors.primary);
+      root.style.setProperty("--secondary", colors.secondary);
+
+      if (colors.sidebar) {
+        root.style.setProperty("--sidebar-background", colors.sidebar);
+      }
+      if (colors.sidebarAccent) {
+        root.style.setProperty("--sidebar-accent", colors.sidebarAccent);
+      }
+      if (colors.accent) {
+        root.style.setProperty("--accent", colors.accent);
+      }
+
+      // Apply font family
+      const fontFamilyMap: Record<OrganizationCustomFont, string> = {
+        lato: '"Lato", system-ui, sans-serif',
+        inter: '"Inter", system-ui, sans-serif',
+        "open-sans": '"Open Sans", system-ui, sans-serif',
+        roboto: '"Roboto", system-ui, sans-serif',
+        "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
+      };
+
+      const fontValue = fontFamilyMap[selectedFont] || fontFamilyMap.lato;
+      root.style.setProperty("--font-sans", fontValue);
+    };
+
+    applyPreview();
+  }, [selectedTheme, selectedFont, appearance, colorMode]);
 
   const handleSave = useCallback(async () => {
     await updateMutation.mutateAsync({

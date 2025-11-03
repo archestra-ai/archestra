@@ -7263,8 +7263,8 @@ export type GetOrganizationAppearanceResponses = {
      * Default Response
      */
     200: {
-        theme?: string;
-        customFont?: string;
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;
     };
@@ -7274,8 +7274,8 @@ export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceRespons
 
 export type UpdateOrganizationAppearanceData = {
     body?: {
-        theme?: string;
-        customFont?: string;
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;
     };
@@ -7321,8 +7321,8 @@ export type UpdateOrganizationAppearanceResponses = {
      * Default Response
      */
     200: {
-        theme?: string;
-        customFont?: string;
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;
     };

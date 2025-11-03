@@ -1,11 +1,8 @@
+import { OrganizationAppearanceSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OrganizationModel } from "@/models";
-import {
-  ErrorResponseSchema,
-  OrganizationAppearanceSchema,
-  RouteId,
-} from "@/types";
+import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {

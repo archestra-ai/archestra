@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import AgentTeamModel from "@/models/agent-team";
 import TokenPriceModel from "@/models/token-price";
+import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 /**
  * Service for validating if current usage has exceeded limits
@@ -29,6 +30,36 @@ class LimitValidationService {
       logger.info(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
+
+      // Get organization ID for cleanup (either from teams or fallback)
+      let organizationId: string | null = null;
+      if (agentTeamIds.length > 0) {
+        const teams = await db
+          .select()
+          .from(schema.team)
+          .where(inArray(schema.team.id, agentTeamIds));
+        if (teams.length > 0 && teams[0].organizationId) {
+          organizationId = teams[0].organizationId;
+        }
+      } else {
+        // If agent has no teams, check if there are any organization limits to apply
+        const existingOrgLimits = await db
+          .select({ entityId: schema.limitsTable.entityId })
+          .from(schema.limitsTable)
+          .where(sql`${schema.limitsTable.entityType} = 'organization'`)
+          .limit(1);
+        if (existingOrgLimits.length > 0) {
+          organizationId = existingOrgLimits[0].entityId;
+        }
+      }
+
+      // Run cleanup if we have an organization ID
+      if (organizationId) {
+        logger.info(
+          `[LimitValidation] Running cleanup for organization: ${organizationId}`,
+        );
+        await cleanupLimitsIfNeeded(organizationId);
+      }
 
       // Check agent-level limits first (highest priority)
       logger.info(
@@ -276,24 +307,40 @@ class LimitValidationService {
           logger.info(
             `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
           );
-          const remaining = Math.max(0, limit.limitValue - currentUsage);
+          
+          // Calculate remaining based on the comparison type (tokens vs dollars)
+          const remaining = Math.max(0, limit.limitValue - comparisonValue);
 
+          // For metadata, always use raw values for programmatic access
           const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
 <archestra-limit-current-usage>${currentUsage}</archestra-limit-current-usage>
 <archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${remaining}</archestra-limit-remaining>`;
+<archestra-limit-remaining>${Math.max(0, limit.limitValue - currentUsage)}</archestra-limit-remaining>`;
 
-          const contentMessage = `
+          // For user message, use appropriate units based on limit type
+          let contentMessage: string;
+          if (limitDescription === "cost_dollars") {
+            contentMessage = `
+I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
+
+Current usage: $${comparisonValue.toFixed(2)}
+Limit: $${limit.limitValue.toFixed(2)}
+Remaining: $${remaining.toFixed(2)}
+
+Please contact your administrator to increase the limit or wait for the usage to reset.`;
+          } else {
+            contentMessage = `
 I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
 
 Current usage: ${currentUsage.toLocaleString()} tokens
 Limit: ${limit.limitValue.toLocaleString()} tokens
-Remaining: ${remaining.toLocaleString()} tokens
+Remaining: ${Math.max(0, limit.limitValue - currentUsage).toLocaleString()} tokens
 
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
+          }
 
           const refusalMessage = `${archestraMetadata}
 ${contentMessage}`;

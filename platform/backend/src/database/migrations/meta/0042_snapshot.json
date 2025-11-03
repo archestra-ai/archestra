@@ -1,5 +1,5 @@
 {
-  "id": "88749970-da86-419b-890d-f3e06f1559c4",
+  "id": "55cc6f74-545e-402d-b40c-eb05953e6467",
   "prevId": "216da50a-6d32-4924-8c2e-7118a509d61f",
   "version": "7",
   "dialect": "postgresql",
@@ -1371,18 +1371,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "entity_type": {
           "name": "entity_type",
           "type": "varchar",
@@ -1407,8 +1395,15 @@
           "primaryKey": false,
           "notNull": true
         },
-        "current_usage": {
-          "name": "current_usage",
+        "current_usage_tokens_in": {
+          "name": "current_usage_tokens_in",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "current_usage_tokens_out": {
+          "name": "current_usage_tokens_out",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1423,6 +1418,18 @@
         "tool_name": {
           "name": "tool_name",
           "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model": {
+          "name": "model",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_cleanup": {
+          "name": "last_cleanup",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
@@ -2004,6 +2011,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "limit_cleanup_interval": {
+          "name": "limit_cleanup_interval",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'1h'"
         }
       },
       "indexes": {},
@@ -2212,6 +2226,82 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.token_price": {
+      "name": "token_price",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "model": {
+          "name": "model",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_per_million_input": {
+          "name": "price_per_million_input",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_per_million_output": {
+          "name": "price_per_million_output",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "token_price_model_idx": {
+          "name": "token_price_model_idx",
+          "columns": [
+            {
+              "expression": "model",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "token_price_model_unique": {
+          "name": "token_price_model_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "model"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

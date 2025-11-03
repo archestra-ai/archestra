@@ -1,23 +1,40 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 
 export async function cleanupLimitsIfNeeded(
   organizationId: string,
 ): Promise<void> {
   try {
+    logger.info(
+      `[LimitsCleanup] Starting cleanup check for organization: ${organizationId}`,
+    );
+
     // Get the organization's cleanup interval
     const [organization] = await db
       .select()
       .from(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, organizationId));
 
-    if (!organization?.limitCleanupInterval) {
-      // No cleanup interval set, nothing to do
-      return;
+    // Use default cleanup interval if not set
+    const cleanupInterval = organization?.limitCleanupInterval || "1h";
+    
+    if (!organization) {
+      logger.warn(
+        `[LimitsCleanup] Organization not found: ${organizationId}, using default interval: ${cleanupInterval}`,
+      );
+    } else if (!organization.limitCleanupInterval) {
+      logger.info(
+        `[LimitsCleanup] No cleanup interval set for organization: ${organizationId}, using default: ${cleanupInterval}`,
+      );
+    } else {
+      logger.info(
+        `[LimitsCleanup] Using cleanup interval: ${cleanupInterval} for organization: ${organizationId}`,
+      );
     }
 
     // Parse the interval and calculate the cutoff time
-    const interval = organization.limitCleanupInterval;
+    const interval = cleanupInterval;
     const now = new Date();
     let cutoffTime: Date;
 
@@ -38,8 +55,15 @@ export async function cleanupLimitsIfNeeded(
         cutoffTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       default:
+        logger.warn(
+          `[LimitsCleanup] Unknown cleanup interval: ${interval}, skipping cleanup`,
+        );
         return;
     }
+
+    logger.info(
+      `[LimitsCleanup] Calculated cutoff time: ${cutoffTime.toISOString()} (interval: ${interval})`,
+    );
 
     // Find limits that need cleanup (last_cleanup is null or older than cutoff)
     const limitsToCleanup = await db
@@ -57,9 +81,23 @@ export async function cleanupLimitsIfNeeded(
         ),
       );
 
+    logger.info(
+      `[LimitsCleanup] Found ${limitsToCleanup.length} limits that need cleanup for organization: ${organizationId}`,
+    );
+
+    if (limitsToCleanup.length > 0) {
+      logger.info(
+        `[LimitsCleanup] Limits to cleanup: ${limitsToCleanup.map((l) => `${l.id}(${l.limitType}:${l.lastCleanup ? l.lastCleanup.toISOString() : "never"})`).join(", ")}`,
+      );
+    }
+
     // Reset current usage and update last cleanup for eligible limits
     if (limitsToCleanup.length > 0) {
       for (const limit of limitsToCleanup) {
+        logger.info(
+          `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, current usage: in=${limit.currentUsageTokensIn}, out=${limit.currentUsageTokensOut}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
+        );
+
         await db
           .update(schema.limitsTable)
           .set({
@@ -69,9 +107,22 @@ export async function cleanupLimitsIfNeeded(
             updatedAt: now,
           })
           .where(eq(schema.limitsTable.id, limit.id));
+
+        logger.info(
+          `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset usage to 0 and set lastCleanup to ${now.toISOString()}`,
+        );
       }
+
+      logger.info(
+        `[LimitsCleanup] Completed cleanup of ${limitsToCleanup.length} limits for organization: ${organizationId}`,
+      );
+    } else {
+      logger.info(
+        `[LimitsCleanup] No limits need cleanup for organization: ${organizationId}`,
+      );
     }
   } catch (error) {
+    logger.error(`[LimitsCleanup] Error cleaning up limits for organization ${organizationId}:`, error);
     console.error("Error cleaning up limits:", error);
     // Don't throw - cleanup is best effort and shouldn't break the main flow
   }

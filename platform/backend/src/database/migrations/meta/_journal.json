@@ -299,43 +299,8 @@
     {
       "idx": 42,
       "version": "7",
-      "when": 1762114383972,
-      "tag": "0042_bitter_network",
-      "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1762118345948,
-      "tag": "0043_slow_cerebro",
-      "breakpoints": true
-    },
-    {
-      "idx": 44,
-      "version": "7",
-      "when": 1762136325322,
-      "tag": "0044_cute_liz_osborn",
-      "breakpoints": true
-    },
-    {
-      "idx": 45,
-      "version": "7",
-      "when": 1762136929829,
-      "tag": "0045_futuristic_veda",
-      "breakpoints": true
-    },
-    {
-      "idx": 46,
-      "version": "7",
-      "when": 1762138120212,
-      "tag": "0046_common_domino",
-      "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1762138400000,
-      "tag": "0047_update_limits_schema",
+      "when": 1762144502963,
+      "tag": "0042_yellow_peter_quill",
       "breakpoints": true
     }
   ]

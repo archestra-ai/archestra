@@ -1,1 +1,0 @@
-ALTER TABLE "limits" ADD COLUMN "model" varchar(255);

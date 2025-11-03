@@ -1,2 +1,0 @@
-ALTER TABLE "organization" ALTER COLUMN "limit_cleanup_interval" SET DEFAULT '1h';--> statement-breakpoint
-UPDATE "organization" SET "limit_cleanup_interval" = '1h' WHERE "limit_cleanup_interval" IS NULL;

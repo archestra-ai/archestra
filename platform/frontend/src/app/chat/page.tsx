@@ -4,7 +4,7 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
@@ -31,6 +31,7 @@ export default function ChatPage() {
 
   const [conversationId, setConversationId] = useState<string>();
   const [input, setInput] = useState("");
+  const loadedConversationRef = useRef<string>();
 
   // Initialize conversation ID from URL on mount
   useEffect(() => {
@@ -58,6 +59,9 @@ export default function ChatPage() {
       if (!res.ok) throw new Error("Failed to fetch conversations");
       return res.json();
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes - don't refetch unless explicitly invalidated
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
   });
 
   // Fetch conversation with messages
@@ -70,6 +74,9 @@ export default function ChatPage() {
       return res.json();
     },
     enabled: !!conversationId,
+    staleTime: 0, // Always refetch to ensure we have the latest messages
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
   });
 
   // Create conversation mutation
@@ -118,17 +125,34 @@ export default function ChatPage() {
       credentials: "include", // Send cookies for authentication
     }),
     id: conversationId,
+    onFinish: () => {
+      // Invalidate the conversation query to refetch with new messages
+      if (conversationId) {
+        queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      }
+    },
   });
 
-  // Sync messages when conversation loads
+  // Sync messages when conversation loads or changes
   useEffect(() => {
-    if (conversation?.messages) {
+    // When switching to a different conversation, reset the loaded ref
+    if (loadedConversationRef.current !== conversationId) {
+      loadedConversationRef.current = undefined;
+    }
+
+    // If we have conversation data and haven't synced it yet, sync it
+    if (
+      conversation?.messages &&
+      conversation.id === conversationId &&
+      loadedConversationRef.current !== conversationId
+    ) {
       setMessages(conversation.messages);
+      loadedConversationRef.current = conversationId;
     } else if (conversationId && !conversation) {
       // Clear messages when switching to a conversation that's loading
       setMessages([]);
     }
-  }, [conversation, conversationId, setMessages]);
+  }, [conversationId, conversation, setMessages]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

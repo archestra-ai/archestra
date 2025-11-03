@@ -49,7 +49,7 @@ export function CreateCatalogDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add MCP Server</DialogTitle>
           <DialogDescription>
@@ -85,7 +85,7 @@ export function CreateCatalogDialog({
           </div>
         </div>
 
-        <div className="min-h-[400px]">
+        <div className="flex-1 overflow-y-auto">
           {activeTab === "archestra-catalog" && (
             <ArchestraCatalogTab
               catalogItems={catalogItems}
@@ -113,7 +113,7 @@ export function CreateCatalogDialog({
         </div>
 
         {activeTab !== "archestra-catalog" && (
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button variant="outline" onClick={handleClose} type="button">
               Cancel
             </Button>

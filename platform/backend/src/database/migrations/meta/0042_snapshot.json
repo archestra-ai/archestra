@@ -1,5 +1,5 @@
 {
-  "id": "04f6e2a7-5e26-4aaf-bfb4-e699cc44acf3",
+  "id": "824b5322-ceee-435b-9bde-aac2d0f06e8c",
   "prevId": "216da50a-6d32-4924-8c2e-7118a509d61f",
   "version": "7",
   "dialect": "postgresql",
@@ -1883,21 +1883,21 @@
           "name": "theme",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'cosmic-night'"
         },
         "custom_font": {
           "name": "custom_font",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'lato'"
         },
         "logo_type": {
           "name": "logo_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'default'"
         }
       },

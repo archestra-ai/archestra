@@ -50,8 +50,7 @@ export function OrganizationThemeProvider({
       "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
     };
 
-    const fontValue =
-      fontFamilyMap[fontFamily] || fontFamilyMap.lato;
+    const fontValue = fontFamilyMap[fontFamily] || fontFamilyMap.lato;
     root.style.setProperty("--font-sans", fontValue);
   }, [appearance, colorMode]);
 

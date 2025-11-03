@@ -7436,7 +7436,7 @@ export type UploadOrganizationLogoResponses = {
      */
     200: {
         success: boolean;
-        logo: string;
+        logo: string | null;
     };
 };
 

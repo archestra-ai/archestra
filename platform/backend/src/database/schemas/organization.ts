@@ -13,12 +13,15 @@ const organizationsTable = pgTable("organization", {
     .notNull(),
   theme: text("theme")
     .$type<OrganizationAppearance["theme"]>()
+    .notNull()
     .default("cosmic-night"),
   customFont: text("custom_font")
     .$type<OrganizationAppearance["customFont"]>()
+    .notNull()
     .default("lato"),
   logoType: text("logo_type")
     .$type<OrganizationAppearance["logoType"]>()
+    .notNull()
     .default("default"),
 });
 

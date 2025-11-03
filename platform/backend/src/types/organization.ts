@@ -21,24 +21,17 @@ export const OrganizationAppearanceSchema = z.object({
   logo: OrganizationLogoSchema.optional().nullable(),
 });
 
-const ExtenededOrganization = {
-  theme: OrganizationThemeSchema,
-  customFont: OrganizationCustomFontSchema,
-  logoType: OrganizationLogoTypeSchema,
-  logo: OrganizationLogoSchema,
-};
-
 export const SelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
-  ExtenededOrganization,
+  OrganizationAppearanceSchema.shape,
 );
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
-  ExtenededOrganization,
+  OrganizationAppearanceSchema.shape,
 );
 export const UpdateOrganizationSchema = createUpdateSchema(
   schema.organizationsTable,
-  ExtenededOrganization,
+  OrganizationAppearanceSchema.shape,
 );
 
 export type OrganizationAppearance = z.infer<

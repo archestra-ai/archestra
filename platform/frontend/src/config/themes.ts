@@ -436,9 +436,7 @@ export function getThemeById(id: string): Theme | undefined {
 /**
  * Get themes by category
  */
-export function getThemesByCategory(
-  category: Theme["category"],
-): Theme[] {
+export function getThemesByCategory(category: Theme["category"]): Theme[] {
   return themes.filter((theme) => theme.category === category);
 }
 

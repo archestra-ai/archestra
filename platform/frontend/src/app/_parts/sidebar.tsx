@@ -107,8 +107,7 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const { data: appearance } = useOrganizationAppearance();
 
-  const hasCustomLogo =
-    appearance?.logoType === "custom" && appearance?.logo;
+  const hasCustomLogo = appearance?.logoType === "custom" && appearance?.logo;
 
   return (
     <Sidebar>
@@ -121,7 +120,7 @@ export function AppSidebar() {
                 alt="Organization logo"
                 width={120}
                 height={36}
-                className="object-contain max-h-9"
+                className="object-contain max-h-9 w-auto max-w-32"
               />
             ) : (
               <>

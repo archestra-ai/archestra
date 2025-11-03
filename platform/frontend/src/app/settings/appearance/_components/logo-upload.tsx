@@ -86,8 +86,7 @@ export function LogoUpload({
       <CardHeader>
         <CardTitle>Organization Logo</CardTitle>
         <CardDescription>
-          Upload a custom logo for your organization. Recommended: landscape
-          orientation, 200x60px, PNG format.
+          Upload a custom logo for your organization.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -137,6 +136,10 @@ export function LogoUpload({
           className="hidden"
           onChange={handleFileSelect}
         />
+
+        <p className="text-sm text-muted-foreground">
+          Recommended size: 200x60px.
+        </p>
       </CardContent>
     </Card>
   );

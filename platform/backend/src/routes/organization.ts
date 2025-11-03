@@ -160,7 +160,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.object({
             success: z.boolean(),
-            logo: z.string(),
+            logo: z.string().nullable(),
           }),
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
@@ -240,7 +240,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         return reply.send({
           success: true,
-          logo: updatedOrg.logo!,
+          logo: updatedOrg.logo || null,
         });
       } catch (error) {
         fastify.log.error(error);

@@ -92,9 +92,7 @@ function ThemeOption({ theme, isSelected, onClick }: ThemeOptionProps) {
         </div>
         {isSelected && <Check className="h-4 w-4" />}
       </div>
-      <span className="text-xs font-normal text-left w-full">
-        {theme.name}
-      </span>
+      <span className="text-xs font-normal text-left w-full">{theme.name}</span>
     </Button>
   );
 }

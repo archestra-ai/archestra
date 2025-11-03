@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import type {
   InsertOrganization,
   Organization,
+  OrganizationAppearance,
   UpdateOrganization,
 } from "@/types";
 
@@ -67,12 +68,7 @@ class OrganizationModel {
 
   static async updateAppearance(
     id: string,
-    appearance: {
-      theme?: string;
-      customFont?: string;
-      logoType?: string;
-      logo?: string | null;
-    },
+    appearance: OrganizationAppearance,
   ): Promise<Organization | null> {
     return OrganizationModel.update(id, appearance);
   }

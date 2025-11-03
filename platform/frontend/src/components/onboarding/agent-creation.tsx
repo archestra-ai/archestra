@@ -24,7 +24,7 @@ export function AgentCreation({
     try {
       const result = await createAgent.mutateAsync({
         name: agentName,
-        usersWithAccess: [],
+        teams: [],
       });
 
       if (result) {

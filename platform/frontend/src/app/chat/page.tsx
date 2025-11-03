@@ -5,10 +5,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
 
 interface Conversation {
   id: string;
@@ -31,8 +38,7 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
-  const [input, setInput] = useState("");
-  const loadedConversationRef = useRef<string>();
+  const loadedConversationRef = useRef<string | undefined>(undefined);
 
   // Initialize conversation ID from URL on mount
   useEffect(() => {
@@ -155,17 +161,19 @@ export default function ChatPage() {
     }
   }, [conversationId, conversation, setMessages]);
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (
+    message: { text?: string; files?: any[] },
+    e: FormEvent<HTMLFormElement>,
+  ) => {
     e.preventDefault();
-    if (!input.trim() || status === "submitted" || status === "streaming") {
+    if (!message.text?.trim() || status === "submitted" || status === "streaming") {
       return;
     }
 
     sendMessage({
       role: "user",
-      parts: [{ type: "text", text: input }],
+      parts: [{ type: "text", text: message.text }],
     });
-    setInput("");
   };
 
   const handleSelectPrompt = (prompt: string) => {
@@ -210,13 +218,19 @@ export default function ChatPage() {
             ) : (
               <ChatMessages messages={messages} />
             )}
-            <ChatInput
-              input={input}
-              onInputChange={(e) => setInput(e.target.value)}
-              onSubmit={handleSubmit}
-              onStop={stop}
-              isLoading={isLoading}
-            />
+            <div className="border-t p-4">
+              <div className="max-w-3xl mx-auto">
+                <PromptInput onSubmit={handleSubmit}>
+                  <PromptInputBody>
+                    <PromptInputTextarea placeholder="Type a message..." />
+                  </PromptInputBody>
+                  <PromptInputToolbar>
+                    <PromptInputTools />
+                    <PromptInputSubmit status={status} />
+                  </PromptInputToolbar>
+                </PromptInput>
+              </div>
+            </div>
           </>
         )}
       </div>

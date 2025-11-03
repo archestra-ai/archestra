@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.23](https://github.com/archestra-ai/archestra/compare/platform-v0.0.22...platform-v0.0.23) (2025-11-03)
+
+
+### Bug Fixes
+
+* next.js hydration error ([#911](https://github.com/archestra-ai/archestra/issues/911)) ([5d7fe04](https://github.com/archestra-ai/archestra/commit/5d7fe04522d7e5775fe7e3c970e43a7a18b796a9))
+
 ## [0.0.22](https://github.com/archestra-ai/archestra/compare/platform-v0.0.21...platform-v0.0.22) (2025-11-03)
 
 

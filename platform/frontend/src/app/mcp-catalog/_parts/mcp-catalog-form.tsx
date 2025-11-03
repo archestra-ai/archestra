@@ -5,7 +5,6 @@ import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Info } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -19,188 +18,25 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-// Simplified OAuth config schema
-const oauthConfigSchema = z.object({
-  client_id: z.string().optional().or(z.literal("")),
-  client_secret: z.string().optional().or(z.literal("")),
-  redirect_uris: z.string().min(1, "At least one redirect URI is required"),
-  scopes: z.string().optional().or(z.literal("")),
-  supports_resource_metadata: z.boolean(),
-});
-
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  label: z.string().min(1, "Label is required"),
-  serverType: z.enum(["remote", "local"]),
-  serverUrl: z
-    .string()
-    .url("Must be a valid URL")
-    .min(1, "Server URL is required"),
-  authMethod: z.enum(["none", "pat", "oauth"]),
-  oauthConfig: oauthConfigSchema.optional(),
-});
-
-export type McpCatalogFormValues = z.infer<typeof formSchema>;
-
-// API data type - matches backend expectations
-export type McpCatalogApiData = {
-  name: string;
-  serverType: "remote" | "local";
-  label?: string;
-  serverUrl?: string;
-  oauthConfig?: {
-    name: string;
-    server_url: string;
-    client_id: string;
-    client_secret?: string;
-    redirect_uris: string[];
-    scopes: string[];
-    default_scopes: string[];
-    supports_resource_metadata: boolean;
-  };
-  userConfig?: Record<
-    string,
-    {
-      type: "string" | "number" | "boolean" | "directory" | "file";
-      title: string;
-      description: string;
-      required?: boolean;
-      sensitive?: boolean;
-      default?: string | number | boolean | string[];
-      multiple?: boolean;
-      min?: number;
-      max?: number;
-    }
-  >;
-};
-
-// Transform function to convert form values to API format
-export function transformFormToApiData(
-  values: McpCatalogFormValues,
-): McpCatalogApiData {
-  const data: McpCatalogApiData = {
-    name: values.name,
-    serverType: values.serverType,
-  };
-
-  if (values.label) {
-    data.label = values.label;
-  }
-
-  if (values.serverUrl) {
-    data.serverUrl = values.serverUrl;
-  }
-
-  // Handle OAuth configuration
-  if (values.authMethod === "oauth" && values.oauthConfig) {
-    const redirectUrisList = values.oauthConfig.redirect_uris
-      .split(",")
-      .map((uri) => uri.trim())
-      .filter((uri) => uri.length > 0);
-
-    // Default to ["read", "write"] if scopes not provided or empty
-    const scopesList = values.oauthConfig.scopes?.trim()
-      ? values.oauthConfig.scopes
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter((scope) => scope.length > 0)
-      : ["read", "write"];
-
-    data.oauthConfig = {
-      name: values.label, // Use label as OAuth provider name
-      server_url: values.serverUrl, // Use serverUrl as OAuth server URL
-      client_id: values.oauthConfig.client_id || "",
-      client_secret: values.oauthConfig.client_secret || undefined,
-      redirect_uris: redirectUrisList,
-      scopes: scopesList,
-      default_scopes: ["read", "write"],
-      supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
-    };
-    // Clear userConfig when using OAuth
-    data.userConfig = {};
-  } else if (values.authMethod === "pat") {
-    // Handle PAT configuration
-    data.userConfig = {
-      access_token: {
-        type: "string" as const,
-        title: "Access Token",
-        description: "Personal access token for authentication",
-        required: true,
-        sensitive: true,
-      },
-    };
-    // Clear oauthConfig when using PAT
-    data.oauthConfig = undefined;
-  } else {
-    // No authentication - clear both configs
-    data.userConfig = {};
-    data.oauthConfig = undefined;
-  }
-
-  return data;
-}
-
-// Transform catalog item to form values
-export function transformCatalogItemToFormValues(
-  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-): McpCatalogFormValues {
-  // Determine auth method
-  let authMethod: "none" | "pat" | "oauth" = "none";
-  if (item.oauthConfig) {
-    authMethod = "oauth";
-  } else if (item.userConfig?.access_token) {
-    authMethod = "pat";
-  } else if (
-    // Special case: GitHub server uses PAT but external catalog doesn't define userConfig
-    item.name.includes("githubcopilot") ||
-    item.name.includes("github")
-  ) {
-    authMethod = "pat";
-  }
-
-  // Extract OAuth config if present
-  let oauthConfig:
-    | {
-        client_id: string;
-        client_secret: string;
-        redirect_uris: string;
-        scopes: string;
-        supports_resource_metadata: boolean;
-      }
-    | undefined;
-  if (item.oauthConfig) {
-    oauthConfig = {
-      client_id: item.oauthConfig.client_id || "",
-      client_secret: item.oauthConfig.client_secret || "",
-      redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
-      scopes: item.oauthConfig.scopes?.join(", ") || "",
-      supports_resource_metadata:
-        item.oauthConfig.supports_resource_metadata ?? true,
-    };
-  }
-
-  return {
-    name: item.name,
-    label: item.label || item.name,
-    serverType: item.serverType as "remote" | "local",
-    serverUrl: item.serverUrl || "",
-    authMethod,
-    oauthConfig,
-  };
-}
+import {
+  formSchema,
+  type McpCatalogFormValues,
+} from "./mcp-catalog-form.types";
+import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
   submitButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  serverType?: "remote" | "local";
 }
 
 export function McpCatalogForm({
@@ -208,6 +44,7 @@ export function McpCatalogForm({
   initialValues,
   onSubmit,
   submitButtonRef,
+  serverType = "remote",
 }: McpCatalogFormProps) {
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
@@ -215,8 +52,7 @@ export function McpCatalogForm({
       ? transformCatalogItemToFormValues(initialValues)
       : {
           name: "",
-          label: "",
-          serverType: "remote",
+          serverType: serverType,
           serverUrl: "",
           authMethod: "none",
           oauthConfig: {
@@ -229,10 +65,20 @@ export function McpCatalogForm({
             scopes: "read, write",
             supports_resource_metadata: true,
           },
+          localConfig: {
+            command: "",
+            arguments: "",
+            environment: "",
+            dockerImage: "",
+            transportType: "stdio",
+            httpPort: "",
+            httpPath: "/mcp",
+          },
         },
   });
 
   const authMethod = form.watch("authMethod");
+  const currentServerType = form.watch("serverType");
 
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
@@ -264,194 +110,63 @@ export function McpCatalogForm({
                   Name <span className="text-destructive">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="e.g., github"
-                    className="font-mono"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Unique identifier for this server
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="label"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Label <span className="text-destructive">*</span>
-                </FormLabel>
-                <FormControl>
                   <Input placeholder="e.g., GitHub MCP Server" {...field} />
                 </FormControl>
-                <FormDescription>Display name shown in the UI</FormDescription>
+                <FormDescription>Display name for this server</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="serverUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Server URL <span className="text-destructive">*</span>
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://api.example.com/mcp"
-                    className="font-mono"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  The remote MCP server endpoint
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {/* Authentication Section */}
-        <div className="space-y-4 pt-4 border-t">
-          <div className="flex items-center gap-2">
-            <FormLabel>Authentication</FormLabel>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">
-                    Choose how users will authenticate when installing this
-                    server
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-
-          <FormField
-            control={form.control}
-            name="authMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <RadioGroup
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    className="space-y-2"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="none" id="auth-none" />
-                      <FormLabel
-                        htmlFor="auth-none"
-                        className="font-normal cursor-pointer"
-                      >
-                        No authentication required
-                      </FormLabel>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="pat" id="auth-pat" />
-                      <FormLabel
-                        htmlFor="auth-pat"
-                        className="font-normal cursor-pointer"
-                      >
-                        Personal Access Token (PAT)
-                      </FormLabel>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="oauth" id="auth-oauth" />
-                      <FormLabel
-                        htmlFor="auth-oauth"
-                        className="font-normal cursor-pointer"
-                      >
-                        OAuth
-                      </FormLabel>
-                    </div>
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {authMethod === "pat" && (
-            <div className="bg-muted p-4 rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Users will be prompted to provide their personal access token
-                when installing this server.
-              </p>
-            </div>
+          {/* Conditional fields based on server type */}
+          {currentServerType === "remote" && (
+            <FormField
+              control={form.control}
+              name="serverUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Server URL <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://api.example.com/mcp"
+                      className="font-mono"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    The remote MCP server endpoint
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           )}
 
-          {authMethod === "oauth" && (
-            <div className="space-y-4 pl-6 border-l-2">
+          {currentServerType === "local" && (
+            <>
               <FormField
                 control={form.control}
-                name="oauthConfig.client_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client ID</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="your-client-id (optional for dynamic registration)"
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Leave empty if the server supports dynamic client
-                      registration
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oauthConfig.client_secret"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Secret</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="your-client-secret (optional)"
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oauthConfig.redirect_uris"
+                name="localConfig.command"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Redirect URIs <span className="text-destructive">*</span>
+                      Command{" "}
+                      {!form.watch("localConfig.dockerImage") && (
+                        <span className="text-destructive">*</span>
+                      )}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                        placeholder="node"
                         className="font-mono"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Comma-separated list of redirect URIs
+                      The executable command to run. Optional if Docker Image is
+                      set (will use image's default <code>CMD</code>).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -460,20 +175,20 @@ export function McpCatalogForm({
 
               <FormField
                 control={form.control}
-                name="oauthConfig.scopes"
+                name="localConfig.dockerImage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Scopes</FormLabel>
+                    <FormLabel>Docker Image (optional)</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="read, write"
+                        placeholder="registry.example.com/my-mcp-server:latest"
                         className="font-mono"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Comma-separated list of OAuth scopes (defaults to read,
-                      write)
+                      Custom Docker image URL. If not specified, Archestra's
+                      default base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -482,32 +197,336 @@ export function McpCatalogForm({
 
               <FormField
                 control={form.control}
-                name="oauthConfig.supports_resource_metadata"
+                name="localConfig.arguments"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                  <FormItem>
+                    <FormLabel>Arguments (one per line)</FormLabel>
                     <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        className="mt-1"
+                      <Textarea
+                        placeholder={`/path/to/server.js\n--verbose`}
+                        className="font-mono min-h-20"
+                        {...field}
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="font-normal cursor-pointer">
-                        Supports OAuth Resource Metadata
-                      </FormLabel>
-                      <FormDescription>
-                        Enable if the server publishes OAuth metadata at
-                        /.well-known/oauth-authorization-server for automatic
-                        endpoint discovery
-                      </FormDescription>
-                    </div>
+                    <FormDescription>
+                      Command line arguments, one per line
+                    </FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
+
+              <FormField
+                control={form.control}
+                name="localConfig.environment"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Environment Variables (KEY=value format)
+                    </FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder={`API_KEY=your-key\nPORT=3000`}
+                        className="font-mono min-h-20"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Environment variables in KEY=value format, one per line
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="localConfig.transportType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Transport Type</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        value={field.value || "stdio"}
+                        className="space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="stdio" id="transport-stdio" />
+                          <FormLabel
+                            htmlFor="transport-stdio"
+                            className="font-normal cursor-pointer"
+                          >
+                            stdio (default)
+                          </FormLabel>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="streamable-http"
+                            id="transport-http"
+                          />
+                          <FormLabel
+                            htmlFor="transport-http"
+                            className="font-normal cursor-pointer"
+                          >
+                            Streamable HTTP
+                          </FormLabel>
+                        </div>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormDescription>
+                      stdio uses JSON-RPC over stdin/stdout (serialized
+                      requests). Streamable HTTP uses native HTTP/SSE transport
+                      (better performance, concurrent requests).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {form.watch("localConfig.transportType") ===
+                "streamable-http" && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="localConfig.httpPort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>HTTP Port (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="8080"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Port for HTTP server (defaults to 8080 if not
+                          specified)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="localConfig.httpPath"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>HTTP Path (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="/mcp"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Endpoint path for MCP requests (defaults to /mcp)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+            </>
           )}
         </div>
+
+        {/* Authentication Section - Only for remote servers */}
+        {currentServerType === "remote" && (
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <FormLabel>Authentication</FormLabel>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs">
+                      Choose how users will authenticate when installing this
+                      server
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="authMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="none" id="auth-none" />
+                        <FormLabel
+                          htmlFor="auth-none"
+                          className="font-normal cursor-pointer"
+                        >
+                          No authentication required
+                        </FormLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="pat" id="auth-pat" />
+                        <FormLabel
+                          htmlFor="auth-pat"
+                          className="font-normal cursor-pointer"
+                        >
+                          Personal Access Token (PAT)
+                        </FormLabel>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="oauth" id="auth-oauth" />
+                        <FormLabel
+                          htmlFor="auth-oauth"
+                          className="font-normal cursor-pointer"
+                        >
+                          OAuth
+                        </FormLabel>
+                      </div>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {authMethod === "pat" && (
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Users will be prompted to provide their personal access token
+                  when installing this server.
+                </p>
+              </div>
+            )}
+
+            {authMethod === "oauth" && (
+              <div className="space-y-4 pl-6 border-l-2">
+                <FormField
+                  control={form.control}
+                  name="oauthConfig.client_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client ID</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="your-client-id (optional for dynamic registration)"
+                          className="font-mono"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Leave empty if the server supports dynamic client
+                        registration
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oauthConfig.client_secret"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Secret</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="your-client-secret (optional)"
+                          className="font-mono"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oauthConfig.redirect_uris"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Redirect URIs{" "}
+                        <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                          className="font-mono"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Comma-separated list of redirect URIs
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oauthConfig.scopes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Scopes</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="read, write"
+                          className="font-mono"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Comma-separated list of OAuth scopes (defaults to read,
+                        write)
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="oauthConfig.supports_resource_metadata"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="mt-1"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="font-normal cursor-pointer">
+                          Supports OAuth Resource Metadata
+                        </FormLabel>
+                        <FormDescription>
+                          Enable if the server publishes OAuth metadata at
+                          /.well-known/oauth-authorization-server for automatic
+                          endpoint discovery
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Hidden submit button that can be triggered externally */}
         <button

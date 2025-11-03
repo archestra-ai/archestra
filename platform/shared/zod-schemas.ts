@@ -22,3 +22,103 @@ export const OAuthConfigSchema = z.object({
   streamable_http_url: z.string().optional(),
   streamable_http_port: z.number().optional(),
 });
+
+export const LocalConfigSchema = z
+  .object({
+    command: z.string().optional(),
+    arguments: z.array(z.string()).optional(),
+    environment: z.record(z.string(), z.string()).optional(),
+    dockerImage: z.string().optional(),
+    transportType: z.enum(["stdio", "streamable-http"]).optional(),
+    httpPort: z.number().optional(),
+    httpPath: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // At least one of command or dockerImage must be provided
+      return data.command || data.dockerImage;
+    },
+    {
+      message:
+        "Either command or dockerImage must be provided. If dockerImage is set, command is optional (Docker image's default CMD will be used).",
+      path: ["command"],
+    },
+  );
+
+// Form version of LocalConfigSchema for UI forms (using strings that get parsed)
+export const LocalConfigFormSchema = z
+  .object({
+    command: z.string().optional(),
+    arguments: z.string(), // UI uses string, gets parsed to array
+    environment: z.string(), // UI uses string, gets parsed to record
+    dockerImage: z.string().optional(), // Custom Docker image URL
+    transportType: z.enum(["stdio", "streamable-http"]).optional(),
+    httpPort: z.string().optional(), // UI uses string, gets parsed to number
+    httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
+  })
+  .refine(
+    (data) => {
+      // At least one of command or dockerImage must be provided
+      return (data.command && data.command.trim().length > 0) || data.dockerImage;
+    },
+    {
+      message:
+        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
+      path: [],
+    },
+  );
+
+// Organization Appearance Schemas
+export const OrganizationThemeSchema = z.enum([
+  // Single Color Themes
+  "cosmic-night",
+  "aubergine",
+  "clementine",
+  "banana",
+  "jade",
+  "lagoon",
+  "barbra",
+  "gray",
+  "mood-indigo",
+  // Vision Assistive Themes
+  "tritanopia",
+  "protanopia-deuteranopia",
+  // Fun and New Themes
+  "raspberry-beret",
+  "big-business",
+  "pog",
+  "mint-chip",
+  "pbj",
+  "chill-vibes",
+  "forest-floor",
+  "slackr",
+  "sea-glass",
+  "lemon-lime",
+  "falling-leaves",
+  "sunrise",
+]);
+
+export const OrganizationCustomFontSchema = z.enum([
+  "lato",
+  "inter",
+  "open-sans",
+  "roboto",
+  "source-sans-pro",
+]);
+
+export const OrganizationLogoTypeSchema = z.enum(["default", "custom"]);
+
+export const OrganizationLogoSchema = z.string();
+
+export const OrganizationAppearanceSchema = z.object({
+  theme: OrganizationThemeSchema.optional(),
+  customFont: OrganizationCustomFontSchema.optional(),
+  logoType: OrganizationLogoTypeSchema.optional(),
+  logo: OrganizationLogoSchema.optional().nullable(),
+});
+
+export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
+export type OrganizationCustomFont = z.infer<typeof OrganizationCustomFontSchema>;
+export type OrganizationLogoType = z.infer<typeof OrganizationLogoTypeSchema>;
+export type OrganizationLogo = z.infer<typeof OrganizationLogoSchema>;
+export type OrganizationAppearance = z.infer<typeof OrganizationAppearanceSchema>;

@@ -51,10 +51,26 @@ class AuthMiddleware {
       url === "/health" ||
       url === "/metrics" ||
       url === "/api/features" ||
-      url.startsWith(config.mcpGateway.endpoint)
-    ) {
+      url.startsWith(config.mcpGateway.endpoint) ||
+      /**
+       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+       * TODO: this is a quick hack to get around this when testing the local mcp server k8s runtime stuffs:
+       *
+       * Pod mcp-0c98fdde-8a01-4317-8fcb-698c149761a0 is now running
+       * Successfully started MCP server pod 0c98fdde-8a01-4317-8fcb-698c149761a0 (context7-local-mcp-server)
+       * Failed to get tools from local MCP server context7-local-mcp-server: Error: Failed to connect to MCP server context7-local-mcp-server: Error POSTing to endpoint (HTTP 401): {"error":{"message":"Unauthenticated","type":"unauthenticated"}}
+       *     at McpClient.connectAndGetTools (..platform/backend/src/clients/mcp-client.ts:265:13)
+       *     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+       *     at async _McpServerModel.getToolsFromServer (..platform/backend/src/models/mcp-server.ts:244:23)
+       *     at async Object.<anonymous> (..platform/backend/src/routes/mcp-server.ts:236:25)
+       * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
+       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+       */
+      url.includes("/mcp_proxy") ||
+      // Skip ACME challenge paths for SSL certificate domain validation
+      url.startsWith("/.well-known/acme-challenge/")
+    )
       return true;
-    }
     return false;
   };
 
@@ -174,6 +190,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAgentAvailableTokens]: {
+    agent: ["read"],
+  },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
@@ -186,6 +205,12 @@ const routePermissionsConfig: Partial<
   [RouteId.UpdateAgentTool]: {
     agent: ["update"],
     tool: ["update"],
+  },
+  [RouteId.GetLabelKeys]: {
+    agent: ["read"],
+  },
+  [RouteId.GetLabelValues]: {
+    agent: ["read"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],
@@ -277,11 +302,29 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerLogs]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.RevokeUserMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GrantTeamMcpServerAccess]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.RevokeTeamMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeAllTeamsMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GetMcpServerInstallationStatus]: {
+    mcpServer: ["read"],
   },
   [RouteId.GetMcpServerInstallationRequests]: {
     mcpServerInstallationRequest: ["read"],
@@ -336,6 +379,72 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.RemoveTeamMember]: {
     team: ["update"],
+  },
+  [RouteId.GetMcpToolCalls]: {
+    mcpToolCall: ["read"],
+  },
+  [RouteId.GetMcpToolCall]: {
+    mcpToolCall: ["read"],
+  },
+  [RouteId.GetLimits]: {
+    limit: ["read"],
+  },
+  [RouteId.CreateLimit]: {
+    limit: ["create"],
+  },
+  [RouteId.GetLimit]: {
+    limit: ["read"],
+  },
+  [RouteId.UpdateLimit]: {
+    limit: ["update"],
+  },
+  [RouteId.DeleteLimit]: {
+    limit: ["delete"],
+  },
+  [RouteId.GetOrganization]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationCleanupInterval]: {
+    organization: ["update"],
+  },
+  [RouteId.GetTokenPrices]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.CreateTokenPrice]: {
+    tokenPrice: ["create"],
+  },
+  [RouteId.GetTokenPrice]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.UpdateTokenPrice]: {
+    tokenPrice: ["update"],
+  },
+  [RouteId.DeleteTokenPrice]: {
+    tokenPrice: ["delete"],
+  },
+  [RouteId.GetTeamStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetAgentStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetModelStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOrganizationAppearance]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationAppearance]: {
+    organization: ["update"],
+  },
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
   },
 };
 

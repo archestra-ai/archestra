@@ -25,6 +25,10 @@ on:
         required: false
       DOCKER_PASSWORD:
         required: false
+      EASTER_EGG_TARGET_SEQUENCE:
+        required: false
+      EASTER_EGG_VIDEO_URL:
+        required: false
 
 jobs:
   # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3
@@ -38,9 +42,9 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         include:
-          - platform: ubuntu-latest
+          - platform: blacksmith-4vcpu-ubuntu-2404
             os_and_arch: linux/amd64
-          - platform: ubuntu-24.04-arm
+          - platform: blacksmith-4vcpu-ubuntu-2404-arm
             os_and_arch: linux/arm64
     permissions:
       contents: read
@@ -59,20 +63,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
           file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
+          build-args: |
+            VERSION=${{ inputs.version }}
+            ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${{ secrets.EASTER_EGG_TARGET_SEQUENCE }}
+            ARCHESTRA_EASTER_EGG_VIDEO_URL=${{ secrets.EASTER_EGG_VIDEO_URL }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Export digest
         if: inputs.push_image
@@ -95,7 +101,7 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: inputs.push_image
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       - build-dockerhub-image
     permissions:
@@ -109,8 +115,8 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Log in to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
@@ -121,10 +127,18 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create \
-            -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
-            -t "docker.io/archestra/${IMAGE_NAME}:latest" \
-            $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
+          if [ "${VERSION}" = "dev" ]; then
+            # For dev version, only tag with version, not latest
+            docker buildx imagetools create \
+              -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
+              $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
+          else
+            # For non-dev versions, tag with both version and latest
+            docker buildx imagetools create \
+              -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
+              -t "docker.io/archestra/${IMAGE_NAME}:latest" \
+              $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
+          fi
         env:
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ inputs.version }}

@@ -10,6 +10,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import { ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
@@ -36,9 +37,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 /**
  * Clean up expired sessions periodically
  */
-function cleanupExpiredSessions(logger: {
-  info: (obj: unknown, msg: string) => void;
-}): void {
+function cleanupExpiredSessions(): void {
   const now = Date.now();
   const expiredSessionIds: string[] = [];
 
@@ -91,6 +90,16 @@ async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            argumentKeys: args ? Object.keys(args) : [],
+            argumentsSize: JSON.stringify(args || {}).length,
+          },
+          "MCP gateway tool call received",
+        );
+
         // Generate a unique ID for this tool call
         const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -114,11 +123,33 @@ async function createAgentServer(
         const result = results[0];
 
         if (result.isError) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+              error: result.error,
+            },
+            "MCP gateway tool call failed",
+          );
+
           throw {
             code: -32603, // Internal error
             message: result.error || "Tool execution failed",
           };
         }
+
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            resultContentLength: Array.isArray(result.content)
+              ? JSON.stringify(result.content).length
+              : typeof result.content === "string"
+                ? result.content.length
+                : JSON.stringify(result.content).length,
+          },
+          "MCP gateway tool call completed",
+        );
 
         // Transform CommonToolResult to MCP response format
         return {
@@ -294,6 +325,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           method: request.body?.method,
           isInitialize,
           bodyKeys: Object.keys(request.body || {}),
+          bodySize: JSON.stringify(request.body || {}).length,
           allHeaders: request.headers,
         },
         "MCP gateway POST request received",
@@ -467,7 +499,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
  */
 setInterval(
   () => {
-    cleanupExpiredSessions({ info: console.log });
+    cleanupExpiredSessions();
   },
   5 * 60 * 1000,
 );

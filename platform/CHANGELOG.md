@@ -1,5 +1,102 @@
 # Changelog
 
+## [0.0.24](https://github.com/archestra-ai/archestra/compare/platform-v0.0.23...platform-v0.0.24) (2025-11-03)
+
+
+### Bug Fixes
+
+* size/alignment of custom logo ([#917](https://github.com/archestra-ai/archestra/issues/917)) ([540121b](https://github.com/archestra-ai/archestra/commit/540121b65215aeb90faf33fa9e7fae410f8b2209))
+
+## [0.0.23](https://github.com/archestra-ai/archestra/compare/platform-v0.0.22...platform-v0.0.23) (2025-11-03)
+
+
+### Bug Fixes
+
+* next.js hydration error ([#911](https://github.com/archestra-ai/archestra/issues/911)) ([5d7fe04](https://github.com/archestra-ai/archestra/commit/5d7fe04522d7e5775fe7e3c970e43a7a18b796a9))
+
+## [0.0.22](https://github.com/archestra-ai/archestra/compare/platform-v0.0.21...platform-v0.0.22) (2025-11-03)
+
+
+### Features
+
+* 🐰 🥚 ([#910](https://github.com/archestra-ai/archestra/issues/910)) ([23d278d](https://github.com/archestra-ai/archestra/commit/23d278d8b10aadc7a445d459299b2567bc67cfeb))
+* add labels support to agents ([#875](https://github.com/archestra-ai/archestra/issues/875)) ([4d106a7](https://github.com/archestra-ai/archestra/commit/4d106a7a6104f0c34ee50c16a1841aed2cc5a416))
+* add Logs to MCP server actions dropdown ([#904](https://github.com/archestra-ai/archestra/issues/904)) ([590cd70](https://github.com/archestra-ai/archestra/commit/590cd70aa26a0f95f5c48f5b726dbb1c40468761))
+* add optional `Ingress` to helm chart + ability to specify `Service` annotations ([#900](https://github.com/archestra-ai/archestra/issues/900)) ([c57c8e0](https://github.com/archestra-ai/archestra/commit/c57c8e0af3402439fb4ef888fc24e5ab621c05bc))
+* add server error handling for auth pages ([#890](https://github.com/archestra-ai/archestra/issues/890)) ([127d9ea](https://github.com/archestra-ai/archestra/commit/127d9eaaac4434209b6d256c5552ad2b34fae3a6))
+* enable log streaming in Kubernetes pod logs ([#907](https://github.com/archestra-ai/archestra/issues/907)) ([c9808cc](https://github.com/archestra-ai/archestra/commit/c9808cc8cc8e7376960d113f452d680d9e0c6222))
+* make command optional when docker image is specified for local mcp ([#882](https://github.com/archestra-ai/archestra/issues/882)) ([ced8a00](https://github.com/archestra-ai/archestra/commit/ced8a00a6dea2a34f1d748b1a5fac7d03fa70993))
+* MCP credentials management ([#843](https://github.com/archestra-ai/archestra/issues/843)) ([e55c86b](https://github.com/archestra-ai/archestra/commit/e55c86bcb6f5e5243802cfc650edda5c35f66ecf))
+* store model and tokens separately ([#902](https://github.com/archestra-ai/archestra/issues/902)) ([d2ecdf1](https://github.com/archestra-ai/archestra/commit/d2ecdf15d3f2805827f94c5e185613917890cc18))
+* update otel traces + prometheus metrics to include agent data ([#887](https://github.com/archestra-ai/archestra/issues/887)) ([95b7e56](https://github.com/archestra-ai/archestra/commit/95b7e5647a673c203fd42c1d94d5579030b9d2cb))
+* white-labeling and theme customization ([#909](https://github.com/archestra-ai/archestra/issues/909)) ([14d97b9](https://github.com/archestra-ai/archestra/commit/14d97b93841c1a97581271bca038dc02c03b48be))
+
+
+### Bug Fixes
+
+* double-quoting of env vars in MCP server form ([#892](https://github.com/archestra-ai/archestra/issues/892)) ([4f56e23](https://github.com/archestra-ai/archestra/commit/4f56e23cdd70c8aea04cfc8992a0dc836a04a333))
+* in mcp server card, show transport type pill ([#885](https://github.com/archestra-ai/archestra/issues/885)) ([8a577eb](https://github.com/archestra-ai/archestra/commit/8a577eb212b0c380f1e8d32e61fd40300c1f39a1))
+* MCP server install button disable behavior ([#891](https://github.com/archestra-ai/archestra/issues/891)) ([10ed854](https://github.com/archestra-ai/archestra/commit/10ed8540f5ac532bd3eeae166b50f4eb765c8272))
+* return agent labels in sorted (consistent) order ([#894](https://github.com/archestra-ai/archestra/issues/894)) ([8d680df](https://github.com/archestra-ai/archestra/commit/8d680dfe6da3017aa0b896cb8371d5ef3de61bd5))
+
+## [0.0.21](https://github.com/archestra-ai/archestra/compare/platform-v0.0.20...platform-v0.0.21) (2025-10-31)
+
+
+### Features
+
+* support streamable http for local mcp servers ([#871](https://github.com/archestra-ai/archestra/issues/871)) ([ebbc311](https://github.com/archestra-ai/archestra/commit/ebbc311c304619fbbe067d1ac8878822adfe9160))
+* unified logging + env var to set logging ([#874](https://github.com/archestra-ai/archestra/issues/874)) ([5a6fd72](https://github.com/archestra-ai/archestra/commit/5a6fd7299f0504177d789ebcad74d0f6128ff3bf))
+
+## [0.0.20](https://github.com/archestra-ai/archestra/compare/platform-v0.0.19...platform-v0.0.20) (2025-10-31)
+
+
+### Bug Fixes
+
+* UI Polish ([#868](https://github.com/archestra-ai/archestra/issues/868)) ([1c34668](https://github.com/archestra-ai/archestra/commit/1c34668b4567b6534ddca025765f5d96a887ab06))
+
+## [0.0.19](https://github.com/archestra-ai/archestra/compare/platform-v0.0.18...platform-v0.0.19) (2025-10-31)
+
+
+### Features
+
+* helm `ServiceAccount` + `Role` + `RoleBinding` ([#864](https://github.com/archestra-ai/archestra/issues/864)) ([7436477](https://github.com/archestra-ai/archestra/commit/7436477619cfc8058c26232c9ba8db4297554cb2))
+* LLM tool call requests and responses ([#853](https://github.com/archestra-ai/archestra/issues/853)) ([efa0e42](https://github.com/archestra-ai/archestra/commit/efa0e425334ec4e32ead97e2bc38248f98b64668))
+
+
+### Bug Fixes
+
+* orlando ([#865](https://github.com/archestra-ai/archestra/issues/865)) ([c926ba2](https://github.com/archestra-ai/archestra/commit/c926ba2ed3141ff7ce1a070d2c1fd5eefa392241))
+* prevent tool id duplication when streaming via proxy ([#866](https://github.com/archestra-ai/archestra/issues/866)) ([89dca1a](https://github.com/archestra-ai/archestra/commit/89dca1a942b6abbe1ee44fa964d135ba9d870058))
+
+## [0.0.18](https://github.com/archestra-ai/archestra/compare/platform-v0.0.17...platform-v0.0.18) (2025-10-30)
+
+
+### Bug Fixes
+
+* do not add /v1/ prefix when proxying and rely on OPENAI_BASE_URL ([#860](https://github.com/archestra-ai/archestra/issues/860)) ([dc9faab](https://github.com/archestra-ai/archestra/commit/dc9faabbe1cb531c4a3deb35e8853b722d448c46))
+
+## [0.0.17](https://github.com/archestra-ai/archestra/compare/platform-v0.0.16...platform-v0.0.17) (2025-10-30)
+
+
+### Features
+
+* use custom docker image for local mcp servers ([#858](https://github.com/archestra-ai/archestra/issues/858)) ([341e3fc](https://github.com/archestra-ai/archestra/commit/341e3fc33f741671a60c2ed9d2a8af23c05890f2))
+
+## [0.0.16](https://github.com/archestra-ai/archestra/compare/platform-v0.0.15...platform-v0.0.16) (2025-10-30)
+
+
+### Features
+
+* add more logging and fix proxying to custom provider url ([#857](https://github.com/archestra-ai/archestra/issues/857)) ([c297c0c](https://github.com/archestra-ai/archestra/commit/c297c0c980348be6cc812e6a1608d0ae56e17205))
+* mcp server runtime in k8s ([#854](https://github.com/archestra-ai/archestra/issues/854)) ([f140291](https://github.com/archestra-ai/archestra/commit/f14029159f17d6b52c089ca06b731441db1e2488))
+
+
+### Bug Fixes
+
+* handlebars highlighting in monaco editor ([#855](https://github.com/archestra-ai/archestra/issues/855)) ([e19a163](https://github.com/archestra-ai/archestra/commit/e19a163860b9969205a876869523d6abbe00e21e))
+* small bug in `McpClient` tool execution (when no auth provided) + UI bug on tools table ([#850](https://github.com/archestra-ai/archestra/issues/850)) ([13f3447](https://github.com/archestra-ai/archestra/commit/13f34474bdfc813dd00adc76969a8aefb50c3af0))
+* use correct prefix v1 in proxy llm  ([#851](https://github.com/archestra-ai/archestra/issues/851)) ([374f964](https://github.com/archestra-ai/archestra/commit/374f964102833c1cb40e0d0b63395d748b1f653b))
+
 ## [0.0.15](https://github.com/archestra-ai/archestra/compare/platform-v0.0.14...platform-v0.0.15) (2025-10-29)
 
 

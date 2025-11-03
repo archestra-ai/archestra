@@ -198,10 +198,7 @@ test.describe('LLM Proxy - OpenAI', () => {
   });
 });
 
-/**
- * TODO: joey to unskip later today (Oct 29, 2025)
- */
-test.skip('LLM Proxy - Anthropic', () => {
+test.describe('LLM Proxy - Anthropic', () => {
   const ANTHROPIC_TEST_CASE_1_HEADER = 'test-case-1-anthropic-tool-call';
 
   let agentId: string;
@@ -221,7 +218,7 @@ test.skip('LLM Proxy - Anthropic', () => {
 
     // 2. Send initial request to register the tool and get the toolId
     const initialResponse = await request.post(
-      `${API_BASE_URL}/v1/anthropic/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/${agentId}/v1/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,
@@ -300,7 +297,7 @@ test.skip('LLM Proxy - Anthropic', () => {
 
     // 5. Send a request with untrusted data
     const response = await request.post(
-      `${API_BASE_URL}/v1/anthropic/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/${agentId}/v1/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,

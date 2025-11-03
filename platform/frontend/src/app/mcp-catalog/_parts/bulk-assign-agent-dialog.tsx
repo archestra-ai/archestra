@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
 
@@ -27,17 +29,21 @@ interface BulkAssignAgentDialogProps {
   }> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  catalogId: string;
 }
 
 export function BulkAssignAgentDialog({
   tools,
   open,
   onOpenChange,
+  catalogId,
 }: BulkAssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
+    useState<string | null>(null);
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents || [];
@@ -74,6 +80,7 @@ export function BulkAssignAgentDialog({
         assignMutation.mutateAsync({
           agentId: assignment.agentId,
           toolId: assignment.toolId,
+          credentialSourceMcpServerId,
         }),
       ),
     );
@@ -114,8 +121,15 @@ export function BulkAssignAgentDialog({
 
     setSelectedAgentIds([]);
     setSearchQuery("");
+    setCredentialSourceMcpServerId(null);
     onOpenChange(false);
-  }, [tools, selectedAgentIds, assignMutation, onOpenChange]);
+  }, [
+    tools,
+    selectedAgentIds,
+    credentialSourceMcpServerId,
+    assignMutation,
+    onOpenChange,
+  ]);
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgentIds((prev) =>
@@ -133,6 +147,7 @@ export function BulkAssignAgentDialog({
         if (!newOpen) {
           setSelectedAgentIds([]);
           setSearchQuery("");
+          setCredentialSourceMcpServerId(null);
         }
       }}
     >
@@ -146,7 +161,7 @@ export function BulkAssignAgentDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="mb-4">
+          <div className="mb-4 space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -182,6 +197,22 @@ export function BulkAssignAgentDialog({
               </div>
             )}
           </div>
+
+          <div className="mt-10">
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Token to use
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which token will be used when agents execute these tools
+            </p>
+            <TokenSelect
+              value={credentialSourceMcpServerId}
+              onValueChange={setCredentialSourceMcpServerId}
+              className="w-full"
+              catalogId={catalogId}
+              agentIds={selectedAgentIds}
+            />
+          </div>
         </div>
 
         <DialogFooter>
@@ -190,6 +221,7 @@ export function BulkAssignAgentDialog({
             onClick={() => {
               setSelectedAgentIds([]);
               setSearchQuery("");
+              setCredentialSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >

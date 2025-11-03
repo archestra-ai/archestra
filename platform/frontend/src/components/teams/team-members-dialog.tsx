@@ -76,6 +76,8 @@ export function TeamMembersDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teamMembers", team.id] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-available-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
       setSelectedUserId("");
       toast.success("Member added to team successfully");
     },
@@ -93,6 +95,8 @@ export function TeamMembersDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teamMembers", team.id] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-available-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
       toast.success("Member removed from team successfully");
     },
     onError: (error: Error) => {

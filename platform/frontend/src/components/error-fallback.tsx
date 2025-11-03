@@ -19,7 +19,7 @@ export function ClientErrorFallback({
 }) {
   return (
     <div className="flex min-h-[400px] items-center justify-center p-4">
-      <Card className="w-full max-w-md border-destructive">
+      <Card className="w-full max-w-2xl border-destructive">
         <CardHeader>
           <div className="flex items-center gap-2">
             <AlertCircle className="size-5 text-destructive" />
@@ -30,23 +30,29 @@ export function ClientErrorFallback({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md bg-muted p-4">
+          <div className="flex flex-col gap-2">
             <p className="text-sm font-medium text-muted-foreground">
               Error details:
             </p>
-            <p className="mt-2 text-sm text-destructive font-mono break-words">
-              {error.message}
-            </p>
-            {error.request && (
-              <p className="mt-2 text-sm text-destructive font-mono break-words">
-                {JSON.stringify(error.request)}
-              </p>
-            )}
-            {error.stack && (
-              <p className="mt-2 text-sm text-destructive font-mono break-words">
-                {error.stack}
-              </p>
-            )}
+            <div className="h-[300px] rounded-md border bg-muted overflow-y-auto">
+              <div className="p-4">
+                <div className="text-sm text-destructive font-mono break-words whitespace-pre-wrap">
+                  {error.message}
+                  {error.request && (
+                    <>
+                      {"\n\nRequest:\n"}
+                      {JSON.stringify(error.request, null, 2)}
+                    </>
+                  )}
+                  {error.stack && (
+                    <>
+                      {"\n\nStack trace:\n"}
+                      {error.stack}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
         {resetErrorBoundary && (

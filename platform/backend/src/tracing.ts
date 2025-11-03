@@ -10,6 +10,7 @@ import {
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import config from "@/config";
+import logger from "@/logging";
 
 const {
   api: { name, version },
@@ -17,9 +18,7 @@ const {
 
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
 const traceExporter = new OTLPTraceExporter({
-  url:
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-    "http://localhost:4318/v1/traces",
+  url: config.observability.otel.otelExporterOtlpEndpoint,
   headers: {},
 });
 
@@ -52,8 +51,8 @@ sdk.start();
 process.on("SIGTERM", () => {
   sdk
     .shutdown()
-    .then(() => console.log("Tracing terminated"))
-    .catch((error) => console.log("Error terminating tracing", error))
+    .then(() => logger.info("Tracing terminated"))
+    .catch((error) => logger.error("Error terminating tracing", error))
     .finally(() => process.exit(0));
 });
 

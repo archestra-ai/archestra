@@ -14,7 +14,11 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { seedRequiredStartingData } from "@/database/seed";
+import logger from "@/logging";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
+import * as routes from "@/routes";
 import {
   Anthropic,
   Gemini,
@@ -22,8 +26,6 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { seedDatabase } from "./database/seed";
-import * as routes from "./routes";
 
 const {
   api: {
@@ -37,16 +39,7 @@ const {
 } = config;
 
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss Z",
-        ignore: "pid,hostname",
-      },
-    },
-  },
+  loggerInstance: logger,
 }).withTypeProvider<ZodTypeProvider>();
 
 // Set up Zod validation and serialization
@@ -81,8 +74,33 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 
 const start = async () => {
   try {
-    // Seed database with demo data
-    await seedDatabase();
+    await seedRequiredStartingData();
+
+    // Initialize MCP Server Runtime (K8s-based)
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
 
     await fastify.register(metricsPlugin, { endpoint: "/metrics" });
 

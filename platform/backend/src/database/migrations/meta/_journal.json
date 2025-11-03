@@ -246,6 +246,69 @@
       "when": 1761663104702,
       "tag": "0034_fine_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1761823484846,
+      "tag": "0035_flashy_speed_demon",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1761832966719,
+      "tag": "0036_massive_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1761941802916,
+      "tag": "0037_fluffy_imperial_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1762001426416,
+      "tag": "0038_great_gamma_corps",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1762075335833,
+      "tag": "0039_thin_bloodstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1762099284531,
+      "tag": "0040_foamy_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1762100060719,
+      "tag": "0041_deep_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1762134087478,
+      "tag": "0042_dear_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1762151375609,
+      "tag": "0043_rainy_slayback",
+      "breakpoints": true
     }
   ]
 }

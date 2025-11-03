@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,8 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
@@ -35,8 +38,11 @@ export function AssignAgentDialog({
 }: AssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
+  const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
+    useState<string | null>(null);
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents || [];
@@ -61,7 +67,11 @@ export function AssignAgentDialog({
 
     const results = await Promise.allSettled(
       selectedAgentIds.map((agentId) =>
-        assignMutation.mutateAsync({ agentId, toolId: tool.tool.id }),
+        assignMutation.mutateAsync({
+          agentId,
+          toolId: tool.tool.id,
+          credentialSourceMcpServerId: credentialSourceMcpServerId || null,
+        }),
       ),
     );
 
@@ -101,8 +111,15 @@ export function AssignAgentDialog({
 
     setSelectedAgentIds([]);
     setSearchQuery("");
+    setCredentialSourceMcpServerId(null);
     onOpenChange(false);
-  }, [tool, selectedAgentIds, assignMutation, onOpenChange]);
+  }, [
+    tool,
+    selectedAgentIds,
+    credentialSourceMcpServerId,
+    assignMutation,
+    onOpenChange,
+  ]);
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgentIds((prev) =>
@@ -120,6 +137,7 @@ export function AssignAgentDialog({
         if (!newOpen) {
           setSelectedAgentIds([]);
           setSearchQuery("");
+          setCredentialSourceMcpServerId(null);
         }
       }}
     >
@@ -170,12 +188,36 @@ export function AssignAgentDialog({
           </div>
         </div>
 
+        {selectedAgentIds.length > 0 && (
+          <div className="pt-4 border-t">
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Token to use
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which token will be used when these agents execute this
+              tool
+            </p>
+            <TokenSelect
+              value={credentialSourceMcpServerId}
+              onValueChange={setCredentialSourceMcpServerId}
+              className="w-full"
+              catalogId={
+                mcpServers.data?.find(
+                  (server) => server.id === tool?.tool.mcpServerId,
+                )?.catalogId ?? ""
+              }
+              agentIds={selectedAgentIds}
+            />
+          </div>
+        )}
+
         <DialogFooter>
           <Button
             variant="outline"
             onClick={() => {
               setSelectedAgentIds([]);
               setSearchQuery("");
+              setCredentialSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >

@@ -6,8 +6,15 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 
-const { createAgent, deleteAgent, getAgents, getDefaultAgent, updateAgent } =
-  archestraApiSdk;
+const {
+  createAgent,
+  deleteAgent,
+  getAgents,
+  getDefaultAgent,
+  updateAgent,
+  getLabelKeys,
+  getLabelValues,
+} = archestraApiSdk;
 
 export function useAgents(params?: {
   initialData?: archestraApiTypes.GetAgentsResponses["200"];
@@ -71,5 +78,19 @@ export function useDeleteAgent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
+  });
+}
+
+export function useLabelKeys() {
+  return useQuery({
+    queryKey: ["agents", "labels", "keys"],
+    queryFn: async () => (await getLabelKeys()).data ?? [],
+  });
+}
+
+export function useLabelValues() {
+  return useQuery({
+    queryKey: ["agents", "labels", "values"],
+    queryFn: async () => (await getLabelValues()).data ?? [],
   });
 }

@@ -313,7 +313,9 @@ class ToolModel {
       responseModifierTemplate: string | null;
       mcpServerSecretId: string | null;
       mcpServerName: string;
-      mcpServerCatalogId: string | null;
+      mcpServerCatalogId: string;
+      mcpServerId: string;
+      credentialSourceMcpServerId: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -328,6 +330,9 @@ class ToolModel {
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        credentialSourceMcpServerId:
+          schema.agentToolsTable.credentialSourceMcpServerId,
+        mcpServerId: schema.mcpServersTable.id,
       })
       .from(schema.toolsTable)
       .innerJoin(

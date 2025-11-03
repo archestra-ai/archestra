@@ -100,6 +100,8 @@ export const RouteId = {
   GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  GetLabelKeys: "getLabelKeys",
+  GetLabelValues: "getLabelValues",
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
@@ -107,6 +109,7 @@ export const RouteId = {
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
   UpdateAgentTool: "updateAgentTool",
+  GetAgentAvailableTokens: "getAgentAvailableTokens",
 
   // Features Routes
   GetFeatures: "getFeatures",
@@ -125,8 +128,15 @@ export const RouteId = {
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
+  GetMcpServerLogs: "getMcpServerLogs",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
+  GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
+  RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
+  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
+  RestartMcpServer: "restartMcpServer",
+  GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -159,6 +169,10 @@ export const RouteId = {
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+
+  // MCP Tool Call Routes
+  GetMcpToolCalls: "getMcpToolCalls",
+  GetMcpToolCall: "getMcpToolCall",
 
   // Autonomy Policy Routes
   GetOperators: "getOperators",
@@ -193,5 +207,34 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Limits Routes
+  GetLimits: "getLimits",
+  CreateLimit: "createLimit",
+  GetLimit: "getLimit",
+  UpdateLimit: "updateLimit",
+  DeleteLimit: "deleteLimit",
+
+  // Organization Routes
+  GetOrganization: "getOrganization",
+  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
+
+  // Token Price Routes
+  GetTokenPrices: "getTokenPrices",
+  CreateTokenPrice: "createTokenPrice",
+  GetTokenPrice: "getTokenPrice",
+  UpdateTokenPrice: "updateTokenPrice",
+  DeleteTokenPrice: "deleteTokenPrice",
+
+  // Statistics Routes
+  GetTeamStatistics: "getTeamStatistics",
+  GetAgentStatistics: "getAgentStatistics",
+  GetModelStatistics: "getModelStatistics",
+  GetOverviewStatistics: "getOverviewStatistics",
+  // Organization Routes
+  GetOrganizationAppearance: "getOrganizationAppearance",
+  UpdateOrganizationAppearance: "updateOrganizationAppearance",
+  UploadOrganizationLogo: "uploadOrganizationLogo",
+  DeleteOrganizationLogo: "deleteOrganizationLogo",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

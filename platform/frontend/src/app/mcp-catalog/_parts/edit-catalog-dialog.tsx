@@ -10,12 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import { McpCatalogForm } from "./mcp-catalog-form";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
-  McpCatalogForm,
-  type McpCatalogFormValues,
   transformCatalogItemToFormValues,
   transformFormToApiData,
-} from "./mcp-catalog-form";
+} from "./mcp-catalog-form.utils";
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;

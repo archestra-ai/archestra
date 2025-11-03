@@ -1,14 +1,24 @@
 import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
+import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
+
+// Get the API base URL from config
+const API_BASE_URL =
+  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
-    const { teams, ...serverData } = server;
+    const { teams, userId, ...serverData } = server;
 
+    // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
       .values(serverData)
@@ -19,9 +29,15 @@ class McpServerModel {
       await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
     }
 
+    // Assign user to the MCP server if provided (personal auth)
+    if (userId) {
+      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+    }
+
     return {
       ...createdServer,
       teams: teams || [],
+      users: userId ? [userId] : [],
     };
   }
 
@@ -29,12 +45,32 @@ class McpServerModel {
     userId?: string,
     isAdmin?: boolean,
   ): Promise<McpServer[]> {
-    let query = db.select().from(schema.mcpServersTable).$dynamic();
+    let query = db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleMcpServerIds =
+      // Get MCP servers accessible through team membership
+      const teamAccessibleMcpServerIds =
         await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+
+      // Get MCP servers with personal access
+      const personalMcpServerIds =
+        await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+
+      // Combine both lists
+      const accessibleMcpServerIds = [
+        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+      ];
 
       if (accessibleMcpServerIds.length === 0) {
         return [];
@@ -45,17 +81,29 @@ class McpServerModel {
       );
     }
 
-    const servers = await query;
+    const results = await query;
 
-    // Populate teams for each MCP server
-    const serversWithTeams: McpServer[] = await Promise.all(
-      servers.map(async (server) => ({
-        ...server,
-        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
-      })),
+    // Populate teams and user details for each MCP server
+    const serversWithRelations: McpServer[] = await Promise.all(
+      results.map(async (result) => {
+        const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
+          result.server.id,
+        );
+        const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
+          result.server.id,
+        );
+        return {
+          ...result.server,
+          ownerEmail: result.ownerEmail,
+          teams: teamDetails.map((t) => t.teamId),
+          users: userDetails.map((u) => u.userId),
+          userDetails,
+          teamDetails,
+        };
+      }),
     );
 
-    return serversWithTeams;
+    return serversWithRelations;
   }
 
   static async findById(
@@ -65,30 +113,45 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-admins
     if (userId && !isAdmin) {
-      const hasAccess = await McpServerTeamModel.userHasMcpServerAccess(
+      const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
         userId,
         id,
         false,
       );
-      if (!hasAccess) {
+      const hasPersonalAccess =
+        await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
+
+      if (!hasTeamAccess && !hasPersonalAccess) {
         return null;
       }
     }
 
-    const [server] = await db
-      .select()
+    const [result] = await db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
       .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
       .where(eq(schema.mcpServersTable.id, id));
 
-    if (!server) {
+    if (!result) {
       return null;
     }
 
-    const teams = await McpServerTeamModel.getTeamsForMcpServer(id);
+    const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(id);
+    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
 
     return {
-      ...server,
-      teams,
+      ...result.server,
+      ownerEmail: result.ownerEmail,
+      teams: teamDetails.map((t) => t.teamId),
+      users: userDetails.map((u) => u.userId),
+      userDetails,
+      teamDetails,
     };
   }
 
@@ -162,7 +225,28 @@ class McpServerModel {
       return false;
     }
 
-    // Delete the MCP server
+    // Check if this is a local server with a running K8s pod
+    if (mcpServer.catalogId) {
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        mcpServer.catalogId,
+      );
+
+      // For local servers, stop and remove the K8s pod
+      if (catalogItem?.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.removeMcpServer(id);
+          logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+        } catch (error) {
+          logger.error(
+            { err: error },
+            `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+          );
+          // Continue with deletion even if pod cleanup fails
+        }
+      }
+    }
+
+    // Delete the MCP server from database
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
@@ -190,9 +274,6 @@ class McpServerModel {
     // Get catalog information if this server was installed from a catalog
     let catalogItem = null;
     if (mcpServer.catalogId) {
-      const { default: InternalMcpCatalogModel } = await import(
-        "./internal-mcp-catalog"
-      );
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
@@ -210,7 +291,7 @@ class McpServerModel {
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
       try {
-        const config = mcpClient.createRemoteServerConfig({
+        const config = mcpClient.createServerConfig({
           name: mcpServer.name,
           url: catalogItem.serverUrl,
           secrets,
@@ -223,68 +304,70 @@ class McpServerModel {
           inputSchema: tool.inputSchema,
         }));
       } catch (error) {
-        console.error(
+        logger.error(
+          { err: error },
           `Failed to get tools from remote MCP server ${mcpServer.name}:`,
-          error,
         );
         throw error;
       }
     }
 
     /**
-     * For other/unknown servers, return mock data
-     *
-     * Soon we will add support for all mcp servers here...
+     * For local servers, check transport type and use appropriate endpoint
      */
-    return [
-      {
-        name: "read_file",
-        description:
-          "Read the complete contents of a file from the file system",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the file to read",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "list_directory",
-        description: "List all files and directories in a given path",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the directory to list",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "search_files",
-        description: "Search for files matching a pattern",
-        inputSchema: {
-          type: "object",
-          properties: {
-            pattern: {
-              type: "string",
-              description: "Glob pattern to match files",
-            },
-            base_path: {
-              type: "string",
-              description: "Base directory to search from",
-            },
-          },
-          required: ["pattern"],
-        },
-      },
-    ];
+    if (catalogItem?.serverType === "local") {
+      try {
+        // Check if this is a streamable-http server
+        const usesStreamableHttp =
+          await McpServerRuntimeManager.usesStreamableHttp(mcpServer.id);
+
+        let url: string;
+        if (usesStreamableHttp) {
+          // Use the HTTP endpoint URL for streamable-http servers
+          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
+            mcpServer.id,
+          );
+          if (!httpEndpointUrl) {
+            throw new Error(
+              `No HTTP endpoint URL found for streamable-http server ${mcpServer.name}`,
+            );
+          }
+          url = httpEndpointUrl;
+        } else {
+          // Use the MCP proxy endpoint for stdio servers
+          url = `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`;
+        }
+
+        const config = mcpClient.createServerConfig({
+          name: mcpServer.name,
+          url,
+          secrets, // Local servers might still use secrets for API keys etc.
+        });
+
+        logger.warn(
+          `Attempting to get tools from local MCP server ${mcpServer.name} with config ${JSON.stringify(config)}`,
+        );
+
+        const tools = await mcpClient.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to get tools from local MCP server ${mcpServer.name}:`,
+        );
+        throw error;
+      }
+    }
+
+    /**
+     * For other/unknown servers, return empty array
+     */
+    return [];
   }
 
   /**
@@ -307,13 +390,10 @@ class McpServerModel {
     // For other remote servers, check if we can connect using catalog info
     if (catalogId) {
       try {
-        const { default: InternalMcpCatalogModel } = await import(
-          "./internal-mcp-catalog"
-        );
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClient.createRemoteServerConfig({
+          const config = mcpClient.createServerConfig({
             name: serverName,
             url: catalogItem.serverUrl,
             secrets,
@@ -322,9 +402,9 @@ class McpServerModel {
           return tools.length > 0;
         }
       } catch (error) {
-        console.error(
+        logger.error(
+          { err: error },
           `Validation failed for remote MCP server ${serverName}:`,
-          error,
         );
         return false;
       }

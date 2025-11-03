@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import type { archestraCatalogTypes } from "@shared";
 import { archestraCatalogSdk } from "@shared";
 import { and, desc, eq } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type {
   InsertMcpServerInstallationRequest,
   McpServerInstallationRequest,
@@ -9,6 +12,31 @@ import type {
   UpdateMcpServerInstallationRequest,
 } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+
+/**
+ * Rewrite OAuth redirect URIs to use the platform's callback URL
+ */
+function rewriteOAuthRedirectUris(
+  oauthConfig?: archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"],
+):
+  | archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"]
+  | undefined {
+  if (!oauthConfig || oauthConfig.requires_proxy) {
+    return oauthConfig;
+  }
+
+  // Use configured frontend URL or default to localhost:3000 for development
+  const platformBaseUrl = config.baseURL || "http://localhost:3000";
+
+  return {
+    ...oauthConfig,
+    redirect_uris: oauthConfig.redirect_uris?.map((uri) =>
+      uri === "http://localhost:8080/oauth/callback"
+        ? `${platformBaseUrl}/oauth-callback`
+        : uri,
+    ),
+  };
+}
 
 class McpServerInstallationRequestModel {
   static async create(
@@ -137,8 +165,7 @@ class McpServerInstallationRequestModel {
 
           // Create internal catalog item from external server data
           await InternalMcpCatalogModel.create({
-            label: externalServer.display_name || externalServer.name,
-            name: externalServer.name,
+            name: externalServer.display_name || externalServer.name,
             version: undefined,
             serverType: externalServer.server.type,
             serverUrl:
@@ -150,30 +177,38 @@ class McpServerInstallationRequestModel {
                 ? externalServer.server.docs_url
                 : undefined,
             userConfig: externalServer.user_config,
-            oauthConfig: externalServer.oauth_config,
+            oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
           });
         }
-      } else if (
-        currentRequest.customServerConfig &&
-        currentRequest.customServerConfig.type === "remote"
-      ) {
+      } else if (currentRequest.customServerConfig) {
         // Custom server request - use provided config
-        const config = currentRequest.customServerConfig;
+        const customConfig = currentRequest.customServerConfig;
 
-        await InternalMcpCatalogModel.create({
-          label: config.label,
-          name: config.name,
-          version: config.version,
-          serverType: "remote",
-          serverUrl: config.serverUrl,
-          docsUrl: config.docsUrl,
-          userConfig: config.userConfig,
-          oauthConfig: config.oauthConfig,
-        });
+        if (customConfig.type === "remote") {
+          await InternalMcpCatalogModel.create({
+            name: customConfig.name,
+            version: customConfig.version,
+            serverType: "remote",
+            serverUrl: customConfig.serverUrl,
+            docsUrl: customConfig.docsUrl,
+            userConfig: customConfig.userConfig,
+            oauthConfig: rewriteOAuthRedirectUris(customConfig.oauthConfig),
+          });
+        } else if (customConfig.type === "local") {
+          await InternalMcpCatalogModel.create({
+            name: customConfig.name,
+            version: customConfig.version,
+            serverType: "local",
+            localConfig: customConfig.localConfig,
+          });
+        }
       }
     } catch (error) {
       // Log the error but still approve the request - admin can handle catalog creation manually
-      console.error("Failed to create catalog item during approval:", error);
+      logger.error(
+        { err: error },
+        "Failed to create catalog item during approval:",
+      );
     }
 
     // Update the request status

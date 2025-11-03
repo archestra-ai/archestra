@@ -54,8 +54,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Environment variables for the Archestra Platform container
 */}}
 {{- define "archestra-platform.env" -}}
-- name: DATABASE_URL
+- name: ARCHESTRA_DATABASE_URL
   value: {{ if .Values.postgresql.external_database_url }}{{ .Values.postgresql.external_database_url }}{{ else }}postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}{{ end }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
+  value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
+{{- if .Values.archestra.orchestrator.baseImage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
+  value: {{ .Values.archestra.orchestrator.baseImage | quote }}
+{{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+- name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
+  value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}
+{{- end }}
+- name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
+  value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
 {{- range $key, $value := .Values.archestra.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}
@@ -82,4 +94,15 @@ PostgreSQL port for database connectivity checks
 {{- else -}}
 5432
 {{- end -}}
+{{- end }}
+
+{{/*
+ServiceAccount name for the Archestra Platform
+*/}}
+{{- define "archestra-platform.serviceAccountName" -}}
+{{- if .Values.archestra.orchestrator.kubernetes.serviceAccount.create }}
+{{- default (include "archestra-platform.fullname" .) .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
+{{- end }}
 {{- end }}

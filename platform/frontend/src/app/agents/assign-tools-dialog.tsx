@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2, Search, Server } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -17,10 +18,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  useAgentTools,
+  useAgentToolPatchMutation,
+  useAllAgentTools,
   useAssignTool,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTools } from "@/lib/tool.query";
 
 interface AssignToolsDialogProps {
@@ -37,16 +40,19 @@ export function AssignToolsDialog({
   // Fetch all tools and filter for MCP tools
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
   const mcpTools = allTools?.filter((tool) => tool.mcpServer !== null) || [];
+  const mcpServers = useMcpServers();
 
-  // Fetch currently assigned tools for this agent
-  const { data: agentTools, isLoading: isLoadingAgentTools } = useAgentTools(
-    agent.id,
+  // Fetch currently assigned tools for this agent (use getAllAgentTools to get credentialSourceMcpServerId)
+  const { data: allAgentTools } = useAllAgentTools({});
+  const agentToolRelations = useMemo(
+    () => allAgentTools?.filter((at) => at.agent.id === agent.id) || [],
+    [allAgentTools, agent.id],
   );
 
-  // Track selected tool IDs
-  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
-    new Set(),
-  );
+  // Track selected tools with their credentials and agent-tool IDs
+  const [selectedTools, setSelectedTools] = useState<
+    { toolId: string; credentialsSourceId?: string; agentToolId?: string }[]
+  >([]);
 
   // Track search query
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,59 +67,98 @@ export function AssignToolsDialog({
 
   // Initialize selected tools when agent tools load
   useEffect(() => {
-    if (agentTools) {
-      const mcpToolIds = agentTools
-        .filter((tool) => tool.mcpServerId !== null)
-        .map((tool) => tool.id);
-      setSelectedToolIds(new Set(mcpToolIds));
+    if (agentToolRelations) {
+      setSelectedTools(
+        agentToolRelations.map((at) => ({
+          toolId: at.tool.id,
+          credentialsSourceId: at.credentialSourceMcpServerId || undefined,
+          agentToolId: at.id,
+        })),
+      );
     }
-  }, [agentTools]);
+  }, [agentToolRelations]);
 
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
+  const patchAgentTool = useAgentToolPatchMutation();
 
-  const isLoading = isLoadingAllTools || isLoadingAgentTools;
-  const isSaving = assignTool.isPending || unassignTool.isPending;
+  const isLoading = isLoadingAllTools;
+  const isSaving =
+    assignTool.isPending || unassignTool.isPending || patchAgentTool.isPending;
 
   const handleToggleTool = useCallback((toolId: string) => {
-    setSelectedToolIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(toolId)) {
-        next.delete(toolId);
-      } else {
-        next.add(toolId);
+    setSelectedTools((prev) => {
+      const isSelected = prev.some((t) => t.toolId === toolId);
+      if (isSelected) {
+        // Remove the tool
+        return prev.filter((t) => t.toolId !== toolId);
       }
-      return next;
+      // Add the tool
+      return [...prev, { toolId, credentialsSourceId: undefined }];
     });
   }, []);
 
+  const handleCredentialsSourceChange = useCallback(
+    (toolId: string, credentialsSourceId?: string) => {
+      setSelectedTools((prev) => {
+        return prev.map((tool) =>
+          tool.toolId === toolId ? { ...tool, credentialsSourceId } : tool,
+        );
+      });
+    },
+    [],
+  );
+
   const handleSave = useCallback(async () => {
-    if (!agentTools) return;
+    // Get current tool IDs and their state
+    const currentToolIds = new Set(agentToolRelations.map((at) => at.tool.id));
+    const selectedToolIds = new Set(selectedTools.map((t) => t.toolId));
 
-    // Get current MCP tool IDs assigned to this agent
-    const currentToolIds = new Set(
-      agentTools
-        .filter((tool) => tool.mcpServerId !== null)
-        .map((tool) => tool.id),
+    // Determine which tools to assign, unassign, and update
+    const toAssign = selectedTools.filter(
+      (tool) => !currentToolIds.has(tool.toolId),
     );
-
-    // Determine which tools to assign and unassign
-    const toAssign = Array.from(selectedToolIds).filter(
-      (id) => !currentToolIds.has(id),
+    const toUnassign = agentToolRelations.filter(
+      (at) => !selectedToolIds.has(at.tool.id),
     );
-    const toUnassign = Array.from(currentToolIds).filter(
-      (id) => !selectedToolIds.has(id),
-    );
+    const toUpdate = selectedTools.filter((tool) => {
+      if (!tool.agentToolId) return false;
+      const current = agentToolRelations.find(
+        (at) => at.tool.id === tool.toolId,
+      );
+      return (
+        current &&
+        current.credentialSourceMcpServerId !==
+          (tool.credentialsSourceId || null)
+      );
+    });
 
     try {
       // Assign new tools
-      for (const toolId of toAssign) {
-        await assignTool.mutateAsync({ agentId: agent.id, toolId });
+      for (const tool of toAssign) {
+        await assignTool.mutateAsync({
+          agentId: agent.id,
+          toolId: tool.toolId,
+          credentialSourceMcpServerId: tool.credentialsSourceId || null,
+        });
       }
 
       // Unassign removed tools
-      for (const toolId of toUnassign) {
-        await unassignTool.mutateAsync({ agentId: agent.id, toolId });
+      for (const at of toUnassign) {
+        await unassignTool.mutateAsync({
+          agentId: agent.id,
+          toolId: at.tool.id,
+        });
+      }
+
+      // Update credentials for existing tools
+      for (const tool of toUpdate) {
+        if (tool.agentToolId) {
+          await patchAgentTool.mutateAsync({
+            id: tool.agentToolId,
+            credentialSourceMcpServerId: tool.credentialsSourceId || null,
+          });
+        }
       }
 
       toast.success(`Successfully updated tools for ${agent.name}`);
@@ -124,11 +169,12 @@ export function AssignToolsDialog({
     }
   }, [
     agent,
-    agentTools,
+    agentToolRelations,
     assignTool,
     unassignTool,
+    patchAgentTool,
     onOpenChange,
-    selectedToolIds,
+    selectedTools,
   ]);
 
   return (
@@ -186,17 +232,43 @@ export function AssignToolsDialog({
                 >
                   <Checkbox
                     id={`tool-${tool.id}`}
-                    checked={selectedToolIds.has(tool.id)}
+                    checked={selectedTools.some((t) => t.toolId === tool.id)}
                     onCheckedChange={() => handleToggleTool(tool.id)}
                     disabled={isSaving}
                   />
                   <div className="flex-1 space-y-1">
                     <Label
                       htmlFor={`tool-${tool.id}`}
-                      className="text-sm font-medium leading-none cursor-pointer"
+                      className="text-sm font-medium leading-none cursor-pointer mb-2"
                     >
                       {tool.name}
                     </Label>
+                    {selectedTools.some((t) => t.toolId === tool.id) && (
+                      <div className="flex flex-col gap-1 mt-4">
+                        <span className="text-xs text-muted-foreground">
+                          Token to use:
+                        </span>
+                        <TokenSelect
+                          catalogId={
+                            mcpServers.data?.find(
+                              (server) => server.id === tool.mcpServer?.id,
+                            )?.catalogId ?? ""
+                          }
+                          agentIds={[agent.id]}
+                          onValueChange={(credentialsSourceId) =>
+                            handleCredentialsSourceChange(
+                              tool.id,
+                              credentialsSourceId ?? undefined,
+                            )
+                          }
+                          value={
+                            selectedTools.find((t) => t.toolId === tool.id)
+                              ?.credentialsSourceId ?? undefined
+                          }
+                          className="mb-4"
+                        />
+                      </div>
+                    )}
                     {tool.description && (
                       <p className="text-sm text-muted-foreground">
                         {tool.description}

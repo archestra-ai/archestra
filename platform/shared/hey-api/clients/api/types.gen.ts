@@ -7591,6 +7591,15 @@ export type UpdateOrganizationCleanupIntervalErrors = {
             type: string;
         };
     };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
 export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
@@ -7626,6 +7635,15 @@ export type GetOrganizationAppearanceErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7650,7 +7668,7 @@ export type GetOrganizationAppearanceResponses = {
      * Default Response
      */
     200: {
-        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;
@@ -7661,7 +7679,7 @@ export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceRespons
 
 export type UpdateOrganizationAppearanceData = {
     body?: {
-        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;
@@ -7672,6 +7690,15 @@ export type UpdateOrganizationAppearanceData = {
 };
 
 export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -7708,7 +7735,7 @@ export type UpdateOrganizationAppearanceResponses = {
      * Default Response
      */
     200: {
-        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         logoType?: 'default' | 'custom';
         logo?: string | null;

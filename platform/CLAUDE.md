@@ -199,10 +199,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **White-labeling**:
 - Admin-only via `/api/organization/appearance` endpoints  
 - Custom logos: PNG only, max 2MB, stored as base64
-- 18 themes: 9 single color, 2 vision assistive, 7 fun themes
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
-- OrganizationThemeProvider applies CSS variables dynamically
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logoType, logo
 

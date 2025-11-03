@@ -96,8 +96,7 @@ This dashboard provides comprehensive monitoring across four key areas:
 - **Route Filter**: Use the "Route (App Metrics)" dropdown to filter by specific API endpoints
 
 #### 4. OTEL Traces
-- **Trace Metrics**: Visual representation of trace data from Tempo
-- Links to detailed trace analysis in Grafana Explore
+The traces section has two panels: **All Traces** displays recent traces in a table format, while **Individual Trace** shows detailed span breakdowns for selected traces. Initially, the "Individual Trace" panel will be empty. Click on any trace in the table, then chose "Trace link" from the context menu to see the individual trace.
 
 ### Dashboard Features
 

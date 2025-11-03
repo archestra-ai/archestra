@@ -48,7 +48,14 @@ export default class K8sPod {
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
-    this.podName = `mcp-${mcpServer.id.toLowerCase()}`;
+    this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+  }
+
+  static slugifyMcpServerName(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/ /g, "-")
+      .replace(/[^a-z0-9-]/g, "");
   }
 
   /**

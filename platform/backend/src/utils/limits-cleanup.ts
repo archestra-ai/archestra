@@ -18,7 +18,7 @@ export async function cleanupLimitsIfNeeded(
 
     // Use default cleanup interval if not set
     const cleanupInterval = organization?.limitCleanupInterval || "1h";
-    
+
     if (!organization) {
       logger.warn(
         `[LimitsCleanup] Organization not found: ${organizationId}, using default interval: ${cleanupInterval}`,
@@ -122,7 +122,9 @@ export async function cleanupLimitsIfNeeded(
       );
     }
   } catch (error) {
-    logger.error(`[LimitsCleanup] Error cleaning up limits for organization ${organizationId}:`, error);
+    logger.error(
+      `[LimitsCleanup] Error cleaning up limits for organization ${organizationId}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     console.error("Error cleaning up limits:", error);
     // Don't throw - cleanup is best effort and shouldn't break the main flow
   }

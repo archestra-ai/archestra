@@ -5107,9 +5107,11 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsage: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
+        model: string | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5126,6 +5128,7 @@ export type CreateLimitData = {
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
+        model?: string | null;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -5175,9 +5178,11 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsage: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
+        model: string | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5298,9 +5303,11 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsage: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
+        model: string | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -5317,6 +5324,7 @@ export type UpdateLimitData = {
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
+        model?: string | null;
         lastCleanup?: unknown;
     };
     path: {
@@ -5377,9 +5385,11 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsage: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
+        model: string | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -7672,6 +7682,177 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type GetTeamStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/teams';
+};
+
+export type GetTeamStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamStatisticsError = GetTeamStatisticsErrors[keyof GetTeamStatisticsErrors];
+
+export type GetTeamStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        teamId: string;
+        teamName: string;
+        members: number;
+        agents: number;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetTeamStatisticsResponse = GetTeamStatisticsResponses[keyof GetTeamStatisticsResponses];
+
+export type GetAgentStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/agents';
+};
+
+export type GetAgentStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentStatisticsError = GetAgentStatisticsErrors[keyof GetAgentStatisticsErrors];
+
+export type GetAgentStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        agentId: string;
+        agentName: string;
+        teamName: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetAgentStatisticsResponse = GetAgentStatisticsResponses[keyof GetAgentStatisticsResponses];
+
+export type GetModelStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/models';
+};
+
+export type GetModelStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetModelStatisticsError = GetModelStatisticsErrors[keyof GetModelStatisticsErrors];
+
+export type GetModelStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        model: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        percentage: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetModelStatisticsResponse = GetModelStatisticsResponses[keyof GetModelStatisticsResponses];
+
+export type GetOverviewStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/overview';
+};
+
+export type GetOverviewStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOverviewStatisticsError = GetOverviewStatisticsErrors[keyof GetOverviewStatisticsErrors];
+
+export type GetOverviewStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalRequests: number;
+        totalTokens: number;
+        totalCost: number;
+        topTeam: string;
+        topAgent: string;
+        topModel: string;
+    };
+};
+
+export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
 export type GetTeamsData = {
     body?: never;

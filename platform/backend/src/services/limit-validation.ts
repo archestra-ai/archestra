@@ -307,7 +307,7 @@ class LimitValidationService {
           logger.info(
             `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
           );
-          
+
           // Calculate remaining based on the comparison type (tokens vs dollars)
           const remaining = Math.max(0, limit.limitValue - comparisonValue);
 

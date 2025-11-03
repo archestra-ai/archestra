@@ -225,5 +225,11 @@ export const RouteId = {
   GetTokenPrice: "getTokenPrice",
   UpdateTokenPrice: "updateTokenPrice",
   DeleteTokenPrice: "deleteTokenPrice",
+
+  // Statistics Routes
+  GetTeamStatistics: "getTeamStatistics",
+  GetAgentStatistics: "getAgentStatistics",
+  GetModelStatistics: "getModelStatistics",
+  GetOverviewStatistics: "getOverviewStatistics",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

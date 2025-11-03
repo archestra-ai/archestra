@@ -101,6 +101,12 @@ import {
   useOrganizationDetails,
   useUpdateOrganizationCleanupInterval,
 } from "@/lib/organization.query";
+import {
+  type TimeFrame,
+  useAgentStatistics,
+  useModelStatistics,
+  useTeamStatistics,
+} from "@/lib/statistics.query";
 import { useTeams } from "@/lib/team.query";
 import {
   useCreateTokenPrice,
@@ -744,6 +750,20 @@ export default function CostPage() {
   const { data: organizationDetails } = useOrganizationDetails();
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
+
+  // Statistics data fetching hooks
+  const currentTimeframe = timeframe.startsWith("custom:")
+    ? "all"
+    : (timeframe as TimeFrame);
+  const { data: teamStatistics = [] } = useTeamStatistics({
+    timeframe: currentTimeframe,
+  });
+  const { data: agentStatistics = [] } = useAgentStatistics({
+    timeframe: currentTimeframe,
+  });
+  const { data: modelStatistics = [] } = useModelStatistics({
+    timeframe: currentTimeframe,
+  });
   const updateCleanupInterval = useUpdateOrganizationCleanupInterval();
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
@@ -1028,222 +1048,132 @@ export default function CostPage() {
     }
   };
 
-  // Chart.js data configuration with teams as separate lines
-  const teamChartData = {
-    labels: ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"],
-    datasets: [
-      {
-        label: "Engineering",
-        data: [15.67, 23.45, 42.12, 67.89, 89.45, 112.34, 123.67],
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
+  // Helper function to convert statistics to chart format
+  const convertStatsToChartData = (
+    statistics: Array<{
+      teamName?: string;
+      agentName?: string;
+      model?: string;
+      timeSeries: Array<{ timestamp: string; value: number }>;
+    }>,
+    labelKey: "teamName" | "agentName" | "model",
+    colors: string[],
+  ) => {
+    // Get unique time points across all datasets
+    const allTimestamps = [
+      ...new Set(
+        statistics.flatMap((stat) =>
+          stat.timeSeries.map((point) => point.timestamp),
+        ),
+      ),
+    ].sort();
+
+    const datasets = statistics.slice(0, 5).map((stat, index) => {
+      // Limit to top 5 for readability
+      const data = allTimestamps.map((timestamp) => {
+        const point = stat.timeSeries.find((p) => p.timestamp === timestamp);
+        return point ? point.value : 0;
+      });
+
+      return {
+        label: stat[labelKey] || "Unknown",
+        data,
+        borderColor: colors[index % colors.length],
+        backgroundColor: colors[index % colors.length]
+          .replace(")", ", 0.1)")
+          .replace("rgb", "rgba"),
         borderWidth: 3,
         fill: false,
         tension: 0.4,
-        pointBackgroundColor: "#3b82f6",
+        pointBackgroundColor: colors[index % colors.length],
         pointBorderColor: "#ffffff",
         pointBorderWidth: 2,
         pointRadius: 5,
         pointHoverRadius: 8,
-      },
-      {
-        label: "Support",
-        data: [8.92, 15.34, 28.67, 45.23, 59.78, 71.23, 78.95],
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#10b981",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Marketing",
-        data: [5.23, 8.67, 15.45, 23.89, 28.34, 32.67, 34.89],
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245, 158, 11, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#f59e0b",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Sales",
-        data: [3.45, 6.78, 12.34, 18.9, 22.45, 25.67, 28.12],
-        borderColor: "#ef4444",
-        backgroundColor: "rgba(239, 68, 68, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#ef4444",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Operations",
-        data: [2.12, 4.23, 7.89, 12.45, 15.67, 18.23, 19.89],
-        borderColor: "#8b5cf6",
-        backgroundColor: "rgba(139, 92, 246, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#8b5cf6",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-    ],
+      };
+    });
+
+    // Format timestamps for display
+    const labels = allTimestamps.map((timestamp) => {
+      const date = new Date(timestamp);
+      if (timeframe === "1h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "24h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "7d" || timeframe === "30d") {
+        return format(date, "MMM d");
+      } else {
+        return format(date, "MMM d");
+      }
+    });
+
+    return { labels, datasets };
   };
+
+  const colors = [
+    "#3b82f6", // blue
+    "#10b981", // green
+    "#f59e0b", // amber
+    "#ef4444", // red
+    "#8b5cf6", // violet
+  ];
+
+  // Chart.js data configuration with teams as separate lines
+  const teamChartData =
+    teamStatistics.length > 0
+      ? convertStatsToChartData(teamStatistics, "teamName", colors)
+      : {
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No teams found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   // Agent chart data
-  const agentChartData = {
-    labels: ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"],
-    datasets: [
-      {
-        label: "Data Analysis Agent",
-        data: [8.45, 12.78, 23.56, 34.67, 45.89, 52.34, 58.9],
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#3b82f6",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Customer Support Bot",
-        data: [6.23, 11.45, 19.87, 29.84, 38.76, 44.12, 48.67],
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#10b981",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Code Review Assistant",
-        data: [4.12, 7.89, 14.56, 22.34, 28.9, 33.45, 36.78],
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245, 158, 11, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#f59e0b",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Marketing Content Gen",
-        data: [2.89, 5.34, 9.78, 15.67, 19.45, 22.89, 25.12],
-        borderColor: "#ef4444",
-        backgroundColor: "rgba(239, 68, 68, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#ef4444",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-    ],
-  };
+  const agentChartData =
+    agentStatistics.length > 0
+      ? convertStatsToChartData(agentStatistics, "agentName", colors)
+      : {
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No agents found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   // Model chart data
-  const modelChartData = {
-    labels: ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"],
-    datasets: [
-      {
-        label: "GPT-4 Turbo",
-        data: [18.45, 27.89, 49.67, 76.34, 98.76, 115.23, 125.89],
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#3b82f6",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Claude 3 Opus",
-        data: [14.23, 21.56, 38.9, 59.78, 77.45, 89.12, 96.34],
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#10b981",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "GPT-3.5 Turbo",
-        data: [5.67, 8.9, 15.34, 23.78, 30.45, 35.67, 38.9],
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245, 158, 11, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#f59e0b",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Gemini Pro",
-        data: [3.45, 5.78, 10.23, 15.9, 20.34, 23.89, 26.12],
-        borderColor: "#ef4444",
-        backgroundColor: "rgba(239, 68, 68, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#ef4444",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-      {
-        label: "Claude 3 Haiku",
-        data: [1.89, 3.12, 5.67, 8.45, 10.78, 12.34, 13.56],
-        borderColor: "#8b5cf6",
-        backgroundColor: "rgba(139, 92, 246, 0.1)",
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        pointBackgroundColor: "#8b5cf6",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-      },
-    ],
-  };
+  const modelChartData =
+    modelStatistics.length > 0
+      ? convertStatsToChartData(modelStatistics, "model", colors)
+      : {
+          labels: ["No Data"],
+          datasets: [
+            {
+              label: "No models found",
+              data: [0],
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156, 163, 175, 0.1)",
+              borderWidth: 3,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        };
 
   const chartOptions = {
     responsive: true,
@@ -1536,54 +1466,37 @@ export default function CostPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Engineering
-                          </TableCell>
-                          <TableCell>12</TableCell>
-                          <TableCell>8</TableCell>
-                          <TableCell>15,234</TableCell>
-                          <TableCell>1,234,567</TableCell>
-                          <TableCell className="text-right">
-                            $1,567.89
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">Support</TableCell>
-                          <TableCell>6</TableCell>
-                          <TableCell>4</TableCell>
-                          <TableCell>9,876</TableCell>
-                          <TableCell>567,890</TableCell>
-                          <TableCell className="text-right">$789.45</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Marketing
-                          </TableCell>
-                          <TableCell>4</TableCell>
-                          <TableCell>3</TableCell>
-                          <TableCell>3,456</TableCell>
-                          <TableCell>234,567</TableCell>
-                          <TableCell className="text-right">$298.67</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">Sales</TableCell>
-                          <TableCell>8</TableCell>
-                          <TableCell>2</TableCell>
-                          <TableCell>1,789</TableCell>
-                          <TableCell>123,456</TableCell>
-                          <TableCell className="text-right">$156.78</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Operations
-                          </TableCell>
-                          <TableCell>3</TableCell>
-                          <TableCell>2</TableCell>
-                          <TableCell>987</TableCell>
-                          <TableCell>67,890</TableCell>
-                          <TableCell className="text-right">$89.34</TableCell>
-                        </TableRow>
+                        {teamStatistics.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={6}
+                              className="text-center py-8 text-muted-foreground"
+                            >
+                              No team data available for the selected timeframe
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          teamStatistics.map((team) => (
+                            <TableRow key={team.teamId}>
+                              <TableCell className="font-medium">
+                                {team.teamName}
+                              </TableCell>
+                              <TableCell>{team.members}</TableCell>
+                              <TableCell>{team.agents}</TableCell>
+                              <TableCell>
+                                {team.requests.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                {(
+                                  team.inputTokens + team.outputTokens
+                                ).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                ${team.cost.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -1617,42 +1530,36 @@ export default function CostPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Data Analysis Agent
-                          </TableCell>
-                          <TableCell>Engineering</TableCell>
-                          <TableCell>3,456</TableCell>
-                          <TableCell>234,567</TableCell>
-                          <TableCell className="text-right">$345.67</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Customer Support Bot
-                          </TableCell>
-                          <TableCell>Support</TableCell>
-                          <TableCell>8,901</TableCell>
-                          <TableCell>198,765</TableCell>
-                          <TableCell className="text-right">$298.45</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Code Review Assistant
-                          </TableCell>
-                          <TableCell>Engineering</TableCell>
-                          <TableCell>2,345</TableCell>
-                          <TableCell>156,789</TableCell>
-                          <TableCell className="text-right">$234.56</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Marketing Content Gen
-                          </TableCell>
-                          <TableCell>Marketing</TableCell>
-                          <TableCell>1,234</TableCell>
-                          <TableCell>98,765</TableCell>
-                          <TableCell className="text-right">$123.45</TableCell>
-                        </TableRow>
+                        {agentStatistics.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="text-center py-8 text-muted-foreground"
+                            >
+                              No agent data available for the selected timeframe
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          agentStatistics.map((agent) => (
+                            <TableRow key={agent.agentId}>
+                              <TableCell className="font-medium">
+                                {agent.agentName}
+                              </TableCell>
+                              <TableCell>{agent.teamName}</TableCell>
+                              <TableCell>
+                                {agent.requests.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                {(
+                                  agent.inputTokens + agent.outputTokens
+                                ).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                ${agent.cost.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -1688,51 +1595,36 @@ export default function CostPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            GPT-4 Turbo
-                          </TableCell>
-                          <TableCell>12,345</TableCell>
-                          <TableCell>456,789</TableCell>
-                          <TableCell>$1,234.56</TableCell>
-                          <TableCell className="text-right">45.2%</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Claude 3 Opus
-                          </TableCell>
-                          <TableCell>8,901</TableCell>
-                          <TableCell>345,678</TableCell>
-                          <TableCell>$890.12</TableCell>
-                          <TableCell className="text-right">32.8%</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            GPT-3.5 Turbo
-                          </TableCell>
-                          <TableCell>23,456</TableCell>
-                          <TableCell>234,567</TableCell>
-                          <TableCell>$234.56</TableCell>
-                          <TableCell className="text-right">12.4%</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Gemini Pro
-                          </TableCell>
-                          <TableCell>5,678</TableCell>
-                          <TableCell>123,456</TableCell>
-                          <TableCell>$98.76</TableCell>
-                          <TableCell className="text-right">6.3%</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="font-medium">
-                            Claude 3 Haiku
-                          </TableCell>
-                          <TableCell>15,432</TableCell>
-                          <TableCell>98,765</TableCell>
-                          <TableCell>$45.67</TableCell>
-                          <TableCell className="text-right">3.3%</TableCell>
-                        </TableRow>
+                        {modelStatistics.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={5}
+                              className="text-center py-8 text-muted-foreground"
+                            >
+                              No model data available for the selected timeframe
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          modelStatistics.map((model) => (
+                            <TableRow key={model.model}>
+                              <TableCell className="font-medium">
+                                {model.model}
+                              </TableCell>
+                              <TableCell>
+                                {model.requests.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                {(
+                                  model.inputTokens + model.outputTokens
+                                ).toLocaleString()}
+                              </TableCell>
+                              <TableCell>${model.cost.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {model.percentage.toFixed(1)}%
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>

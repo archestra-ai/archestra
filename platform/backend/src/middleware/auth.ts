@@ -419,6 +419,18 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteTokenPrice]: {
     tokenPrice: ["delete"],
   },
+  [RouteId.GetTeamStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetAgentStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetModelStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

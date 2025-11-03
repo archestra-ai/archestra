@@ -1,18 +1,10 @@
 "use client";
-import {
-  authLocalization,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@daveyplate/better-auth-ui";
-import type { Role } from "@shared";
+import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import {
   BookOpen,
   Bot,
   Bug,
-  ClipboardList,
   DollarSign,
-  FileJson2,
   Github,
   Info,
   LogIn,
@@ -20,7 +12,6 @@ import {
   MessagesSquare,
   Router,
   Settings,
-  ShieldCheck,
   Slack,
   Star,
   Wrench,
@@ -45,21 +36,19 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { WithRole } from "@/components/with-permission";
-import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
+import { useOrganizationAppearance } from "@/lib/organization.query";
 
 interface MenuItem {
   title: string;
   url: string;
   icon: LucideIcon;
   subItems?: MenuItem[];
+  customIsActive?: (pathname: string) => boolean;
 }
 
-const getNavigationItems = (
-  isAuthenticated: boolean,
-  role: Role,
-): MenuItem[] => {
+const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   return [
     {
       title: "How security works",
@@ -77,62 +66,37 @@ const getNavigationItems = (
             title: "Logs",
             url: "/logs/llm-proxy",
             icon: MessagesSquare,
-            subItems: [
-              {
-                title: "LLM Proxy",
-                url: "/logs/llm-proxy",
-                icon: MessagesSquare,
-              },
-              {
-                title: "MCP Gateway",
-                url: "/logs/mcp-gateway",
-                icon: Router,
-              },
-            ],
+            customIsActive: (pathname: string) => pathname.startsWith("/logs"),
           },
           {
             title: "Tools",
-            url: "/tools",
+            url: "/tools/agents-assigned",
             icon: Wrench,
+            customIsActive: (pathname: string) => pathname.startsWith("/tools"),
           },
           {
             title: "MCP Registry",
-            url: "/mcp-catalog",
+            url: "/mcp-catalog/registry",
             icon: Router,
-            subItems: [
-              {
-                title: "Installation Requests",
-                url: "/mcp-catalog/installation-requests",
-                icon: ClipboardList,
-              },
-            ],
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/mcp-catalog"),
+          },
+          {
+            title: "Settings",
+            url: "/settings",
+            icon: Settings,
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/settings"),
           },
           {
             title: "Cost",
             url: "/cost",
             icon: DollarSign,
           },
-          ...(role === "admin"
-            ? [
-                {
-                  title: "LLM & MCP Gateways",
-                  url: "/gateways",
-                  icon: Settings,
-                },
-              ]
-            : []),
         ]
       : []),
   ];
 };
-
-const actionItems: MenuItem[] = [
-  {
-    title: "Dual LLM",
-    url: "/dual-llm",
-    icon: ShieldCheck,
-  },
-];
 
 const userItems: MenuItem[] = [
   {
@@ -146,15 +110,36 @@ const userItems: MenuItem[] = [
 export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
-  const role = useRole();
   const { data: starCount } = useGithubStars();
+  const { data: appearance } = useOrganizationAppearance();
+
+  const hasCustomLogo = appearance?.logoType === "custom" && appearance?.logo;
 
   return (
     <Sidebar>
       <SidebarHeader className="flex items-center flex-row justify-between">
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Image src="/logo.png" alt="Logo" width={28} height={28} />
-          <span className="text-base font-semibold">Archestra.AI</span>
+        <div className="flex flex-col gap-1 px-2 py-2">
+          <div className="flex items-center gap-2">
+            {hasCustomLogo ? (
+              <Image
+                src={appearance.logo || "/logo.png"}
+                alt="Organization logo"
+                width={120}
+                height={36}
+                className="object-contain max-h-9 w-full"
+              />
+            ) : (
+              <>
+                <Image src="/logo.png" alt="Logo" width={28} height={28} />
+                <span className="text-base font-semibold">Archestra.AI</span>
+              </>
+            )}
+          </div>
+          {hasCustomLogo && (
+            <p className="text-[10px] text-muted-foreground pl-1">
+              Powered by Archestra
+            </p>
+          )}
         </div>
         <ColorModeToggle />
       </SidebarHeader>
@@ -162,9 +147,15 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated, role).map((item) => (
+              {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={item.url === pathname}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={
+                      item.customIsActive?.(pathname) ??
+                      pathname.startsWith(item.url)
+                    }
+                  >
                     <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
@@ -192,31 +183,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SignedIn>
-          <WithRole requiredExactRole="admin">
-            <SidebarGroup className="px-4">
-              <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {actionItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={item.url === pathname}
-                      >
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </WithRole>
-        </SignedIn>
 
         <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>
@@ -288,7 +254,7 @@ export function AppSidebar() {
               <UserButton
                 align="center"
                 className="w-full bg-transparent hover:bg-transparent text-foreground"
-                localization={{ ...authLocalization, SETTINGS: "Account" }}
+                disableDefaultLinks
               />
             </SidebarGroupContent>
           </SidebarGroup>

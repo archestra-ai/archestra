@@ -146,7 +146,7 @@ export function ExternalMCPCatalog({
   const displayedServers = filteredServers;
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full">
       <div className="">
         <h1 className="text-lg font-semibold tracking-tight mb-2">
           External MCP Registry

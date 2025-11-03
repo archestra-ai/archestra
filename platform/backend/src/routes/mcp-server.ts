@@ -531,10 +531,463 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * MCP Proxy endpoint for stdio-based MCP servers running in K8s
-   * This proxies JSON-RPC requests to/from MCP servers running as pods
-   */
+  fastify.get(
+    "/api/mcp_server/:id/logs",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerLogs,
+        description: "Get logs for a specific MCP server pod",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        querystring: z.object({
+          lines: z.coerce.number().optional().default(100),
+          follow: z.coerce.boolean().optional().default(false),
+        }),
+        response: {
+          200: z.object({
+            logs: z.string(),
+            containerName: z.string(),
+            command: z.string(),
+            namespace: z.string(),
+          }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: mcpServerId } = request.params;
+      const { lines, follow } = request.query;
+
+      try {
+        // If follow is enabled, stream the logs
+        if (follow) {
+          // Hijack the response to handle streaming
+          reply.hijack();
+          reply.raw.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+          });
+
+          await McpServerRuntimeManager.streamMcpServerLogs(
+            mcpServerId,
+            reply.raw,
+            lines,
+          );
+
+          return;
+        }
+
+        // Otherwise, return logs as usual
+        const logs = await McpServerRuntimeManager.getMcpServerLogs(
+          mcpServerId,
+          lines,
+        );
+        return reply.send(logs);
+      } catch (error) {
+        fastify.log.error(
+          `Error getting logs for MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+
+        // If we've already hijacked, we can't send a normal error response
+        if (follow && reply.raw.headersSent) {
+          reply.raw.end();
+          return;
+        }
+
+        return reply.status(404).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Failed to get logs",
+            type: "not_found",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/restart",
+    {
+      schema: {
+        operationId: RouteId.RestartMcpServer,
+        description: "Restart a single MCP server pod",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            message: z.string(),
+          }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: mcpServerId } = request.params;
+
+      try {
+        await McpServerRuntimeManager.restartServer(mcpServerId);
+        return reply.send({
+          success: true,
+          message: `MCP server ${mcpServerId} restarted successfully`,
+        });
+      } catch (error) {
+        fastify.log.error(
+          `Failed to restart MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+
+        if (error instanceof Error && error.message?.includes("not found")) {
+          return reply.status(404).send({
+            error: {
+              message: error.message,
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to restart MCP server",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/catalog/:catalogId/user/:userId",
+    {
+      schema: {
+        operationId: RouteId.RevokeUserMcpServerAccess,
+        description:
+          "Revoke a user's personal access to an MCP server by finding their personal-auth installation",
+        tags: ["MCP Server"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+          userId: z.string(),
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { catalogId, userId } = request.params;
+
+        // Find all servers with this catalogId
+        const serversForCatalog =
+          await McpServerModel.findByCatalogId(catalogId);
+
+        // Find the personal-auth server owned by this user
+        const personalServer = serversForCatalog.find(
+          (s) => s.authType === "personal" && s.ownerId === userId,
+        );
+
+        if (!personalServer) {
+          return reply.status(404).send({
+            error: {
+              message:
+                "Personal MCP server installation not found for this user",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Delete the personal-auth server (which will cascade delete the secret and mcp_server_user entries)
+        await McpServerModel.delete(personalServer.id);
+
+        return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/catalog/:catalogId/teams",
+    {
+      schema: {
+        operationId: RouteId.GrantTeamMcpServerAccess,
+        description:
+          "Grant team(s) access to an MCP server using current user's team-auth token (admin only)",
+        tags: ["MCP Server"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        body: z.object({
+          teamIds: z.array(z.string()).min(1),
+          userId: z.string().optional(), // Optional: specify which admin's token to use
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { catalogId } = request.params;
+        const { userId: targetUserId } = request.body;
+
+        // Get the current user
+        const user = await getUserFromRequest(request);
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        // Use the specified userId or default to current user
+        const ownerIdToUse = targetUserId || user.id;
+
+        // Find all servers with this catalogId
+        const serversForCatalog =
+          await McpServerModel.findByCatalogId(catalogId);
+
+        // Find the team-auth server owned by the specified user
+        const teamServer = serversForCatalog.find(
+          (s) => s.authType === "team" && s.ownerId === ownerIdToUse,
+        );
+
+        if (!teamServer) {
+          const errorMsg = targetUserId
+            ? `Team authentication not found for the specified admin.`
+            : `Team authentication not found. You must install with team authentication first.`;
+          return reply.status(404).send({
+            error: {
+              message: errorMsg,
+              type: "not_found",
+            },
+          });
+        }
+
+        // Assign teams to the MCP server
+        await McpServerTeamModel.assignTeamsToMcpServer(
+          teamServer.id,
+          request.body.teamIds,
+        );
+
+        return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/:id/team/:teamId",
+    {
+      schema: {
+        operationId: RouteId.RevokeTeamMcpServerAccess,
+        description: "Revoke a team's access to an MCP server (admin only)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+          teamId: z.string(),
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        // Get the MCP server
+        const mcpServer = await McpServerModel.findById(request.params.id);
+
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // When there are multiple installations (personal + team auth), we need to find
+        // the actual server that has this team. Check all servers with the same catalogId.
+        if (!mcpServer.catalogId) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server has no catalog ID",
+              type: "not_found",
+            },
+          });
+        }
+
+        const allServersForCatalog = await McpServerModel.findByCatalogId(
+          mcpServer.catalogId,
+        );
+
+        // Find which server actually has this team
+        let targetServerId: string | null = null;
+        for (const server of allServersForCatalog) {
+          const teams = await McpServerTeamModel.getTeamsForMcpServer(
+            server.id,
+          );
+          if (teams.includes(request.params.teamId)) {
+            targetServerId = server.id;
+            break;
+          }
+        }
+
+        if (!targetServerId) {
+          return reply.status(404).send({
+            error: {
+              message: "Team access not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Get the target server to check if we should delete it entirely
+        const targetServer = await McpServerModel.findById(targetServerId);
+        if (!targetServer) {
+          return reply.status(404).send({
+            error: {
+              message: "Target server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // If this is a team-only installation (only one team, no users), delete the entire server
+        const isTeamOnlyInstallation =
+          targetServer.teams?.length === 1 &&
+          targetServer.teams[0] === request.params.teamId &&
+          (!targetServer.users || targetServer.users.length === 0);
+
+        if (isTeamOnlyInstallation) {
+          // Delete the entire MCP server (which will cascade delete the secret)
+          await McpServerModel.delete(targetServerId);
+        } else {
+          // Otherwise, just remove the team from the junction table
+          await McpServerTeamModel.removeTeamFromMcpServer(
+            targetServerId,
+            request.params.teamId,
+          );
+        }
+
+        return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.delete(
+    "/api/mcp_server/catalog/:catalogId/teams",
+    {
+      schema: {
+        operationId: RouteId.RevokeAllTeamsMcpServerAccess,
+        description:
+          "Revoke all team access to an MCP server by deleting the team-auth installation",
+        tags: ["MCP Server"],
+        params: z.object({
+          catalogId: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { catalogId } = request.params;
+
+        // Get the current user
+        const user = await getUserFromRequest(request);
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        // Find all servers with this catalogId
+        const serversForCatalog =
+          await McpServerModel.findByCatalogId(catalogId);
+
+        // Find the team-auth server owned by current user
+        const teamServer = serversForCatalog.find(
+          (s) => s.authType === "team" && s.ownerId === user.id,
+        );
+
+        if (!teamServer) {
+          return reply.status(404).send({
+            error: {
+              message: "Team MCP server installation not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Delete the team-auth server (which will cascade delete the secret and all mcp_server_team entries)
+        await McpServerModel.delete(teamServer.id);
+
+        return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
   fastify.post(
     "/mcp_proxy/:id",
     {
@@ -650,443 +1103,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
           );
         }
-      }
-    },
-  );
-
-  /**
-   * Get logs for an MCP server pod
-   */
-  fastify.get(
-    "/mcp_proxy/:id/logs",
-    {
-      schema: {
-        operationId: RouteId.GetMcpServerLogs,
-        description: "Get logs for a specific MCP server pod",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        querystring: z.object({
-          lines: z.coerce.number().optional().default(100),
-        }),
-        response: {
-          200: z.object({
-            logs: z.string(),
-            containerName: z.string(),
-          }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id: mcpServerId } = request.params;
-      const { lines } = request.query;
-
-      try {
-        const logs = await McpServerRuntimeManager.getMcpServerLogs(
-          mcpServerId,
-          lines,
-        );
-        return reply.send(logs);
-      } catch (error) {
-        fastify.log.error(
-          `Error getting logs for MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-        return reply.status(404).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Failed to get logs",
-            type: "not_found",
-          },
-        });
-      }
-    },
-  );
-
-  /**
-   * Restart an MCP server pod
-   */
-  fastify.post(
-    "/api/mcp_server/:id/restart",
-    {
-      schema: {
-        operationId: RouteId.RestartMcpServer,
-        description: "Restart a single MCP server pod",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        response: {
-          200: z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id: mcpServerId } = request.params;
-
-      try {
-        await McpServerRuntimeManager.restartServer(mcpServerId);
-        return reply.send({
-          success: true,
-          message: `MCP server ${mcpServerId} restarted successfully`,
-        });
-      } catch (error) {
-        fastify.log.error(
-          `Failed to restart MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-
-        if (error instanceof Error && error.message?.includes("not found")) {
-          return reply.status(404).send({
-            error: {
-              message: error.message,
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to restart MCP server",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  // Revoke user access to MCP server
-  fastify.delete(
-    "/api/mcp_server/catalog/:catalogId/user/:userId",
-    {
-      schema: {
-        operationId: RouteId.RevokeUserMcpServerAccess,
-        description:
-          "Revoke a user's personal access to an MCP server by finding their personal-auth installation",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-          userId: z.string(),
-        }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        const { catalogId, userId } = request.params;
-
-        // Find all servers with this catalogId
-        const serversForCatalog =
-          await McpServerModel.findByCatalogId(catalogId);
-
-        // Find the personal-auth server owned by this user
-        const personalServer = serversForCatalog.find(
-          (s) => s.authType === "personal" && s.ownerId === userId,
-        );
-
-        if (!personalServer) {
-          return reply.status(404).send({
-            error: {
-              message:
-                "Personal MCP server installation not found for this user",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Delete the personal-auth server (which will cascade delete the secret and mcp_server_user entries)
-        await McpServerModel.delete(personalServer.id);
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  // Grant team access to MCP server
-  fastify.post(
-    "/api/mcp_server/catalog/:catalogId/teams",
-    {
-      schema: {
-        operationId: RouteId.GrantTeamMcpServerAccess,
-        description:
-          "Grant team(s) access to an MCP server using current user's team-auth token (admin only)",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        body: z.object({
-          teamIds: z.array(z.string()).min(1),
-          userId: z.string().optional(), // Optional: specify which admin's token to use
-        }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        const { catalogId } = request.params;
-        const { userId: targetUserId } = request.body;
-
-        // Get the current user
-        const user = await getUserFromRequest(request);
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        // Use the specified userId or default to current user
-        const ownerIdToUse = targetUserId || user.id;
-
-        // Find all servers with this catalogId
-        const serversForCatalog =
-          await McpServerModel.findByCatalogId(catalogId);
-
-        // Find the team-auth server owned by the specified user
-        const teamServer = serversForCatalog.find(
-          (s) => s.authType === "team" && s.ownerId === ownerIdToUse,
-        );
-
-        if (!teamServer) {
-          const errorMsg = targetUserId
-            ? `Team authentication not found for the specified admin.`
-            : `Team authentication not found. You must install with team authentication first.`;
-          return reply.status(404).send({
-            error: {
-              message: errorMsg,
-              type: "not_found",
-            },
-          });
-        }
-
-        // Assign teams to the MCP server
-        await McpServerTeamModel.assignTeamsToMcpServer(
-          teamServer.id,
-          request.body.teamIds,
-        );
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  // Revoke team access to MCP server
-  fastify.delete(
-    "/api/mcp_server/:id/team/:teamId",
-    {
-      schema: {
-        operationId: RouteId.RevokeTeamMcpServerAccess,
-        description: "Revoke a team's access to an MCP server (admin only)",
-        tags: ["MCP Server"],
-        params: z.object({
-          id: UuidIdSchema,
-          teamId: z.string(),
-        }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        // Get the MCP server
-        const mcpServer = await McpServerModel.findById(request.params.id);
-
-        if (!mcpServer) {
-          return reply.status(404).send({
-            error: {
-              message: "MCP server not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // When there are multiple installations (personal + team auth), we need to find
-        // the actual server that has this team. Check all servers with the same catalogId.
-        if (!mcpServer.catalogId) {
-          return reply.status(404).send({
-            error: {
-              message: "MCP server has no catalog ID",
-              type: "not_found",
-            },
-          });
-        }
-
-        const allServersForCatalog = await McpServerModel.findByCatalogId(
-          mcpServer.catalogId,
-        );
-
-        // Find which server actually has this team
-        let targetServerId: string | null = null;
-        for (const server of allServersForCatalog) {
-          const teams = await McpServerTeamModel.getTeamsForMcpServer(
-            server.id,
-          );
-          if (teams.includes(request.params.teamId)) {
-            targetServerId = server.id;
-            break;
-          }
-        }
-
-        if (!targetServerId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team access not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Get the target server to check if we should delete it entirely
-        const targetServer = await McpServerModel.findById(targetServerId);
-        if (!targetServer) {
-          return reply.status(404).send({
-            error: {
-              message: "Target server not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // If this is a team-only installation (only one team, no users), delete the entire server
-        const isTeamOnlyInstallation =
-          targetServer.teams?.length === 1 &&
-          targetServer.teams[0] === request.params.teamId &&
-          (!targetServer.users || targetServer.users.length === 0);
-
-        if (isTeamOnlyInstallation) {
-          // Delete the entire MCP server (which will cascade delete the secret)
-          await McpServerModel.delete(targetServerId);
-        } else {
-          // Otherwise, just remove the team from the junction table
-          await McpServerTeamModel.removeTeamFromMcpServer(
-            targetServerId,
-            request.params.teamId,
-          );
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  // Revoke all team access for a catalog (delete team-auth server)
-  fastify.delete(
-    "/api/mcp_server/catalog/:catalogId/teams",
-    {
-      schema: {
-        operationId: RouteId.RevokeAllTeamsMcpServerAccess,
-        description:
-          "Revoke all team access to an MCP server by deleting the team-auth installation",
-        tags: ["MCP Server"],
-        params: z.object({
-          catalogId: UuidIdSchema,
-        }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        const { catalogId } = request.params;
-
-        // Get the current user
-        const user = await getUserFromRequest(request);
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        // Find all servers with this catalogId
-        const serversForCatalog =
-          await McpServerModel.findByCatalogId(catalogId);
-
-        // Find the team-auth server owned by current user
-        const teamServer = serversForCatalog.find(
-          (s) => s.authType === "team" && s.ownerId === user.id,
-        );
-
-        if (!teamServer) {
-          return reply.status(404).send({
-            error: {
-              message: "Team MCP server installation not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Delete the team-auth server (which will cascade delete the secret and all mcp_server_team entries)
-        await McpServerModel.delete(teamServer.id);
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
       }
     },
   );

@@ -18,8 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: <http://localhost:3000/>
 - **Tools Inspector**: <http://localhost:3000/tools>
-- **Dual LLM Config**: <http://localhost:3000/dual-llm>
-- **Settings/Teams**: <http://localhost:3000/account/settings>
+- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
+- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
-- **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
+- **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
@@ -91,7 +91,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts)
 
 **Workspaces**:
 
@@ -166,7 +166,9 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
   - **streamable-http**: Native HTTP/SSE transport using K8s Service (better performance, concurrent requests)
-- Pod logs available via `/mcp_proxy/:id/logs`
+- Pod logs available via `/api/mcp_server/:id/logs` endpoint
+  - Query parameters: `?lines=N` to limit output, `?follow=true` for real-time streaming
+  - Streaming uses chunked transfer encoding similar to `kubectl logs -f`
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - When using Docker image, command is optional (uses image's default CMD if not specified)
@@ -186,5 +188,15 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+
+**White-labeling**:
+- Admin-only via `/api/organization/appearance` endpoints  
+- Custom logos: PNG only, max 2MB, stored as base64
+- 18 themes: 9 single color, 2 vision assistive, 7 fun themes
+- 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
+- Real-time theme and font preview in settings
+- OrganizationThemeProvider applies CSS variables dynamically
+- Custom logos display with "Powered by Archestra" attribution
+- Database columns: theme, customFont, logoType, logo
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

@@ -1,3 +1,4 @@
+import { OrganizationAppearanceSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -8,12 +9,15 @@ import { schema } from "@/database";
 
 export const SelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
+  OrganizationAppearanceSchema.shape,
 );
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
+  OrganizationAppearanceSchema.shape,
 );
 export const UpdateOrganizationSchema = createUpdateSchema(
   schema.organizationsTable,
+  OrganizationAppearanceSchema.shape,
 );
 
 export type Organization = z.infer<typeof SelectOrganizationSchema>;

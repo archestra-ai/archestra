@@ -302,6 +302,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerLogs]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
@@ -383,53 +386,17 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
-  [RouteId.GetLimits]: {
-    limit: ["read"],
-  },
-  [RouteId.CreateLimit]: {
-    limit: ["create"],
-  },
-  [RouteId.GetLimit]: {
-    limit: ["read"],
-  },
-  [RouteId.UpdateLimit]: {
-    limit: ["update"],
-  },
-  [RouteId.DeleteLimit]: {
-    limit: ["delete"],
-  },
-  [RouteId.GetOrganization]: {
+  [RouteId.GetOrganizationAppearance]: {
     organization: ["read"],
   },
-  [RouteId.UpdateOrganizationCleanupInterval]: {
+  [RouteId.UpdateOrganizationAppearance]: {
     organization: ["update"],
   },
-  [RouteId.GetTokenPrices]: {
-    tokenPrice: ["read"],
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
   },
-  [RouteId.CreateTokenPrice]: {
-    tokenPrice: ["create"],
-  },
-  [RouteId.GetTokenPrice]: {
-    tokenPrice: ["read"],
-  },
-  [RouteId.UpdateTokenPrice]: {
-    tokenPrice: ["update"],
-  },
-  [RouteId.DeleteTokenPrice]: {
-    tokenPrice: ["delete"],
-  },
-  [RouteId.GetTeamStatistics]: {
-    interaction: ["read"],
-  },
-  [RouteId.GetAgentStatistics]: {
-    interaction: ["read"],
-  },
-  [RouteId.GetModelStatistics]: {
-    interaction: ["read"],
-  },
-  [RouteId.GetOverviewStatistics]: {
-    interaction: ["read"],
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
   },
 };
 

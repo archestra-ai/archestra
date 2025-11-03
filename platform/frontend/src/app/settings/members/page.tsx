@@ -1,19 +1,12 @@
 "use client";
 
-import {
-  ApiKeysCard,
-  DeleteAccountCard,
-  OrganizationMembersCard,
-  SecuritySettingsCards,
-} from "@daveyplate/better-auth-ui";
+import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleUser, Shield, Users } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner } from "@/components/loading";
-import { TeamsList } from "@/components/teams/teams-list";
 import {
   Card,
   CardContent,
@@ -27,34 +20,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   organizationKeys,
   useActiveMemberRole,
   useActiveOrganization,
 } from "@/lib/organization.query";
 
-function SettingsContent() {
+function MembersSettingsContent() {
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Periodically check credentials status while on settings page
-  useEffect(() => {
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["auth", "defaultCredentialsEnabled"],
-      });
-    }, 2000); // Check every 2 seconds
-
-    return () => clearInterval(interval);
-  }, [queryClient]);
-
-  const showMembersTab =
-    activeMemberRole &&
-    (activeMemberRole === "admin" || activeMemberRole === "owner");
 
   const members = activeOrg ? (
     <div className="space-y-6">
@@ -109,63 +86,15 @@ function SettingsContent() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-      <div className="mb-6">
-        <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-          Account Settings
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your account settings and preferences
-        </p>
-      </div>
-      <Tabs defaultValue="account">
-        <TabsList
-          className={`grid ${showMembersTab ? "grid-cols-3" : "grid-cols-1"}`}
-        >
-          <TabsTrigger value="account" className="flex items-center gap-2">
-            <CircleUser className="h-4 w-4" />
-            Your Account
-          </TabsTrigger>
-          {showMembersTab && (
-            <>
-              <TabsTrigger value="members" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Members
-              </TabsTrigger>
-              <TabsTrigger value="teams" className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                Teams
-              </TabsTrigger>
-            </>
-          )}
-        </TabsList>
-        <div className="max-w-3xl">
-          <TabsContent value="account">
-            <div className="space-y-6">
-              <SecuritySettingsCards />
-              <ApiKeysCard />
-              <DeleteAccountCard />
-            </div>
-          </TabsContent>
-          {showMembersTab && (
-            <>
-              <TabsContent value="members">{members}</TabsContent>
-              <TabsContent value="teams">
-                <TeamsList />
-              </TabsContent>
-            </>
-          )}
-        </div>
-      </Tabs>
-    </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">{members}</div>
   );
 }
 
-export default function AccountSettingsPage() {
+export default function MembersSettingsPage() {
   return (
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
-        <SettingsContent />
+        <MembersSettingsContent />
       </Suspense>
     </ErrorBoundary>
   );

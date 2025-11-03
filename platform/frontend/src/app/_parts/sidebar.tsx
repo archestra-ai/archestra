@@ -120,7 +120,7 @@ export function AppSidebar() {
                 alt="Organization logo"
                 width={120}
                 height={36}
-                className="object-contain max-h-9 w-auto max-w-32"
+                className="object-contain max-h-9 w-full"
               />
             ) : (
               <>

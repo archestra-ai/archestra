@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.27](https://github.com/archestra-ai/archestra/compare/platform-v0.0.26...platform-v0.0.27) (2025-11-03)
+
+
+### Bug Fixes
+
+* fix theme settings ([#926](https://github.com/archestra-ai/archestra/issues/926)) ([fec48dd](https://github.com/archestra-ai/archestra/commit/fec48dd8498bd7e86811d573cbdc4168c75ad782))
+
 ## [0.0.26](https://github.com/archestra-ai/archestra/compare/platform-v0.0.25...platform-v0.0.26) (2025-11-03)
 
 

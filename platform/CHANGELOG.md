@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.28](https://github.com/archestra-ai/archestra/compare/platform-v0.0.27...platform-v0.0.28) (2025-11-03)
+
+
+### Features
+
+* fixed size dialog and better isntructions ([#931](https://github.com/archestra-ai/archestra/issues/931)) ([bd279e9](https://github.com/archestra-ai/archestra/commit/bd279e9b563da08c3f32efa68d595918d63f38eb))
+* traces panels ([#930](https://github.com/archestra-ai/archestra/issues/930)) ([2fb5d32](https://github.com/archestra-ai/archestra/commit/2fb5d3212c934b5ceb0de16f53badcc943db56ec))
+
+
+### Bug Fixes
+
+* minor, make tilt restart pnpm-dev after db clean or migrate ([#932](https://github.com/archestra-ai/archestra/issues/932)) ([b2d3d6f](https://github.com/archestra-ai/archestra/commit/b2d3d6f7e86f7ed19d10d0abcfbbac397ba54fb3))
+
 ## [0.0.27](https://github.com/archestra-ai/archestra/compare/platform-v0.0.26...platform-v0.0.27) (2025-11-03)
 
 

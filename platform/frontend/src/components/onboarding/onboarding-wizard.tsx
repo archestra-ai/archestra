@@ -217,7 +217,7 @@ export default forwardRef(function OnboardingWizard(
             >
               <div className="text-left">
                 <div className="font-semibold">MCP Gateway</div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-slate-400 mt-1  whitespace-normal break-words">
                   Install MCP servers and expose them via a secure gateway for
                   your clients (Cursor, Claude, etc.)
                 </div>

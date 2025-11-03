@@ -1,9 +1,9 @@
 "use client";
 
+import { assignToolToAgent } from "@shared/hey-api/clients/api/sdk.gen";
 import { Check, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { assignToolToAgent } from "@/lib/clients/api";
 import { useUnassignedTools } from "@/lib/tool.query";
 import OnboardingStep from "../onboarding-step";
 

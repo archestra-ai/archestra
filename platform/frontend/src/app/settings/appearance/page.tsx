@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { getThemeById } from "@/config/themes";
+import { fontFamilyMap, getThemeById } from "@/config/themes";
 import {
   organizationKeys,
   useOrganizationAppearance,
@@ -69,15 +69,6 @@ export default function AppearanceSettingsPage() {
       if (colors.accent) {
         root.style.setProperty("--accent", colors.accent);
       }
-
-      // Apply font family
-      const fontFamilyMap: Record<OrganizationCustomFont, string> = {
-        lato: '"Lato", system-ui, sans-serif',
-        inter: '"Inter", system-ui, sans-serif',
-        "open-sans": '"Open Sans", system-ui, sans-serif',
-        roboto: '"Roboto", system-ui, sans-serif',
-        "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
-      };
 
       const fontValue = fontFamilyMap[selectedFont] || fontFamilyMap.lato;
       root.style.setProperty("--font-sans", fontValue);

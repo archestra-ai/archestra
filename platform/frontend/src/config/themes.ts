@@ -542,6 +542,14 @@ export function getThemeCategories(): Array<{
   ];
 }
 
+export const fontFamilyMap: Record<OrganizationCustomFont, string> = {
+  lato: '"Lato", system-ui, sans-serif',
+  inter: '"Inter", system-ui, sans-serif',
+  "open-sans": '"Open Sans", system-ui, sans-serif',
+  roboto: '"Roboto", system-ui, sans-serif',
+  "source-sans-pro": '"Source Sans Pro", system-ui, sans-serif',
+};
+
 /**
  * Available font options
  */

@@ -51,13 +51,38 @@ export interface OverviewStatistics {
   topModel: string;
 }
 
-export interface TimeSeriesData {
+// Base time series interface
+export interface BaseTimeSeriesData {
   timeBucket: string;
   requests: number;
   inputTokens: number;
   outputTokens: number;
-  [key: string]: any; // Allow additional properties
 }
+
+// Team-specific time series data
+export interface TeamTimeSeriesData extends BaseTimeSeriesData {
+  teamId: string;
+  teamName: string;
+}
+
+// Agent-specific time series data
+export interface AgentTimeSeriesData extends BaseTimeSeriesData {
+  agentId: string;
+  agentName: string;
+  teamName: string | null;
+}
+
+// Model-specific time series data
+export interface ModelTimeSeriesData extends BaseTimeSeriesData {
+  model: string | null;
+}
+
+// Union type for all time series data
+export type TimeSeriesData =
+  | BaseTimeSeriesData
+  | TeamTimeSeriesData
+  | AgentTimeSeriesData
+  | ModelTimeSeriesData;
 
 class StatisticsModel {
   /**
@@ -173,10 +198,10 @@ class StatisticsModel {
   /**
    * Group time series data by custom bucket intervals
    */
-  private static groupTimeSeries(
-    timeSeriesData: TimeSeriesData[],
+  private static groupTimeSeries<T extends BaseTimeSeriesData>(
+    timeSeriesData: T[],
     timeframe: TimeFrame,
-  ): TimeSeriesData[] {
+  ): T[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
     // If the interval is standard (60 minutes or more), no custom grouping needed
@@ -185,7 +210,7 @@ class StatisticsModel {
     }
 
     // Group by custom intervals
-    const grouped = new Map<string, TimeSeriesData>();
+    const grouped = new Map<string, T>();
 
     for (const row of timeSeriesData) {
       const bucketKey = StatisticsModel.roundToBucket(
@@ -200,7 +225,7 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
-        });
+        } as T);
       }
 
       const existing = grouped.get(bucketKey);

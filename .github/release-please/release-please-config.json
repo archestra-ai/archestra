@@ -77,7 +77,24 @@
       "component": "platform",
       "release-type": "node",
       "prerelease": true,
-      "initial-version": "0.0.1"
+      "initial-version": "0.0.1",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "platform/shared/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "platform/frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "platform/backend/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   },
   "plugins": [],

@@ -12,19 +12,27 @@ class AuthMiddleware {
 
     // return 401 if unauthenticated
     if (await this.isUnauthenticated(request)) {
-      return reply
-        .status(401)
-        .send(prepareErrorResponse("Unauthorized", request));
+      return reply.status(401).send(
+        prepareErrorResponse({
+          message: "Unauthenticated",
+          type: "unauthenticated",
+        }),
+      );
     }
 
     // check if authorized
-    const permissionsStatus = await this.requiredPermissionsStatus(request);
-    if ("success" in permissionsStatus && permissionsStatus.success) {
+    const { success, error } = await this.requiredPermissionsStatus(request);
+    if (success) {
       return;
     }
 
     // return 403 if unauthorized
-    return reply.status(403).send(prepareErrorResponse("Forbidden", request));
+    return reply.status(403).send(
+      prepareErrorResponse({
+        message: error?.message ?? "Forbidden",
+        type: "forbidden",
+      }),
+    );
   };
 
   private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
@@ -41,36 +49,108 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
+      url === "/metrics" ||
       url === "/api/features" ||
-      url.startsWith(config.mcpGateway.endpoint)
-    ) {
+      url.startsWith(config.mcpGateway.endpoint) ||
+      /**
+       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+       * TODO: this is a quick hack to get around this when testing the local mcp server k8s runtime stuffs:
+       *
+       * Pod mcp-0c98fdde-8a01-4317-8fcb-698c149761a0 is now running
+       * Successfully started MCP server pod 0c98fdde-8a01-4317-8fcb-698c149761a0 (context7-local-mcp-server)
+       * Failed to get tools from local MCP server context7-local-mcp-server: Error: Failed to connect to MCP server context7-local-mcp-server: Error POSTing to endpoint (HTTP 401): {"error":{"message":"Unauthenticated","type":"unauthenticated"}}
+       *     at McpClient.connectAndGetTools (..platform/backend/src/clients/mcp-client.ts:265:13)
+       *     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+       *     at async _McpServerModel.getToolsFromServer (..platform/backend/src/models/mcp-server.ts:244:23)
+       *     at async Object.<anonymous> (..platform/backend/src/routes/mcp-server.ts:236:25)
+       * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
+       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+       */
+      url.includes("/mcp_proxy") ||
+      // Skip ACME challenge paths for SSL certificate domain validation
+      url.startsWith("/.well-known/acme-challenge/")
+    )
       return true;
-    }
     return false;
   };
 
   private isUnauthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
-    const session = await auth.api.getSession({
-      headers,
-      query: { disableCookieCache: true },
-    });
-    return !session;
+
+    try {
+      const session = await auth.api.getSession({
+        headers,
+        query: { disableCookieCache: true },
+      });
+
+      if (session) return false;
+    } catch (_error) {
+      /**
+       * If getSession fails (e.g., "No active organization"), try API key verification
+       */
+      const authHeader = headers.get("authorization");
+      if (authHeader) {
+        try {
+          const { valid } = await auth.api.verifyApiKey({
+            body: { key: authHeader },
+          });
+
+          return !valid;
+        } catch (_apiKeyError) {
+          // API key verification failed, return unauthenticated
+          return true;
+        }
+      }
+    }
+
+    return true;
   };
 
-  private requiredPermissionsStatus = async (request: FastifyRequest) => {
+  private requiredPermissionsStatus = async (
+    request: FastifyRequest,
+  ): Promise<{ success: boolean; error: Error | null }> => {
     const routeId = request.routeOptions.schema?.operationId as
       | RouteId
       | undefined;
     if (!routeId) {
-      return { error: "Forbidden" };
+      return {
+        success: false,
+        error: new Error("Forbidden, routeId not found"),
+      };
     }
-    return await auth.api.hasPermission({
-      headers: new Headers(request.headers as HeadersInit),
-      body: {
-        permissions: routePermissionsConfig[routeId] ?? {},
-      },
-    });
+
+    try {
+      return await auth.api.hasPermission({
+        headers: new Headers(request.headers as HeadersInit),
+        body: {
+          permissions: routePermissionsConfig[routeId] ?? {},
+        },
+      });
+    } catch (_error) {
+      /**
+       * Handle API key sessions that don't have organization context
+       * API keys have all permissions by default (see auth config)
+       */
+      const headers = new Headers(request.headers as HeadersInit);
+      const authHeader = headers.get("authorization");
+
+      if (authHeader) {
+        try {
+          // Verify if this is a valid API key
+          const apiKeyResult = await auth.api.verifyApiKey({
+            body: { key: authHeader },
+          });
+          if (apiKeyResult?.valid) {
+            // API keys have all permissions, so allow the request
+            return { success: true, error: null };
+          }
+        } catch (_apiKeyError) {
+          // Not a valid API key, return original error
+          return { success: false, error: new Error("Invalid API key") };
+        }
+      }
+      return { success: false, error: new Error("No API key provided") };
+    }
   };
 }
 
@@ -90,6 +170,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetAgent]: {
     agent: ["read"],
   },
+  [RouteId.GetDefaultAgent]: {
+    agent: ["read"],
+  },
   [RouteId.CreateAgent]: {
     agent: ["create"],
   },
@@ -107,6 +190,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAgentAvailableTokens]: {
+    agent: ["read"],
+  },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
@@ -119,6 +205,12 @@ const routePermissionsConfig: Partial<
   [RouteId.UpdateAgentTool]: {
     agent: ["update"],
     tool: ["update"],
+  },
+  [RouteId.GetLabelKeys]: {
+    agent: ["read"],
+  },
+  [RouteId.GetLabelValues]: {
+    agent: ["read"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],
@@ -207,11 +299,152 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServer]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerTools]: {
+    mcpServer: ["read"],
+  },
+  [RouteId.GetMcpServerLogs]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.RevokeUserMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GrantTeamMcpServerAccess]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.RevokeTeamMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeAllTeamsMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GetMcpServerInstallationStatus]: {
+    mcpServer: ["read"],
+  },
+  [RouteId.GetMcpServerInstallationRequests]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.CreateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["create"],
+  },
+  [RouteId.GetMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.UpdateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.ApproveMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeclineMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.AddMcpServerInstallationRequestNote]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeleteMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["delete"],
+  },
+  [RouteId.InitiateOAuth]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.HandleOAuthCallback]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.GetTeams]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeam]: {
+    team: ["read"],
+  },
+  [RouteId.CreateTeam]: {
+    team: ["create"],
+  },
+  [RouteId.UpdateTeam]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeam]: {
+    team: ["delete"],
+  },
+  [RouteId.GetTeamMembers]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.GetMcpToolCalls]: {
+    mcpToolCall: ["read"],
+  },
+  [RouteId.GetMcpToolCall]: {
+    mcpToolCall: ["read"],
+  },
+  [RouteId.GetLimits]: {
+    limit: ["read"],
+  },
+  [RouteId.CreateLimit]: {
+    limit: ["create"],
+  },
+  [RouteId.GetLimit]: {
+    limit: ["read"],
+  },
+  [RouteId.UpdateLimit]: {
+    limit: ["update"],
+  },
+  [RouteId.DeleteLimit]: {
+    limit: ["delete"],
+  },
+  [RouteId.GetOrganization]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationCleanupInterval]: {
+    organization: ["update"],
+  },
+  [RouteId.GetTokenPrices]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.CreateTokenPrice]: {
+    tokenPrice: ["create"],
+  },
+  [RouteId.GetTokenPrice]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.UpdateTokenPrice]: {
+    tokenPrice: ["update"],
+  },
+  [RouteId.DeleteTokenPrice]: {
+    tokenPrice: ["delete"],
+  },
+  [RouteId.GetTeamStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetAgentStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetModelStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOrganizationAppearance]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationAppearance]: {
+    organization: ["update"],
+  },
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
   },
 };
 

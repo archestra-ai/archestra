@@ -84,7 +84,7 @@ export default function TestAgentPage() {
     <div className="flex flex-col gap-8 items-center h-full w-full pt-[10vh] px-4">
       {/* Title and Subtitle */}
       <div className="text-center max-w-3xl">
-        <h1 className="text-5xl font-bold mb-4">How it works</h1>
+        <h1 className="text-5xl font-bold mb-4">How security works</h1>
         <p className="text-xl text-muted-foreground">
           Agents connected to sensitive data and able to externally communicate
           via MCP or other tool calls are vulnerable to{" "}

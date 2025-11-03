@@ -17,7 +17,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       operationId: RouteId.GetDefaultCredentialsStatus,
       description: "Get default credentials status",
-      tags: ["Auth"],
+      tags: ["auth"],
       response: {
         200: z.object({
           enabled: z.boolean(),
@@ -81,6 +81,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
+    schema: {
+      tags: ["auth"],
+    },
     async handler(request, reply) {
       try {
         const url = new URL(request.url, `http://${request.headers.host}`);

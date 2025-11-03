@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import _ from "lodash";
+import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 
@@ -61,17 +61,17 @@ class TrustedDataPolicyModel {
       const arrayPath = parts[0];
       const itemPath = parts[1];
 
-      const array = _.get(obj, arrayPath);
+      const array = get(obj, arrayPath);
       if (!Array.isArray(array)) {
         return [];
       }
 
       return array
-        .map((item) => _.get(item, itemPath))
+        .map((item) => get(item, itemPath))
         .filter((v) => v !== undefined);
     }
     // Simple path without wildcards
-    const value = _.get(obj, path);
+    const value = get(obj, path);
     return value !== undefined ? [value] : [];
   }
 

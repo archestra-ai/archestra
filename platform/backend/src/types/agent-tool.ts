@@ -37,6 +37,7 @@ export const SelectAgentToolSchema = createSelectSchema(
       updatedAt: z.date(),
       mcpServerId: z.string().nullable(),
       mcpServerName: z.string().nullable(),
+      mcpServerCatalogId: z.string().nullable(),
     }),
   });
 

@@ -1,8 +1,10 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,13 +16,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
-  tool: GetAllAgentToolsResponses["200"][number] | UnassignedToolData | null;
+  tool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"][number]
+    | UnassignedToolData
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -32,8 +38,11 @@ export function AssignAgentDialog({
 }: AssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
+  const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
+    useState<string | null>(null);
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents || [];
@@ -45,25 +54,72 @@ export function AssignAgentDialog({
   const handleAssign = useCallback(async () => {
     if (!tool || selectedAgentIds.length === 0) return;
 
-    try {
-      await Promise.all(
-        selectedAgentIds.map((agentId) =>
-          assignMutation.mutateAsync({ agentId, toolId: tool.tool.id }),
-        ),
+    // Helper function to check if an error is a duplicate key error
+    const isDuplicateError = (error: unknown): boolean => {
+      if (!error) return false;
+      const errorStr = JSON.stringify(error).toLowerCase();
+      return (
+        errorStr.includes("duplicate key") ||
+        errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
+        errorStr.includes("already assigned")
       );
+    };
 
-      toast.success(
-        `Successfully assigned ${tool.tool.name} to ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? "s" : ""}`,
+    const results = await Promise.allSettled(
+      selectedAgentIds.map((agentId) =>
+        assignMutation.mutateAsync({
+          agentId,
+          toolId: tool.tool.id,
+          credentialSourceMcpServerId: credentialSourceMcpServerId || null,
+        }),
+      ),
+    );
+
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const totalAttempted = results.length;
+
+    // Check if failures are due to duplicates
+    const duplicates = results.filter(
+      (r) => r.status === "rejected" && isDuplicateError(r.reason),
+    ).length;
+
+    const actualFailures = failed - duplicates;
+
+    if (succeeded > 0) {
+      if (duplicates > 0 && actualFailures === 0) {
+        toast.success(
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
+        );
+      } else if (actualFailures > 0) {
+        toast.warning(
+          `Assigned ${tool.tool.name} to ${succeeded} of ${totalAttempted} agent${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+        );
+      } else {
+        toast.success(
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}`,
+        );
+      }
+    } else if (duplicates === failed) {
+      toast.info(
+        `${tool.tool.name} is already assigned to all selected agents`,
       );
-
-      setSelectedAgentIds([]);
-      setSearchQuery("");
-      onOpenChange(false);
-    } catch (error) {
+    } else {
       toast.error(`Failed to assign ${tool.tool.name}`);
-      console.error("Assignment error:", error);
+      console.error("Assignment errors:", results);
     }
-  }, [tool, selectedAgentIds, assignMutation, onOpenChange]);
+
+    setSelectedAgentIds([]);
+    setSearchQuery("");
+    setCredentialSourceMcpServerId(null);
+    onOpenChange(false);
+  }, [
+    tool,
+    selectedAgentIds,
+    credentialSourceMcpServerId,
+    assignMutation,
+    onOpenChange,
+  ]);
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgentIds((prev) =>
@@ -81,6 +137,7 @@ export function AssignAgentDialog({
         if (!newOpen) {
           setSelectedAgentIds([]);
           setSearchQuery("");
+          setCredentialSourceMcpServerId(null);
         }
       }}
     >
@@ -131,12 +188,36 @@ export function AssignAgentDialog({
           </div>
         </div>
 
+        {selectedAgentIds.length > 0 && (
+          <div className="pt-4 border-t">
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Token to use
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which token will be used when these agents execute this
+              tool
+            </p>
+            <TokenSelect
+              value={credentialSourceMcpServerId}
+              onValueChange={setCredentialSourceMcpServerId}
+              className="w-full"
+              catalogId={
+                mcpServers.data?.find(
+                  (server) => server.id === tool?.tool.mcpServerId,
+                )?.catalogId ?? ""
+              }
+              agentIds={selectedAgentIds}
+            />
+          </div>
+        )}
+
         <DialogFooter>
           <Button
             variant="outline"
             onClick={() => {
               setSelectedAgentIds([]);
               setSearchQuery("");
+              setCredentialSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >

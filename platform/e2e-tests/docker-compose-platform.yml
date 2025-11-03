@@ -6,8 +6,8 @@ services:
       - "9000:9000"
       - "3000:3000"
     environment:
-      - OPENAI_BASE_URL=http://wiremock:8080/v1
-      - ANTHROPIC_BASE_URL=http://wiremock:8080
+      - ARCHESTRA_OPENAI_BASE_URL=http://wiremock:8080/v1
+      - ARCHESTRA_ANTHROPIC_BASE_URL=http://wiremock:8080
     healthcheck:
       test:
         [

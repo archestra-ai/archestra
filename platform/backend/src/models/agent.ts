@@ -2,38 +2,35 @@ import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent, UpdateAgent } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentLabelModel from "./agent-label";
+import AgentTeamModel from "./agent-team";
 
 class AgentModel {
-  static async create(
-    { usersWithAccess, ...agent }: InsertAgent,
-    creatorUserId?: string,
-  ): Promise<Agent> {
+  static async create({
+    teams,
+    labels,
+    ...agent
+  }: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values(agent)
       .returning();
 
-    const userIdsToGrant: string[] = [];
-
-    if (creatorUserId) {
-      // Auto-grant creator access
-      userIdsToGrant.push(creatorUserId);
+    // Assign teams to the agent if provided
+    if (teams && teams.length > 0) {
+      await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
     }
 
-    if (usersWithAccess.length > 0) {
-      userIdsToGrant.push(...usersWithAccess);
+    // Assign labels to the agent if provided
+    if (labels && labels.length > 0) {
+      await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
-
-    await AgentAccessControlModel.grantAgentAccess(
-      createdAgent.id,
-      userIdsToGrant,
-    );
 
     return {
       ...createdAgent,
       tools: [],
-      usersWithAccess: userIdsToGrant,
+      teams: teams || [],
+      labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };
   }
 
@@ -53,8 +50,10 @@ class AgentModel {
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -76,7 +75,8 @@ class AgentModel {
         agentsMap.set(agent.id, {
           ...agent,
           tools: [],
-          usersWithAccess: [],
+          teams: [],
+          labels: [],
         });
       }
 
@@ -88,10 +88,10 @@ class AgentModel {
 
     const agents = Array.from(agentsMap.values());
 
-    // Populate usersWithAccess for each agent
+    // Populate teams and labels for each agent
     for (const agent of agents) {
-      agent.usersWithAccess =
-        await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
+      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
+      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
     }
 
     return agents;
@@ -104,7 +104,7 @@ class AgentModel {
   ): Promise<Agent | null> {
     // Check access control for non-admins
     if (userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         id,
         false,
@@ -130,21 +130,19 @@ class AgentModel {
     const agent = rows[0].agents;
     const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
 
-    const usersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(id);
+    const teams = await AgentTeamModel.getTeamsForAgent(id);
+    const labels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...agent,
       tools,
-      usersWithAccess,
+      teams,
+      labels,
     };
   }
 
-  static async getAgentOrCreateDefault(
-    name: string | undefined,
-  ): Promise<Agent> {
-    const agentName = name || DEFAULT_AGENT_NAME;
-
+  static async getAgentOrCreateDefault(name?: string): Promise<Agent> {
+    // First, try to find an agent with isDefault=true
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -152,30 +150,45 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
       )
-      .where(eq(schema.agentsTable.name, agentName));
+      .where(eq(schema.agentsTable.isDefault, true));
 
-    if (rows.length === 0) {
-      return AgentModel.create({ name: agentName, usersWithAccess: [] });
+    if (rows.length > 0) {
+      // Default agent exists, return it
+      const agent = rows[0].agents;
+      const tools = rows
+        .map((row) => row.tools)
+        .filter((tool) => tool !== null);
+
+      return {
+        ...agent,
+        tools,
+        teams: await AgentTeamModel.getTeamsForAgent(agent.id),
+        labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+      };
     }
 
-    const agent = rows[0].agents;
-    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
-
-    const usersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
-
-    return {
-      ...agent,
-      tools,
-      usersWithAccess,
-    };
+    // No default agent exists, create one
+    return AgentModel.create({
+      name: name || DEFAULT_AGENT_NAME,
+      isDefault: true,
+      teams: [],
+      labels: [],
+    });
   }
 
   static async update(
     id: string,
-    { usersWithAccess, ...agent }: Partial<UpdateAgent>,
+    { teams, labels, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    let updatedAgent: Omit<Agent, "tools" | "usersWithAccess"> | undefined;
+    let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
+
+    // If setting isDefault to true, unset all other agents' isDefault first
+    if (agent.isDefault === true) {
+      await db
+        .update(schema.agentsTable)
+        .set({ isDefault: false })
+        .where(eq(schema.agentsTable.isDefault, true));
+    }
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
@@ -189,7 +202,7 @@ class AgentModel {
         return null;
       }
     } else {
-      // If only updating usersWithAccess, fetch the existing agent
+      // If only updating teams, fetch the existing agent
       const [existingAgent] = await db
         .select()
         .from(schema.agentsTable)
@@ -202,9 +215,14 @@ class AgentModel {
       updatedAgent = existingAgent;
     }
 
-    // Sync access control if usersWithAccess is provided
-    if (usersWithAccess) {
-      await AgentAccessControlModel.syncAgentAccess(id, usersWithAccess);
+    // Sync team assignments if teams is provided
+    if (teams !== undefined) {
+      await AgentTeamModel.syncAgentTeams(id, teams);
+    }
+
+    // Sync label assignments if labels is provided
+    if (labels !== undefined) {
+      await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
     // Fetch the tools for the updated agent
@@ -213,14 +231,15 @@ class AgentModel {
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.agentId, updatedAgent.id));
 
-    // Fetch current usersWithAccess
-    const currentUsersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(id);
+    // Fetch current teams and labels
+    const currentTeams = await AgentTeamModel.getTeamsForAgent(id);
+    const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...updatedAgent,
       tools,
-      usersWithAccess: currentUsersWithAccess,
+      teams: currentTeams,
+      labels: currentLabels,
     };
   }
 

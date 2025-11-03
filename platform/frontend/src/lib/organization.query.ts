@@ -1,4 +1,17 @@
-import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import type { OrganizationAppearance } from "@shared";
+import { archestraApiSdk } from "@shared";
+import {
+  deleteOrganizationLogo,
+  getOrganizationAppearance,
+  updateOrganizationAppearance,
+  uploadOrganizationLogo,
+} from "@shared/hey-api/clients/api/sdk.gen";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,6 +27,8 @@ export const organizationKeys = {
   activeOrg: () => [...organizationKeys.all, "active"] as const,
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
+  details: () => [...organizationKeys.all, "details"] as const,
+  appearance: () => [...organizationKeys.all, "appearance"] as const,
 };
 
 /**
@@ -187,6 +202,136 @@ export function useCreateInvitation(organizationId: string | undefined) {
     onError: (error) => {
       toast.error("Error", {
         description: error.message || "Failed to generate invitation link",
+      });
+    },
+  });
+}
+
+/**
+ * Get organization details including cleanup interval
+ */
+export function useOrganizationDetails() {
+  return useQuery({
+    queryKey: organizationKeys.details(),
+    queryFn: async () => {
+      const response = await archestraApiSdk.getOrganization();
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Fetch organization appearance settings
+ */
+export function useOrganizationAppearance() {
+  const session = authClient.useSession();
+
+  return useQuery({
+    queryKey: organizationKeys.appearance(),
+    queryFn: async () => {
+      const response = await getOrganizationAppearance();
+      return response.data;
+    },
+    enabled: !!session.data?.user,
+  });
+}
+
+/**
+ * Update organization cleanup interval mutation
+ */
+export function useUpdateOrganizationCleanupInterval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      limitCleanupInterval: "1h" | "12h" | "24h" | "1w" | "1m" | null,
+    ) => {
+      // Use fetch directly to handle null values properly
+      const response = await fetch("/api/organization/cleanup-interval", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limitCleanupInterval }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(
+          error.error?.message || "Failed to update cleanup interval",
+        );
+      }
+
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+      toast.success("Cleanup interval updated successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to update cleanup interval", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Update organization appearance settings
+ */
+export function useUpdateOrganizationAppearance() {
+  return useMutation({
+    mutationFn: async (data: Partial<OrganizationAppearance>) => {
+      const response = await updateOrganizationAppearance({
+        body: data,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Appearance settings updated");
+    },
+    onError: (error) => {
+      toast.error("Failed to update appearance settings", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Upload organization logo
+ */
+export function useUploadOrganizationLogo() {
+  return useMutation({
+    mutationFn: async (logo: string) => {
+      const response = await uploadOrganizationLogo({
+        body: { logo },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Logo uploaded successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to upload logo", {
+        description: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * Delete organization logo
+ */
+export function useDeleteOrganizationLogo() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await deleteOrganizationLogo();
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success("Logo removed");
+    },
+    onError: (error) => {
+      toast.error("Failed to remove logo", {
+        description: error.message,
       });
     },
   });

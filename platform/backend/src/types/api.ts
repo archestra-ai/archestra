@@ -11,6 +11,7 @@ export const ErrorResponseSchema = z.object({
     }),
   ]),
 });
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 /**
  * Pagination query parameters schema
@@ -96,8 +97,11 @@ export const RouteId = {
   GetAgents: "getAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
+  GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  GetLabelKeys: "getLabelKeys",
+  GetLabelValues: "getLabelValues",
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
@@ -105,6 +109,7 @@ export const RouteId = {
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
   UpdateAgentTool: "updateAgentTool",
+  GetAgentAvailableTokens: "getAgentAvailableTokens",
 
   // Features Routes
   GetFeatures: "getFeatures",
@@ -122,8 +127,40 @@ export const RouteId = {
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
+  GetMcpServerTools: "getMcpServerTools",
+  GetMcpServerLogs: "getMcpServerLogs",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
+  GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
+  RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
+  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
+  RestartMcpServer: "restartMcpServer",
+  GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
+
+  // MCP Server Installation Request Routes
+  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
+  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
+  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
+  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
+  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
+  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
+  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
+  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
+
+  // OAuth Routes
+  InitiateOAuth: "initiateOAuth",
+  HandleOAuthCallback: "handleOAuthCallback",
+
+  // Team Routes
+  GetTeams: "getTeams",
+  CreateTeam: "createTeam",
+  GetTeam: "getTeam",
+  UpdateTeam: "updateTeam",
+  DeleteTeam: "deleteTeam",
+  GetTeamMembers: "getTeamMembers",
+  AddTeamMember: "addTeamMember",
+  RemoveTeamMember: "removeTeamMember",
 
   // Tool Routes
   GetTools: "getTools",
@@ -132,6 +169,10 @@ export const RouteId = {
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+
+  // MCP Tool Call Routes
+  GetMcpToolCalls: "getMcpToolCalls",
+  GetMcpToolCall: "getMcpToolCall",
 
   // Autonomy Policy Routes
   GetOperators: "getOperators",
@@ -166,5 +207,34 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Limits Routes
+  GetLimits: "getLimits",
+  CreateLimit: "createLimit",
+  GetLimit: "getLimit",
+  UpdateLimit: "updateLimit",
+  DeleteLimit: "deleteLimit",
+
+  // Organization Routes
+  GetOrganization: "getOrganization",
+  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
+
+  // Token Price Routes
+  GetTokenPrices: "getTokenPrices",
+  CreateTokenPrice: "createTokenPrice",
+  GetTokenPrice: "getTokenPrice",
+  UpdateTokenPrice: "updateTokenPrice",
+  DeleteTokenPrice: "deleteTokenPrice",
+
+  // Statistics Routes
+  GetTeamStatistics: "getTeamStatistics",
+  GetAgentStatistics: "getAgentStatistics",
+  GetModelStatistics: "getModelStatistics",
+  GetOverviewStatistics: "getOverviewStatistics",
+  // Organization Routes
+  GetOrganizationAppearance: "getOrganizationAppearance",
+  UpdateOrganizationAppearance: "updateOrganizationAppearance",
+  UploadOrganizationLogo: "uploadOrganizationLogo",
+  DeleteOrganizationLogo: "deleteOrganizationLogo",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

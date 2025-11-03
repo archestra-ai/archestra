@@ -25,6 +25,7 @@ namespace OpenAi {
     export type ChatCompletionsResponse = z.infer<
       typeof OpenAiAPI.ChatCompletionResponseSchema
     >;
+    export type Usage = z.infer<typeof OpenAiAPI.ChatCompletionUsageSchema>;
 
     export type FinishReason = z.infer<typeof OpenAiAPI.FinishReasonSchema>;
     export type Message = z.infer<typeof OpenAiMessages.MessageParamSchema>;

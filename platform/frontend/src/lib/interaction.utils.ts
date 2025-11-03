@@ -1,5 +1,5 @@
+import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type { SupportedProviders } from "@/lib/clients/api";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import type {
   DualLlmResult,
@@ -15,7 +15,7 @@ export class DynamicInteraction implements InteractionUtils {
   id: string;
   agentId: string;
   type: Interaction["type"];
-  provider: SupportedProviders;
+  provider: archestraApiTypes.SupportedProviders;
   endpoint: string;
   createdAt: string;
   modelName: string;
@@ -26,7 +26,7 @@ export class DynamicInteraction implements InteractionUtils {
     this.id = interaction.id;
     this.agentId = interaction.agentId;
     this.type = interaction.type;
-    this.provider = provider as SupportedProviders;
+    this.provider = provider as archestraApiTypes.SupportedProviders;
     this.endpoint = endpoint;
     this.createdAt = interaction.createdAt;
 

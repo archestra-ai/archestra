@@ -191,6 +191,10 @@
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+  /* Override Tailwind's font-sans to use our dynamic CSS variable */
+  .font-sans {
+    font-family: var(--font-sans) !important;
+  }
 }
 
 button, div[role="menuitem"] {

@@ -1,6 +1,10 @@
+// Import tracing first to ensure auto-instrumentation works properly
+import "./tracing";
+
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
+import metricsPlugin from "fastify-metrics";
 import {
   jsonSchemaTransform,
   jsonSchemaTransformObject,
@@ -10,7 +14,11 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { seedRequiredStartingData } from "@/database/seed";
+import logger from "@/logging";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
+import * as routes from "@/routes";
 import {
   Anthropic,
   Gemini,
@@ -18,24 +26,20 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { seedDatabase } from "./database/seed";
-import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host, corsOrigins, authHeaderName },
+  api: {
+    port,
+    name,
+    version,
+    host,
+    corsOrigins,
+    apiKeyAuthorizationHeaderName,
+  },
 } = config;
 
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss Z",
-        ignore: "pid,hostname",
-      },
-    },
-  },
+  loggerInstance: logger,
 }).withTypeProvider<ZodTypeProvider>();
 
 // Set up Zod validation and serialization
@@ -70,8 +74,35 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 
 const start = async () => {
   try {
-    // Seed database with demo data
-    await seedDatabase();
+    await seedRequiredStartingData();
+
+    // Initialize MCP Server Runtime (K8s-based)
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
+
+    await fastify.register(metricsPlugin, { endpoint: "/metrics" });
 
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {
@@ -79,10 +110,9 @@ const start = async () => {
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
-        "Authorization",
         "X-Requested-With",
         "Cookie",
-        authHeaderName,
+        apiKeyAuthorizationHeaderName,
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
@@ -103,6 +133,13 @@ const start = async () => {
           version,
         },
       },
+
+      /**
+       * basically we use this hide untagged option to NOT include fastify-http-proxy routes in the OpenAPI spec
+       * (ex. we use this in several spots, as of this writing, under ./routes/proxy/)
+       */
+      hideUntagged: true,
+
       /**
        * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-use-together-with-fastifyswagger
        */
@@ -115,10 +152,26 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    fastify.get("/health", async () => ({
-      status: name,
-      version,
-    }));
+    fastify.get(
+      "/health",
+      {
+        schema: {
+          tags: ["health"],
+          response: {
+            200: z.object({
+              name: z.string(),
+              status: z.string(),
+              version: z.string(),
+            }),
+          },
+        },
+      },
+      async () => ({
+        name,
+        status: "ok",
+        version,
+      }),
+    );
 
     fastify.addHook("preHandler", authMiddleware.handle);
 

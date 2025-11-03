@@ -7,9 +7,10 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 
 const {
-  api: { authHeaderName },
+  api: { apiKeyAuthorizationHeaderName },
   baseURL,
   production,
   auth: { secret, cookieDomain, trustedOrigins },
@@ -28,11 +29,21 @@ export const auth = betterAuth({
         admin: adminRole,
         member: memberRole,
       },
+      features: {
+        team: {
+          enabled: true,
+          ac,
+          roles: {
+            admin: adminRole,
+            member: memberRole,
+          },
+        },
+      },
     }),
     admin(),
     apiKey({
-      // enableSessionForAPIKeys: true,
-      apiKeyHeaders: [authHeaderName],
+      enableSessionForAPIKeys: true,
+      apiKeyHeaders: [apiKeyAuthorizationHeaderName],
       defaultPrefix: "archestra_",
       rateLimit: {
         enabled: false,
@@ -67,6 +78,8 @@ export const auth = betterAuth({
       member: schema.member,
       invitation: schema.invitation,
       account: schema.account,
+      team: schema.team,
+      teamMember: schema.teamMember,
     },
   }),
 
@@ -163,9 +176,9 @@ export const auth = betterAuth({
             await db
               .delete(schema.invitation)
               .where(eq(schema.invitation.id, invitationId));
-            console.log(`✅ Invitation ${invitationId} deleted from database`);
+            logger.info(`✅ Invitation ${invitationId} deleted from database`);
           } catch (error) {
-            console.error("❌ Failed to delete invitation:", error);
+            logger.error({ err: error }, "❌ Failed to delete invitation:");
           }
         }
       }
@@ -181,9 +194,12 @@ export const auth = betterAuth({
             await db
               .delete(schema.session)
               .where(eq(schema.session.userId, userId));
-            console.log(`✅ All sessions for user ${userId} invalidated`);
+            logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
-            console.error("❌ Failed to invalidate user sessions:", error);
+            logger.error(
+              { err: error },
+              "❌ Failed to invalidate user sessions:",
+            );
           }
         }
       }
@@ -216,16 +232,16 @@ export const auth = betterAuth({
             }
 
             if (deleted[0]) {
-              console.log(
+              logger.info(
                 `✅ Member ${deleted[0].id} deleted from organization ${deleted[0].organizationId}`,
               );
             } else {
-              console.warn(
+              logger.warn(
                 `⚠️ Member ${memberIdOrUserId} not found for deletion`,
               );
             }
           } catch (error) {
-            console.error("❌ Failed to delete member:", error);
+            logger.error({ err: error }, "❌ Failed to delete member:");
           }
         }
       }
@@ -249,7 +265,7 @@ export const auth = betterAuth({
           }
 
           // Handle invitation sign-up: accept invitation and add user to organization
-          console.log(
+          logger.info(
             `🔗 Processing invitation ${invitationId} for user ${user.email}`,
           );
 
@@ -262,7 +278,7 @@ export const auth = betterAuth({
               .limit(1);
 
             if (!invitation[0]) {
-              console.error(`❌ Invitation ${invitationId} not found`);
+              logger.error(`❌ Invitation ${invitationId} not found`);
               return;
             }
 
@@ -274,6 +290,12 @@ export const auth = betterAuth({
               role: invitation[0].role || "member",
               createdAt: new Date(),
             });
+
+            // Update user role to match the invitation role
+            await db
+              .update(schema.usersTable)
+              .set({ role: invitation[0].role || "member" })
+              .where(eq(schema.usersTable.id, user.id));
 
             // Mark invitation as accepted
             await db
@@ -287,13 +309,13 @@ export const auth = betterAuth({
               .set({ activeOrganizationId: invitation[0].organizationId })
               .where(eq(schema.session.id, sessionId));
 
-            console.log(
+            logger.info(
               `✅ Invitation accepted: user ${user.email} added to organization ${invitation[0].organizationId} as ${invitation[0].role || "member"}`,
             );
           } catch (error) {
-            console.error(
+            logger.error(
+              { err: error },
               `❌ Failed to accept invitation ${invitationId}:`,
-              error,
             );
           }
 
@@ -324,13 +346,16 @@ export const auth = betterAuth({
                   })
                   .where(eq(schema.session.id, sessionId));
 
-                console.log(
+                logger.info(
                   `✅ Active organization set for user ${newSession.user.email}`,
                 );
               }
             }
           } catch (error) {
-            console.error("❌ Failed to set active organization:", error);
+            logger.error(
+              { err: error },
+              "❌ Failed to set active organization:",
+            );
           }
         }
       }

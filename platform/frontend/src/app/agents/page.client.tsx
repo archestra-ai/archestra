@@ -1,22 +1,29 @@
 "use client";
 
-import { E2eTestId } from "@shared";
-import { Pencil, Plug, Plus, Trash2, Wrench, X } from "lucide-react";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
+import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import {
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Plug,
+  Plus,
+  Tag,
+  Trash2,
+  Wrench,
+  X,
+} from "lucide-react";
+import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -35,14 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -53,17 +52,17 @@ import {
   useAgents,
   useCreateAgent,
   useDeleteAgent,
+  useLabelKeys,
+  useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
-import { useCurrentOrgMembers } from "@/lib/auth.query";
-import type { GetAgentsResponses } from "@/lib/clients/api";
-import { useFeatureFlag } from "@/lib/features.hook";
+import { formatDate } from "@/lib/utils";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
   initialData,
 }: {
-  initialData: GetAgentsResponses["200"];
+  initialData: archestraApiTypes.GetAgentsResponses["200"];
 }) {
   return (
     <div className="w-full h-full">
@@ -76,52 +75,69 @@ export default function AgentsPage({
   );
 }
 
-function AgentMembersBadges({
-  usersWithAccess,
-  orgMembers,
+function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground/50 flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
+    </div>
+  );
+}
+
+function AgentTeamsBadges({
+  teamIds,
+  teams,
 }: {
-  usersWithAccess: string[];
-  orgMembers:
-    | Array<{ user: { id: string; name: string; email: string } }>
+  teamIds: string[];
+  teams:
+    | Array<{ id: string; name: string; description: string | null }>
     | undefined;
 }) {
-  const MAX_USERS_TO_SHOW = 3;
-  if (!orgMembers || usersWithAccess.length === 0) {
+  const MAX_TEAMS_TO_SHOW = 3;
+  if (!teams || teamIds.length === 0) {
     return <span className="text-sm text-muted-foreground">None</span>;
   }
 
-  const getUserById = (userId: string) => {
-    return orgMembers.find((member) => member.user.id === userId)?.user;
+  const getTeamById = (teamId: string) => {
+    return teams.find((team) => team.id === teamId);
   };
 
-  const visibleUsers = usersWithAccess.slice(0, MAX_USERS_TO_SHOW);
-  const remainingUsers = usersWithAccess.slice(MAX_USERS_TO_SHOW);
+  const visibleTeams = teamIds.slice(0, MAX_TEAMS_TO_SHOW);
+  const remainingTeams = teamIds.slice(MAX_TEAMS_TO_SHOW);
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {visibleUsers.map((userId) => {
-        const user = getUserById(userId);
+      {visibleTeams.map((teamId) => {
+        const team = getTeamById(teamId);
         return (
-          <Badge key={userId} variant="secondary" className="text-xs">
-            {user?.email || userId}
+          <Badge key={teamId} variant="secondary" className="text-xs">
+            {team?.name || teamId}
           </Badge>
         );
       })}
-      {remainingUsers.length > 0 && (
+      {remainingTeams.length > 0 && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingUsers.length} more
+                +{remainingTeams.length} more
               </span>
             </TooltipTrigger>
             <TooltipContent>
               <div className="flex flex-col gap-1">
-                {remainingUsers.map((userId) => {
-                  const user = getUserById(userId);
+                {remainingTeams.map((teamId) => {
+                  const team = getTeamById(teamId);
                   return (
-                    <div key={userId} className="text-xs">
-                      {user?.email || userId}
+                    <div key={teamId} className="text-xs">
+                      {team?.name || teamId}
                     </div>
                   );
                 })}
@@ -134,24 +150,222 @@ function AgentMembersBadges({
   );
 }
 
-function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
+function Agents({
+  initialData,
+}: {
+  initialData: archestraApiTypes.GetAgentsResponses["200"];
+}) {
   const { data: agents } = useAgents({ initialData });
-  const { data: orgMembers } = useCurrentOrgMembers();
-  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getTeams();
+      return data || [];
+    },
+  });
+
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "createdAt", desc: true },
+  ]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
-    GetAgentsResponses["200"][number] | null
+    archestraApiTypes.GetAgentsResponses["200"][number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
-    usersWithAccess: string[];
+    teams: string[];
+    labels: AgentLabel[];
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+
+  type AgentData = archestraApiTypes.GetAgentsResponses["200"][number];
+
+  const columns: ColumnDef<AgentData>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Name
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="font-medium">
+            <div className="flex items-center gap-2">
+              {agent.name}
+              {agent.isDefault && (
+                <Badge
+                  variant="outline"
+                  className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
+                >
+                  DEFAULT
+                </Badge>
+              )}
+              {agent.labels && agent.labels.length > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="inline-flex">
+                        <Tag className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {agent.labels.map((label) => (
+                          <Badge
+                            key={label.key}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            <span className="font-semibold">{label.key}:</span>
+                            <span className="ml-1">{label.value}</span>
+                          </Badge>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      accessorKey: "createdAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Created
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono text-xs">
+          {formatDate({ date: row.original.createdAt })}
+        </div>
+      ),
+    },
+    {
+      id: "tools",
+      header: "Connected Tools",
+      cell: ({ row }) => <div>{row.original.tools.length}</div>,
+    },
+    {
+      id: "teams",
+      header: "Teams",
+      cell: ({ row }) => (
+        <AgentTeamsBadges teamIds={row.original.teams || []} teams={teams} />
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-1 justify-end">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConnectingAgent({
+                        id: agent.id,
+                        name: agent.name,
+                      });
+                    }}
+                  >
+                    <Plug className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Connect</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAssigningToolsAgent(agent);
+                    }}
+                  >
+                    <Wrench className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Assign Tools</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingAgent({
+                        id: agent.id,
+                        name: agent.name,
+                        teams: agent.teams || [],
+                        labels: agent.labels || [],
+                      });
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <WithPermission permissions={["agent:delete"]}>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingAgentId(agent.id);
+                      }}
+                      className="hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </WithPermission>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="w-full h-full">
@@ -163,7 +377,10 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                 Agents
               </h1>
               <p className="text-sm text-muted-foreground">
-                List of agents detected by proxy.{" "}
+                Agents are a way to organize access and logging. <br />
+                <br />
+                An agent can be: an N8N workflow, a custom application, or a
+                team sharing an MCP gateway.{" "}
                 <a
                   href="https://www.archestra.ai/docs/platform-agents"
                   target="_blank"
@@ -187,138 +404,19 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
         {!agents || agents.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No agents found</CardTitle>
-              <CardDescription>
-                Create your first agent to get started with the Archestra
-                Platform.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="text-muted-foreground">No agents found</div>
         ) : (
-          <Card>
-            <CardContent className="px-6">
-              <Table data-testid={E2eTestId.AgentsTable}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Connected Tools</TableHead>
-                    <TableHead>Members</TableHead>
-                    <WithPermission permissions={["agent:delete"]}>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </WithPermission>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agents.map((agent) => (
-                    <TableRow key={agent.id}>
-                      <TableCell className="font-medium">
-                        {agent.name}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(agent.createdAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "numeric",
-                          day: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell>{agent.tools.length}</TableCell>
-                      <TableCell>
-                        <AgentMembersBadges
-                          usersWithAccess={agent.usersWithAccess || []}
-                          orgMembers={orgMembers}
-                        />
-                      </TableCell>
-                      <WithPermission permissions={["agent:delete"]}>
-                        <TableCell>
-                          <div className="flex items-center gap-1 justify-end">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      setConnectingAgent({
-                                        id: agent.id,
-                                        name: agent.name,
-                                      })
-                                    }
-                                  >
-                                    <Plug className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Connect</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            {mcpRegistryEnabled && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() =>
-                                        setAssigningToolsAgent(agent)
-                                      }
-                                    >
-                                      <Wrench className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Assign Tools</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() =>
-                                      setEditingAgent({
-                                        id: agent.id,
-                                        name: agent.name,
-                                        usersWithAccess:
-                                          agent.usersWithAccess || [],
-                                      })
-                                    }
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                                    onClick={() => setDeletingAgentId(agent.id)}
-                                    className="hover:bg-destructive/10 hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </WithPermission>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div data-testid={E2eTestId.AgentsTable}>
+            <DataTable
+              columns={columns}
+              data={agents}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              manualSorting={true}
+            />
+          </div>
         )}
 
         <CreateAgentDialog
@@ -370,50 +468,51 @@ function CreateAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
-  const { data: orgMembers } = useCurrentOrgMembers();
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<AgentLabel[]>([]);
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const response = await archestraApiSdk.getTeams();
+      return response.data || [];
+    },
+  });
+  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableValues = [] } = useLabelValues();
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
 
-  const handleAddUser = useCallback(
-    (userId: string) => {
-      if (userId && !assignedUserIds.includes(userId)) {
-        setAssignedUserIds([...assignedUserIds, userId]);
-        setSelectedUserId("");
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
       }
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const handleRemoveUser = useCallback(
-    (userId: string) => {
-      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const getAdminMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter((member) => member.role === "admin");
-  }, [orgMembers]);
+  const getUnassignedTeams = useCallback(() => {
+    if (!teams) return [];
+    return teams.filter((team) => !assignedTeamIds.includes(team.id));
+  }, [teams, assignedTeamIds]);
 
-  const getUnassignedMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter(
-      (member) =>
-        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
-    );
-  }, [orgMembers, assignedUserIds]);
-
-  const getUserById = useCallback(
-    (userId: string) => {
-      return orgMembers?.find((member) => member.user.id === userId)?.user;
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
     },
-    [orgMembers],
+    [teams],
   );
 
   const handleSubmit = useCallback(
@@ -427,7 +526,8 @@ function CreateAgentDialog({
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
-          usersWithAccess: assignedUserIds,
+          teams: assignedTeamIds,
+          labels,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -438,28 +538,17 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedUserIds, createAgent],
+    [name, assignedTeamIds, labels, createAgent],
   );
 
   const handleClose = useCallback(() => {
     setName("");
-    setAssignedUserIds([]);
-    setSelectedUserId("");
+    setAssignedTeamIds([]);
+    setLabels([]);
+    setSelectedTeamId("");
     setCreatedAgent(null);
     onOpenChange(false);
   }, [onOpenChange]);
-
-  const adminMemberIds = useMemo(() => {
-    return getAdminMembers().map((member) => member.user.id);
-  }, [getAdminMembers]);
-
-  /**
-   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
-   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
-   */
-  const filteredAssignedUserIds = useMemo(() => {
-    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
-  }, [assignedUserIds, adminMemberIds]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -492,55 +581,42 @@ function CreateAgentDialog({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Members with access</Label>
+                  <Label>Team Access</Label>
                   <p className="text-sm text-muted-foreground">
-                    Admin users have access to all agents.
+                    Assign teams to grant their members access to this agent.
                   </p>
-                  <Select value={selectedUserId} onValueChange={handleAddUser}>
-                    <SelectTrigger id="assign-user">
-                      <SelectValue placeholder="Select a member to assign" />
+                  <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                    <SelectTrigger id="assign-team">
+                      <SelectValue placeholder="Select a team to assign" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getUnassignedMembers().length === 0 ? (
+                      {getUnassignedTeams().length === 0 ? (
                         <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          All members are already assigned
+                          All teams are already assigned
                         </div>
                       ) : (
-                        getUnassignedMembers().map((member) => (
-                          <SelectItem
-                            key={member.user.id}
-                            value={member.user.id}
-                          >
-                            {member.user.name} ({member.user.email})
+                        getUnassignedTeams().map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-                  {getAdminMembers().length > 0 ||
-                  filteredAssignedUserIds.length > 0 ? (
+                  {assignedTeamIds.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {getAdminMembers().map((member) => (
-                        <Badge
-                          key={member.user.id}
-                          variant="outline"
-                          className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
-                        >
-                          <span>{member.user.email} (Admin)</span>
-                        </Badge>
-                      ))}
-                      {filteredAssignedUserIds.map((userId) => {
-                        const user = getUserById(userId);
+                      {assignedTeamIds.map((teamId) => {
+                        const team = getTeamById(teamId);
                         return (
                           <Badge
-                            key={userId}
+                            key={teamId}
                             variant="secondary"
                             className="flex items-center gap-1 pr-1"
                           >
-                            <span>{user?.email || userId}</span>
+                            <span>{team?.name || teamId}</span>
                             <button
                               type="button"
-                              onClick={() => handleRemoveUser(userId)}
+                              onClick={() => handleRemoveTeam(teamId)}
                               className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                             >
                               <X className="h-3 w-3" />
@@ -551,10 +627,17 @@ function CreateAgentDialog({
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No members assigned yet
+                      No teams assigned yet. Admins have access to all agents.
                     </p>
                   )}
                 </div>
+
+                <AgentLabels
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                  availableKeys={availableKeys}
+                  availableValues={availableValues}
+                />
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -573,10 +656,10 @@ function CreateAgentDialog({
                 How to connect "{createdAgent.name}" to Archestra
               </DialogTitle>
             </DialogHeader>
-            <div className="py-4">
+            <div className="overflow-y-auto py-4 flex-1">
               <AgentConnectionTabs agentId={createdAgent.id} />
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <Button
                 type="button"
                 onClick={handleClose}
@@ -597,33 +680,47 @@ function EditAgentDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string; usersWithAccess: string[] };
+  agent: {
+    id: string;
+    name: string;
+    teams: string[];
+    labels: AgentLabel[];
+  };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState(agent.name);
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(
-    agent.usersWithAccess || [],
+  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
+    agent.teams || [],
   );
-  const { data: orgMembers } = useCurrentOrgMembers();
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const response = await archestraApiSdk.getTeams();
+      return response.data || [];
+    },
+  });
+  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableValues = [] } = useLabelValues();
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
 
-  const handleAddUser = useCallback(
-    (userId: string) => {
-      if (userId && !assignedUserIds.includes(userId)) {
-        setAssignedUserIds([...assignedUserIds, userId]);
-        setSelectedUserId("");
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
       }
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const handleRemoveUser = useCallback(
-    (userId: string) => {
-      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
   const handleSubmit = useCallback(
@@ -639,7 +736,8 @@ function EditAgentDialog({
           id: agent.id,
           data: {
             name: name.trim(),
-            usersWithAccess: assignedUserIds,
+            teams: assignedTeamIds,
+            labels,
           },
         });
         toast.success("Agent updated successfully");
@@ -648,40 +746,20 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedUserIds, updateAgent, onOpenChange],
+    [agent.id, name, assignedTeamIds, labels, updateAgent, onOpenChange],
   );
 
-  const getAdminMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter((member) => member.role === "admin");
-  }, [orgMembers]);
+  const getUnassignedTeams = useCallback(() => {
+    if (!teams) return [];
+    return teams.filter((team) => !assignedTeamIds.includes(team.id));
+  }, [teams, assignedTeamIds]);
 
-  const getUnassignedMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter(
-      (member) =>
-        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
-    );
-  }, [orgMembers, assignedUserIds]);
-
-  const getUserById = useCallback(
-    (userId: string) => {
-      return orgMembers?.find((member) => member.user.id === userId)?.user;
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
     },
-    [orgMembers],
+    [teams],
   );
-
-  const adminMemberIds = useMemo(() => {
-    return getAdminMembers().map((member) => member.user.id);
-  }, [getAdminMembers]);
-
-  /**
-   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
-   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
-   */
-  const filteredAssignedUserIds = useMemo(() => {
-    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
-  }, [assignedUserIds, adminMemberIds]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -692,7 +770,7 @@ function EditAgentDialog({
         <DialogHeader>
           <DialogTitle>Edit agent</DialogTitle>
           <DialogDescription>
-            Update the agent's name and assign organization members.
+            Update the agent's name and assign teams.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -712,52 +790,42 @@ function EditAgentDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Members with access</Label>
+              <Label>Team Access</Label>
               <p className="text-sm text-muted-foreground">
-                Admin users have access to all agents.
+                Assign teams to grant their members access to this agent.
               </p>
-              <Select value={selectedUserId} onValueChange={handleAddUser}>
-                <SelectTrigger id="assign-user">
-                  <SelectValue placeholder="Select a member to assign" />
+              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                <SelectTrigger id="assign-team">
+                  <SelectValue placeholder="Select a team to assign" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getUnassignedMembers().length === 0 ? (
+                  {getUnassignedTeams().length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      All members are already assigned
+                      All teams are already assigned
                     </div>
                   ) : (
-                    getUnassignedMembers().map((member) => (
-                      <SelectItem key={member.user.id} value={member.user.id}>
-                        {member.user.name} ({member.user.email})
+                    getUnassignedTeams().map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
-              {getAdminMembers().length > 0 ||
-              filteredAssignedUserIds.length > 0 ? (
+              {assignedTeamIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {getAdminMembers().map((member) => (
-                    <Badge
-                      key={member.user.id}
-                      variant="outline"
-                      className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
-                    >
-                      <span>{member.user.email} (Admin)</span>
-                    </Badge>
-                  ))}
-                  {filteredAssignedUserIds.map((userId) => {
-                    const user = getUserById(userId);
+                  {assignedTeamIds.map((teamId) => {
+                    const team = getTeamById(teamId);
                     return (
                       <Badge
-                        key={userId}
+                        key={teamId}
                         variant="secondary"
                         className="flex items-center gap-1 pr-1"
                       >
-                        <span>{user?.email || userId}</span>
+                        <span>{team?.name || teamId}</span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveUser(userId)}
+                          onClick={() => handleRemoveTeam(teamId)}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
                           <X className="h-3 w-3" />
@@ -768,10 +836,17 @@ function EditAgentDialog({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No members assigned yet
+                  No teams assigned yet. Admins have access to all agents.
                 </p>
               )}
             </div>
+
+            <AgentLabels
+              labels={labels}
+              onLabelsChange={setLabels}
+              availableKeys={availableKeys}
+              availableValues={availableValues}
+            />
           </div>
           <DialogFooter className="mt-4">
             <Button

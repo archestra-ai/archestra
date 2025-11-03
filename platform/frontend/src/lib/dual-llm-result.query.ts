@@ -1,11 +1,10 @@
 "use client";
 
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import {
-  type GetDualLlmResultsByInteractionResponses,
-  getDualLlmResultByToolCallId,
-  getDualLlmResultsByInteraction,
-} from "@/lib/clients/api";
+
+const { getDualLlmResultByToolCallId, getDualLlmResultsByInteraction } =
+  archestraApiSdk;
 
 export function useDualLlmResultByToolCallId(toolCallId: string | null) {
   return useQuery({
@@ -26,7 +25,7 @@ export function useDualLlmResultsByInteraction({
   initialData,
 }: {
   interactionId: string;
-  initialData?: GetDualLlmResultsByInteractionResponses["200"];
+  initialData?: archestraApiTypes.GetDualLlmResultsByInteractionResponses["200"];
 }) {
   return useQuery({
     queryKey: ["dual-llm-results", "by-interaction", interactionId],

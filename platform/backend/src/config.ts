@@ -17,9 +17,19 @@ import packageJson from "../package.json";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
+/**
+ * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+ */
+export const getDatabaseUrl = (): string => {
+  const databaseUrl =
+    process.env.ARCHESTRA_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL or DATABASE_URL",
+    );
+  }
+  return databaseUrl;
+};
 
 const isProduction = ["production", "prod"].includes(
   process.env.NODE_ENV?.toLowerCase() ?? "",
@@ -101,9 +111,9 @@ export default {
     host: "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
-    version: packageJson.version,
+    version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
-    authHeaderName: "X-Archestra-API-Key",
+    apiKeyAuthorizationHeaderName: "Authorization",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
@@ -119,20 +129,48 @@ export default {
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
   },
   database: {
-    url: process.env.DATABASE_URL,
+    url: getDatabaseUrl(),
   },
   llm: {
     openai: {
-      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+      baseUrl:
+        process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
     },
     anthropic: {
-      baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      baseUrl:
+        process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
   },
   features: {
-    mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+    /**
+     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
+     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+     */
+  },
+  orchestrator: {
+    mcpServerBaseImage:
+      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+    kubernetes: {
+      namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+      kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+      loadKubeconfigFromCurrentCluster:
+        process.env
+          .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+        "true",
+    },
+  },
+  observability: {
+    otel: {
+      otelExporterOtlpEndpoint:
+        process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
+        "http://localhost:4318/v1/traces",
+    },
   },
   debug: isDevelopment,
+  logging: {
+    level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
+  },
   production: isProduction,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",

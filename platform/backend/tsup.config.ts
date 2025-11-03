@@ -15,6 +15,9 @@ export default defineConfig((options: Options) => ({
   clean: true,
   format: ["esm"],  // Changed from "cjs" to "esm" since you have "type": "module"
   
+  // Generate source maps for better stack traces
+  sourcemap: true,
+  
   // Exclude test files
   exclude: [
     "**/*.test.ts",

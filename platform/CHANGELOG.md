@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.24](https://github.com/archestra-ai/archestra/compare/platform-v0.0.23...platform-v0.0.24) (2025-11-03)
+
+
+### Bug Fixes
+
+* size/alignment of custom logo ([#917](https://github.com/archestra-ai/archestra/issues/917)) ([540121b](https://github.com/archestra-ai/archestra/commit/540121b65215aeb90faf33fa9e7fae410f8b2209))
+
 ## [0.0.23](https://github.com/archestra-ai/archestra/compare/platform-v0.0.22...platform-v0.0.23) (2025-11-03)
 
 

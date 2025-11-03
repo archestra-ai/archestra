@@ -398,6 +398,12 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteLimit]: {
     limit: ["delete"],
   },
+  [RouteId.GetOrganization]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationCleanupInterval]: {
+    organization: ["update"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

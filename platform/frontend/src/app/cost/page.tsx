@@ -97,6 +97,10 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
+import {
+  useOrganizationDetails,
+  useUpdateOrganizationCleanupInterval,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
 
 // Inline Form Component for adding/editing limits
@@ -497,6 +501,8 @@ export default function CostPage() {
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
   const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
+  const { data: organizationDetails } = useOrganizationDetails();
+  const updateCleanupInterval = useUpdateOrganizationCleanupInterval();
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
@@ -1413,6 +1419,37 @@ export default function CostPage() {
           </TabsContent>
 
           <TabsContent value="limits" className="mt-0 space-y-6">
+            {/* Global Cleanup Settings Panel */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">
+                    Auto-cleanup interval
+                  </CardTitle>
+                  <Select
+                    value={organizationDetails?.limitCleanupInterval || "1h"}
+                    onValueChange={(value) => {
+                      updateCleanupInterval.mutate(
+                        value as "1h" | "12h" | "24h" | "1w" | "1m",
+                      );
+                    }}
+                    disabled={updateCleanupInterval.isPending}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1h">Every hour</SelectItem>
+                      <SelectItem value="12h">Every 12 hours</SelectItem>
+                      <SelectItem value="24h">Every 24 hours</SelectItem>
+                      <SelectItem value="1w">Every week</SelectItem>
+                      <SelectItem value="1m">Every month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+            </Card>
+
             {/* LLM Limits Section */}
             <Card>
               <CardHeader>

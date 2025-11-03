@@ -23,6 +23,7 @@ const limitsTable = pgTable(
     currentUsage: integer("current_usage").notNull().default(0),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),
     toolName: varchar("tool_name", { length: 255 }),
+    lastCleanup: timestamp("last_cleanup", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

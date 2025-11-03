@@ -5110,6 +5110,7 @@ export type GetLimitsResponses = {
         currentUsage: number;
         mcpServerName: string | null;
         toolName: string | null;
+        lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -5125,6 +5126,7 @@ export type CreateLimitData = {
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
+        lastCleanup?: unknown;
     };
     path?: never;
     query?: never;
@@ -5176,6 +5178,7 @@ export type CreateLimitResponses = {
         currentUsage: number;
         mcpServerName: string | null;
         toolName: string | null;
+        lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -5298,6 +5301,7 @@ export type GetLimitResponses = {
         currentUsage: number;
         mcpServerName: string | null;
         toolName: string | null;
+        lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -5313,6 +5317,7 @@ export type UpdateLimitData = {
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
+        lastCleanup?: unknown;
     };
     path: {
         id: string;
@@ -5375,6 +5380,7 @@ export type UpdateLimitResponses = {
         currentUsage: number;
         mcpServerName: string | null;
         toolName: string | null;
+        lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -7534,6 +7540,111 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type UpdateOrganizationCleanupIntervalData = {
+    body: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/cleanup-interval';
+};
+
+export type UpdateOrganizationCleanupIntervalErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
+
+export type UpdateOrganizationCleanupIntervalResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
+
+export type GetOrganizationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization';
+};
+
+export type GetOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationError = GetOrganizationErrors[keyof GetOrganizationErrors];
+
+export type GetOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
 export type GetTeamsData = {
     body?: never;

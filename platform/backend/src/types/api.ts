@@ -214,5 +214,9 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+
+  // Organization Routes
+  GetOrganization: "getOrganization",
+  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

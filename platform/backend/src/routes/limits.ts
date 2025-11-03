@@ -11,6 +11,7 @@ import {
   UpdateLimitSchema,
 } from "@/types/limit";
 import { getUserFromRequest } from "@/utils";
+import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -46,6 +47,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "unauthorized",
             },
           });
+        }
+
+        // Cleanup limits if needed before fetching
+        if (user.organizationId) {
+          await cleanupLimitsIfNeeded(user.organizationId);
         }
 
         const conditions = [];

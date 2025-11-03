@@ -6554,6 +6554,7 @@ export type GetMcpServerLogsData = {
     };
     query?: {
         lines?: number;
+        follow?: boolean;
     };
     url: '/api/mcp_server/{id}/logs';
 };
@@ -7217,6 +7218,229 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetOrganizationAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
+
+export type GetOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: string;
+        customFont?: string;
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
+
+export type UpdateOrganizationAppearanceData = {
+    body?: {
+        theme?: string;
+        customFont?: string;
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
+
+export type UpdateOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: string;
+        customFont?: string;
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+
+export type DeleteOrganizationLogoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type DeleteOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+
+export type DeleteOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
+
+export type UploadOrganizationLogoData = {
+    body: {
+        logo: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type UploadOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+
+export type UploadOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        logo: string;
+    };
+};
+
+export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
 
 export type GetTeamsData = {
     body?: never;

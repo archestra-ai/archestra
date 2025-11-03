@@ -1,19 +1,14 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OrganizationModel } from "@/models";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import {
+  ErrorResponseSchema,
+  OrganizationAppearanceSchema,
+  RouteId,
+} from "@/types";
 import { getUserFromRequest } from "@/utils";
 
-// Schema for appearance settings
-const AppearanceSchema = z.object({
-  theme: z.string().optional(),
-  customFont: z.string().optional(),
-  logoType: z.enum(["default", "custom"]).optional(),
-  logo: z.string().nullable().optional(),
-});
-
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // GET /api/organization/appearance - Get current appearance settings
   fastify.get(
     "/api/organization/appearance",
     {
@@ -22,7 +17,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get organization appearance settings",
         tags: ["Organization"],
         response: {
-          200: AppearanceSchema,
+          200: OrganizationAppearanceSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -43,7 +38,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get the organization
-        const organization = await OrganizationModel.getOrCreateDefaultOrganization();
+        const organization =
+          await OrganizationModel.getOrCreateDefaultOrganization();
 
         if (!organization) {
           return reply.status(404).send({
@@ -74,7 +70,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // PUT /api/organization/appearance - Update appearance settings
   fastify.put(
     "/api/organization/appearance",
     {
@@ -82,9 +77,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateOrganizationAppearance,
         description: "Update organization appearance settings",
         tags: ["Organization"],
-        body: AppearanceSchema,
+        body: OrganizationAppearanceSchema,
         response: {
-          200: AppearanceSchema,
+          200: OrganizationAppearanceSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -115,7 +110,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get the organization
-        const organization = await OrganizationModel.getOrCreateDefaultOrganization();
+        const organization =
+          await OrganizationModel.getOrCreateDefaultOrganization();
 
         // Update appearance settings
         const updatedOrg = await OrganizationModel.updateAppearance(
@@ -136,7 +132,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           theme: updatedOrg.theme || "cosmic-night",
           customFont: updatedOrg.customFont || "lato",
           logoType: updatedOrg.logoType || "default",
-          logo: updatedOrg.logo || null,
+          logo: updatedOrg.logo,
         });
       } catch (error) {
         fastify.log.error(error);
@@ -151,7 +147,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // POST /api/organization/logo - Upload custom logo
   fastify.post(
     "/api/organization/logo",
     {
@@ -222,7 +217,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get the organization
-        const organization = await OrganizationModel.getOrCreateDefaultOrganization();
+        const organization =
+          await OrganizationModel.getOrCreateDefaultOrganization();
 
         // Update logo
         const updatedOrg = await OrganizationModel.updateAppearance(
@@ -259,7 +255,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // DELETE /api/organization/logo - Remove custom logo
   fastify.delete(
     "/api/organization/logo",
     {
@@ -301,7 +296,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get the organization
-        const organization = await OrganizationModel.getOrCreateDefaultOrganization();
+        const organization =
+          await OrganizationModel.getOrCreateDefaultOrganization();
 
         // Remove logo
         const updatedOrg = await OrganizationModel.updateAppearance(

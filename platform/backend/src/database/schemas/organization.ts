@@ -1,4 +1,5 @@
 import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import type { OrganizationAppearance } from "@/types/organization";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -10,9 +11,15 @@ const organizationsTable = pgTable("organization", {
   hasSeededMcpCatalog: boolean("has_seeded_mcp_catalog")
     .default(false)
     .notNull(),
-  theme: text("theme").default("cosmic-night"),
-  customFont: text("custom_font").default("lato"),
-  logoType: text("logo_type").default("default"),
+  theme: text("theme")
+    .$type<OrganizationAppearance["theme"]>()
+    .default("cosmic-night"),
+  customFont: text("custom_font")
+    .$type<OrganizationAppearance["customFont"]>()
+    .default("lato"),
+  logoType: text("logo_type")
+    .$type<OrganizationAppearance["logoType"]>()
+    .default("default"),
 });
 
 export default organizationsTable;

@@ -9,6 +9,7 @@ import {
   useUpdateOrganizationAppearance,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
+import { FontSelector } from "./_components/font-selector";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -19,13 +20,19 @@ export default function AppearanceSettingsPage() {
 
   const {
     currentUITheme,
+    currentUIFont,
     themeFromBackend,
+    fontFromBackend,
     setPreviewTheme,
+    setPreviewFont,
     applyThemeOnUI,
+    applyFontOnUI,
     saveTheme,
+    saveFont,
     logo,
     logoType,
     DEFAULT_THEME,
+    DEFAULT_FONT,
     isLoadingAppearance,
   } = useOrgTheme();
 
@@ -33,6 +40,10 @@ export default function AppearanceSettingsPage() {
     if (themeFromBackend) {
       applyThemeOnUI(themeFromBackend);
       setPreviewTheme(themeFromBackend);
+    }
+    if (fontFromBackend) {
+      applyFontOnUI(fontFromBackend);
+      setPreviewFont(fontFromBackend);
     }
   });
 
@@ -63,17 +74,28 @@ export default function AppearanceSettingsPage() {
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {
             setPreviewTheme(themeId);
-            setHasChanges(themeId !== themeFromBackend);
+            setHasChanges(
+              themeId !== themeFromBackend || currentUIFont !== fontFromBackend,
+            );
           }}
         />
-        {/* <FontSelector
-          selectedFont={selectedFont}
-          onFontSelect={setSelectedFont}
-        /> */}
+        <FontSelector
+          selectedFont={currentUIFont}
+          onFontSelect={(fontId) => {
+            setPreviewFont(fontId);
+            setHasChanges(
+              currentUITheme !== themeFromBackend || fontId !== fontFromBackend,
+            );
+          }}
+        />
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
             <Button
-              onClick={() => saveTheme(currentUITheme)}
+              onClick={() => {
+                saveTheme(currentUITheme);
+                saveFont(currentUIFont);
+                setHasChanges(false);
+              }}
               disabled={updateMutation.isPending}
             >
               Save
@@ -82,6 +104,7 @@ export default function AppearanceSettingsPage() {
               variant="outline"
               onClick={() => {
                 setPreviewTheme(themeFromBackend || DEFAULT_THEME);
+                setPreviewFont(fontFromBackend || DEFAULT_FONT);
                 setHasChanges(false);
               }}
               disabled={updateMutation.isPending}

@@ -40,8 +40,9 @@ function generateCSSVars(vars: Record<string, string>): string {
 				return `  --${key}: ${value};`;
 			}
 			// ignore everything else (fonts, radius, shadows, etc.)
-			return '';
+			return undefined;
 		})
+		.filter(Boolean)
 		.join("\n");
 }
 

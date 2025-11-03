@@ -56,6 +56,7 @@ export interface TimeSeriesData {
   requests: number;
   inputTokens: number;
   outputTokens: number;
+  [key: string]: any; // Allow additional properties
 }
 
 class StatisticsModel {

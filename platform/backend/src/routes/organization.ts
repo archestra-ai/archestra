@@ -32,6 +32,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
+          500: ErrorResponseSchema,
         },
       },
     },
@@ -104,6 +105,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: OrganizationAppearanceSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -259,6 +261,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: OrganizationAppearanceSchema,
         response: {
           200: OrganizationAppearanceSchema,
+          400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           500: ErrorResponseSchema,

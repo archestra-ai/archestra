@@ -40,7 +40,11 @@ export function OrganizationThemeProvider({
       root.style.setProperty("--sidebar", colors.sidebar, "important");
     }
     if (colors.sidebarAccent) {
-      root.style.setProperty("--sidebar-accent", colors.sidebarAccent, "important");
+      root.style.setProperty(
+        "--sidebar-accent",
+        colors.sidebarAccent,
+        "important",
+      );
     }
     if (colors.accent) {
       root.style.setProperty("--accent", colors.accent, "important");

@@ -50,7 +50,7 @@ interface MenuItem {
 
 const getNavigationItems = (
   isAuthenticated: boolean,
-  role?: string,
+  _role?: string,
 ): MenuItem[] => {
   return [
     {

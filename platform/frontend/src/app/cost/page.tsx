@@ -1276,7 +1276,9 @@ export default function CostPage() {
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight mb-2">Cost & Limits</h1>
+          <h1 className="text-2xl font-semibold tracking-tight mb-2">
+            Cost & Limits
+          </h1>
           <p className="text-sm text-muted-foreground">
             Monitor and manage your AI model usage costs across all agents and
             teams.

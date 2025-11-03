@@ -7554,6 +7554,15 @@ export type UpdateOrganizationCleanupIntervalErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -7564,6 +7573,15 @@ export type UpdateOrganizationCleanupIntervalErrors = {
      * Default Response
      */
     403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -7601,6 +7619,15 @@ export type GetOrganizationData = {
 };
 
 export type GetOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -8154,6 +8181,308 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTokenPricesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type GetTokenPricesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
+
+export type GetTokenPricesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
+
+export type CreateTokenPriceData = {
+    body: {
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type CreateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
+
+export type CreateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
+
+export type DeleteTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type DeleteTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
+
+export type DeleteTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
+
+export type GetTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type GetTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
+
+export type GetTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
+
+export type UpdateTokenPriceData = {
+    body?: {
+        model?: string;
+        pricePerMillionInput?: string;
+        pricePerMillionOutput?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type UpdateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
+
+export type UpdateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
 export type GetToolsData = {
     body?: never;

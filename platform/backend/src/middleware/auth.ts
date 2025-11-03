@@ -404,6 +404,21 @@ const routePermissionsConfig: Partial<
   [RouteId.UpdateOrganizationCleanupInterval]: {
     organization: ["update"],
   },
+  [RouteId.GetTokenPrices]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.CreateTokenPrice]: {
+    tokenPrice: ["create"],
+  },
+  [RouteId.GetTokenPrice]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.UpdateTokenPrice]: {
+    tokenPrice: ["update"],
+  },
+  [RouteId.DeleteTokenPrice]: {
+    tokenPrice: ["delete"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

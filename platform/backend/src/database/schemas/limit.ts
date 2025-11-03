@@ -20,7 +20,12 @@ const limitsTable = pgTable(
       enum: ["token_cost", "mcp_server_calls", "tool_calls"],
     }).notNull(),
     limitValue: integer("limit_value").notNull(),
-    currentUsage: integer("current_usage").notNull().default(0),
+    currentUsageTokensIn: integer("current_usage_tokens_in")
+      .notNull()
+      .default(0),
+    currentUsageTokensOut: integer("current_usage_tokens_out")
+      .notNull()
+      .default(0),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),
     toolName: varchar("tool_name", { length: 255 }),
     lastCleanup: timestamp("last_cleanup", { mode: "date" }),

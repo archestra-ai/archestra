@@ -63,7 +63,8 @@ export async function cleanupLimitsIfNeeded(
         await db
           .update(schema.limitsTable)
           .set({
-            currentUsage: 0,
+            currentUsageTokensIn: 0,
+            currentUsageTokensOut: 0,
             lastCleanup: now,
             updatedAt: now,
           })

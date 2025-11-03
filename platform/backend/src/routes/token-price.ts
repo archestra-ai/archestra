@@ -1,37 +1,29 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import TokenPriceModel from "@/models/token-price";
 import { ErrorResponseSchema, RouteId } from "@/types";
 import {
-  CreateLimitSchema,
-  LimitEntityTypeSchema,
-  LimitTypeSchema,
-  SelectLimitSchema,
-  UpdateLimitSchema,
-} from "@/types/limit";
+  CreateTokenPriceSchema,
+  SelectTokenPriceSchema,
+  UpdateTokenPriceSchema,
+} from "@/types/token-price";
 import { getUserFromRequest } from "@/utils";
-import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
-const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
-   * Get all limits with optional filtering
+   * Get all token prices
    */
   fastify.get(
-    "/api/limits",
+    "/api/token-prices",
     {
       schema: {
-        operationId: RouteId.GetLimits,
-        description: "Get all limits with optional filtering",
-        tags: ["Limits"],
-        querystring: z.object({
-          entityType: LimitEntityTypeSchema.optional(),
-          entityId: z.string().optional(),
-          limitType: LimitTypeSchema.optional(),
-        }),
+        operationId: RouteId.GetTokenPrices,
+        description: "Get all token prices",
+        tags: ["Token Prices"],
         response: {
-          200: z.array(SelectLimitSchema),
+          200: z.array(SelectTokenPriceSchema),
           401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -50,39 +42,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Cleanup limits if needed before fetching
-        if (user.organizationId) {
-          await cleanupLimitsIfNeeded(user.organizationId);
-        }
-
-        // Ensure all models from interactions have pricing records
+        // Ensure all models from interactions have pricing
         await TokenPriceModel.ensureAllModelsHavePricing();
 
-        const conditions = [];
-
-        if (request.query.entityType) {
-          conditions.push(
-            eq(schema.limitsTable.entityType, request.query.entityType),
-          );
-        }
-
-        if (request.query.entityId) {
-          conditions.push(
-            eq(schema.limitsTable.entityId, request.query.entityId),
-          );
-        }
-
-        if (request.query.limitType) {
-          conditions.push(
-            eq(schema.limitsTable.limitType, request.query.limitType),
-          );
-        }
-
-        const limits = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined);
-        return reply.send(limits);
+        const tokenPrices = await TokenPriceModel.findAll();
+        return reply.send(tokenPrices);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -97,20 +61,21 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Create a new limit (Admin only)
+   * Create a new token price (Admin only)
    */
   fastify.post(
-    "/api/limits",
+    "/api/token-prices",
     {
       schema: {
-        operationId: RouteId.CreateLimit,
-        description: "Create a new limit (Admin only)",
-        tags: ["Limits"],
-        body: CreateLimitSchema,
+        operationId: RouteId.CreateTokenPrice,
+        description: "Create a new token price (Admin only)",
+        tags: ["Token Prices"],
+        body: CreateTokenPriceSchema,
         response: {
-          200: SelectLimitSchema,
+          200: SelectTokenPriceSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
+          409: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -131,18 +96,27 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!user.isAdmin) {
           return reply.status(403).send({
             error: {
-              message: "Only admins can create limits",
+              message: "Only admins can create token prices",
               type: "forbidden",
             },
           });
         }
 
-        const [limit] = await db
-          .insert(schema.limitsTable)
-          .values(request.body)
-          .returning();
+        // Check if model already exists
+        const existingTokenPrice = await TokenPriceModel.findByModel(
+          request.body.model,
+        );
+        if (existingTokenPrice) {
+          return reply.status(409).send({
+            error: {
+              message: "Token price for this model already exists",
+              type: "conflict",
+            },
+          });
+        }
 
-        return reply.send(limit);
+        const tokenPrice = await TokenPriceModel.create(request.body);
+        return reply.send(tokenPrice);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -157,20 +131,20 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Get a limit by ID
+   * Get a token price by ID
    */
   fastify.get(
-    "/api/limits/:id",
+    "/api/token-prices/:id",
     {
       schema: {
-        operationId: RouteId.GetLimit,
-        description: "Get a limit by ID",
-        tags: ["Limits"],
+        operationId: RouteId.GetTokenPrice,
+        description: "Get a token price by ID",
+        tags: ["Token Prices"],
         params: z.object({
           id: z.string().uuid(),
         }),
         response: {
-          200: SelectLimitSchema,
+          200: SelectTokenPriceSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -190,21 +164,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const [limit] = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+        const tokenPrice = await TokenPriceModel.findById(request.params.id);
 
-        if (!limit) {
+        if (!tokenPrice) {
           return reply.status(404).send({
             error: {
-              message: "Limit not found",
+              message: "Token price not found",
               type: "not_found",
             },
           });
         }
 
-        return reply.send(limit);
+        return reply.send(tokenPrice);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -219,21 +190,21 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Update a limit (Admin only)
+   * Update a token price (Admin only)
    */
   fastify.put(
-    "/api/limits/:id",
+    "/api/token-prices/:id",
     {
       schema: {
-        operationId: RouteId.UpdateLimit,
-        description: "Update a limit (Admin only)",
-        tags: ["Limits"],
+        operationId: RouteId.UpdateTokenPrice,
+        description: "Update a token price (Admin only)",
+        tags: ["Token Prices"],
         params: z.object({
           id: z.string().uuid(),
         }),
-        body: UpdateLimitSchema.omit({ id: true }),
+        body: UpdateTokenPriceSchema.omit({ id: true }),
         response: {
-          200: SelectLimitSchema,
+          200: SelectTokenPriceSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
@@ -257,28 +228,27 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!user.isAdmin) {
           return reply.status(403).send({
             error: {
-              message: "Only admins can update limits",
+              message: "Only admins can update token prices",
               type: "forbidden",
             },
           });
         }
 
-        const [limit] = await db
-          .update(schema.limitsTable)
-          .set({ ...request.body, updatedAt: new Date() })
-          .where(eq(schema.limitsTable.id, request.params.id))
-          .returning();
+        const tokenPrice = await TokenPriceModel.update(
+          request.params.id,
+          request.body,
+        );
 
-        if (!limit) {
+        if (!tokenPrice) {
           return reply.status(404).send({
             error: {
-              message: "Limit not found",
+              message: "Token price not found",
               type: "not_found",
             },
           });
         }
 
-        return reply.send(limit);
+        return reply.send(tokenPrice);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -293,15 +263,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Delete a limit (Admin only)
+   * Delete a token price (Admin only)
    */
   fastify.delete(
-    "/api/limits/:id",
+    "/api/token-prices/:id",
     {
       schema: {
-        operationId: RouteId.DeleteLimit,
-        description: "Delete a limit (Admin only)",
-        tags: ["Limits"],
+        operationId: RouteId.DeleteTokenPrice,
+        description: "Delete a token price (Admin only)",
+        tags: ["Token Prices"],
         params: z.object({
           id: z.string().uuid(),
         }),
@@ -330,20 +300,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!user.isAdmin) {
           return reply.status(403).send({
             error: {
-              message: "Only admins can delete limits",
+              message: "Only admins can delete token prices",
               type: "forbidden",
             },
           });
         }
 
-        const result = await db
-          .delete(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+        const success = await TokenPriceModel.delete(request.params.id);
 
-        if (result.rowCount === 0) {
+        if (!success) {
           return reply.status(404).send({
             error: {
-              message: "Limit not found",
+              message: "Token price not found",
               type: "not_found",
             },
           });
@@ -364,4 +332,4 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default limitsRoutes;
+export default tokenPriceRoutes;

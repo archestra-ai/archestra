@@ -102,6 +102,202 @@ import {
   useUpdateOrganizationCleanupInterval,
 } from "@/lib/organization.query";
 import { useTeams } from "@/lib/team.query";
+import {
+  useCreateTokenPrice,
+  useDeleteTokenPrice,
+  useTokenPrices,
+  useUpdateTokenPrice,
+} from "@/lib/token-price.query";
+
+// Inline Form Component for adding/editing token prices
+function TokenPriceInlineForm({
+  initialData,
+  onSave,
+  onCancel,
+}: {
+  initialData?: any;
+  onSave: (data: any) => void;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    model: initialData?.model || "",
+    pricePerMillionInput: initialData?.pricePerMillionInput || "",
+    pricePerMillionOutput: initialData?.pricePerMillionOutput || "",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  const isValid =
+    formData.model &&
+    formData.pricePerMillionInput &&
+    formData.pricePerMillionOutput;
+
+  return (
+    <tr className="border-b">
+      <td colSpan={4} className="p-4 bg-muted/30">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-wrap items-center gap-4"
+        >
+          <div className="flex items-center gap-2">
+            <Label htmlFor="model" className="text-sm whitespace-nowrap">
+              Model
+            </Label>
+            <Input
+              id="model"
+              type="text"
+              value={formData.model}
+              onChange={(e) =>
+                setFormData({ ...formData, model: e.target.value })
+              }
+              placeholder="e.g. gpt-4"
+              required
+              className="w-48"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label htmlFor="priceInput" className="text-sm whitespace-nowrap">
+              Input Price ($)
+            </Label>
+            <Input
+              id="priceInput"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.pricePerMillionInput}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  pricePerMillionInput: e.target.value,
+                })
+              }
+              placeholder="50.00"
+              required
+              className="w-32"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label htmlFor="priceOutput" className="text-sm whitespace-nowrap">
+              Output Price ($)
+            </Label>
+            <Input
+              id="priceOutput"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.pricePerMillionOutput}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  pricePerMillionOutput: e.target.value,
+                })
+              }
+              placeholder="50.00"
+              required
+              className="w-32"
+            />
+          </div>
+
+          <div className="flex gap-2 flex-shrink-0">
+            <Button type="submit" disabled={!isValid} size="sm">
+              <Save className="h-4 w-4 mr-1" />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              size="sm"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </td>
+    </tr>
+  );
+}
+
+// Token Price Row Component for displaying/editing individual token prices
+function TokenPriceRow({
+  tokenPrice,
+  isEditing,
+  onEdit,
+  onSave,
+  onCancel,
+  onDelete,
+}: {
+  tokenPrice: any;
+  isEditing: boolean;
+  onEdit: () => void;
+  onSave: (data: any) => void;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  if (isEditing) {
+    return (
+      <TokenPriceInlineForm
+        initialData={tokenPrice}
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  return (
+    <tr className="border-b hover:bg-muted/30">
+      <td className="p-4 font-medium">{tokenPrice.model}</td>
+      <td className="p-4">
+        ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}
+      </td>
+      <td className="p-4">
+        ${parseFloat(tokenPrice.pricePerMillionOutput).toFixed(2)}
+      </td>
+      <td className="p-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Edit className="h-4 w-4" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Token Price</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete the pricing for{" "}
+                  {tokenPrice.model}? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 // Inline Form Component for adding/editing limits
 function LimitInlineForm({
@@ -360,9 +556,16 @@ function LimitRow({
   mcpServers: CatalogItem[];
   getEntityName: (limit: any) => string;
   getUsageStatus: (
-    currentUsage: number,
+    currentUsageTokensIn: number,
+    currentUsageTokensOut: number,
     limitValue: number,
-  ) => { percentage: number; status: string };
+    limitType: string,
+  ) => {
+    percentage: number;
+    status: string;
+    actualUsage: number;
+    actualLimit: number;
+  };
   hasOrganizationLimit: (
     limitType: "token_cost" | "mcp_server_calls",
     mcpServerName?: string,
@@ -387,9 +590,11 @@ function LimitRow({
     );
   }
 
-  const { percentage, status } = getUsageStatus(
-    limit.currentUsage,
+  const { percentage, status, actualUsage, actualLimit } = getUsageStatus(
+    limit.currentUsageTokensIn,
+    limit.currentUsageTokensOut,
     limit.limitValue,
+    limit.limitType,
   );
 
   return (
@@ -426,8 +631,8 @@ function LimitRow({
           <div className="flex justify-between text-sm">
             <span>
               {limit.limitType === "token_cost"
-                ? `$${limit.currentUsage.toFixed(2)} / $${limit.limitValue.toFixed(2)}`
-                : `${limit.currentUsage.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
+                ? `$${actualUsage.toFixed(2)} / $${actualLimit.toFixed(2)}`
+                : `${limit.currentUsageTokensIn.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
             </span>
             <span>{percentage.toFixed(1)}%</span>
           </div>
@@ -496,16 +701,25 @@ export default function CostPage() {
   const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
   const [isAddingLlmLimit, setIsAddingLlmLimit] = useState(false);
   const [isAddingMcpLimit, setIsAddingMcpLimit] = useState(false);
+  const [editingTokenPriceId, setEditingTokenPriceId] = useState<string | null>(
+    null,
+  );
+  const [isAddingTokenPrice, setIsAddingTokenPrice] = useState(false);
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
   const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
   const { data: organizationDetails } = useOrganizationDetails();
+  const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
+    useTokenPrices();
   const updateCleanupInterval = useUpdateOrganizationCleanupInterval();
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
+  const deleteTokenPrice = useDeleteTokenPrice();
+  const createTokenPrice = useCreateTokenPrice();
+  const updateTokenPrice = useUpdateTokenPrice();
 
   // Filter limits by type
   const llmLimits = limits.filter((limit) => limit.limitType === "token_cost");
@@ -565,15 +779,69 @@ export default function CostPage() {
     return "Unknown Agent";
   };
 
+  // Helper function to calculate real cost for token limits
+  const calculateTokenCost = (
+    inputTokens: number,
+    outputTokens: number,
+  ): number => {
+    // For token cost limits, we need to calculate cost from tokens
+    // Since we don't have a specific model in the limit, we'll use average prices
+    // This is a simplified calculation - in a real scenario you might want to track model-specific usage
+    if (tokenPrices.length === 0) {
+      // This should not happen since the backend ensures pricing exists,
+      // but if it does, return 0 to avoid errors
+      console.warn("No token prices available for cost calculation");
+      return 0;
+    }
+
+    const averageInputPrice =
+      tokenPrices.reduce(
+        (sum, tp) => sum + parseFloat(tp.pricePerMillionInput),
+        0,
+      ) / tokenPrices.length;
+
+    const averageOutputPrice =
+      tokenPrices.reduce(
+        (sum, tp) => sum + parseFloat(tp.pricePerMillionOutput),
+        0,
+      ) / tokenPrices.length;
+
+    const inputCost = (inputTokens * averageInputPrice) / 1000000;
+    const outputCost = (outputTokens * averageOutputPrice) / 1000000;
+    const totalCost = inputCost + outputCost;
+
+    return totalCost;
+  };
+
   // Helper function to get usage percentage and status
-  const getUsageStatus = (currentUsage: number, limitValue: number) => {
-    const percentage = (currentUsage / limitValue) * 100;
+  const getUsageStatus = (
+    currentUsageTokensIn: number,
+    currentUsageTokensOut: number,
+    limitValue: number,
+    limitType: string,
+  ) => {
+    let actualUsage: number;
+    const actualLimit = limitValue;
+
+    // For token cost limits, convert tokens to dollars using separate input/output tokens
+    // limitValue is already in dollars, so no conversion needed
+    if (limitType === "token_cost") {
+      actualUsage = calculateTokenCost(
+        currentUsageTokensIn,
+        currentUsageTokensOut,
+      );
+    } else {
+      // For MCP server calls, use the input tokens field as call count
+      actualUsage = currentUsageTokensIn;
+    }
+
+    const percentage = (actualUsage / actualLimit) * 100;
     let status: "safe" | "warning" | "danger" = "safe";
 
     if (percentage >= 90) status = "danger";
     else if (percentage >= 75) status = "warning";
 
-    return { percentage, status };
+    return { percentage, status, actualUsage, actualLimit };
   };
 
   const handleDeleteLimit = async (id: string) => {
@@ -603,6 +871,30 @@ export default function CostPage() {
     setEditingLimitId(null);
     setIsAddingLlmLimit(false);
     setIsAddingMcpLimit(false);
+    setEditingTokenPriceId(null);
+    setIsAddingTokenPrice(false);
+  };
+
+  const handleDeleteTokenPrice = async (id: string) => {
+    await deleteTokenPrice.mutateAsync({ id });
+  };
+
+  const handleCreateTokenPrice = async (data: any) => {
+    try {
+      await createTokenPrice.mutateAsync(data);
+      setIsAddingTokenPrice(false);
+    } catch (error) {
+      console.error("Failed to create token price:", error);
+    }
+  };
+
+  const handleUpdateTokenPrice = async (id: string, data: any) => {
+    try {
+      await updateTokenPrice.mutateAsync({ id, ...data });
+      setEditingTokenPriceId(null);
+    } catch (error) {
+      console.error("Failed to update token price:", error);
+    }
   };
 
   // Initialize from URL parameters
@@ -1637,13 +1929,86 @@ export default function CostPage() {
           <TabsContent value="token-price" className="mt-0">
             <Card>
               <CardHeader>
-                <CardTitle>Token Pricing</CardTitle>
-                <CardDescription>
-                  Configure token pricing for different models
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Token Pricing</CardTitle>
+                    <CardDescription>
+                      Configure token pricing for different models (per million
+                      tokens)
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setIsAddingTokenPrice(true)}
+                    size="sm"
+                    disabled={
+                      isAddingTokenPrice || editingTokenPriceId !== null
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Model Price
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">Coming soon...</p>
+                {tokenPricesLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-16 bg-muted animate-pulse rounded"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Model</TableHead>
+                        <TableHead>Input Price ($)</TableHead>
+                        <TableHead>Output Price ($)</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isAddingTokenPrice && (
+                        <TokenPriceInlineForm
+                          onSave={handleCreateTokenPrice}
+                          onCancel={handleCancelEdit}
+                        />
+                      )}
+                      {tokenPrices.length === 0 && !isAddingTokenPrice ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p>No token prices configured</p>
+                            <p className="text-sm">
+                              Click "Add Model Price" to get started
+                            </p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        tokenPrices.map((tokenPrice) => (
+                          <TokenPriceRow
+                            key={tokenPrice.id}
+                            tokenPrice={tokenPrice}
+                            isEditing={editingTokenPriceId === tokenPrice.id}
+                            onEdit={() => setEditingTokenPriceId(tokenPrice.id)}
+                            onSave={(data) =>
+                              handleUpdateTokenPrice(tokenPrice.id, data)
+                            }
+                            onCancel={handleCancelEdit}
+                            onDelete={() =>
+                              handleDeleteTokenPrice(tokenPrice.id)
+                            }
+                          />
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -218,5 +218,12 @@ export const RouteId = {
   // Organization Routes
   GetOrganization: "getOrganization",
   UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
+
+  // Token Price Routes
+  GetTokenPrices: "getTokenPrices",
+  CreateTokenPrice: "createTokenPrice",
+  GetTokenPrice: "getTokenPrice",
+  UpdateTokenPrice: "updateTokenPrice",
+  DeleteTokenPrice: "deleteTokenPrice",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

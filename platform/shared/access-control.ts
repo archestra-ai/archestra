@@ -20,6 +20,7 @@ export type Resource =
   | "mcpToolCall"
   | "team"
   | "limit"
+  | "tokenPrice"
 
 /**
  * Available actions
@@ -51,6 +52,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   team: ["create", "read", "update", "delete"],
   mcpToolCall: ["read"],
   limit: ["create", "read", "update", "delete"],
+  tokenPrice: ["create", "read", "update", "delete"],
 };
 
 export const ac = createAccessControl(allAvailableActions);
@@ -80,5 +82,6 @@ export const memberRole = ac.newRole({
   team: ["read"],
   mcpToolCall: ["read"],
   limit: ["read"],
+  tokenPrice: ["read"],
 });
 

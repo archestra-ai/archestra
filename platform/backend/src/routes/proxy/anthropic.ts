@@ -341,6 +341,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
                 ...(body as any),
                 messages: filteredMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
               });
               llmSpan.end();
               return stream;
@@ -358,8 +359,36 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const events: AnthropicProvider.Messages.MessageStreamEvent[] = [];
 
+        // Track indices of tool use blocks to know which content_block_stop events to skip
+        const toolUseBlockIndices = new Set<number>();
+
         for await (const event of messageStream) {
           events.push(event);
+
+          // Stream message_start event immediately (contains message metadata)
+          if (event.type === "message_start") {
+            fastify.log.info(
+              { eventType: event.type },
+              "Streaming message_start event",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
+
+          // Stream content_block_start for text blocks immediately
+          if (
+            event.type === "content_block_start" &&
+            event.content_block.type === "text"
+          ) {
+            fastify.log.info(
+              { eventType: event.type, index: event.index },
+              "Streaming content_block_start (text)",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
 
           // Stream text content immediately
           if (
@@ -372,12 +401,35 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             accumulatedText += event.delta.text;
           }
 
+          // Stream content_block_stop for text blocks immediately (skip tool blocks)
+          if (event.type === "content_block_stop") {
+            if (!toolUseBlockIndices.has(event.index)) {
+              fastify.log.info(
+                { eventType: event.type, index: event.index },
+                "Streaming content_block_stop (text)",
+              );
+              reply.raw.write(
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              );
+            } else {
+              fastify.log.info(
+                { eventType: event.type, index: event.index },
+                "Skipping content_block_stop (tool_use)",
+              );
+            }
+          }
+
           // Accumulate tool calls (don't stream yet - need to evaluate policies first)
           if (
             event.type === "content_block_start" &&
             event.content_block.type === "tool_use"
           ) {
+            toolUseBlockIndices.add(event.index);
             accumulatedToolCalls.push(event.content_block);
+            fastify.log.info(
+              { eventType: event.type, index: event.index },
+              "Accumulating content_block_start (tool_use)",
+            );
           } else if (
             event.type === "content_block_delta" &&
             event.delta.type === "input_json_delta"
@@ -392,6 +444,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        fastify.log.info("Stream loop completed, processing final events");
+
         // Parse accumulated tool inputs
         for (const toolCall of accumulatedToolCalls) {
           try {
@@ -404,6 +458,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Evaluate tool invocation policies dynamically
         let toolInvocationRefusal: [string, string] | null = null;
         if (accumulatedToolCalls.length > 0) {
+          fastify.log.info(
+            {
+              toolCallCount: accumulatedToolCalls.length,
+              toolNames: accumulatedToolCalls.map((tc) => tc.name),
+            },
+            "Evaluating tool invocation policies",
+          );
           toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
             accumulatedToolCalls.map((toolCall) => ({
               toolCallName: toolCall.name,
@@ -411,6 +472,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })),
             resolvedAgentId,
             contextIsTrusted,
+          );
+          fastify.log.info(
+            { refused: !!toolInvocationRefusal },
+            "Tool invocation policy result",
           );
         }
 
@@ -442,6 +507,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } else {
           // Tool calls are allowed - stream them now
           if (accumulatedToolCalls.length > 0) {
+            fastify.log.info(
+              { toolCallCount: accumulatedToolCalls.length },
+              "Tool calls allowed, streaming them now",
+            );
             responseContent = [
               ...(accumulatedText
                 ? [
@@ -455,6 +524,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...accumulatedToolCalls,
             ];
 
+            let streamedToolEvents = 0;
             for (const event of events) {
               if (
                 event.type === "content_block_start" &&
@@ -463,6 +533,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 reply.raw.write(
                   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
                 );
+                streamedToolEvents++;
               } else if (
                 event.type === "content_block_delta" &&
                 event.delta.type === "input_json_delta"
@@ -470,8 +541,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 reply.raw.write(
                   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
                 );
+                streamedToolEvents++;
+              } else if (
+                event.type === "content_block_stop" &&
+                toolUseBlockIndices.has(event.index)
+              ) {
+                // Stream content_block_stop for tool_use blocks
+                reply.raw.write(
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                );
+                streamedToolEvents++;
               }
             }
+            fastify.log.info(
+              { streamedToolEvents },
+              "Streamed tool call events",
+            );
           } else {
             responseContent = [
               {
@@ -524,21 +609,32 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage.output,
         });
 
-        // Send message_delta with stop_reason
+        // Send message_delta with stop_reason and usage
         const messageDeltaEvent = {
           type: "message_delta",
           delta: {
             stop_reason: "end_turn",
             stop_sequence: null,
           },
+          usage: {
+            output_tokens: usage.output_tokens,
+          },
         };
+        fastify.log.info("Streaming message_delta event");
         reply.raw.write(
           `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
         );
 
         // Send message_stop event
-        reply.raw.write(`event: message_stop\ndata: {}\n\n`);
+        const messageStopEvent = {
+          type: "message_stop",
+        };
+        fastify.log.info("Streaming message_stop event");
+        reply.raw.write(
+          `event: message_stop\ndata: ${JSON.stringify(messageStopEvent)}\n\n`,
+        );
 
+        fastify.log.info("Stream complete, ending response");
         reply.raw.end();
         return reply;
       } else {

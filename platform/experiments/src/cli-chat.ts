@@ -795,6 +795,10 @@ const cliChatWithAnthropic = async (options: {
         }
 
         for await (const chunk of streamResponse) {
+          if (debug) {
+            console.log(`[DEBUG] Received chunk type: ${chunk.type}`);
+          }
+
           if (chunk.type === "content_block_start") {
             if (chunk.content_block.type === "text") {
               // Start of text block
@@ -857,6 +861,9 @@ const cliChatWithAnthropic = async (options: {
               currentToolUse = null;
             }
           } else if (chunk.type === "message_stop") {
+            if (debug) {
+              console.log("[DEBUG] Received message_stop, creating assistantMessage");
+            }
             // Message complete
             assistantMessage = {
               id: `msg_${Date.now()}`,
@@ -868,6 +875,17 @@ const cliChatWithAnthropic = async (options: {
               stop_sequence: null,
               usage: { input_tokens: 0, output_tokens: 0 },
             };
+          }
+        }
+
+        if (debug) {
+          console.log(
+            `[DEBUG] Stream ended. assistantMessage is ${assistantMessage ? "defined" : "undefined"}`,
+          );
+          if (!assistantMessage) {
+            console.log(
+              `[DEBUG] accumulatedContent has ${accumulatedContent.length} blocks`,
+            );
           }
         }
       } else {

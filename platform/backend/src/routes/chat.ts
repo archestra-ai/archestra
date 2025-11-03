@@ -462,7 +462,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create Anthropic client (call directly to Anthropic API)
       const anthropic = createAnthropic({
         apiKey: config.chat.anthropic.apiKey,
-        baseURL: "https://api.anthropic.com/v1",
+        baseURL: config.chat.anthropic.baseUrl,
       });
 
       // Stream with AI SDK

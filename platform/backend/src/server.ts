@@ -1,6 +1,3 @@
-// Import tracing first to ensure auto-instrumentation works properly
-import "./tracing";
-
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
@@ -14,8 +11,11 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { seedRequiredStartingData } from "@/database/seed";
+import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
+import * as routes from "@/routes";
 import {
   Anthropic,
   Gemini,
@@ -23,12 +23,9 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { seedDatabase } from "./database/seed";
-import { initializeMetrics } from "./llm-metrics";
-import logger from "./logging";
-import AgentLabelModel from "./models/agent-label";
-import * as routes from "./routes";
-import { initializeTracing } from "./tracing";
+import { initializeMetrics } from "@/llm-metrics";
+import { AgentLabelModel } from "@/models";
+import { initializeTracing } from "@/tracing";
 
 const {
   api: {
@@ -77,8 +74,7 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 
 const start = async () => {
   try {
-    // Seed database with demo data
-    await seedDatabase();
+    await seedRequiredStartingData();
 
     // Fetch all unique agent label keys from the database
     const labelKeys = await AgentLabelModel.getAllKeys();

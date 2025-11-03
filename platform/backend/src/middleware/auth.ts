@@ -386,6 +386,54 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
+  [RouteId.GetLimits]: {
+    limit: ["read"],
+  },
+  [RouteId.CreateLimit]: {
+    limit: ["create"],
+  },
+  [RouteId.GetLimit]: {
+    limit: ["read"],
+  },
+  [RouteId.UpdateLimit]: {
+    limit: ["update"],
+  },
+  [RouteId.DeleteLimit]: {
+    limit: ["delete"],
+  },
+  [RouteId.GetOrganization]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationCleanupInterval]: {
+    organization: ["update"],
+  },
+  [RouteId.GetTokenPrices]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.CreateTokenPrice]: {
+    tokenPrice: ["create"],
+  },
+  [RouteId.GetTokenPrice]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.UpdateTokenPrice]: {
+    tokenPrice: ["update"],
+  },
+  [RouteId.DeleteTokenPrice]: {
+    tokenPrice: ["delete"],
+  },
+  [RouteId.GetTeamStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetAgentStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetModelStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
   [RouteId.GetOrganizationAppearance]: {
     organization: ["read"],
   },

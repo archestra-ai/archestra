@@ -31,19 +31,23 @@ export function OrganizationThemeProvider({
     const colors =
       colorMode === "dark" ? theme.colors.dark : theme.colors.light;
 
-    // Apply theme colors as CSS variables
+    // Apply theme colors as CSS variables with !important to override hardcoded values
     const root = document.documentElement;
-    root.style.setProperty("--primary", colors.primary);
-    root.style.setProperty("--secondary", colors.secondary);
+    root.style.setProperty("--primary", colors.primary, "important");
+    root.style.setProperty("--secondary", colors.secondary, "important");
 
     if (colors.sidebar) {
-      root.style.setProperty("--sidebar-background", colors.sidebar);
+      root.style.setProperty("--sidebar", colors.sidebar, "important");
     }
     if (colors.sidebarAccent) {
-      root.style.setProperty("--sidebar-accent", colors.sidebarAccent);
+      root.style.setProperty(
+        "--sidebar-accent",
+        colors.sidebarAccent,
+        "important",
+      );
     }
     if (colors.accent) {
-      root.style.setProperty("--accent", colors.accent);
+      root.style.setProperty("--accent", colors.accent, "important");
     }
 
     const fontValue = fontFamilyMap[fontFamily] || fontFamilyMap.lato;

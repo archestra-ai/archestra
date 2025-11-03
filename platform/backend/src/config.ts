@@ -7,7 +7,7 @@ import {
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
 } from "@shared";
 import dotenv from "dotenv";
-import packageJson from "../package.json";
+import packageJson from "../../package.json";
 
 /**
  * Load .env from platform root

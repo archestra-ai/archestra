@@ -5063,6 +5063,341 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
+export type GetLimitsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+    };
+    url: '/api/limits';
+};
+
+export type GetLimitsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
+
+export type GetLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
+
+export type CreateLimitData = {
+    body: {
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/limits';
+};
+
+export type CreateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
+
+export type CreateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
+
+export type DeleteLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
+
+export type DeleteLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
+
+export type GetLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type GetLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
+
+export type GetLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
+
+export type UpdateLimitData = {
+    body?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue?: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
+
+export type UpdateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
+
 export type GetV1McpData = {
     body?: never;
     path?: never;
@@ -7219,6 +7554,58 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+export type UpdateOrganizationCleanupIntervalData = {
+    body: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/cleanup-interval';
+};
+
+export type UpdateOrganizationCleanupIntervalErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
+
+export type UpdateOrganizationCleanupIntervalResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
+
 export type GetOrganizationAppearanceData = {
     body?: never;
     path?: never;
@@ -7329,6 +7716,68 @@ export type UpdateOrganizationAppearanceResponses = {
 };
 
 export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+
+export type GetOrganizationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization';
+};
+
+export type GetOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationError = GetOrganizationErrors[keyof GetOrganizationErrors];
+
+export type GetOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
 export type DeleteOrganizationLogoData = {
     body?: never;
@@ -7441,6 +7890,177 @@ export type UploadOrganizationLogoResponses = {
 };
 
 export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+
+export type GetTeamStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/teams';
+};
+
+export type GetTeamStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamStatisticsError = GetTeamStatisticsErrors[keyof GetTeamStatisticsErrors];
+
+export type GetTeamStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        teamId: string;
+        teamName: string;
+        members: number;
+        agents: number;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetTeamStatisticsResponse = GetTeamStatisticsResponses[keyof GetTeamStatisticsResponses];
+
+export type GetAgentStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/agents';
+};
+
+export type GetAgentStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentStatisticsError = GetAgentStatisticsErrors[keyof GetAgentStatisticsErrors];
+
+export type GetAgentStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        agentId: string;
+        agentName: string;
+        teamName: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetAgentStatisticsResponse = GetAgentStatisticsResponses[keyof GetAgentStatisticsResponses];
+
+export type GetModelStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/models';
+};
+
+export type GetModelStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetModelStatisticsError = GetModelStatisticsErrors[keyof GetModelStatisticsErrors];
+
+export type GetModelStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        model: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        percentage: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetModelStatisticsResponse = GetModelStatisticsResponses[keyof GetModelStatisticsResponses];
+
+export type GetOverviewStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/overview';
+};
+
+export type GetOverviewStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOverviewStatisticsError = GetOverviewStatisticsErrors[keyof GetOverviewStatisticsErrors];
+
+export type GetOverviewStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalRequests: number;
+        totalTokens: number;
+        totalCost: number;
+        topTeam: string;
+        topAgent: string;
+        topModel: string;
+    };
+};
+
+export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
 export type GetTeamsData = {
     body?: never;
@@ -7950,6 +8570,308 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTokenPricesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type GetTokenPricesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
+
+export type GetTokenPricesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
+
+export type CreateTokenPriceData = {
+    body: {
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type CreateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
+
+export type CreateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
+
+export type DeleteTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type DeleteTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
+
+export type DeleteTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
+
+export type GetTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type GetTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
+
+export type GetTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
+
+export type UpdateTokenPriceData = {
+    body?: {
+        model?: string;
+        pricePerMillionInput?: string;
+        pricePerMillionOutput?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type UpdateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
+
+export type UpdateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
 export type GetToolsData = {
     body?: never;

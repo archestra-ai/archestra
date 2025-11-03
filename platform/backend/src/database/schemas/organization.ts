@@ -1,5 +1,11 @@
 import type { OrganizationAppearance } from "@shared";
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -11,6 +17,9 @@ const organizationsTable = pgTable("organization", {
   hasSeededMcpCatalog: boolean("has_seeded_mcp_catalog")
     .default(false)
     .notNull(),
+  limitCleanupInterval: varchar("limit_cleanup_interval", {
+    enum: ["1h", "12h", "24h", "1w", "1m"],
+  }).default("1h"),
   theme: text("theme")
     .$type<OrganizationAppearance["theme"]>()
     .notNull()

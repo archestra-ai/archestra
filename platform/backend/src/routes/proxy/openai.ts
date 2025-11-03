@@ -6,6 +6,7 @@ import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
+import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
   ErrorResponseSchema,
@@ -194,6 +195,31 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "OpenAI request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {

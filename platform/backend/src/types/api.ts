@@ -208,6 +208,29 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Limits Routes
+  GetLimits: "getLimits",
+  CreateLimit: "createLimit",
+  GetLimit: "getLimit",
+  UpdateLimit: "updateLimit",
+  DeleteLimit: "deleteLimit",
+
+  // Organization Routes
+  GetOrganization: "getOrganization",
+  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
+
+  // Token Price Routes
+  GetTokenPrices: "getTokenPrices",
+  CreateTokenPrice: "createTokenPrice",
+  GetTokenPrice: "getTokenPrice",
+  UpdateTokenPrice: "updateTokenPrice",
+  DeleteTokenPrice: "deleteTokenPrice",
+
+  // Statistics Routes
+  GetTeamStatistics: "getTeamStatistics",
+  GetAgentStatistics: "getAgentStatistics",
+  GetModelStatistics: "getModelStatistics",
+  GetOverviewStatistics: "getOverviewStatistics",
   // Organization Routes
   GetOrganizationAppearance: "getOrganizationAppearance",
   UpdateOrganizationAppearance: "updateOrganizationAppearance",

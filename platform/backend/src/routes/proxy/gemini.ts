@@ -5,6 +5,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getObservableGenAI } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
+import LimitValidationService from "@/services/limit-validation";
+
 import { type Agent, ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
@@ -138,6 +140,31 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const modelName = model || "gemini-2.5-pro";
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "Gemini request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       // TODO: Persist tools if present
       // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
 

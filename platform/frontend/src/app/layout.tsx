@@ -16,7 +16,7 @@ import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { EasterEgg } from "@/components/easter-egg";
 import { Toaster } from "@/components/ui/sonner";
-import pjson from "../../../package.json";
+import { Version } from "@/components/version";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { AuthProvider } from "./auth/auth-provider";
 
@@ -85,11 +85,7 @@ export default function RootLayout({
                         </header>
                         <div className="flex-1 min-w-0 overflow-auto flex flex-col">
                           <div className="flex-1">{children}</div>
-                          {pjson.version && (
-                            <div className="text-xs text-muted-foreground text-center py-4">
-                              Version: {pjson.version}
-                            </div>
-                          )}
+                          <Version />
                         </div>
                       </main>
                       <Toaster />

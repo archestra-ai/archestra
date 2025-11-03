@@ -55,7 +55,7 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -80,6 +80,9 @@ jobs:
 
           echo "=== Container status after wait ==="
           docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+
+          echo "=== WireMock Container Logs ==="
+          docker logs archestra-platform-test-wiremock
 
           echo "=== Quick log check for each container ==="
           docker logs archestra-platform-test --tail 50
@@ -126,6 +129,9 @@ jobs:
 
           echo "=== PostgreSQL Container Logs ==="
           docker logs archestra-platform-test-postgresql
+
+          echo "=== WireMock Container Logs ==="
+          docker logs archestra-platform-test-wiremock
 
           echo "=== All Container Stats ==="
 

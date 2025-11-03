@@ -91,6 +91,32 @@ class McpServerTeamModel {
   }
 
   /**
+   * Get all team details with access to a specific MCP server
+   */
+  static async getTeamDetailsForMcpServer(mcpServerId: string): Promise<
+    Array<{
+      teamId: string;
+      name: string;
+      createdAt: Date;
+    }>
+  > {
+    const result = await db
+      .select({
+        teamId: schema.mcpServerTeamTable.teamId,
+        name: schema.team.name,
+        createdAt: schema.mcpServerTeamTable.createdAt,
+      })
+      .from(schema.mcpServerTeamTable)
+      .innerJoin(
+        schema.team,
+        eq(schema.mcpServerTeamTable.teamId, schema.team.id),
+      )
+      .where(eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId));
+
+    return result;
+  }
+
+  /**
    * Sync team assignments for an MCP server (replaces all existing assignments)
    */
   static async syncMcpServerTeams(

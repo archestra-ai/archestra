@@ -10,8 +10,6 @@ import type { InternalMcpCatalogServerType } from "@/types/mcp-catalog";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // Human-friendly display label for UI cards
-  label: text("label"),
   name: text("name").notNull(),
   version: text("version"),
   description: text("description"),
@@ -38,8 +36,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   docsUrl: text("docs_url"), // Documentation URL for remote servers
   // Local server configuration
   localConfig: jsonb("local_config").$type<{
-    command: string;
-    arguments: Array<string>;
+    command?: string;
+    arguments?: Array<string>;
     environment?: Record<string, string>;
     dockerImage?: string;
     transportType?: "stdio" | "streamable-http";

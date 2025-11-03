@@ -18,8 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: <http://localhost:3000/>
 - **Tools Inspector**: <http://localhost:3000/tools>
-- **Dual LLM Config**: <http://localhost:3000/dual-llm>
-- **Settings/Teams**: <http://localhost:3000/account/settings>
+- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
+- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
@@ -28,9 +28,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
-- **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
+- **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
-- **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
+- **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
+- **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
@@ -53,7 +55,11 @@ tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 
 # Testing with WireMock
-tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
+tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
+
+# Observability
+tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
+docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables
@@ -92,7 +98,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts)
 
 **Workspaces**:
 
@@ -107,6 +113,14 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - API keys have all permissions by default
 - API keys work as fallback when session auth fails (e.g., "No active organization" errors)
 - Use `pnpm test:e2e` to run API tests with API key authentication
+
+## Observability
+
+**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes. Traces stored in Grafana Tempo, viewable via Grafana UI.
+
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
+
+**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
 ## Coding Conventions
 
@@ -136,6 +150,15 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Admin-only team CRUD operations via `/api/teams/*` routes
 - Members can read teams and access team-assigned agents/MCP servers
 
+**Agent Labels**:
+
+- Agents support key-value labels for organization/categorization
+- Database schema: `label_keys`, `label_values`, `agent_labels` tables
+- Keys and values stored separately for consistency and reuse
+- One value per key per agent (updating same key replaces value)
+- Labels returned in alphabetical order by key for consistency
+- API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
+
 **MCP Server Installation Requests**:
 
 - Members can request MCP servers from external catalog
@@ -150,9 +173,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
   - **streamable-http**: Native HTTP/SSE transport using K8s Service (better performance, concurrent requests)
-- Pod logs available via `/mcp_proxy/:id/logs`
+- Pod logs available via `/api/mcp_server/:id/logs` endpoint
+  - Query parameters: `?lines=N` to limit output, `?follow=true` for real-time streaming
+  - Streaming uses chunked transfer encoding similar to `kubectl logs -f`
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
+- When using Docker image, command is optional (uses image's default CMD if not specified)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Configuring Transport Type**:
@@ -162,11 +188,22 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 - For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
-**Helm Chart RBAC**:
+**Helm Chart**:
 
-- ServiceAccount with configurable name/annotations for pod identity
-- Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
-- RoleBinding links ServiceAccount to Role for MCP server management
-- Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- RBAC: ServiceAccount with configurable name/annotations for pod identity
+- RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
+- RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
+- Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+
+**White-labeling**:
+- Admin-only via `/api/organization/appearance` endpoints  
+- Custom logos: PNG only, max 2MB, stored as base64
+- 18 themes: 9 single color, 2 vision assistive, 7 fun themes
+- 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
+- Real-time theme and font preview in settings
+- OrganizationThemeProvider applies CSS variables dynamically
+- Custom logos display with "Powered by Archestra" attribution
+- Database columns: theme, customFont, logoType, logo
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

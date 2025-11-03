@@ -5,9 +5,16 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
-import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
+import LimitValidationService from "@/services/limit-validation";
+import {
+  type Agent,
+  ErrorResponseSchema,
+  OpenAi,
+  RouteId,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
@@ -138,13 +145,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    // Add OpenTelemetry span attribute for filtering in Jaeger
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute("route.category", "llm-proxy");
-      span.setAttribute("llm.provider", "openai");
-    }
-
     const { messages, tools, stream } = body;
 
     fastify.log.info(
@@ -159,7 +159,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "OpenAI chat completion request received",
     );
 
-    let resolvedAgentId: string;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -171,13 +171,22 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
+
+    const resolvedAgentId = resolvedAgent.id;
+
+    // Add OpenTelemetry trace attributes
+    utils.tracing.sprinkleTraceAttributes(
+      "openai",
+      utils.tracing.RouteCategory.LLM_PROXY,
+      resolvedAgent,
+    );
 
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
@@ -190,10 +199,35 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgentId),
+          fetch: getObservableFetch("openai", resolvedAgent),
         });
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "OpenAI request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
@@ -656,7 +690,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (usageTokens) {
           reportLLMTokens(
             "openai",
-            resolvedAgentId,
+            resolvedAgent,
             usageTokens.input,
             usageTokens.output,
           );
@@ -681,6 +715,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ],
           },
+          model: body.model,
+          inputTokens: usageTokens?.input || null,
+          outputTokens: usageTokens?.output || null,
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -845,12 +882,20 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Extract token usage from response
+        const tokenUsage = response.usage
+          ? utils.adapters.openai.getUsageTokens(response.usage)
+          : { input: null, output: null };
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
           request: body,
           response,
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);

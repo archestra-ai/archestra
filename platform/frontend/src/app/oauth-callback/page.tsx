@@ -86,12 +86,20 @@ export default function OAuthCallbackPage() {
 
         const { catalogId, name, secretId } = await response.json();
 
-        // Install the MCP server with the secret reference
+        // Retrieve teams from sessionStorage if they were stored
+        const teamsJson = sessionStorage.getItem("oauth_teams");
+        const teams = teamsJson ? JSON.parse(teamsJson) : [];
+
+        // Install the MCP server with the secret reference and teams
         await installMutation.mutateAsync({
           name,
           catalogId,
           secretId,
+          teams,
         });
+
+        // Clean up teams from sessionStorage
+        sessionStorage.removeItem("oauth_teams");
 
         // Clean up the processing flag after successful installation
         sessionStorage.removeItem(processKey);

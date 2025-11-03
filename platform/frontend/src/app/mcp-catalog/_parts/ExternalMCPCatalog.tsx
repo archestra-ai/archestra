@@ -95,7 +95,6 @@ export function ExternalMCPCatalog({
         : undefined;
 
     await createMutation.mutateAsync({
-      label: server.display_name || server.name,
       name: server.name,
       version: undefined, // No version in archestra catalog
       serverType: server.server.type,
@@ -147,7 +146,7 @@ export function ExternalMCPCatalog({
   const displayedServers = filteredServers;
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full">
       <div className="">
         <h1 className="text-lg font-semibold tracking-tight mb-2">
           External MCP Registry

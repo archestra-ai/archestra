@@ -28,8 +28,8 @@ const {
 class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi: k8s.CoreV1Api;
-  private k8sExec: k8s.Exec;
   private k8sAttach: Attach;
+  private k8sLog: k8s.Log;
   private namespace: string;
   private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
@@ -64,8 +64,8 @@ class McpServerRuntimeManager {
     }
 
     this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
-    this.k8sExec = new k8s.Exec(this.k8sConfig);
     this.k8sAttach = new Attach(this.k8sConfig);
+    this.k8sLog = new k8s.Log(this.k8sConfig);
     this.namespace = namespace;
   }
 
@@ -166,8 +166,8 @@ class McpServerRuntimeManager {
       const k8sPod = new K8sPod(
         mcpServer,
         this.k8sApi,
-        this.k8sExec,
         this.k8sAttach,
+        this.k8sLog,
         this.namespace,
       );
 
@@ -320,11 +320,30 @@ class McpServerRuntimeManager {
       throw new Error(`Pod not found for MCP server ${mcpServerId}`);
     }
 
-    const logs = await k8sPod.getRecentLogs(lines);
+    const containerName = k8sPod.containerName;
     return {
-      logs,
-      containerName: k8sPod.containerName,
+      logs: await k8sPod.getRecentLogs(lines),
+      containerName,
+      // Construct the kubectl command for the user to manually get the logs if they'd like
+      command: `kubectl logs -n ${this.namespace} ${containerName} --tail=${lines}`,
+      namespace: this.namespace,
     };
+  }
+
+  /**
+   * Stream logs from an MCP server pod with follow enabled
+   */
+  async streamMcpServerLogs(
+    mcpServerId: string,
+    responseStream: NodeJS.WritableStream,
+    lines: number = 100,
+  ): Promise<void> {
+    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    if (!k8sPod) {
+      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    }
+
+    await k8sPod.streamLogs(responseStream, lines);
   }
 
   /**

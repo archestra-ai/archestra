@@ -9,6 +9,7 @@ import { schema } from "@/database";
 export const LocalMcpServerInstallationStatusSchema = z.enum([
   "idle",
   "pending",
+  "discovering-tools",
   "success",
   "error",
 ]);
@@ -16,13 +17,34 @@ export const LocalMcpServerInstallationStatusSchema = z.enum([
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
+  ownerEmail: z.string().nullable().optional(),
   teams: z.array(z.string()).optional(),
+  users: z.array(z.string()).optional(),
+  userDetails: z
+    .array(
+      z.object({
+        userId: z.string(),
+        email: z.string(),
+        createdAt: z.coerce.date(),
+      }),
+    )
+    .optional(),
+  teamDetails: z
+    .array(
+      z.object({
+        teamId: z.string(),
+        name: z.string(),
+        createdAt: z.coerce.date(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
 });
 export const InsertMcpServerSchema = createInsertSchema(
   schema.mcpServersTable,
 ).extend({
   teams: z.array(z.string()).optional(),
+  userId: z.string().optional(), // For personal auth
   localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
 });
 export const UpdateMcpServerSchema = createUpdateSchema(

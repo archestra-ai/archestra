@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1322,7 +1322,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2138,6 +2138,12 @@ export type GetAgentsResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     }>;
 };
 
@@ -2149,6 +2155,12 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -2214,6 +2226,12 @@ export type CreateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2285,6 +2303,12 @@ export type GetDefaultAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2410,6 +2434,12 @@ export type GetAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2421,6 +2451,12 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -2488,10 +2524,94 @@ export type UpdateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/keys';
+};
+
+export type GetLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelKeysError = GetLabelKeysErrors[keyof GetLabelKeysErrors];
+
+export type GetLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysResponses];
+
+export type GetLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/values';
+};
+
+export type GetLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
+
+export type GetLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -2532,6 +2652,7 @@ export type GetAllAgentToolsResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        credentialSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2561,6 +2682,7 @@ export type GetAllAgentToolsResponses = {
             updatedAt: string;
             mcpServerId: string | null;
             mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
         };
     }>;
 };
@@ -2603,7 +2725,9 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: never;
+    body?: {
+        credentialSourceMcpServerId?: string | null;
+    } | null;
     path: {
         agentId: string;
         toolId: string;
@@ -2613,6 +2737,15 @@ export type AssignToolToAgentData = {
 };
 
 export type AssignToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -2715,6 +2848,7 @@ export type UpdateAgentToolData = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -2724,6 +2858,15 @@ export type UpdateAgentToolData = {
 };
 
 export type UpdateAgentToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -2757,12 +2900,85 @@ export type UpdateAgentToolResponses = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentAvailableTokensData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentIds: string;
+        catalogId?: string;
+    };
+    url: '/api/agents/available-tokens';
+};
+
+export type GetAgentAvailableTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
+
+export type GetAgentAvailableTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        authType: 'personal' | 'team';
+        catalogId: string | null;
+        ownerId: string | null;
+        ownerEmail: string | null;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -4157,6 +4373,9 @@ export type GetInteractionsResponses = {
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4164,6 +4383,9 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4171,6 +4393,9 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -4228,6 +4453,9 @@ export type GetInteractionResponses = {
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4235,6 +4463,9 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4242,6 +4473,9 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     };
 };
@@ -4275,7 +4509,6 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4294,12 +4527,15 @@ export type GetInternalMcpCatalogResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4345,7 +4581,6 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
-        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -4364,12 +4599,15 @@ export type CreateInternalMcpCatalogItemData = {
         serverUrl?: string | null;
         docsUrl?: string | null;
         localConfig?: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4432,7 +4670,6 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4451,12 +4688,15 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4581,7 +4821,6 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4600,12 +4839,15 @@ export type GetInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4651,7 +4893,6 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
-        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -4670,12 +4911,15 @@ export type UpdateInternalMcpCatalogItemData = {
         serverUrl?: string | null;
         docsUrl?: string | null;
         localConfig?: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4749,7 +4993,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4768,12 +5011,15 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4816,6 +5062,341 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetLimitsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+    };
+    url: '/api/limits';
+};
+
+export type GetLimitsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
+
+export type GetLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
+
+export type CreateLimitData = {
+    body: {
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/limits';
+};
+
+export type CreateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
+
+export type CreateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
+
+export type DeleteLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
+
+export type DeleteLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
+
+export type GetLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type GetLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
+
+export type GetLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
+
+export type UpdateLimitData = {
+    body?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue?: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
+
+export type UpdateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
 export type GetV1McpData = {
     body?: never;
@@ -4954,12 +5535,15 @@ export type GetMcpServerInstallationRequestsResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5023,12 +5607,15 @@ export type CreateMcpServerInstallationRequestData = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
     };
@@ -5119,12 +5706,15 @@ export type CreateMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5305,12 +5895,15 @@ export type GetMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5374,12 +5967,15 @@ export type UpdateMcpServerInstallationRequestData = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -5491,12 +6087,15 @@ export type UpdateMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5618,12 +6217,15 @@ export type ApproveMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5745,12 +6347,15 @@ export type DeclineMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5872,12 +6477,15 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5900,7 +6508,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        authType?: 'personal' | 'team';
+    };
     url: '/api/mcp_server';
 };
 
@@ -5936,12 +6546,26 @@ export type GetMcpServersResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     }>;
 };
 
@@ -5952,10 +6576,13 @@ export type InstallMcpServerData = {
         name: string;
         catalogId: string;
         secretId?: string;
+        ownerId?: string | null;
+        authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
-        localInstallationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
         teams?: Array<string>;
+        userId?: string;
         agentIds?: Array<string>;
         accessToken?: string;
     };
@@ -5969,6 +6596,24 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -5996,12 +6641,26 @@ export type InstallMcpServerResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -6100,12 +6759,26 @@ export type GetMcpServerResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -6148,7 +6821,7 @@ export type GetMcpServerInstallationStatusResponses = {
      * Default Response
      */
     200: {
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
     };
 };
@@ -6216,8 +6889,9 @@ export type GetMcpServerLogsData = {
     };
     query?: {
         lines?: number;
+        follow?: boolean;
     };
-    url: '/mcp_proxy/{id}/logs';
+    url: '/api/mcp_server/{id}/logs';
 };
 
 export type GetMcpServerLogsErrors = {
@@ -6250,6 +6924,8 @@ export type GetMcpServerLogsResponses = {
     200: {
         logs: string;
         containerName: string;
+        command: string;
+        namespace: string;
     };
 };
 
@@ -6298,6 +6974,219 @@ export type RestartMcpServerResponses = {
 };
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
+
+export type RevokeUserMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
+};
+
+export type RevokeUserMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
+
+export type RevokeUserMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
+
+export type RevokeAllTeamsMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type RevokeAllTeamsMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
+
+export type RevokeAllTeamsMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
+
+export type GrantTeamMcpServerAccessData = {
+    body: {
+        teamIds: Array<string>;
+        userId?: string;
+    };
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type GrantTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
+
+export type GrantTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
+
+export type RevokeTeamMcpServerAccessData = {
+    body?: never;
+    path: {
+        id: string;
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/team/{teamId}';
+};
+
+export type RevokeTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
+
+export type RevokeTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
 
 export type GetMcpToolCallsData = {
     body?: never;
@@ -6664,6 +7553,514 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type UpdateOrganizationCleanupIntervalData = {
+    body: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/cleanup-interval';
+};
+
+export type UpdateOrganizationCleanupIntervalErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
+
+export type UpdateOrganizationCleanupIntervalResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
+
+export type GetOrganizationAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
+
+export type GetOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
+
+export type UpdateOrganizationAppearanceData = {
+    body?: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
+
+export type UpdateOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'cosmic-night' | 'aubergine' | 'clementine' | 'banana' | 'jade' | 'lagoon' | 'barbra' | 'gray' | 'mood-indigo' | 'tritanopia' | 'protanopia-deuteranopia' | 'raspberry-beret' | 'big-business' | 'pog' | 'mint-chip' | 'pbj' | 'chill-vibes' | 'forest-floor' | 'slackr' | 'sea-glass' | 'lemon-lime' | 'falling-leaves' | 'sunrise';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+
+export type GetOrganizationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization';
+};
+
+export type GetOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationError = GetOrganizationErrors[keyof GetOrganizationErrors];
+
+export type GetOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type DeleteOrganizationLogoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type DeleteOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+
+export type DeleteOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
+
+export type UploadOrganizationLogoData = {
+    body: {
+        logo: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type UploadOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+
+export type UploadOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        logo: string | null;
+    };
+};
+
+export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+
+export type GetTeamStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/teams';
+};
+
+export type GetTeamStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamStatisticsError = GetTeamStatisticsErrors[keyof GetTeamStatisticsErrors];
+
+export type GetTeamStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        teamId: string;
+        teamName: string;
+        members: number;
+        agents: number;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetTeamStatisticsResponse = GetTeamStatisticsResponses[keyof GetTeamStatisticsResponses];
+
+export type GetAgentStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/agents';
+};
+
+export type GetAgentStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentStatisticsError = GetAgentStatisticsErrors[keyof GetAgentStatisticsErrors];
+
+export type GetAgentStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        agentId: string;
+        agentName: string;
+        teamName: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetAgentStatisticsResponse = GetAgentStatisticsResponses[keyof GetAgentStatisticsResponses];
+
+export type GetModelStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/models';
+};
+
+export type GetModelStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetModelStatisticsError = GetModelStatisticsErrors[keyof GetModelStatisticsErrors];
+
+export type GetModelStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        model: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        percentage: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetModelStatisticsResponse = GetModelStatisticsResponses[keyof GetModelStatisticsResponses];
+
+export type GetOverviewStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/overview';
+};
+
+export type GetOverviewStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOverviewStatisticsError = GetOverviewStatisticsErrors[keyof GetOverviewStatisticsErrors];
+
+export type GetOverviewStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalRequests: number;
+        totalTokens: number;
+        totalCost: number;
+        topTeam: string;
+        topAgent: string;
+        topModel: string;
+    };
+};
+
+export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
 export type GetTeamsData = {
     body?: never;
@@ -7173,6 +8570,308 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTokenPricesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type GetTokenPricesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
+
+export type GetTokenPricesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
+
+export type CreateTokenPriceData = {
+    body: {
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type CreateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
+
+export type CreateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
+
+export type DeleteTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type DeleteTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
+
+export type DeleteTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
+
+export type GetTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type GetTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
+
+export type GetTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
+
+export type UpdateTokenPriceData = {
+    body?: {
+        model?: string;
+        pricePerMillionInput?: string;
+        pricePerMillionOutput?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type UpdateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
+
+export type UpdateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
 export type GetToolsData = {
     body?: never;

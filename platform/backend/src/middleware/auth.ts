@@ -66,7 +66,9 @@ class AuthMiddleware {
        * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
        * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
        */
-      url.includes("/mcp_proxy")
+      url.includes("/mcp_proxy") ||
+      // Skip ACME challenge paths for SSL certificate domain validation
+      url.startsWith("/.well-known/acme-challenge/")
     )
       return true;
     return false;
@@ -188,6 +190,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAgentAvailableTokens]: {
+    agent: ["read"],
+  },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
@@ -200,6 +205,12 @@ const routePermissionsConfig: Partial<
   [RouteId.UpdateAgentTool]: {
     agent: ["update"],
     tool: ["update"],
+  },
+  [RouteId.GetLabelKeys]: {
+    agent: ["read"],
+  },
+  [RouteId.GetLabelValues]: {
+    agent: ["read"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],
@@ -291,10 +302,25 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServerTools]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerLogs]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeUserMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GrantTeamMcpServerAccess]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.RevokeTeamMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeAllTeamsMcpServerAccess]: {
     mcpServer: ["delete"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
@@ -380,6 +406,66 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
+  },
+  [RouteId.GetLimits]: {
+    limit: ["read"],
+  },
+  [RouteId.CreateLimit]: {
+    limit: ["create"],
+  },
+  [RouteId.GetLimit]: {
+    limit: ["read"],
+  },
+  [RouteId.UpdateLimit]: {
+    limit: ["update"],
+  },
+  [RouteId.DeleteLimit]: {
+    limit: ["delete"],
+  },
+  [RouteId.GetOrganization]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationCleanupInterval]: {
+    organization: ["update"],
+  },
+  [RouteId.GetTokenPrices]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.CreateTokenPrice]: {
+    tokenPrice: ["create"],
+  },
+  [RouteId.GetTokenPrice]: {
+    tokenPrice: ["read"],
+  },
+  [RouteId.UpdateTokenPrice]: {
+    tokenPrice: ["update"],
+  },
+  [RouteId.DeleteTokenPrice]: {
+    tokenPrice: ["delete"],
+  },
+  [RouteId.GetTeamStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetAgentStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetModelStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetOrganizationAppearance]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationAppearance]: {
+    organization: ["update"],
+  },
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
   },
 };
 

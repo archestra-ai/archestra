@@ -4,9 +4,11 @@ import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getObservableGenAI } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { getObservableGenAI } from "@/models/llm-metrics";
-import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import LimitValidationService from "@/services/limit-validation";
+
+import { type Agent, ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
@@ -108,14 +110,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
-    // Add OpenTelemetry span attribute for filtering in Jaeger
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute("route.category", "llm-proxy");
-      span.setAttribute("llm.provider", "gemini");
-    }
-
-    let resolvedAgentId: string;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -127,24 +122,58 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
 
+    const resolvedAgentId = resolvedAgent.id;
+
+    // Add OpenTelemetry trace attributes
+    utils.tracing.sprinkleTraceAttributes(
+      "gemini",
+      utils.tracing.RouteCategory.LLM_PROXY,
+      resolvedAgent,
+    );
+
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
-      resolvedAgentId,
+      resolvedAgent,
     );
 
     // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-2.5-pro";
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "Gemini request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       // TODO: Persist tools if present
       // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
 
@@ -357,13 +386,20 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   }
         // }
 
-        // Store the complete interaction
+        // Extract token usage and store the complete interaction
+        const tokenUsage = response.usageMetadata
+          ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
+          : { input: null, output: null };
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "gemini:generateContent",
           request: body,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
           response: response as any,
+          model: model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);

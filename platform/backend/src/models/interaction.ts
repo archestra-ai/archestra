@@ -4,6 +4,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import UsageTrackingService from "@/services/usage-tracking";
 import type {
   InsertInteraction,
   Interaction,
@@ -18,6 +19,14 @@ class InteractionModel {
       .insert(schema.interactionsTable)
       .values(data)
       .returning();
+
+    // Update usage tracking after interaction is created
+    // Run in background to not block the response
+    UsageTrackingService.updateUsageAfterInteraction(
+      interaction as InsertInteraction & { id: string },
+    ).catch((error) => {
+      console.error("Failed to update usage tracking:", error);
+    });
 
     return interaction;
   }

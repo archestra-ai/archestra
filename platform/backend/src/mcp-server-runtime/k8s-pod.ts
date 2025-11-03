@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { Readable, Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
@@ -21,8 +21,8 @@ const {
 export default class K8sPod {
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
-  private k8sExec: k8s.Exec;
   private k8sAttach: Attach;
+  private k8sLog: k8s.Log;
   private namespace: string;
   private podName: string;
   private state: K8sPodState = "not_created";
@@ -39,16 +39,23 @@ export default class K8sPod {
   constructor(
     mcpServer: McpServer,
     k8sApi: k8s.CoreV1Api,
-    k8sExec: k8s.Exec,
     k8sAttach: Attach,
+    k8sLog: k8s.Log,
     namespace: string,
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
-    this.k8sExec = k8sExec;
     this.k8sAttach = k8sAttach;
+    this.k8sLog = k8sLog;
     this.namespace = namespace;
-    this.podName = `mcp-${mcpServer.id.toLowerCase()}`;
+    this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+  }
+
+  static slugifyMcpServerName(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/ /g, "-")
+      .replace(/[^a-z0-9-]/g, "");
   }
 
   /**
@@ -172,9 +179,13 @@ export default class K8sPod {
       logger.info(
         `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
       );
-      logger.info(
-        `Using command: ${catalogItem.localConfig.command} ${catalogItem.localConfig.arguments.join(" ")}`,
-      );
+      if (catalogItem.localConfig.command) {
+        logger.info(
+          `Using command: ${catalogItem.localConfig.command} ${(catalogItem.localConfig.arguments || []).join(" ")}`,
+        );
+      } else {
+        logger.info("Using Docker image's default CMD");
+      }
       this.state = "pending";
 
       // Use custom Docker image if provided, otherwise use the base image
@@ -201,9 +212,14 @@ export default class K8sPod {
               name: "mcp-server",
               image: dockerImage,
               env: this.createPodEnvFromConfig(catalogItem.localConfig),
-              // Use the command and arguments from local config
-              command: [catalogItem.localConfig.command],
-              args: catalogItem.localConfig.arguments,
+              // Use the command and arguments from local config if provided
+              // If not provided, Kubernetes will use the Docker image's default CMD
+              ...(catalogItem.localConfig.command
+                ? {
+                    command: [catalogItem.localConfig.command],
+                    args: catalogItem.localConfig.arguments || [],
+                  }
+                : {}),
               // For stdio-based MCP servers, we use stdin/stdout
               stdin: true,
               tty: false,
@@ -616,6 +632,103 @@ export default class K8sPod {
       if (error instanceof Error && error.message.includes("404")) {
         return "Pod not found";
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Stream logs from the pod with follow enabled
+   */
+  async streamLogs(
+    responseStream: NodeJS.WritableStream,
+    lines: number = 100,
+  ): Promise<void> {
+    try {
+      // Create a PassThrough stream to handle the log data
+      const logStream = new PassThrough();
+
+      // Handle log data by piping to the response stream
+      logStream.on("data", (chunk) => {
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.write(chunk);
+        }
+      });
+
+      // Handle stream errors
+      logStream.on("error", (error) => {
+        logger.error(
+          { err: error },
+          `Log stream error for pod ${this.podName}:`,
+        );
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          if (
+            "destroy" in responseStream &&
+            typeof responseStream.destroy === "function"
+          ) {
+            responseStream.destroy(error);
+          }
+        }
+      });
+
+      // Handle stream end
+      logStream.on("end", () => {
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.end();
+        }
+      });
+
+      // Handle response stream errors and cleanup
+      responseStream.on("error", (error) => {
+        logger.error(
+          { err: error },
+          `Response stream error for pod ${this.podName}:`,
+        );
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+      });
+
+      responseStream.on("close", () => {
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+      });
+
+      // Use the Log client to stream logs with follow=true
+      const req = await this.k8sLog.log(
+        this.namespace,
+        this.podName,
+        "mcp-server", // container name
+        logStream,
+        {
+          follow: true,
+          tailLines: lines,
+          pretty: false,
+          timestamps: false,
+        },
+      );
+
+      // Handle cleanup when response stream closes
+      responseStream.on("close", () => {
+        if (req) {
+          req.abort();
+        }
+      });
+    } catch (error: unknown) {
+      logger.error(
+        { err: error },
+        `Failed to stream logs for pod ${this.podName}:`,
+      );
+
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        if (
+          "destroy" in responseStream &&
+          typeof responseStream.destroy === "function"
+        ) {
+          responseStream.destroy(error as Error);
+        }
+      }
+
       throw error;
     }
   }

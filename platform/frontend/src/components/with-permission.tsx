@@ -32,17 +32,26 @@ export function WithPermissions({
 
 export function WithRole({
   children,
-  requiredRole,
+  requiredMinimalRole,
+  requiredExactRole,
 }: {
   children: React.ReactNode;
-  requiredRole: Role;
+  requiredMinimalRole?: Role;
+  requiredExactRole?: Role;
 }) {
   const currentRole = useRole();
-  if (currentRole === "admin") {
+
+  if (requiredExactRole && currentRole === requiredExactRole) {
     return children;
   }
-  if (requiredRole === currentRole) {
-    return children;
+
+  if (requiredMinimalRole) {
+    if (currentRole === "admin") {
+      return children;
+    }
+    if (requiredMinimalRole === currentRole) {
+      return children;
+    }
   }
   return null;
 }

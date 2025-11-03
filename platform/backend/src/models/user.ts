@@ -42,6 +42,15 @@ class User {
       logger.error({ err }, "Failed to create admin:");
     }
   }
+
+  static async getUserById(id: string) {
+    const [user] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, id))
+      .limit(1);
+    return user;
+  }
 }
 
 export default User;

@@ -71,11 +71,76 @@ If agents have custom labels defined, you can filter by them:
 { span.agent.environment="production" }
 ```
 
+## Grafana Dashboards
+
+### Archestra Platform Dashboard
+
+The main monitoring dashboard is available at: **http://localhost:3002/d/archestra-platform**
+
+This dashboard provides comprehensive monitoring across four key areas:
+
+#### 1. System Resources
+- **CPU Usage**: Process CPU utilization over time
+- **Memory Usage**: Resident memory consumption
+
+#### 2. LLM Metrics  
+- **LLM Token Usage**: Input and output token rates by agent
+  - Blue lines: Input tokens
+  - Green lines: Output tokens
+  - Stacked view shows total token consumption
+
+#### 3. Application Metrics
+- **Request Rate**: HTTP requests per second by route
+- **Request Duration**: p95 and p50 latency percentiles  
+- **Error Rate**: 4xx and 5xx error rates by route and status code
+- **Route Filter**: Use the "Route (App Metrics)" dropdown to filter by specific API endpoints
+
+#### 4. OTEL Traces
+- **Trace Metrics**: Visual representation of trace data from Tempo
+- Links to detailed trace analysis in Grafana Explore
+
+### Dashboard Features
+
+**Time Range Controls:**
+- Default: Last 15 minutes with 5-second refresh
+- Adjustable via the time picker in the top-right
+
+**Interactive Filtering:**
+- **Route Filter**: Applies only to Application Metrics panels
+- Filter by specific API routes like `/v1/openai/*`, `/health`, etc.
+
+**Panel Navigation:**
+- Click on any metric spike to drill down to specific time ranges
+- Use panel legends to toggle specific series on/off
+- Hover over data points for detailed values
+
+### Accessing Trace Details
+
+From the dashboard, you can access detailed trace information in two ways:
+
+1. **Grafana Explore**: Navigate to Explore → Tempo datasource
+2. **Direct Tempo queries**: Use TraceQL for advanced trace filtering
+
+**Common TraceQL Queries:**
+```
+# All traces from the API service
+{ service.name="Archestra Platform API" }
+
+# LLM proxy requests only  
+{ span.route.category="llm-proxy" }
+
+# Slow requests (>1 second)
+{ duration > 1s }
+
+# OpenAI requests with errors
+{ span.llm.provider="openai" && status=error }
+```
+
 ## Configuration
 
 ### Environment Variables
 
-The OpenTelemetry exporter endpoint can be configured via environment variables:
+The OTEL exporter endpoint can be configured via environment variables:
 
 ```bash
 # In your .env file

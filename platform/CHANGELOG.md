@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.25](https://github.com/archestra-ai/archestra/compare/platform-v0.0.24...platform-v0.0.25) (2025-11-03)
+
+
+### Features
+
+* add grafana dashboard ([#924](https://github.com/archestra-ai/archestra/issues/924)) ([51da831](https://github.com/archestra-ai/archestra/commit/51da831efeccfc8a93ff9dd7d4e5aac3c8c8c675))
+* cost and limits ([#919](https://github.com/archestra-ai/archestra/issues/919)) ([9888847](https://github.com/archestra-ai/archestra/commit/9888847dafdf1ba629772eb6a97edefc2aa96d0c))
+
 ## [0.0.24](https://github.com/archestra-ai/archestra/compare/platform-v0.0.23...platform-v0.0.24) (2025-11-03)
 
 

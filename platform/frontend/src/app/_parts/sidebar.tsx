@@ -4,9 +4,7 @@ import {
   BookOpen,
   Bot,
   Bug,
-  ClipboardList,
   DollarSign,
-  FileJson2,
   Github,
   Info,
   LogIn,
@@ -38,7 +36,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated } from "@/lib/auth.hook";
+import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrganizationAppearance } from "@/lib/organization.query";
 
@@ -50,7 +48,10 @@ interface MenuItem {
   customIsActive?: (pathname: string) => boolean;
 }
 
-const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+const getNavigationItems = (
+  isAuthenticated: boolean,
+  role?: string,
+): MenuItem[] => {
   return [
     {
       title: "How security works",
@@ -121,6 +122,7 @@ const userItems: MenuItem[] = [
 export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
+  const role = useRole();
   const { data: starCount } = useGithubStars();
   const { data: appearance } = useOrganizationAppearance();
 
@@ -158,7 +160,7 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated).map((item) => (
+              {getNavigationItems(isAuthenticated, role).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

@@ -7554,7 +7554,6 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
-<<<<<<< HEAD
 export type UpdateOrganizationCleanupIntervalData = {
     body: {
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
@@ -7565,7 +7564,48 @@ export type UpdateOrganizationCleanupIntervalData = {
 };
 
 export type UpdateOrganizationCleanupIntervalErrors = {
-=======
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
+
+export type UpdateOrganizationCleanupIntervalResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
+
 export type GetOrganizationAppearanceData = {
     body?: never;
     path?: never;
@@ -7677,137 +7717,6 @@ export type UpdateOrganizationAppearanceResponses = {
 
 export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
 
-export type DeleteOrganizationLogoData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/logo';
-};
-
-export type DeleteOrganizationLogoErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
-
-export type DeleteOrganizationLogoResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
-
-export type UploadOrganizationLogoData = {
-    body: {
-        logo: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/logo';
-};
-
-export type UploadOrganizationLogoErrors = {
->>>>>>> origin/main
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-<<<<<<< HEAD
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-=======
->>>>>>> origin/main
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-<<<<<<< HEAD
-export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
-
-export type UpdateOrganizationCleanupIntervalResponses = {
-=======
-export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
-
-export type UploadOrganizationLogoResponses = {
->>>>>>> origin/main
-    /**
-     * Default Response
-     */
-    200: {
-<<<<<<< HEAD
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-    };
-};
-
-export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
-
 export type GetOrganizationData = {
     body?: never;
     path?: never;
@@ -7869,6 +7778,118 @@ export type GetOrganizationResponses = {
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type DeleteOrganizationLogoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type DeleteOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+
+export type DeleteOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
+
+export type UploadOrganizationLogoData = {
+    body: {
+        logo: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type UploadOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+
+export type UploadOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        logo: string | null;
+    };
+};
+
+export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;
@@ -8040,14 +8061,6 @@ export type GetOverviewStatisticsResponses = {
 };
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
-=======
-        success: boolean;
-        logo: string | null;
-    };
-};
-
-export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
->>>>>>> origin/main
 
 export type GetTeamsData = {
     body?: never;

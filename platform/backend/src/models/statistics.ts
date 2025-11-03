@@ -312,7 +312,6 @@ class StatisticsModel {
 
     // Debug logging for 1h timeframe only
     if (timeframe === "1h") {
-      console.log("Team statistics (1h) - Raw data:", rawTimeSeriesData);
     }
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
@@ -321,7 +320,6 @@ class StatisticsModel {
     );
 
     if (timeframe === "1h") {
-      console.log("Team statistics (1h) - After grouping:", timeSeriesData);
     }
 
     // Get team member counts
@@ -466,7 +464,6 @@ class StatisticsModel {
 
     // Debug logging for 1h timeframe only
     if (timeframe === "1h") {
-      console.log("Agent statistics (1h) - Raw data:", rawTimeSeriesData);
     }
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
@@ -475,7 +472,6 @@ class StatisticsModel {
     );
 
     if (timeframe === "1h") {
-      console.log("Agent statistics (1h) - After grouping:", timeSeriesData);
     }
 
     // Aggregate data by agent

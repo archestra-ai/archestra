@@ -1,8 +1,8 @@
+import { OrganizationAppearanceSchema } from "@shared";
 import { eq } from "drizzle-orm";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
-import { OrganizationAppearanceSchema } from "@shared";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { OrganizationModel } from "@/models";
 import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
@@ -285,7 +285,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "bad_request",
             },
           });
-        } 
+        }
 
         // Only admins can update appearance settings
         if (!user.isAdmin) {
@@ -404,7 +404,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();

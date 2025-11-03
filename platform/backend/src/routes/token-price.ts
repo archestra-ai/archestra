@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
 import TokenPriceModel from "@/models/token-price";
 import { ErrorResponseSchema, RouteId } from "@/types";
 import {

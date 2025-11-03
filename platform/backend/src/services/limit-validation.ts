@@ -18,9 +18,6 @@ class LimitValidationService {
     agentId: string,
   ): Promise<null | [string, string]> {
     try {
-      console.log(
-        `🔍 [LimitValidation] ENTRY: Starting limit check for agent: ${agentId}`,
-      );
       logger.info(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
@@ -68,9 +65,6 @@ class LimitValidationService {
       const agentLimitViolation =
         await LimitValidationService.checkEntityLimits("agent", agentId);
       if (agentLimitViolation) {
-        console.log(
-          `🚫 [LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
-        );
         logger.info(
           `[LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
         );
@@ -162,19 +156,11 @@ class LimitValidationService {
           );
         }
       }
-
-      console.log(
-        `✅ [LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
-      );
       logger.info(
         `[LimitValidation] All limits OK for agent: ${agentId} - ALLOWING request`,
       );
       return null; // No limits exceeded
     } catch (error) {
-      console.log(
-        `❌ [LimitValidation] ERROR checking limits for agent: ${agentId}:`,
-        error,
-      );
       logger.error(
         `[LimitValidation] Error checking limits before request: ${error}`,
       );
@@ -228,10 +214,6 @@ class LimitValidationService {
           isExceeded: currentUsage >= limit.limitValue,
           fullLimitObject: limit,
         };
-        console.log(
-          `📊 [LimitValidation] FULL Limit details for ${entityType} ${entityId}:`,
-          JSON.stringify(limitDetails, null, 2),
-        );
         logger.info(
           `[LimitValidation] Limit details for ${entityType} ${entityId}: ${JSON.stringify(limitDetails)}`,
         );
@@ -245,9 +227,6 @@ class LimitValidationService {
             logger.warn(
               `[LimitValidation] token_cost limit ${limit.id} has no model specified - cannot convert to cost`,
             );
-            console.log(
-              `⚠️ [LimitValidation] token_cost limit has no model - skipping cost conversion`,
-            );
             // Fall back to token comparison (will likely fail, but better than crashing)
           } else {
             try {
@@ -257,9 +236,6 @@ class LimitValidationService {
               if (!tokenPrice) {
                 logger.warn(
                   `[LimitValidation] No pricing found for model ${limit.model} - cannot convert to cost`,
-                );
-                console.log(
-                  `⚠️ [LimitValidation] No pricing found for model ${limit.model}`,
                 );
               } else {
                 // Convert tokens to cost using the model's pricing
@@ -277,27 +253,10 @@ class LimitValidationService {
 
                 comparisonValue = totalCost;
                 limitDescription = "cost_dollars";
-
-                console.log(
-                  `💰 [LimitValidation] Converting tokens to cost for model ${limit.model}:`,
-                );
-                console.log(
-                  `💰   Input: ${inputTokens} tokens × $${tokenPrice.pricePerMillionInput}/1M = $${inputCost.toFixed(4)}`,
-                );
-                console.log(
-                  `💰   Output: ${outputTokens} tokens × $${tokenPrice.pricePerMillionOutput}/1M = $${outputCost.toFixed(4)}`,
-                );
-                console.log(
-                  `💰   Total: $${totalCost.toFixed(4)} vs limit $${limit.limitValue}`,
-                );
               }
             } catch (error) {
               logger.error(
                 `[LimitValidation] Error converting tokens to cost for model ${limit.model}: ${error}`,
-              );
-              console.log(
-                `❌ [LimitValidation] Error converting tokens to cost:`,
-                error,
               );
             }
           }

@@ -51,6 +51,13 @@ export interface OverviewStatistics {
   topModel: string;
 }
 
+export interface TimeSeriesData {
+  timeBucket: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 class StatisticsModel {
   /**
    * Convert timeframe to SQL interval
@@ -166,9 +173,9 @@ class StatisticsModel {
    * Group time series data by custom bucket intervals
    */
   private static groupTimeSeries(
-    timeSeriesData: Array<{ timeBucket: string; [key: string]: any }>,
+    timeSeriesData: TimeSeriesData[],
     timeframe: TimeFrame,
-  ): Array<{ timeBucket: string; [key: string]: any }> {
+  ): TimeSeriesData[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
     // If the interval is standard (60 minutes or more), no custom grouping needed
@@ -177,7 +184,7 @@ class StatisticsModel {
     }
 
     // Group by custom intervals
-    const grouped = new Map<string, any>();
+    const grouped = new Map<string, TimeSeriesData>();
 
     for (const row of timeSeriesData) {
       const bucketKey = StatisticsModel.roundToBucket(

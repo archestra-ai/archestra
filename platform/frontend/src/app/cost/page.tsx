@@ -1,5 +1,52 @@
 "use client";
 
+// Type definitions
+interface TokenPriceData {
+  id?: string;
+  model: string;
+  pricePerMillionInput: string | number;
+  pricePerMillionOutput: string | number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface LimitData {
+  id?: string;
+  entityType: string;
+  entityId: string;
+  limitType: string;
+  maxTokensPerHour?: number;
+  maxTokensPerDay?: number;
+  maxTokensPerMonth?: number;
+  maxCostPerHour?: number;
+  maxCostPerDay?: number;
+  maxCostPerMonth?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface TeamData {
+  id: string;
+  name: string;
+  // Add other team properties as needed
+}
+
+// Loading skeleton component
+function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
+  const skeletons = Array.from(
+    { length: count },
+    (_, i) => `${prefix}-skeleton-${i}`,
+  );
+
+  return (
+    <div className="space-y-3">
+      {skeletons.map((key) => (
+        <div key={key} className="h-16 bg-muted animate-pulse rounded" />
+      ))}
+    </div>
+  );
+}
+
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -121,8 +168,8 @@ function TokenPriceInlineForm({
   onSave,
   onCancel,
 }: {
-  initialData?: any;
-  onSave: (data: any) => void;
+  initialData?: TokenPriceData;
+  onSave: (data: TokenPriceData) => void;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
@@ -239,10 +286,10 @@ function TokenPriceRow({
   onCancel,
   onDelete,
 }: {
-  tokenPrice: any;
+  tokenPrice: TokenPriceData;
   isEditing: boolean;
   onEdit: () => void;
-  onSave: (data: any) => void;
+  onSave: (data: TokenPriceData) => void;
   onCancel: () => void;
   onDelete: () => void;
 }) {
@@ -317,13 +364,13 @@ function LimitInlineForm({
   hasOrganizationLimit,
   getTeamsWithLimits,
 }: {
-  initialData?: any;
+  initialData?: LimitData;
   limitType: "token_cost" | "mcp_server_calls";
-  onSave: (data: any) => void;
+  onSave: (data: LimitData) => void;
   onCancel: () => void;
-  teams: any[];
+  teams: TeamData[];
   mcpServers: CatalogItem[];
-  tokenPrices: any[];
+  tokenPrices: TokenPriceData[];
   hasOrganizationLimit: (
     limitType: "token_cost" | "mcp_server_calls",
     mcpServerName?: string,
@@ -581,16 +628,16 @@ function LimitRow({
   hasOrganizationLimit,
   getTeamsWithLimits,
 }: {
-  limit: any;
+  limit: LimitData;
   isEditing: boolean;
   onEdit: () => void;
-  onSave: (data: any) => void;
+  onSave: (data: LimitData) => void;
   onCancel: () => void;
   onDelete: () => void;
-  teams: any[];
+  teams: TeamData[];
   mcpServers: CatalogItem[];
-  tokenPrices: any[];
-  getEntityName: (limit: any) => string;
+  tokenPrices: TokenPriceData[];
+  getEntityName: (limit: LimitData) => string;
   getUsageStatus: (
     currentUsageTokensIn: number,
     currentUsageTokensOut: number,
@@ -819,7 +866,7 @@ export default function CostPage() {
   };
 
   // Helper function to get entity name
-  const getEntityName = (limit: any) => {
+  const getEntityName = (limit: LimitData) => {
     if (limit.entityType === "team") {
       const team = teams.find((t) => t.id === limit.entityId);
       return team?.name || "Unknown Team";
@@ -899,7 +946,7 @@ export default function CostPage() {
     await deleteLimit.mutateAsync({ id });
   };
 
-  const handleCreateLimit = async (data: any) => {
+  const handleCreateLimit = async (data: LimitData) => {
     try {
       await createLimit.mutateAsync(data);
       setIsAddingLlmLimit(false);
@@ -909,7 +956,7 @@ export default function CostPage() {
     }
   };
 
-  const handleUpdateLimit = async (id: string, data: any) => {
+  const handleUpdateLimit = async (id: string, data: LimitData) => {
     try {
       await updateLimit.mutateAsync({ id, ...data });
       setEditingLimitId(null);
@@ -930,7 +977,7 @@ export default function CostPage() {
     await deleteTokenPrice.mutateAsync({ id });
   };
 
-  const handleCreateTokenPrice = async (data: any) => {
+  const handleCreateTokenPrice = async (data: TokenPriceData) => {
     try {
       await createTokenPrice.mutateAsync(data);
       setIsAddingTokenPrice(false);
@@ -939,7 +986,7 @@ export default function CostPage() {
     }
   };
 
-  const handleUpdateTokenPrice = async (id: string, data: any) => {
+  const handleUpdateTokenPrice = async (id: string, data: TokenPriceData) => {
     try {
       await updateTokenPrice.mutateAsync({ id, ...data });
       setEditingTokenPriceId(null);
@@ -1690,14 +1737,7 @@ export default function CostPage() {
               </CardHeader>
               <CardContent>
                 {limitsLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-16 bg-muted animate-pulse rounded"
-                      />
-                    ))}
-                  </div>
+                  <LoadingSkeleton count={3} prefix="llm-limits" />
                 ) : (
                   <Table>
                     <TableHeader>
@@ -1794,14 +1834,7 @@ export default function CostPage() {
                 {/* Disabled Content */}
                 <div className="opacity-30 pointer-events-none">
                   {limitsLoading ? (
-                    <div className="space-y-3">
-                      {[...Array(3)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="h-16 bg-muted animate-pulse rounded"
-                        />
-                      ))}
-                    </div>
+                    <LoadingSkeleton count={3} prefix="mcp-limits" />
                   ) : (
                     <Table>
                       <TableHeader>
@@ -1894,14 +1927,7 @@ export default function CostPage() {
               </CardHeader>
               <CardContent>
                 {tokenPricesLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-16 bg-muted animate-pulse rounded"
-                      />
-                    ))}
-                  </div>
+                  <LoadingSkeleton count={3} prefix="token-prices" />
                 ) : (
                   <Table>
                     <TableHeader>

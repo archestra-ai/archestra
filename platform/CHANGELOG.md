@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.26](https://github.com/archestra-ai/archestra/compare/platform-v0.0.25...platform-v0.0.26) (2025-11-03)
+
+
+### Features
+
+* move chat from desktop_app to platform ([#888](https://github.com/archestra-ai/archestra/issues/888)) ([abc15d7](https://github.com/archestra-ai/archestra/commit/abc15d7061987ba4cbcd61823bd505b0bf654bee))
+
 ## [0.0.25](https://github.com/archestra-ai/archestra/compare/platform-v0.0.24...platform-v0.0.25) (2025-11-03)
 
 

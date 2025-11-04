@@ -45,46 +45,11 @@ export function useHasPermissions(permissionsToCheck: Permission[]) {
         },
         {} as Record<Resource, Action[]>,
       );
-
-      try {
-        const { data } = await authClient.organization.hasPermission({
-          permissions: permissionsMap,
-        });
-        return data?.success ?? false;
-      } catch (error) {
-        // If permission check fails due to auth issues (common in older WebKit),
-        // invalidate session cache to trigger re-authentication
-        if (
-          error instanceof Error &&
-          (error.message.includes("401") ||
-            error.message.includes("Unauthorized") ||
-            error.message.includes("authentication"))
-        ) {
-          console.warn(
-            "Permission check failed due to authentication issue, invalidating session cache",
-          );
-          // Force session refresh on next render
-          await authClient.getSession();
-          return false;
-        }
-        throw error;
-      }
+      const { data } = await authClient.organization.hasPermission({
+        permissions: permissionsMap,
+      });
+      return data?.success ?? false;
     },
-    // Add retry logic for authentication failures
-    retry: (failureCount, error) => {
-      // Retry up to 2 times for auth-related errors
-      if (
-        failureCount < 2 &&
-        error instanceof Error &&
-        (error.message.includes("401") ||
-          error.message.includes("Unauthorized") ||
-          error.message.includes("authentication"))
-      ) {
-        return true;
-      }
-      return false;
-    },
-    retryDelay: 1000, // 1 second delay between retries
   });
 }
 

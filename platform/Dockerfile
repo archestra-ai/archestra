@@ -137,12 +137,21 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+echo "=== ENTRYPOINT DEBUG ==="
+echo "ARCHESTRA_DATABASE_URL: ${ARCHESTRA_DATABASE_URL}"
+echo "DATABASE_URL: ${DATABASE_URL}"
+
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
+
+echo "EFFECTIVE_DATABASE_URL: ${EFFECTIVE_DATABASE_URL}"
+echo "Is EFFECTIVE_DATABASE_URL empty? $(test -z "$EFFECTIVE_DATABASE_URL" && echo 'YES' || echo 'NO')"
+echo "========================"
 
 # Determine if we're using an external database
 # If DATABASE_URL is provided, it's always external. Otherwise, use internal postgres.
 if [ -z "$EFFECTIVE_DATABASE_URL" ]; then
+    echo ">>> BRANCH: Using internal postgres (EFFECTIVE_DATABASE_URL is empty)"
     # No DATABASE_URL provided - using internal postgres with defaults
     POSTGRES_USER=${POSTGRES_USER:-archestra}
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
@@ -193,6 +202,7 @@ EOFPOSTGRES
     BACKEND_SLEEP="sleep 5"
     FRONTEND_SLEEP="sleep 8"
 else
+    echo ">>> BRANCH: Using external database (EFFECTIVE_DATABASE_URL is set)"
     # Using external database - no need to start postgres or wait for it
     echo "Using external database, skipping internal postgres startup"
     BACKEND_SLEEP=""

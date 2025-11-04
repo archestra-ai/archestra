@@ -61,7 +61,7 @@ export function ProxyConnectionInstructions({
         </Select>
       </div>
       <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-        <CodeText className="text-sm">{proxyUrl}</CodeText>
+        <CodeText className="text-sm break-all">{proxyUrl}</CodeText>
         <Button variant="ghost" size="icon" onClick={handleCopy}>
           {copied ? (
             <Check className="h-4 w-4 text-green-500" />

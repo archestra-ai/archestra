@@ -1,4 +1,7 @@
 archestra:
+  env:
+    ARCHESTRA_API_BASE_URL: https://backend.archestra.dev
+
   service:
     annotations:
       # GKE BackendConfig for custom health checks
@@ -12,8 +15,7 @@ archestra:
       kubernetes.io/ingress.global-static-ip-name: "archestra-staging-ip"
       ingress.gcp.cloud.google.com/load-balancer-type: "External"
       networking.gke.io/managed-certificates: "archestra-platform-staging-ssl"
-      # TODO: enable SSL redirect when Google manaaged certificate is FULY provisioned/ready
-      ingress.gcp.cloud.google.com/ssl-redirect: "false"
+      ingress.gcp.cloud.google.com/ssl-redirect: "true"
 
     hosts:
       - host: frontend.archestra.dev

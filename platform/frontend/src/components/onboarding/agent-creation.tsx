@@ -8,12 +8,14 @@ import { Input } from "../ui/input";
 
 interface AgentCreationProps {
   isActive: boolean;
+  isNextStep: boolean;
   isTransitioning: boolean;
   onComplete: (agentId: string) => void;
 }
 
 export function AgentCreation({
   isActive,
+  isNextStep,
   isTransitioning,
   onComplete,
 }: AgentCreationProps) {
@@ -46,6 +48,7 @@ export function AgentCreation({
         onClick: handleCreate,
         disabled: createAgent.isPending || !agentName.trim(),
       }}
+      isNextStep={isNextStep}
     >
       <div className="space-y-2">
         <label htmlFor="agent-name" className="block text-sm text-slate-300">

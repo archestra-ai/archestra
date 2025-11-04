@@ -58,16 +58,8 @@ export default function ProviderDetails({
           />
           <CopyButton text={proxyUrl} />
         </div>
-        {framework && (
-          <a
-            href={FRAMEWORK_DOCS[framework]}
-            className="text-sm text-blue-500 hover:underline"
-          >
-            Learn where to set it up
-          </a>
-        )}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mt-4">
             <div className="block text-sm text-slate-300">Code Snippet</div>
             <CopyButton
               text={

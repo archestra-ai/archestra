@@ -2,6 +2,7 @@
 
 import { FRAMEWORK_DOCS, FRAMEWORK_LABELS, type Framework } from "@shared";
 import type { ArchestraMcpServerManifest } from "@shared/hey-api/clients/archestra-catalog/types.gen";
+import { Link } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
   forwardRef,
@@ -51,10 +52,41 @@ export default forwardRef(function OnboardingWizard(
   const queryAgentId = searchParams.get("agentId");
   const queryMcpServerId = searchParams.get("mcpServerId");
 
-  // Determine initial step based on query params
-  const isResuming = resumeOnboarding === "true" && queryAgentId;
-  const initialStep = isResuming ? 5 : 0;
-  const initialMode = isResuming ? ("mcp-gateway" as OnboardingMode) : null;
+  // Check sessionStorage as fallback for resuming onboarding
+  const sessionOnboardingStep =
+    typeof window !== "undefined"
+      ? sessionStorage.getItem("onboarding_step")
+      : null;
+  const sessionAgentId =
+    typeof window !== "undefined"
+      ? sessionStorage.getItem("onboarding_agent_id")
+      : null;
+  const sessionMode =
+    typeof window !== "undefined"
+      ? (sessionStorage.getItem("onboarding_mode") as OnboardingMode | null)
+      : null;
+  const sessionMcpServerId =
+    typeof window !== "undefined"
+      ? sessionStorage.getItem("onboarding_mcp_server_id")
+      : null;
+
+  // Determine initial step based on query params OR sessionStorage
+  // Priority: Query params (for OAuth callback) > SessionStorage (for page refresh)
+  const agentIdToUse = queryAgentId || sessionAgentId;
+  const mcpServerIdToUse = queryMcpServerId || sessionMcpServerId;
+  const stepToUse = sessionOnboardingStep
+    ? parseInt(sessionOnboardingStep, 10)
+    : 0;
+
+  // For OAuth callback, always use step 5 (tool selection)
+  // For page refresh with sessionStorage, use saved step and mode
+  // Otherwise, start fresh at step 0
+  const initialStep =
+    resumeOnboarding === "true" ? 5 : sessionOnboardingStep ? stepToUse : 0;
+  const initialMode =
+    resumeOnboarding === "true"
+      ? ("mcp-gateway" as OnboardingMode)
+      : sessionMode || null;
 
   const [step, setStep] = useState(initialStep);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -66,9 +98,9 @@ export default forwardRef(function OnboardingWizard(
     useState<ArchestraMcpServerManifest | null>(null);
   const [installedMcpServerId, setInstalledMcpServerId] = useState<
     string | null
-  >(queryMcpServerId || null);
+  >(mcpServerIdToUse || null);
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(
-    queryAgentId || null,
+    agentIdToUse || null,
   );
 
   const frameworks = Object.keys(FRAMEWORK_DOCS) as Array<Framework>;
@@ -124,6 +156,27 @@ export default forwardRef(function OnboardingWizard(
     },
     [getMaxStep],
   );
+
+  // Save step, mode, agentId, and mcpServerId to sessionStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (step > 0) {
+        sessionStorage.setItem("onboarding_step", step.toString());
+      }
+      if (mode) {
+        sessionStorage.setItem("onboarding_mode", mode);
+      }
+      if (createdAgentId) {
+        sessionStorage.setItem("onboarding_agent_id", createdAgentId);
+      }
+      if (installedMcpServerId) {
+        sessionStorage.setItem(
+          "onboarding_mcp_server_id",
+          installedMcpServerId,
+        );
+      }
+    }
+  }, [step, mode, createdAgentId, installedMcpServerId]);
 
   useEffect(() => {
     onStepChange?.(step);
@@ -213,7 +266,11 @@ export default forwardRef(function OnboardingWizard(
     }
   }, [step, hasFirstInteraction, goto, mode]);
 
-  const renderStepCard = (stepIndex: number, isActive: boolean) => {
+  const renderStepCard = (
+    stepIndex: number,
+    isActive: boolean,
+    isNextStep: boolean,
+  ) => {
     // Step 0: Welcome
     if (stepIndex === 0) {
       return (
@@ -238,6 +295,7 @@ export default forwardRef(function OnboardingWizard(
             label: "Continue",
             onClick: next,
           }}
+          isNextStep={isNextStep}
         />
       );
     }
@@ -250,6 +308,7 @@ export default forwardRef(function OnboardingWizard(
           description="Choose the setup that best fits your needs"
           isActive={isActive}
           isTransitioning={isTransitioning}
+          isNextStep={isNextStep}
         >
           <div className="flex flex-col gap-3">
             <OptionButton
@@ -316,6 +375,7 @@ export default forwardRef(function OnboardingWizard(
               setCreatedAgentId(agentId);
               setTimeout(() => next(), 500);
             }}
+            isNextStep={isNextStep}
           />
         );
       }
@@ -325,26 +385,29 @@ export default forwardRef(function OnboardingWizard(
         return (
           <OnboardingStep
             title="Connect your first agent"
-            description="In order to get started with Archestra we need to receive the first data from your agent."
+            description="In order to get started with Archestra we need to receive the first data from your agent.\nHow to set it up:"
             isActive={isActive}
             isTransitioning={isTransitioning}
             primaryAction={{
               label: "Continue",
               onClick: next,
             }}
+            isNextStep={isNextStep}
           >
+            <p className="text-sm text-slate-300">How to set it up :</p>
             <div className="flex flex-wrap gap-3 mb-4">
               {frameworks.map((f) => (
-                <OptionButton
+                <a
                   key={f}
-                  active={framework === f}
+                  href={FRAMEWORK_DOCS[f]}
+                  target="_blank"
+                  className="text-sm text-blue-500 hover:underline"
                   onClick={() => {
-                    window.open(FRAMEWORK_DOCS[f], "_blank");
                     if (isActive) setFramework(f);
                   }}
                 >
                   {FRAMEWORK_LABELS[f]}
-                </OptionButton>
+                </a>
               ))}
             </div>
 
@@ -364,6 +427,7 @@ export default forwardRef(function OnboardingWizard(
             description="We're waiting for your first conversation to analyze, proxy and protect...."
             isActive={isActive}
             isTransitioning={isTransitioning}
+            isNextStep={isNextStep}
           >
             <div className="flex justify-center gap-2">
               <div
@@ -412,6 +476,7 @@ export default forwardRef(function OnboardingWizard(
                   }
                 : undefined
             }
+            isNextStep={isNextStep}
           >
             <div className="rounded border border-blue-500 bg-slate-950/40 p-4 mb-4 animate-in fade-in duration-500">
               <p className="text-sm text-slate-200">{displayMessage}</p>
@@ -472,6 +537,7 @@ export default forwardRef(function OnboardingWizard(
               setCreatedAgentId(agentId);
               setTimeout(() => next(), 500);
             }}
+            isNextStep={isNextStep}
           />
         );
       }
@@ -490,6 +556,7 @@ export default forwardRef(function OnboardingWizard(
               setSelectedMcpServer(mcpServer);
             }}
             onNext={next}
+            isNextStep={isNextStep}
           />
         );
       }
@@ -511,6 +578,7 @@ export default forwardRef(function OnboardingWizard(
                 setInstalledMcpServerId(serverId);
                 next();
               }}
+              isNextStep={isNextStep}
             />
           );
         }
@@ -535,6 +603,7 @@ export default forwardRef(function OnboardingWizard(
             onComplete={() => {
               setTimeout(() => next(), 500);
             }}
+            isNextStep={isNextStep}
           />
         );
       }
@@ -549,6 +618,7 @@ export default forwardRef(function OnboardingWizard(
             onComplete={() => {
               onComplete?.();
             }}
+            isNextStep={isNextStep}
           />
         );
       }
@@ -559,9 +629,9 @@ export default forwardRef(function OnboardingWizard(
 
   return (
     <div className="mx-auto max-w-xl space-y-3 text-white">
-      {step >= 2 && renderStepCard(step - 1, false)}
-      {renderStepCard(step, true)}
-      {step <= (getMaxStep() ?? 1) - 2 && renderStepCard(step + 1, false)}
+      {step >= 2 && renderStepCard(step - 1, false, false)}
+      {renderStepCard(step, true, false)}
+      {step <= (getMaxStep() ?? 1) - 2 && renderStepCard(step + 1, false, true)}
     </div>
   );
 });

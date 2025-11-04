@@ -17,7 +17,6 @@ export default function OnboardingModal() {
   const [open, setOpen] = useState(false);
 
   const wizardRef = useRef<OnboardingWizardHandle | null>(null);
-  const [step, setStep] = useState(0);
 
   const shouldShowOnboarding = Boolean(
     session?.user && session?.user.onboardingCompleted === false,
@@ -36,6 +35,13 @@ export default function OnboardingModal() {
         id: session.session.userId,
         data: { onboardingCompleted: true },
       });
+    }
+    // Clear sessionStorage when onboarding is completed
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("onboarding_step");
+      sessionStorage.removeItem("onboarding_mode");
+      sessionStorage.removeItem("onboarding_agent_id");
+      sessionStorage.removeItem("onboarding_mcp_server_id");
     }
     setOpen(false);
   };
@@ -60,7 +66,6 @@ export default function OnboardingModal() {
                 <div data-slot="dialog-body" className="mt-4">
                   <OnboardingWizard
                     ref={wizardRef}
-                    onStepChange={(s) => setStep(s)}
                     onComplete={completeOnboarding}
                   />
                 </div>
@@ -68,11 +73,7 @@ export default function OnboardingModal() {
                   <Button
                     variant="link"
                     type="button"
-                    onClick={() =>
-                      step < 3
-                        ? wizardRef.current?.next()
-                        : completeOnboarding()
-                    }
+                    onClick={completeOnboarding}
                   >
                     Skip this step for now
                   </Button>

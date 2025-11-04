@@ -11,6 +11,7 @@ import OnboardingStep from "../onboarding-step";
 
 interface McpServerInstallationProps {
   isActive: boolean;
+  isNextStep: boolean;
   isTransitioning: boolean;
   server: ArchestraMcpServerManifest | null;
   agentId: string;
@@ -19,6 +20,7 @@ interface McpServerInstallationProps {
 
 export function McpServerInstallation({
   isActive,
+  isNextStep,
   isTransitioning,
   server,
   agentId,
@@ -173,6 +175,7 @@ export function McpServerInstallation({
       }
       isActive={isActive}
       isTransitioning={isTransitioning}
+      isNextStep={isNextStep}
     >
       <div className="space-y-3">
         {requiresOAuth && !oauthCompleted && (

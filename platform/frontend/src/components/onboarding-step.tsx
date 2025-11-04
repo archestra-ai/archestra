@@ -16,6 +16,7 @@ interface OnboardingStepProps {
   };
   /** Whether this step is currently active */
   isActive: boolean;
+  isNextStep?: boolean;
   /** Whether a transition is in progress */
   isTransitioning: boolean;
 }
@@ -30,6 +31,7 @@ export default function OnboardingStep({
   children,
   primaryAction,
   isActive,
+  isNextStep,
   isTransitioning,
 }: OnboardingStepProps) {
   const baseClasses = isActive
@@ -48,7 +50,10 @@ export default function OnboardingStep({
     <div
       className={`${baseClasses} ${greyedClasses} ${activeTransitionClasses}`}
     >
-      <h3 className="mb-3 text-base font-medium text-white">{title}</h3>
+      <h3 className="mb-3 text-base font-medium text-white">
+        {isNextStep && "Next step : "}
+        {title}
+      </h3>
 
       {description && (
         <p

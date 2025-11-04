@@ -9,6 +9,7 @@ import OnboardingStep from "../onboarding-step";
 
 interface ToolSelectionProps {
   isActive: boolean;
+  isNextStep: boolean;
   isTransitioning: boolean;
   agentId: string;
   mcpServerId: string | null;
@@ -18,6 +19,7 @@ interface ToolSelectionProps {
 
 export function ToolSelection({
   isActive,
+  isNextStep,
   isTransitioning,
   agentId,
   mcpServerId,
@@ -83,6 +85,7 @@ export function ToolSelection({
         onClick: handleAssignTools,
         disabled: selectedToolIds.size === 0 || isAssigningTools,
       }}
+      isNextStep={isNextStep}
     >
       <div className="space-y-3 max-h-96 overflow-y-auto">
         {tools.length === 0 ? (

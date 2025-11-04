@@ -6,6 +6,7 @@ import OnboardingStep from "../onboarding-step";
 interface McpGatewayEndpointProps {
   isActive: boolean;
   isTransitioning: boolean;
+  isNextStep?: boolean;
   agentId: string;
   onComplete: () => void;
 }
@@ -13,6 +14,7 @@ interface McpGatewayEndpointProps {
 export function McpGatewayEndpoint({
   isActive,
   isTransitioning,
+  isNextStep,
   agentId,
   onComplete,
 }: McpGatewayEndpointProps) {
@@ -26,6 +28,7 @@ export function McpGatewayEndpoint({
         label: "Complete Setup",
         onClick: onComplete,
       }}
+      isNextStep={isNextStep}
     >
       <div className="space-y-4">
         <div className="p-4">

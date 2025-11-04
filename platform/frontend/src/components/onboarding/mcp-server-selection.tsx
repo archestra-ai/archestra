@@ -8,6 +8,7 @@ import OptionButton from "../option-button";
 
 interface McpServerSelectionProps {
   isActive: boolean;
+  isNextStep: boolean;
   isTransitioning: boolean;
   onSelect: (mcpServer: ArchestraMcpServerManifest) => void;
   onNext: () => void;
@@ -15,6 +16,7 @@ interface McpServerSelectionProps {
 
 export function McpServerSelection({
   isActive,
+  isNextStep,
   isTransitioning,
   onSelect,
   onNext,
@@ -43,6 +45,7 @@ export function McpServerSelection({
         description="Select an MCP server to install from the registry"
         isActive={isActive}
         isTransitioning={isTransitioning}
+        isNextStep={isNextStep}
       >
         <div className="text-sm text-slate-400">Loading MCP servers...</div>
       </OnboardingStep>
@@ -56,6 +59,7 @@ export function McpServerSelection({
         description="Select an MCP server to install from the registry"
         isActive={isActive}
         isTransitioning={isTransitioning}
+        isNextStep={isNextStep}
       >
         <div className="text-sm text-slate-400">
           No MCP servers available in the catalog. Please add some to get
@@ -76,6 +80,7 @@ export function McpServerSelection({
         onClick: onNext,
         disabled: !selectedServer,
       }}
+      isNextStep={isNextStep}
     >
       <div className="space-y-2 max-h-96 overflow-y-auto whitespace-normal break-words overflow-hidden">
         {catalogItems.map((item) => (

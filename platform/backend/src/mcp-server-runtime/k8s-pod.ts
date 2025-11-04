@@ -62,7 +62,7 @@ export default class K8sPod {
    */
   static constructPodName(mcpServer: McpServer): string {
     const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
-    return `mcp-$slugified`.substring(0, 253);
+    return `mcp-${slugified}`.substring(0, 253);
   }
 
   /**
@@ -77,10 +77,10 @@ export default class K8sPod {
   static ensureStringIsRfc1123Compliant(input: string): string {
     return input
       .toLowerCase()
-      .replace(/s+/g, "-") // replace any whitespace with hyphens
+      .replace(/\s+/g, "-") // replace any whitespace with hyphens
       .replace(/[^a-z0-9.-]/g, "") // remove invalid characters
       .replace(/-+/g, "-") // collapse consecutive hyphens
-      .replace(/.+/g, ".") // collapse consecutive dots
+      .replace(/\.+/g, ".") // collapse consecutive dots
       .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
       .replace(/[^a-z0-9]+$/, ""); // remove trailing non-alphanumeric
   }
@@ -194,7 +194,7 @@ export default class K8sPod {
             if (
               config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
             ) {
-              const serviceName = `$this.podName-service`;
+              const serviceName = `${this.podName}-service`;
               baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
             } else {
               // Local dev: get NodePort from service

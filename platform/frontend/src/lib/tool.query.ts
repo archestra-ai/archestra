@@ -9,21 +9,26 @@ const { getTools } = archestraApiSdk;
 
 export function useTools({
   initialData,
+  refetchInterval,
 }: {
   initialData?: archestraApiTypes.GetToolsResponses["200"];
-}) {
+  refetchInterval?: number | null;
+} = {}) {
   return useSuspenseQuery({
     queryKey: ["tools"],
     queryFn: async () => (await getTools()).data ?? null,
     initialData,
+    ...(refetchInterval !== null ? { refetchInterval } : {}),
   });
 }
 
 export function useUnassignedTools({
   initialData,
+  refetchInterval,
 }: {
   initialData?: archestraApiTypes.GetToolsResponses["200"];
-}) {
+  refetchInterval?: number | null;
+} = {}) {
   return useSuspenseQuery({
     queryKey: ["tools", "unassigned"],
     queryFn: async () => {
@@ -35,6 +40,7 @@ export function useUnassignedTools({
       return response.data ?? null;
     },
     initialData,
+    ...(refetchInterval !== null ? { refetchInterval } : {}),
   });
 }
 

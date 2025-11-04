@@ -15,7 +15,7 @@ import { useAgents } from "@/lib/agent.query";
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { useMcpServers } from "@/lib/mcp-server.query";
-import { useDetectedTools } from "@/lib/tool.query";
+import { useTools } from "@/lib/tool.query";
 import OnboardingStep from "../onboarding-step";
 import OptionButton from "../option-button";
 import { AgentCreation } from "./agent-creation";
@@ -94,7 +94,7 @@ export default forwardRef(function OnboardingWizard(
   // Determine max step based on selected mode
   const getMaxStep = useCallback(() => {
     if (!mode) return 1;
-    if (mode === "llm-proxy") return 4;
+    if (mode === "llm-proxy") return 5;
     if (mode === "mcp-gateway") return 6;
   }, [mode]);
 
@@ -168,29 +168,47 @@ export default forwardRef(function OnboardingWizard(
   );
 
   const { data: firstUserInteraction } = useHasFirstUserInteraction({
-    refetchInterval: mode === "llm-proxy" && step === 3 ? 3_000 : null,
+    agentId: createdAgentId || undefined,
+    refetchInterval:
+      mode === "llm-proxy" && step === 4 && createdAgentId ? 3_000 : null,
   });
 
   const hasFirstInteraction = firstUserInteraction !== null;
 
-  const { data: detectedToolsData } = useDetectedTools({
+  const { data: allTools } = useTools({
     refetchInterval:
-      mode === "llm-proxy" && step === 4 && !toolsDetectedRef.current
+      mode === "llm-proxy" && step === 5 && !toolsDetectedRef.current
         ? 3_000
         : null,
   });
 
+  // Filter tools by agent ID and created in the last 5 minutes
+  const recentlyDetectedTools = (allTools ?? []).filter((tool) => {
+    // Filter by agent ID (note: tool has 'agent' singular, not 'agents')
+    if (tool.agent?.id !== createdAgentId) {
+      return false;
+    }
+
+    // Filter by creation time (last 5 minutes)
+    if (!tool.createdAt) return false;
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const toolCreatedAt = new Date(tool.createdAt).getTime();
+    return toolCreatedAt >= fiveMinutesAgo;
+  });
+
+  const hasDetectedTools = recentlyDetectedTools.length > 0;
+
   useEffect(() => {
-    if (detectedToolsData?.hasDetectedTools) {
+    if (hasDetectedTools) {
       toolsDetectedRef.current = true;
     }
-  }, [detectedToolsData?.hasDetectedTools]);
+  }, [hasDetectedTools]);
 
   useEffect(() => {
     // Auto-advance when first user interaction is detected in LLM proxy mode
-    if (mode === "llm-proxy" && step === 3 && hasFirstInteraction) {
+    if (mode === "llm-proxy" && step === 4 && hasFirstInteraction) {
       setTimeout(() => {
-        goto(4);
+        goto(5);
       }, 500);
     }
   }, [step, hasFirstInteraction, goto, mode]);
@@ -288,8 +306,22 @@ export default forwardRef(function OnboardingWizard(
 
     // LLM PROXY PATH
     if (mode === "llm-proxy") {
-      // Step 2: Connect agent (Framework selection)
+      // Step 2: Create Agent
       if (stepIndex === 2) {
+        return (
+          <AgentCreation
+            isActive={isActive}
+            isTransitioning={isTransitioning}
+            onComplete={(agentId: string) => {
+              setCreatedAgentId(agentId);
+              setTimeout(() => next(), 500);
+            }}
+          />
+        );
+      }
+
+      // Step 3: Connect agent (Framework selection)
+      if (stepIndex === 3) {
         return (
           <OnboardingStep
             title="Connect your first agent"
@@ -316,13 +348,16 @@ export default forwardRef(function OnboardingWizard(
               ))}
             </div>
 
-            <ProviderDetails framework={framework}></ProviderDetails>
+            <ProviderDetails
+              framework={framework}
+              agentId={createdAgentId}
+            ></ProviderDetails>
           </OnboardingStep>
         );
       }
 
-      // Step 3: Waiting for first chat
-      if (stepIndex === 3) {
+      // Step 4: Waiting for first chat
+      if (stepIndex === 4) {
         return (
           <OnboardingStep
             title="Waiting for your first chat"
@@ -348,8 +383,8 @@ export default forwardRef(function OnboardingWizard(
         );
       }
 
-      // Step 4: Analysis and completion (LLM proxy)
-      if (stepIndex === 4) {
+      // Step 5: Analysis and completion (LLM proxy)
+      if (stepIndex === 5) {
         let displayMessage = "Message detected";
 
         if (firstUserInteraction) {
@@ -358,9 +393,8 @@ export default forwardRef(function OnboardingWizard(
           ).getLastUserMessage();
         }
 
-        const hasDetectedTools = detectedToolsData?.hasDetectedTools ?? false;
-        const toolCount = detectedToolsData?.detectedCount ?? 0;
-        const detectedTools = (detectedToolsData?.tools ?? []).slice(2, 7);
+        const toolCount = recentlyDetectedTools.length;
+        const detectedTools = recentlyDetectedTools.slice(0, 5);
 
         return (
           <OnboardingStep

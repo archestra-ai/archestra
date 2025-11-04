@@ -87,7 +87,7 @@ export function useHasFirstUserInteraction({
         query: {
           ...(agentId ? { agentId } : {}),
           limit: 1,
-          offset: 2, // skip first 2 interactions (seed)
+          offset: 0, // skip first 2 interactions (seed)
           sortBy: "createdAt",
           sortDirection: "asc",
         },

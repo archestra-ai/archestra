@@ -9,18 +9,27 @@ import { Input } from "../ui/input";
 
 export default function ProviderDetails({
   framework,
+  agentId,
 }: {
   framework: Framework;
+  agentId?: string | null;
 }) {
   const [provider, setProvider] = useState<Provider>(
     Object.keys(PROVIDER_INFO)[0] as Provider,
   );
 
-  const [proxyUrl, setProxyUrl] = useState(PROVIDER_INFO[provider].baseUrl);
+  const getProxyUrlWithAgent = (baseUrl: string) => {
+    return agentId ? `${baseUrl}/${agentId}` : baseUrl;
+  };
+
+  const [proxyUrl, setProxyUrl] = useState(
+    getProxyUrlWithAgent(PROVIDER_INFO[provider].baseUrl),
+  );
 
   useEffect(() => {
-    setProxyUrl(PROVIDER_INFO[provider].baseUrl);
-  }, [provider]);
+    setProxyUrl(getProxyUrlWithAgent(PROVIDER_INFO[provider].baseUrl));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, agentId]);
   return (
     <div className="space-y-4">
       <div className="mb-4">
@@ -60,10 +69,26 @@ export default function ProviderDetails({
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="block text-sm text-slate-300">Code Snippet</div>
-            <CopyButton text={PROVIDER_INFO[provider].snippet} />
+            <CopyButton
+              text={
+                agentId
+                  ? PROVIDER_INFO[provider].snippet.replace(
+                      PROVIDER_INFO[provider].baseUrl,
+                      getProxyUrlWithAgent(PROVIDER_INFO[provider].baseUrl),
+                    )
+                  : PROVIDER_INFO[provider].snippet
+              }
+            />
           </div>
           <pre className="rounded bg-slate-950 border border-slate-700 p-4 text-xs text-slate-200 overflow-x-auto">
-            <code>{PROVIDER_INFO[provider].snippet}</code>
+            <code>
+              {agentId
+                ? PROVIDER_INFO[provider].snippet.replace(
+                    PROVIDER_INFO[provider].baseUrl,
+                    getProxyUrlWithAgent(PROVIDER_INFO[provider].baseUrl),
+                  )
+                : PROVIDER_INFO[provider].snippet}
+            </code>
           </pre>
         </div>
       </div>

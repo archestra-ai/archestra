@@ -944,7 +944,12 @@ export type AnthropicMessagesRequestInput = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | unknown;
-    };
+    } | Array<{
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    }>;
     temperature?: number;
     thinking?: unknown;
     tool_choice?: {
@@ -1968,7 +1973,12 @@ export type AnthropicMessagesRequest = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | unknown;
-    };
+    } | Array<{
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    }>;
     temperature?: number;
     thinking?: unknown;
     tool_choice?: {
@@ -2075,7 +2085,16 @@ export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 export type GetAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter by agent name
+         */
+        name?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/agents';
 };
 
@@ -2106,45 +2125,55 @@ export type GetAgentsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        isDemo: boolean;
-        isDefault: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
+    200: {
+        data: Array<{
             id: string;
-            agentId: string | null;
-            mcpServerId: string | null;
             name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
+            isDemo: boolean;
+            isDefault: boolean;
             createdAt: string;
             updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                mcpServerId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<string>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
-        teams: Array<string>;
-        labels: Array<{
-            key: string;
-            value: string;
-            keyId?: string;
-            valueId?: string;
-        }>;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
@@ -2236,6 +2265,83 @@ export type CreateAgentResponses = {
 };
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type GetAllAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/all';
+};
+
+export type GetAllAgentsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAllAgentsError = GetAllAgentsErrors[keyof GetAllAgentsErrors];
+
+export type GetAllAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    }>;
+};
+
+export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
 export type GetDefaultAgentData = {
     body?: never;
@@ -3669,6 +3775,298 @@ export type UpdateTrustedDataPolicyResponses = {
 };
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
+
+export type StreamChatData = {
+    body: {
+        id?: string;
+        messages: Array<unknown>;
+        trigger?: 'submit-message' | 'regenerate-message';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat';
+};
+
+export type StreamChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
+
+export type GetChatConversationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations';
+};
+
+export type GetChatConversationsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatConversationsError = GetChatConversationsErrors[keyof GetChatConversationsErrors];
+
+export type GetChatConversationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];
+
+export type CreateChatConversationData = {
+    body?: {
+        title?: string | null;
+        selectedModel?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations';
+};
+
+export type CreateChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateChatConversationError = CreateChatConversationErrors[keyof CreateChatConversationErrors];
+
+export type CreateChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatConversationResponse = CreateChatConversationResponses[keyof CreateChatConversationResponses];
+
+export type DeleteChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type DeleteChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteChatConversationError = DeleteChatConversationErrors[keyof DeleteChatConversationErrors];
+
+export type DeleteChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatConversationResponse = DeleteChatConversationResponses[keyof DeleteChatConversationResponses];
+
+export type GetChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type GetChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatConversationError = GetChatConversationErrors[keyof GetChatConversationErrors];
+
+export type GetChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        messages: Array<unknown>;
+    };
+};
+
+export type GetChatConversationResponse = GetChatConversationResponses[keyof GetChatConversationResponses];
+
+export type UpdateChatConversationData = {
+    body?: {
+        title?: string | null;
+        selectedModel?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type UpdateChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateChatConversationError = UpdateChatConversationErrors[keyof UpdateChatConversationErrors];
+
+export type UpdateChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type GetChatMcpToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/mcp-tools';
+};
+
+export type GetChatMcpToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatMcpToolsError = GetChatMcpToolsErrors[keyof GetChatMcpToolsErrors];
+
+export type GetChatMcpToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        description?: string;
+        inputSchema: unknown;
+    }>;
+};
+
+export type GetChatMcpToolsResponse = GetChatMcpToolsResponses[keyof GetChatMcpToolsResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;

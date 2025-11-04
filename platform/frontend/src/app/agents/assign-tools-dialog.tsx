@@ -27,7 +27,7 @@ import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTools } from "@/lib/tool.query";
 
 interface AssignToolsDialogProps {
-  agent: archestraApiTypes.GetAgentsResponses["200"][number];
+  agent: archestraApiTypes.GetAllAgentsResponses["200"][number];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

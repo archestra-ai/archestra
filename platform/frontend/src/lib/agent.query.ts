@@ -10,19 +10,51 @@ const {
   createAgent,
   deleteAgent,
   getAgents,
+  getAllAgents,
   getDefaultAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
 } = archestraApiSdk;
 
+// For backward compatibility - returns all agents as an array
 export function useAgents(params?: {
-  initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
 }) {
   return useSuspenseQuery({
-    queryKey: ["agents"],
-    queryFn: async () => (await getAgents()).data ?? null,
+    queryKey: ["agents", "all"],
+    queryFn: async () => {
+      const response = await getAllAgents();
+      return response.data ?? [];
+    },
     initialData: params?.initialData,
+  });
+}
+
+// New paginated hook for the agents page
+export function useAgentsPaginated(params?: {
+  limit?: number;
+  offset?: number;
+  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
+  sortDirection?: "asc" | "desc";
+  name?: string;
+}) {
+  const { limit, offset, sortBy, sortDirection, name } = params || {};
+
+  return useSuspenseQuery({
+    queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
+    queryFn: async () =>
+      (
+        await getAgents({
+          query: {
+            limit,
+            offset,
+            sortBy,
+            sortDirection,
+            name,
+          },
+        })
+      ).data ?? null,
   });
 }
 

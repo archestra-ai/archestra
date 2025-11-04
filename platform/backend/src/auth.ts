@@ -12,7 +12,6 @@ import logger from "@/logging";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
-  production,
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
 
@@ -91,8 +90,36 @@ export const auth = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: production, // Only use secure cookies in production (HTTPS required)
-      sameSite: production ? "none" : "lax", // "none" required for cross-domain in production with HTTPS
+      /**
+       * Cookie security configuration for cross-browser compatibility
+       *
+       * PROBLEM: Older Safari/WebKit versions (< 13.1) have strict cookie handling policies
+       * that differ from Chromium browsers, particularly around:
+       * - Third-party cookie access and cross-site request handling
+       * - Session persistence across page loads and browser restarts
+       * - Cookie expiration and storage mechanisms
+       *
+       * SOLUTION: Use `secure: true` and `sameSite: "none"` for all environments
+       *
+       * Why this works:
+       * 1. `secure: true` - Works on localhost in modern browsers (Chrome 76+, Firefox 75+, Safari 14+)
+       *    and is required when using `sameSite: "none"`
+       * 2. `sameSite: "none"` - Better cross-origin compatibility, especially important for:
+       *    - Older Safari versions that need explicit permission for cross-site cookies
+       *    - iframe embedding scenarios and cross-origin authentication flows
+       *    - Consistent behavior across different deployment scenarios
+       *
+       * Note: Better Auth docs mention `sameSite: "lax"` as default for CSRF protection,
+       * but this causes session persistence issues in older Safari versions where
+       * cookies may not be properly restored after browser restarts or storage state changes.
+       *
+       * References:
+       * - https://www.better-auth.com/docs/reference/security#csrf-protection
+       * - https://github.com/microsoft/playwright/issues/20301#issuecomment-1403989922 and https://github.com/microsoft/playwright/issues/35712#issuecomment-2825008445 (WebKit storageState issues)
+       * - Safari cookie policies: https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/
+       */
+      secure: true,
+      sameSite: "none",
     },
   },
 

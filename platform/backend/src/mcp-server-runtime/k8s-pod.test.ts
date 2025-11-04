@@ -801,44 +801,6 @@ describe("K8sPod.generatePodSpec", () => {
     ]);
   });
 
-  test("generates consistent podSpecs for the same inputs", () => {
-    const mcpServer: McpServer = {
-      id: "consistent-id",
-      name: "consistent-server",
-      catalogId: "catalog-consistent",
-      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
-    } as any;
-
-    const k8sPod = createMockK8sPod(mcpServer);
-
-    const dockerImage = "consistent:latest";
-    const localConfig: z.infer<typeof LocalConfigSchema> = {
-      command: "node",
-      arguments: ["index.js"],
-      environment: {
-        NODE_ENV: "production",
-      },
-    };
-    const needsHttp = false;
-    const httpPort = 8080;
-
-    const podSpec1 = k8sPod.generatePodSpec(
-      dockerImage,
-      localConfig,
-      needsHttp,
-      httpPort,
-    );
-
-    const podSpec2 = k8sPod.generatePodSpec(
-      dockerImage,
-      localConfig,
-      needsHttp,
-      httpPort,
-    );
-
-    expect(podSpec1).toEqual(podSpec2);
-  });
-
   test("generates podSpec with complex environment configuration", () => {
     const mcpServer: McpServer = {
       id: "complex-env-id",

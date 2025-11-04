@@ -268,14 +268,16 @@ export default class K8sPod {
               name: "mcp-server",
               image: dockerImage,
               env: K8sPod.createPodEnvFromConfig(catalogItem.localConfig),
-              // Use the command and arguments from local config if provided
-              // If not provided, Kubernetes will use the Docker image's default CMD
+              /**
+               * Use the command from local config if provided
+               * If not provided, Kubernetes will use the Docker image's default CMD
+               */
               ...(catalogItem.localConfig.command
                 ? {
                     command: [catalogItem.localConfig.command],
-                    args: catalogItem.localConfig.arguments || [],
                   }
                 : {}),
+              args: catalogItem.localConfig.arguments || [],
               // For stdio-based MCP servers, we use stdin/stdout
               stdin: true,
               tty: false,

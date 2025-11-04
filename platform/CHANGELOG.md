@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.0.30](https://github.com/archestra-ai/archestra/compare/platform-v0.0.29...platform-v0.0.30) (2025-11-04)
+
+
+### Features
+
+* agents search, sorting, pagination ([#937](https://github.com/archestra-ai/archestra/issues/937)) ([b099eb7](https://github.com/archestra-ai/archestra/commit/b099eb7e510d67f6c686ce0121b702697462cb1f))
+
+
+### Bug Fixes
+
+* easter egg + simplify `DATABASE_URL` logic in `platform/Dockerfile` ([#947](https://github.com/archestra-ai/archestra/issues/947)) ([ec77224](https://github.com/archestra-ai/archestra/commit/ec77224e66ab3204d1b1cfecacad4b166a303e1c))
+* ensure `K8sPod.slugifyMcpServerName` generates valid Kubernetes DNS subdomain names ([#950](https://github.com/archestra-ai/archestra/issues/950)) ([60a20f9](https://github.com/archestra-ai/archestra/commit/60a20f9018c49f9e12a54a253815cb091bcde0a5))
+* environment variable bug in MCP server dialog creation ([#946](https://github.com/archestra-ai/archestra/issues/946)) ([ba50fba](https://github.com/archestra-ai/archestra/commit/ba50fba90743a556ff06f0c5232e2f56ee28dd37))
+* show "No teams available" instead of "All teams are already assigned" when no teams exist ([#945](https://github.com/archestra-ai/archestra/issues/945)) ([97fb7bf](https://github.com/archestra-ai/archestra/commit/97fb7bfa8439acc0d0430ac6c21a578551292973))
+* ui vertical scroll cut-off in add mcp server dialog ([#938](https://github.com/archestra-ai/archestra/issues/938)) ([a91b576](https://github.com/archestra-ai/archestra/commit/a91b5768bdbeadc40e77bcf89f448ee02b3ac9e4))
+
+
+### Dependencies
+
+* **platform:** bump react-syntax-highlighter from 15.6.6 to 16.1.0 in /platform ([#941](https://github.com/archestra-ai/archestra/issues/941)) ([f39ba42](https://github.com/archestra-ai/archestra/commit/f39ba4265f9e559520af1fcf3ae626ff2d74f6ab))
+* **platform:** bump the platform-dependencies group in /platform with 24 updates ([#940](https://github.com/archestra-ai/archestra/issues/940)) ([1f651b5](https://github.com/archestra-ai/archestra/commit/1f651b5619aaa35e13c53faada2bcfd84d37fc57))
+
 ## [0.0.29](https://github.com/archestra-ai/archestra/compare/platform-v0.0.28...platform-v0.0.29) (2025-11-03)
 
 

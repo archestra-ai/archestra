@@ -108,6 +108,16 @@ COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 
 # Create base supervisord configuration (without postgres)
+#
+# Important notes about supervisord environment variable handling:
+# - Subprocesses automatically inherit ALL environment variables from the shell that starts supervisord
+#   See: https://supervisord.org/subprocess.html#subprocess-environment
+# - You ONLY need to explicitly set environment variables in the config when:
+#   1. Using placeholder substitution (e.g., DATABASE_URL="placeholder" that gets replaced via sed)
+#   2. Mapping ENV variables to different names (e.g., ARCHESTRA_* -> NEXT_PUBLIC_*)
+#   3. Setting hardcoded values not in ENV (e.g., HOSTNAME="0.0.0.0")
+# - All ENV variables declared in the Dockerfile are automatically available to all programs
+#   See: https://supervisord.org/configuration.html#supervisord-section-values
 RUN cat > /etc/supervisord.conf <<'EOF'
 [supervisord]
 nodaemon=true
@@ -125,7 +135,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",ARCHESTRA_OPENAI_BASE_URL="%(ENV_ARCHESTRA_OPENAI_BASE_URL)s",ARCHESTRA_ANTHROPIC_BASE_URL="%(ENV_ARCHESTRA_ANTHROPIC_BASE_URL)s",ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="%(ENV_ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER)s",ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="%(ENV_ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE)s",ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="%(ENV_ARCHESTRA_ORCHESTRATOR_KUBECONFIG)s",ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="%(ENV_ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT)s",ARCHESTRA_LOGGING_LEVEL="%(ENV_ARCHESTRA_LOGGING_LEVEL)s",ARCHESTRA_VERSION="%(ENV_ARCHESTRA_VERSION)s",ARCHESTRA_FRONTEND_URL="%(ENV_ARCHESTRA_FRONTEND_URL)s",ARCHESTRA_AUTH_COOKIE_DOMAIN="%(ENV_ARCHESTRA_AUTH_COOKIE_DOMAIN)s"
+# DATABASE_URL is set to a placeholder here and replaced via sed in docker-entrypoint.sh
+# All other environment variables (NODE_ENV, ARCHESTRA_*, etc.) are inherited automatically
+environment=DATABASE_URL="placeholder"
 
 [program:frontend]
 directory=/app/frontend
@@ -137,7 +149,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s"
+# HOSTNAME is a hardcoded value, and NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
+# All other environment variables (NODE_ENV, etc.) are inherited automatically
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)

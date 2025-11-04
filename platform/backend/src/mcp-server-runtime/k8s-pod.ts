@@ -312,16 +312,14 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      const podSpec = this.generatePodSpec(
-        dockerImage,
-        catalogItem.localConfig,
-        needsHttp,
-        httpPort,
-      );
-
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
-        body: podSpec,
+        body: this.generatePodSpec(
+          dockerImage,
+          catalogItem.localConfig,
+          needsHttp,
+          httpPort,
+        ),
       });
 
       logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);

@@ -71,8 +71,13 @@ export default class K8sPod {
 
   /**
    * Create environment variables for the pod
+   *
+   * This method processes environment variables from the local config and ensures
+   * that values are properly formatted. It strips surrounding quotes (both single
+   * and double) from values, as they are often used as delimiters in the UI but
+   * should not be part of the actual environment variable value.
    */
-  private createPodEnvFromConfig(
+  static createPodEnvFromConfig(
     localConfig?: z.infer<typeof LocalConfigSchema>,
   ): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
@@ -80,9 +85,23 @@ export default class K8sPod {
     // Add environment variables from local config
     if (localConfig?.environment) {
       Object.entries(localConfig.environment).forEach(([key, value]) => {
+        let processedValue = String(value);
+
+        // Strip surrounding quotes (both single and double)
+        // Users may enter values like: API_KEY='my value' or API_KEY="my value"
+        // We want to extract the actual value without the quotes
+        // Only strip if the value has length > 1 to avoid stripping single quote chars
+        if (
+          processedValue.length > 1 &&
+          ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
+            (processedValue.startsWith('"') && processedValue.endsWith('"')))
+        ) {
+          processedValue = processedValue.slice(1, -1);
+        }
+
         env.push({
           name: key,
-          value: String(value),
+          value: processedValue,
         });
       });
     }
@@ -211,7 +230,7 @@ export default class K8sPod {
             {
               name: "mcp-server",
               image: dockerImage,
-              env: this.createPodEnvFromConfig(catalogItem.localConfig),
+              env: K8sPod.createPodEnvFromConfig(catalogItem.localConfig),
               // Use the command and arguments from local config if provided
               // If not provided, Kubernetes will use the Docker image's default CMD
               ...(catalogItem.localConfig.command

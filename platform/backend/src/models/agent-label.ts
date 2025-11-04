@@ -204,6 +204,38 @@ class AgentLabelModel {
     const values = await db.select().from(schema.labelValueTable);
     return values.map((v) => v.value);
   }
+
+  /**
+   * Get all available label values for a specific key
+   */
+  static async getValuesByKey(key: string): Promise<string[]> {
+    // Find the key ID
+    const [keyRecord] = await db
+      .select()
+      .from(schema.labelKeyTable)
+      .where(eq(schema.labelKeyTable.key, key))
+      .limit(1);
+
+    if (!keyRecord) {
+      return [];
+    }
+
+    // Get all values associated with this key
+    const values = await db
+      .select({
+        value: schema.labelValueTable.value,
+      })
+      .from(schema.agentLabelTable)
+      .innerJoin(
+        schema.labelValueTable,
+        eq(schema.agentLabelTable.valueId, schema.labelValueTable.id),
+      )
+      .where(eq(schema.agentLabelTable.keyId, keyRecord.id))
+      .groupBy(schema.labelValueTable.value)
+      .orderBy(asc(schema.labelValueTable.value));
+
+    return values.map((v) => v.value);
+  }
 }
 
 export default AgentLabelModel;

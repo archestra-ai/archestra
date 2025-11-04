@@ -1,11 +1,12 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useLabelValues } from "@/lib/agent.query";
 
 export interface AgentLabel {
   key: string;
@@ -21,14 +22,22 @@ interface AgentLabelsProps {
   availableValues?: string[];
 }
 
-export function AgentLabels({
-  labels,
-  onLabelsChange,
-  availableKeys = [],
-  availableValues = [],
-}: AgentLabelsProps) {
+export interface AgentLabelsRef {
+  saveUnsavedLabel: () => boolean;
+}
+
+export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
+  function AgentLabels(
+    { labels, onLabelsChange, availableKeys = [], availableValues = [] },
+    ref,
+  ) {
   const [newLabelKey, setNewLabelKey] = useState("");
   const [newLabelValue, setNewLabelValue] = useState("");
+
+  // Fetch values for the current key (only if key is not empty)
+  const { data: valuesForKey = [] } = useLabelValues({
+    key: newLabelKey.trim() || undefined,
+  });
 
   const handleAddLabel = useCallback(() => {
     const key = newLabelKey.trim();
@@ -71,6 +80,35 @@ export function AgentLabels({
     },
     [handleAddLabel],
   );
+
+  // Expose method to save unsaved label
+  useImperativeHandle(ref, () => ({
+    saveUnsavedLabel: () => {
+      const key = newLabelKey.trim();
+      const value = newLabelValue.trim();
+
+      if (!key || !value) {
+        return false;
+      }
+
+      // Check if key already exists
+      const existingLabelIndex = labels.findIndex((label) => label.key === key);
+
+      if (existingLabelIndex >= 0) {
+        // Update existing label
+        const updatedLabels = [...labels];
+        updatedLabels[existingLabelIndex] = { key, value };
+        onLabelsChange(updatedLabels);
+      } else {
+        // Add new label
+        onLabelsChange([...labels, { key, value }]);
+      }
+
+      setNewLabelKey("");
+      setNewLabelValue("");
+      return true;
+    },
+  }));
 
   return (
     <div className="grid gap-4">
@@ -116,7 +154,7 @@ export function AgentLabels({
             className="w-full"
           />
           <datalist id="label-values-list">
-            {availableValues.map((value) => (
+            {valuesForKey.map((value) => (
               <option key={value} value={value} />
             ))}
           </datalist>
@@ -159,4 +197,5 @@ export function AgentLabels({
       )}
     </div>
   );
-}
+  },
+);

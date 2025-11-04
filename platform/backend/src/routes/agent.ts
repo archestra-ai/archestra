@@ -414,6 +414,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelValues,
         description: "Get all available label values",
         tags: ["Agents"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
         response: {
           200: z.array(z.string()),
           401: ErrorResponseSchema,
@@ -434,7 +437,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const values = await AgentLabelModel.getAllValues();
+        const { key } = request.query;
+        const values = key
+          ? await AgentLabelModel.getValuesByKey(key)
+          : await AgentLabelModel.getAllValues();
         return reply.send(values);
       } catch (error) {
         fastify.log.error(error);

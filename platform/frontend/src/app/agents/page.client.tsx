@@ -16,10 +16,14 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
+import {
+  type AgentLabel,
+  AgentLabels,
+  type AgentLabelsRef,
+} from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -627,6 +631,7 @@ function CreateAgentDialog({
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -664,6 +669,9 @@ function CreateAgentDialog({
         toast.error("Please enter an agent name");
         return;
       }
+
+      // Save any unsaved label before submitting
+      agentLabelsRef.current?.saveUnsavedLabel();
 
       try {
         const agent = await createAgent.mutateAsync({
@@ -779,6 +787,7 @@ function CreateAgentDialog({
                 </div>
 
                 <AgentLabels
+                  ref={agentLabelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
@@ -851,6 +860,7 @@ function EditAgentDialog({
   const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -876,6 +886,9 @@ function EditAgentDialog({
         toast.error("Please enter an agent name");
         return;
       }
+
+      // Save any unsaved label before submitting
+      agentLabelsRef.current?.saveUnsavedLabel();
 
       try {
         await updateAgent.mutateAsync({
@@ -992,6 +1005,7 @@ function EditAgentDialog({
             </div>
 
             <AgentLabels
+              ref={agentLabelsRef}
               labels={labels}
               onLabelsChange={setLabels}
               availableKeys={availableKeys}

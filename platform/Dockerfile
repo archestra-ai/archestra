@@ -47,12 +47,18 @@ ARG ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=""
 ARG ARCHESTRA_EASTER_EGG_VIDEO_URL=""
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
-ENV ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
+ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
+ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
 
 ENV NODE_ENV=production
 ENV ARCHESTRA_AUTH_SECRET=""
+
+# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
+# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
+ENV NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=${ARCHESTRA_API_BASE_URL}
+
 ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
 ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -64,7 +70,6 @@ ENV ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="default"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 ENV ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
 ENV ARCHESTRA_LOGGING_LEVEL="info"
-
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \
@@ -140,7 +145,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL)s"
 EOF
 
 # Create initialization script
@@ -192,15 +197,9 @@ fi
 # Update supervisord config with actual environment variables
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf
 
-# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
-# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
-# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
-sed -i "s|ARCHESTRA_API_BASE_URL=\"[^\"]*\"|ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
-sed -i "s|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"[^\"]*\"|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
-
 # Propagate analytics setting to frontend (enabled by default, set to "disabled" to opt-out)
 if [ -n "$ARCHESTRA_ANALYTICS" ]; then
-    sed -i "s|environment=\(.*\)|environment=\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
+  sed -i "s|environment=\(.*\)|environment=\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
 fi
 
 # Start supervisord

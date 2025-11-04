@@ -64,7 +64,7 @@ export function McpConnectionInstructions({
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">MCP Gateway URL:</p>
         <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-          <CodeText className="text-sm">{mcpUrl}</CodeText>
+          <CodeText className="text-sm break-all">{mcpUrl}</CodeText>
           <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
             {copiedUrl ? (
               <Check className="h-4 w-4 text-green-500" />
@@ -78,7 +78,9 @@ export function McpConnectionInstructions({
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">Authorization Header:</p>
         <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-          <CodeText className="text-sm">Authorization: Bearer {token}</CodeText>
+          <CodeText className="text-sm break-all">
+            Authorization: Bearer {token}
+          </CodeText>
           <Button variant="ghost" size="icon" onClick={handleCopyAuth}>
             {copiedAuth ? (
               <Check className="h-4 w-4 text-green-500" />
@@ -95,8 +97,10 @@ export function McpConnectionInstructions({
         </p>
 
         <div className="bg-muted rounded-md p-3 relative">
-          <pre className="text-xs overflow-x-auto">
-            <code>{mcpConfig}</code>
+          <pre className="text-xs whitespace-pre-wrap break-all">
+            <CodeText className="text-sm whitespace pre-wrap break-all">
+              {mcpConfig}
+            </CodeText>
           </pre>
           <Button
             variant="ghost"

@@ -69,23 +69,7 @@ jobs:
 
       - name: Start platform with docker compose
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
-
-          echo "=== Containers started ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
-
-          echo "=== Waiting for services to initialize (30s) ==="
-          sleep 30
-
-          echo "=== Container status after wait ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
-
-          echo "=== WireMock Container Logs ==="
-          docker logs archestra-platform-test-wiremock
-
-          echo "=== Quick log check for each container ==="
-          docker logs archestra-platform-test --tail 50
+        run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

@@ -45,7 +45,7 @@ pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
-pnpm test:e2e                           # Run e2e tests with Playwright (includes WireMock)
+pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -204,4 +204,4 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logoType, logo
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking
+**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking

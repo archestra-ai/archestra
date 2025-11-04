@@ -68,6 +68,7 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 ```bash
 # Required (ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL)
 ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
+# Note: When using Docker container with external database, internal postgres will be skipped automatically
 
 # Provider API Keys
 OPENAI_API_KEY=your-api-key-here

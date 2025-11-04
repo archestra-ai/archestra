@@ -48,8 +48,15 @@ const TextBlockParamSchema = z.object({
 // const ImageBlockParamSchema = z.any();
 // const DocumentBlockParamSchema = z.any();
 // const SearchResultBlockParamSchema = z.any();
-// const ThinkingBlockParamSchema = z.any();
-// const RedactedThinkingBlockParamSchema = z.any();
+const ThinkingBlockParamSchema = z.object({
+  thinking: z.string(),
+  type: z.enum(["thinking"]),
+  signature: z.string().optional(),
+});
+const RedactedThinkingBlockParamSchema = z.object({
+  data: z.string(),
+  type: z.enum(["redacted_thinking"]),
+});
 const ToolUseBlockParamSchema = z.object({
   id: z.string(),
   input: z.any(),
@@ -84,8 +91,8 @@ const ContentBlockParamSchema = z.union([
   // ImageBlockParamSchema,
   // DocumentBlockParamSchema,
   // SearchResultBlockParamSchema,
-  // ThinkingBlockParamSchema,
-  // RedactedThinkingBlockParamSchema,
+  ThinkingBlockParamSchema,
+  RedactedThinkingBlockParamSchema,
   ToolUseBlockParamSchema,
   ToolResultBlockParamSchema,
   // ServerToolUseBlockParamSchema,

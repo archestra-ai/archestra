@@ -390,6 +390,20 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
+          // Stream content_block_start for thinking blocks immediately
+          if (
+            event.type === "content_block_start" &&
+            event.content_block.type === "thinking"
+          ) {
+            fastify.log.info(
+              { eventType: event.type, index: event.index },
+              "Streaming content_block_start (thinking)",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
+
           // Stream text content immediately
           if (
             event.type === "content_block_delta" &&
@@ -401,12 +415,26 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             accumulatedText += event.delta.text;
           }
 
-          // Stream content_block_stop for text blocks immediately (skip tool blocks)
+          // Stream thinking content immediately
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "thinking_delta"
+          ) {
+            fastify.log.info(
+              { thinkingLength: event.delta.thinking?.length || 0 },
+              "Streaming thinking_delta",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
+
+          // Stream content_block_stop for text/thinking blocks immediately (skip tool blocks)
           if (event.type === "content_block_stop") {
             if (!toolUseBlockIndices.has(event.index)) {
               fastify.log.info(
                 { eventType: event.type, index: event.index },
-                "Streaming content_block_stop (text)",
+                "Streaming content_block_stop (text/thinking)",
               );
               reply.raw.write(
                 `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,

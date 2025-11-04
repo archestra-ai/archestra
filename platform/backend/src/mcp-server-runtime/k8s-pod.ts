@@ -48,11 +48,21 @@ export default class K8sPod {
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
-    this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+    this.podName = K8sPod.constructPodName(mcpServer);
   }
 
   /**
-   * Converts an MCP server name into a valid Kubernetes DNS subdomain name.
+   * Constructs a valid Kubernetes pod name for an MCP server.
+   *
+   * Creates a pod name in the format "mcp-<slugified-name>".
+   */
+  static constructPodName(mcpServer: McpServer): string {
+    const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
+    return `mcp-${slugified}`.substring(0, 253);
+  }
+
+  /**
+   * Ensures a string is RFC 1123 compliant for Kubernetes DNS subdomain names and label values.
    *
    * According to RFC 1123, Kubernetes DNS subdomain names must:
    * - contain no more than 253 characters
@@ -60,15 +70,29 @@ export default class K8sPod {
    * - start with an alphanumeric character
    * - end with an alphanumeric character
    */
-  static slugifyMcpServerName(name: string): string {
-    return name
+  static ensureStringIsRfc1123Compliant(input: string): string {
+    return input
       .toLowerCase()
-      .replace(/ /g, "-")
-      .replace(/[^a-z0-9.-]/g, "")
+      .replace(/\s+/g, "-") // replace any whitespace with hyphens
+      .replace(/[^a-z0-9.-]/g, "") // remove invalid characters
       .replace(/-+/g, "-") // collapse consecutive hyphens
+      .replace(/\.+/g, ".") // collapse consecutive dots
       .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
-      .replace(/[^a-z0-9]+$/, "") // remove trailing non-alphanumeric
-      .substring(0, 253); // limit to 253 characters
+      .replace(/[^a-z0-9]+$/, ""); // remove trailing non-alphanumeric
+  }
+
+  /**
+   * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
+   */
+  static sanitizeMetadataLabels(
+    labels: Record<string, string>,
+  ): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(labels)) {
+      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] =
+        K8sPod.ensureStringIsRfc1123Compliant(value);
+    }
+    return sanitized;
   }
 
   /**
@@ -232,11 +256,11 @@ export default class K8sPod {
       const podSpec: k8s.V1Pod = {
         metadata: {
           name: this.podName,
-          labels: {
+          labels: K8sPod.sanitizeMetadataLabels({
             app: "mcp-server",
             "mcp-server-id": this.mcpServer.id,
             "mcp-server-name": this.mcpServer.name,
-          },
+          }),
         },
         spec: {
           containers: [

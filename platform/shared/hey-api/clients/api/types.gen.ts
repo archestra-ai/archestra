@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -363,7 +363,10 @@ export type GeminiGenerateContentRequestInput = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        role: 'user' | 'model' | 'function';
+        /**
+         * The role of the author of this content.
+         */
+        role: string;
         /**
          * https://ai.google.dev/api/caching#Part
          */
@@ -525,7 +528,7 @@ export type GeminiGenerateContentRequestInput = {
              */
             thoughtSignature?: string;
             inlineData: {
-                mimeType: string;
+                mimeType?: string;
                 data: string;
             };
             /**
@@ -757,7 +760,53 @@ export type GeminiGenerateContentRequestInput = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }>;
+    }> | {
+        functionDeclarations?: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
+            name: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
+        }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval?: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
+    };
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -829,6 +878,110 @@ export type GeminiGenerateContentRequestInput = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
+    config?: {
+        tools?: Array<{
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        }> | {
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        };
+        /**
+         * Tool configuration for any Tool specified in the request.
+         */
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+    };
 };
 
 export type GeminiGenerateContentResponseInput = {
@@ -846,7 +999,10 @@ export type GeminiGenerateContentResponseInput = {
          *
          */
         content: {
-            role: 'user' | 'model' | 'function';
+            /**
+             * The role of the author of this content.
+             */
+            role: string;
             /**
              * https://ai.google.dev/api/caching#Part
              */
@@ -1008,7 +1164,7 @@ export type GeminiGenerateContentResponseInput = {
                  */
                 thoughtSignature?: string;
                 inlineData: {
-                    mimeType: string;
+                    mimeType?: string;
                     data: string;
                 };
                 /**
@@ -1327,6 +1483,10 @@ export type GeminiGenerateContentResponseInput = {
      * The model version used to generate the response.
      */
     modelVersion?: string;
+    /**
+     * The unique response ID.
+     */
+    responseId?: string;
 };
 
 export type AnthropicMessagesRequestInput = {
@@ -1457,7 +1617,10 @@ export type AnthropicMessagesResponseInput = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
@@ -1754,7 +1917,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1819,7 +1982,10 @@ export type GeminiGenerateContentRequest = {
      * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
      */
     contents: Array<{
-        role: 'user' | 'model' | 'function';
+        /**
+         * The role of the author of this content.
+         */
+        role: string;
         /**
          * https://ai.google.dev/api/caching#Part
          */
@@ -1981,7 +2147,7 @@ export type GeminiGenerateContentRequest = {
              */
             thoughtSignature?: string;
             inlineData: {
-                mimeType: string;
+                mimeType?: string;
                 data: string;
             };
             /**
@@ -2213,7 +2379,53 @@ export type GeminiGenerateContentRequest = {
         codeExecution?: unknown;
         googleSearch?: unknown;
         urlContext?: unknown;
-    }>;
+    }> | {
+        functionDeclarations?: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
+            name: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
+        }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval?: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
+    };
     /**
      * Tool configuration for any Tool specified in the request.
      */
@@ -2285,6 +2497,110 @@ export type GeminiGenerateContentRequest = {
      * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
      */
     cachedContent?: string;
+    config?: {
+        tools?: Array<{
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        }> | {
+            functionDeclarations?: Array<{
+                /**
+                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 */
+                name: string;
+                /**
+                 * A brief description of the function.
+                 */
+                description: string;
+                /**
+                 * https://ai.google.dev/api/caching#Behavior
+                 */
+                behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+                /**
+                 * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                parametersJsonSchema?: unknown;
+                response?: unknown;
+                responseJsonSchema?: unknown;
+            }>;
+            /**
+             * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+             */
+            googleSearchRetrieval?: {
+                /**
+                 *
+                 * Specifies the dynamic retrieval configuration for the given source.
+                 *
+                 * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+                 *
+                 */
+                dynamicRetrievalConfig: {
+                    /**
+                     * https://ai.google.dev/api/caching#Mode
+                     */
+                    mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                    dynamicThreshold: number;
+                };
+            };
+            codeExecution?: unknown;
+            googleSearch?: unknown;
+            urlContext?: unknown;
+        };
+        /**
+         * Tool configuration for any Tool specified in the request.
+         */
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+    };
 };
 
 export type GeminiGenerateContentResponse = {
@@ -2302,7 +2618,10 @@ export type GeminiGenerateContentResponse = {
          *
          */
         content: {
-            role: 'user' | 'model' | 'function';
+            /**
+             * The role of the author of this content.
+             */
+            role: string;
             /**
              * https://ai.google.dev/api/caching#Part
              */
@@ -2464,7 +2783,7 @@ export type GeminiGenerateContentResponse = {
                  */
                 thoughtSignature?: string;
                 inlineData: {
-                    mimeType: string;
+                    mimeType?: string;
                     data: string;
                 };
                 /**
@@ -2783,6 +3102,10 @@ export type GeminiGenerateContentResponse = {
      * The model version used to generate the response.
      */
     modelVersion?: string;
+    /**
+     * The unique response ID.
+     */
+    responseId?: string;
 };
 
 export type AnthropicMessagesRequest = {
@@ -2913,7 +3236,10 @@ export type AnthropicMessagesResponse = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type GetHealthData = {
@@ -3038,6 +3364,12 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -3103,6 +3435,12 @@ export type CreateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -3251,6 +3589,12 @@ export type GetDefaultAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -3376,6 +3720,12 @@ export type GetAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -3387,6 +3737,12 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -3454,10 +3810,94 @@ export type UpdateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/keys';
+};
+
+export type GetLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelKeysError = GetLabelKeysErrors[keyof GetLabelKeysErrors];
+
+export type GetLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysResponses];
+
+export type GetLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/values';
+};
+
+export type GetLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
+
+export type GetLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -3498,6 +3938,7 @@ export type GetAllAgentToolsResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        credentialSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -3527,6 +3968,7 @@ export type GetAllAgentToolsResponses = {
             updatedAt: string;
             mcpServerId: string | null;
             mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
         };
     }>;
 };
@@ -3569,7 +4011,9 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: never;
+    body?: {
+        credentialSourceMcpServerId?: string | null;
+    } | null;
     path: {
         agentId: string;
         toolId: string;
@@ -3579,6 +4023,15 @@ export type AssignToolToAgentData = {
 };
 
 export type AssignToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3681,6 +4134,7 @@ export type UpdateAgentToolData = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -3690,6 +4144,15 @@ export type UpdateAgentToolData = {
 };
 
 export type UpdateAgentToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3723,12 +4186,85 @@ export type UpdateAgentToolResponses = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentAvailableTokensData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentIds: string;
+        catalogId?: string;
+    };
+    url: '/api/agents/available-tokens';
+};
+
+export type GetAgentAvailableTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
+
+export type GetAgentAvailableTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        authType: 'personal' | 'team';
+        catalogId: string | null;
+        ownerId: string | null;
+        ownerEmail: string | null;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -3809,7 +4345,7 @@ export type AnthropicMessagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/anthropic/v1/{agentId}/messages';
+    url: '/v1/anthropic/{agentId}/v1/messages';
 };
 
 export type AnthropicMessagesWithAgentErrors = {
@@ -5102,7 +5638,7 @@ export type GetFeaturesResponses = {
 
 export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
-export type PostV1GeminiModelsByModelGenerateContentData = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -5121,10 +5657,10 @@ export type PostV1GeminiModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/models/{model}:generateContent';
+    url: '/v1/gemini/v1beta/models/{model}:generateContent';
 };
 
-export type PostV1GeminiModelsByModelGenerateContentErrors = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -5163,18 +5699,18 @@ export type PostV1GeminiModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
+export type PostV1GeminiV1BetaModelsByModelGenerateContentError = PostV1GeminiV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiModelsByModelGenerateContentResponses = {
+export type PostV1GeminiV1BetaModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
+export type PostV1GeminiV1BetaModelsByModelGenerateContentResponse = PostV1GeminiV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiV1BetaModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -5193,10 +5729,10 @@ export type PostV1GeminiModelsByModelStreamGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -5235,9 +5771,9 @@ export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -5257,10 +5793,10 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
+    url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent';
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -5299,18 +5835,18 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors];
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
     200: GeminiGenerateContentResponse;
 };
 
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses];
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
@@ -5330,10 +5866,10 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
         model: string;
     };
     query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
+    url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent';
 };
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
@@ -5372,7 +5908,7 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
     };
 };
 
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
+export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
 
 export type GetInteractionsData = {
     body?: never;
@@ -5415,6 +5951,9 @@ export type GetInteractionsResponses = {
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -5422,6 +5961,9 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -5429,6 +5971,9 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -5486,6 +6031,9 @@ export type GetInteractionResponses = {
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -5493,6 +6041,9 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -5500,6 +6051,9 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     };
 };
@@ -5533,7 +6087,6 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -5548,9 +6101,20 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -5595,7 +6159,6 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
-        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -5610,9 +6173,20 @@ export type CreateInternalMcpCatalogItemData = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote';
+        serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -5674,7 +6248,6 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -5689,9 +6262,20 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -5815,7 +6399,6 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -5830,9 +6413,20 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -5877,7 +6471,6 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
-        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -5895,6 +6488,17 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -5967,7 +6571,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -5982,9 +6585,20 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command?: string;
+            arguments?: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -6026,6 +6640,341 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetLimitsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+    };
+    url: '/api/limits';
+};
+
+export type GetLimitsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
+
+export type GetLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
+
+export type CreateLimitData = {
+    body: {
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/limits';
+};
+
+export type CreateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
+
+export type CreateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
+
+export type DeleteLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
+
+export type DeleteLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
+
+export type GetLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type GetLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
+
+export type GetLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
+
+export type UpdateLimitData = {
+    body?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue?: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+        model?: string | null;
+        lastCleanup?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
+
+export type UpdateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsageTokensIn: number;
+        currentUsageTokensOut: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        model: string | null;
+        lastCleanup: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
 export type GetV1McpData = {
     body?: never;
@@ -6159,6 +7108,21 @@ export type GetMcpServerInstallationRequestsResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6216,6 +7180,21 @@ export type CreateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
     };
     path?: never;
@@ -6300,6 +7279,21 @@ export type CreateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6474,6 +7468,21 @@ export type GetMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6531,6 +7540,21 @@ export type UpdateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse?: string | null;
         reviewedBy?: string | null;
@@ -6636,6 +7660,21 @@ export type UpdateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6751,6 +7790,21 @@ export type ApproveMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6866,6 +7920,21 @@ export type DeclineMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -6981,6 +8050,21 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command?: string;
+                arguments?: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -7002,7 +8086,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        authType?: 'personal' | 'team';
+    };
     url: '/api/mcp_server';
 };
 
@@ -7036,12 +8122,28 @@ export type GetMcpServersResponses = {
     200: Array<{
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     }>;
 };
 
@@ -7050,10 +8152,15 @@ export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersRe
 export type InstallMcpServerData = {
     body: {
         name: string;
-        catalogId?: string | null;
+        catalogId: string;
         secretId?: string;
+        ownerId?: string | null;
+        authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
+        localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError?: string | null;
         teams?: Array<string>;
+        userId?: string;
         agentIds?: Array<string>;
         accessToken?: string;
     };
@@ -7067,6 +8174,24 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -7092,12 +8217,28 @@ export type InstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -7194,16 +8335,76 @@ export type GetMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type GetMcpServerInstallationStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/installation-status';
+};
+
+export type GetMcpServerInstallationStatusErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerInstallationStatusError = GetMcpServerInstallationStatusErrors[keyof GetMcpServerInstallationStatusErrors];
+
+export type GetMcpServerInstallationStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
+        localInstallationError: string | null;
+    };
+};
+
+export type GetMcpServerInstallationStatusResponse = GetMcpServerInstallationStatusResponses[keyof GetMcpServerInstallationStatusResponses];
 
 export type GetMcpServerToolsData = {
     body?: never;
@@ -7258,6 +8459,438 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
+export type GetMcpServerLogsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        lines?: number;
+        follow?: boolean;
+    };
+    url: '/api/mcp_server/{id}/logs';
+};
+
+export type GetMcpServerLogsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerLogsError = GetMcpServerLogsErrors[keyof GetMcpServerLogsErrors];
+
+export type GetMcpServerLogsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        logs: string;
+        containerName: string;
+        command: string;
+        namespace: string;
+    };
+};
+
+export type GetMcpServerLogsResponse = GetMcpServerLogsResponses[keyof GetMcpServerLogsResponses];
+
+export type RestartMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/restart';
+};
+
+export type RestartMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RestartMcpServerError = RestartMcpServerErrors[keyof RestartMcpServerErrors];
+
+export type RestartMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        message: string;
+    };
+};
+
+export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
+
+export type RevokeUserMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
+};
+
+export type RevokeUserMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
+
+export type RevokeUserMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
+
+export type RevokeAllTeamsMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type RevokeAllTeamsMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
+
+export type RevokeAllTeamsMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
+
+export type GrantTeamMcpServerAccessData = {
+    body: {
+        teamIds: Array<string>;
+        userId?: string;
+    };
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type GrantTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
+
+export type GrantTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
+
+export type RevokeTeamMcpServerAccessData = {
+    body?: never;
+    path: {
+        id: string;
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/team/{teamId}';
+};
+
+export type RevokeTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
+
+export type RevokeTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
+
+export type GetMcpToolCallsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent ID
+         */
+        agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/mcp-tool-calls';
+};
+
+export type GetMcpToolCallsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallsError = GetMcpToolCallsErrors[keyof GetMcpToolCallsErrors];
+
+export type GetMcpToolCallsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            mcpServerName: string;
+            toolCall: {
+                id: string;
+                name: string;
+                arguments: {
+                    [key: string]: unknown;
+                };
+            };
+            toolResult: {
+                id: string;
+                content: unknown;
+                isError: boolean;
+                error?: string;
+            };
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMcpToolCallsResponse = GetMcpToolCallsResponses[keyof GetMcpToolCallsResponses];
+
+export type GetMcpToolCallData = {
+    body?: never;
+    path: {
+        mcpToolCallId: string;
+    };
+    query?: never;
+    url: '/api/mcp-tool-calls/{mcpToolCallId}';
+};
+
+export type GetMcpToolCallErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallError = GetMcpToolCallErrors[keyof GetMcpToolCallErrors];
+
+export type GetMcpToolCallResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        mcpServerName: string;
+        toolCall: {
+            id: string;
+            name: string;
+            arguments: {
+                [key: string]: unknown;
+            };
+        };
+        toolResult: {
+            id: string;
+            content: unknown;
+            isError: boolean;
+            error?: string;
+        };
+        createdAt: string;
+    };
+};
+
+export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
 
 export type InitiateOAuthData = {
     body: {
@@ -8542,6 +10175,308 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTokenPricesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type GetTokenPricesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPricesError = GetTokenPricesErrors[keyof GetTokenPricesErrors];
+
+export type GetTokenPricesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPricesResponses];
+
+export type CreateTokenPriceData = {
+    body: {
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/token-prices';
+};
+
+export type CreateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTokenPriceError = CreateTokenPriceErrors[keyof CreateTokenPriceErrors];
+
+export type CreateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTokenPriceResponse = CreateTokenPriceResponses[keyof CreateTokenPriceResponses];
+
+export type DeleteTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type DeleteTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTokenPriceError = DeleteTokenPriceErrors[keyof DeleteTokenPriceErrors];
+
+export type DeleteTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTokenPriceResponse = DeleteTokenPriceResponses[keyof DeleteTokenPriceResponses];
+
+export type GetTokenPriceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type GetTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTokenPriceError = GetTokenPriceErrors[keyof GetTokenPriceErrors];
+
+export type GetTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceResponses];
+
+export type UpdateTokenPriceData = {
+    body?: {
+        model?: string;
+        pricePerMillionInput?: string;
+        pricePerMillionOutput?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/token-prices/{id}';
+};
+
+export type UpdateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTokenPriceError = UpdateTokenPriceErrors[keyof UpdateTokenPriceErrors];
+
+export type UpdateTokenPriceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        model: string;
+        pricePerMillionInput: string;
+        pricePerMillionOutput: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
 export type GetToolsData = {
     body?: never;

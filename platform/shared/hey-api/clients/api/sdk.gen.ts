@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMcpServerInstallationRequestNoteData, AddMcpServerInstallationRequestNoteErrors, AddMcpServerInstallationRequestNoteResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, ApproveMcpServerInstallationRequestData, ApproveMcpServerInstallationRequestErrors, ApproveMcpServerInstallationRequestResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatConversationData, CreateChatConversationErrors, CreateChatConversationResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateInternalMcpCatalogItemData, CreateInternalMcpCatalogItemErrors, CreateInternalMcpCatalogItemResponses, CreateLimitData, CreateLimitErrors, CreateLimitResponses, CreateMcpServerInstallationRequestData, CreateMcpServerInstallationRequestErrors, CreateMcpServerInstallationRequestResponses, CreateTeamData, CreateTeamErrors, CreateTeamResponses, CreateTokenPriceData, CreateTokenPriceErrors, CreateTokenPriceResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeclineMcpServerInstallationRequestData, DeclineMcpServerInstallationRequestErrors, DeclineMcpServerInstallationRequestResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteChatConversationData, DeleteChatConversationErrors, DeleteChatConversationResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteInternalMcpCatalogItemData, DeleteInternalMcpCatalogItemErrors, DeleteInternalMcpCatalogItemResponses, DeleteLimitData, DeleteLimitErrors, DeleteLimitResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerInstallationRequestData, DeleteMcpServerInstallationRequestErrors, DeleteMcpServerInstallationRequestResponses, DeleteMcpServerResponses, DeleteOrganizationLogoData, DeleteOrganizationLogoErrors, DeleteOrganizationLogoResponses, DeleteTeamData, DeleteTeamErrors, DeleteTeamResponses, DeleteTokenPriceData, DeleteTokenPriceErrors, DeleteTokenPriceResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentAvailableTokensData, GetAgentAvailableTokensErrors, GetAgentAvailableTokensResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentStatisticsData, GetAgentStatisticsErrors, GetAgentStatisticsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetAllAgentsData, GetAllAgentsErrors, GetAllAgentsResponses, GetAllAgentToolsData, GetAllAgentToolsErrors, GetAllAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetChatConversationData, GetChatConversationErrors, GetChatConversationResponses, GetChatConversationsData, GetChatConversationsErrors, GetChatConversationsResponses, GetChatMcpToolsData, GetChatMcpToolsErrors, GetChatMcpToolsResponses, GetDefaultAgentData, GetDefaultAgentErrors, GetDefaultAgentResponses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetInternalMcpCatalogData, GetInternalMcpCatalogErrors, GetInternalMcpCatalogItemData, GetInternalMcpCatalogItemErrors, GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogResponses, GetLabelKeysData, GetLabelKeysErrors, GetLabelKeysResponses, GetLabelValuesData, GetLabelValuesErrors, GetLabelValuesResponses, GetLimitData, GetLimitErrors, GetLimitResponses, GetLimitsData, GetLimitsErrors, GetLimitsResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerInstallationRequestData, GetMcpServerInstallationRequestErrors, GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestsData, GetMcpServerInstallationRequestsErrors, GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationStatusData, GetMcpServerInstallationStatusErrors, GetMcpServerInstallationStatusResponses, GetMcpServerLogsData, GetMcpServerLogsErrors, GetMcpServerLogsResponses, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetMcpServerToolsData, GetMcpServerToolsErrors, GetMcpServerToolsResponses, GetMcpToolCallData, GetMcpToolCallErrors, GetMcpToolCallResponses, GetMcpToolCallsData, GetMcpToolCallsErrors, GetMcpToolCallsResponses, GetModelStatisticsData, GetModelStatisticsErrors, GetModelStatisticsResponses, GetOperatorsData, GetOperatorsResponses, GetOrganizationAppearanceData, GetOrganizationAppearanceErrors, GetOrganizationAppearanceResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetOverviewStatisticsData, GetOverviewStatisticsErrors, GetOverviewStatisticsResponses, GetTeamData, GetTeamErrors, GetTeamMembersData, GetTeamMembersErrors, GetTeamMembersResponses, GetTeamResponses, GetTeamsData, GetTeamsErrors, GetTeamsResponses, GetTeamStatisticsData, GetTeamStatisticsErrors, GetTeamStatisticsResponses, GetTokenPriceData, GetTokenPriceErrors, GetTokenPriceResponses, GetTokenPricesData, GetTokenPricesErrors, GetTokenPricesResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetUnassignedToolsData, GetUnassignedToolsErrors, GetUnassignedToolsResponses, GetV1McpData, GetV1McpErrors, GetV1McpResponses, GrantTeamMcpServerAccessData, GrantTeamMcpServerAccessErrors, GrantTeamMcpServerAccessResponses, HandleOAuthCallbackData, HandleOAuthCallbackErrors, HandleOAuthCallbackResponses, InitiateOAuthData, InitiateOAuthErrors, InitiateOAuthResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostV1GeminiByAgentIdModelsByModelGenerateContentData, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentData, PostV1GeminiModelsByModelGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelStreamGenerateContentData, PostV1GeminiModelsByModelStreamGenerateContentErrors, PostV1McpData, PostV1McpResponses, RemoveTeamMemberData, RemoveTeamMemberErrors, RemoveTeamMemberResponses, RestartMcpServerData, RestartMcpServerErrors, RestartMcpServerResponses, RevokeAllTeamsMcpServerAccessData, RevokeAllTeamsMcpServerAccessErrors, RevokeAllTeamsMcpServerAccessResponses, RevokeTeamMcpServerAccessData, RevokeTeamMcpServerAccessErrors, RevokeTeamMcpServerAccessResponses, RevokeUserMcpServerAccessData, RevokeUserMcpServerAccessErrors, RevokeUserMcpServerAccessResponses, StreamChatData, StreamChatErrors, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateAgentToolData, UpdateAgentToolErrors, UpdateAgentToolResponses, UpdateChatConversationData, UpdateChatConversationErrors, UpdateChatConversationResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateInternalMcpCatalogItemData, UpdateInternalMcpCatalogItemErrors, UpdateInternalMcpCatalogItemResponses, UpdateLimitData, UpdateLimitErrors, UpdateLimitResponses, UpdateMcpServerInstallationRequestData, UpdateMcpServerInstallationRequestErrors, UpdateMcpServerInstallationRequestResponses, UpdateOrganizationAppearanceData, UpdateOrganizationAppearanceErrors, UpdateOrganizationAppearanceResponses, UpdateOrganizationCleanupIntervalData, UpdateOrganizationCleanupIntervalErrors, UpdateOrganizationCleanupIntervalResponses, UpdateTeamData, UpdateTeamErrors, UpdateTeamResponses, UpdateTokenPriceData, UpdateTokenPriceErrors, UpdateTokenPriceResponses, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses, UploadOrganizationLogoData, UploadOrganizationLogoErrors, UploadOrganizationLogoResponses } from './types.gen';
+import type { AddMcpServerInstallationRequestNoteData, AddMcpServerInstallationRequestNoteErrors, AddMcpServerInstallationRequestNoteResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, ApproveMcpServerInstallationRequestData, ApproveMcpServerInstallationRequestErrors, ApproveMcpServerInstallationRequestResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatConversationData, CreateChatConversationErrors, CreateChatConversationResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateInternalMcpCatalogItemData, CreateInternalMcpCatalogItemErrors, CreateInternalMcpCatalogItemResponses, CreateLimitData, CreateLimitErrors, CreateLimitResponses, CreateMcpServerInstallationRequestData, CreateMcpServerInstallationRequestErrors, CreateMcpServerInstallationRequestResponses, CreateTeamData, CreateTeamErrors, CreateTeamResponses, CreateTokenPriceData, CreateTokenPriceErrors, CreateTokenPriceResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeclineMcpServerInstallationRequestData, DeclineMcpServerInstallationRequestErrors, DeclineMcpServerInstallationRequestResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteChatConversationData, DeleteChatConversationErrors, DeleteChatConversationResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteInternalMcpCatalogItemData, DeleteInternalMcpCatalogItemErrors, DeleteInternalMcpCatalogItemResponses, DeleteLimitData, DeleteLimitErrors, DeleteLimitResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerInstallationRequestData, DeleteMcpServerInstallationRequestErrors, DeleteMcpServerInstallationRequestResponses, DeleteMcpServerResponses, DeleteOrganizationLogoData, DeleteOrganizationLogoErrors, DeleteOrganizationLogoResponses, DeleteTeamData, DeleteTeamErrors, DeleteTeamResponses, DeleteTokenPriceData, DeleteTokenPriceErrors, DeleteTokenPriceResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentAvailableTokensData, GetAgentAvailableTokensErrors, GetAgentAvailableTokensResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentStatisticsData, GetAgentStatisticsErrors, GetAgentStatisticsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetAllAgentsData, GetAllAgentsErrors, GetAllAgentsResponses, GetAllAgentToolsData, GetAllAgentToolsErrors, GetAllAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetChatConversationData, GetChatConversationErrors, GetChatConversationResponses, GetChatConversationsData, GetChatConversationsErrors, GetChatConversationsResponses, GetChatMcpToolsData, GetChatMcpToolsErrors, GetChatMcpToolsResponses, GetDefaultAgentData, GetDefaultAgentErrors, GetDefaultAgentResponses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetInternalMcpCatalogData, GetInternalMcpCatalogErrors, GetInternalMcpCatalogItemData, GetInternalMcpCatalogItemErrors, GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogResponses, GetLabelKeysData, GetLabelKeysErrors, GetLabelKeysResponses, GetLabelValuesData, GetLabelValuesErrors, GetLabelValuesResponses, GetLimitData, GetLimitErrors, GetLimitResponses, GetLimitsData, GetLimitsErrors, GetLimitsResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerInstallationRequestData, GetMcpServerInstallationRequestErrors, GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestsData, GetMcpServerInstallationRequestsErrors, GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationStatusData, GetMcpServerInstallationStatusErrors, GetMcpServerInstallationStatusResponses, GetMcpServerLogsData, GetMcpServerLogsErrors, GetMcpServerLogsResponses, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetMcpServerToolsData, GetMcpServerToolsErrors, GetMcpServerToolsResponses, GetMcpToolCallData, GetMcpToolCallErrors, GetMcpToolCallResponses, GetMcpToolCallsData, GetMcpToolCallsErrors, GetMcpToolCallsResponses, GetModelStatisticsData, GetModelStatisticsErrors, GetModelStatisticsResponses, GetOperatorsData, GetOperatorsResponses, GetOrganizationAppearanceData, GetOrganizationAppearanceErrors, GetOrganizationAppearanceResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetOverviewStatisticsData, GetOverviewStatisticsErrors, GetOverviewStatisticsResponses, GetTeamData, GetTeamErrors, GetTeamMembersData, GetTeamMembersErrors, GetTeamMembersResponses, GetTeamResponses, GetTeamsData, GetTeamsErrors, GetTeamsResponses, GetTeamStatisticsData, GetTeamStatisticsErrors, GetTeamStatisticsResponses, GetTokenPriceData, GetTokenPriceErrors, GetTokenPriceResponses, GetTokenPricesData, GetTokenPricesErrors, GetTokenPricesResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetUnassignedToolsData, GetUnassignedToolsErrors, GetUnassignedToolsResponses, GetV1McpData, GetV1McpErrors, GetV1McpResponses, GrantTeamMcpServerAccessData, GrantTeamMcpServerAccessErrors, GrantTeamMcpServerAccessResponses, HandleOAuthCallbackData, HandleOAuthCallbackErrors, HandleOAuthCallbackResponses, InitiateOAuthData, InitiateOAuthErrors, InitiateOAuthResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors, PostV1GeminiV1BetaModelsByModelGenerateContentData, PostV1GeminiV1BetaModelsByModelGenerateContentErrors, PostV1GeminiV1BetaModelsByModelGenerateContentResponses, PostV1GeminiV1BetaModelsByModelStreamGenerateContentData, PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors, PostV1McpData, PostV1McpResponses, RemoveTeamMemberData, RemoveTeamMemberErrors, RemoveTeamMemberResponses, RestartMcpServerData, RestartMcpServerErrors, RestartMcpServerResponses, RevokeAllTeamsMcpServerAccessData, RevokeAllTeamsMcpServerAccessErrors, RevokeAllTeamsMcpServerAccessResponses, RevokeTeamMcpServerAccessData, RevokeTeamMcpServerAccessErrors, RevokeTeamMcpServerAccessResponses, RevokeUserMcpServerAccessData, RevokeUserMcpServerAccessErrors, RevokeUserMcpServerAccessResponses, StreamChatData, StreamChatErrors, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateAgentToolData, UpdateAgentToolErrors, UpdateAgentToolResponses, UpdateChatConversationData, UpdateChatConversationErrors, UpdateChatConversationResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateInternalMcpCatalogItemData, UpdateInternalMcpCatalogItemErrors, UpdateInternalMcpCatalogItemResponses, UpdateLimitData, UpdateLimitErrors, UpdateLimitResponses, UpdateMcpServerInstallationRequestData, UpdateMcpServerInstallationRequestErrors, UpdateMcpServerInstallationRequestResponses, UpdateOrganizationAppearanceData, UpdateOrganizationAppearanceErrors, UpdateOrganizationAppearanceResponses, UpdateOrganizationCleanupIntervalData, UpdateOrganizationCleanupIntervalErrors, UpdateOrganizationCleanupIntervalResponses, UpdateTeamData, UpdateTeamErrors, UpdateTeamResponses, UpdateTokenPriceData, UpdateTokenPriceErrors, UpdateTokenPriceResponses, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses, UploadOrganizationLogoData, UploadOrganizationLogoErrors, UploadOrganizationLogoResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -104,6 +104,26 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 };
 
 /**
+ * Get all available label keys
+ */
+export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({
+        url: '/api/agents/labels/keys',
+        ...options
+    });
+};
+
+/**
+ * Get all available label values
+ */
+export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({
+        url: '/api/agents/labels/values',
+        ...options
+    });
+};
+
+/**
  * Get all agent-tool relationships with details
  */
 export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => {
@@ -129,7 +149,11 @@ export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(opti
 export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => {
     return (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
         url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };
 
@@ -158,6 +182,16 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 };
 
 /**
+ * Get MCP servers that can be used as credential sources for the specified agents' tools
+ */
+export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options: Options<GetAgentAvailableTokensData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({
+        url: '/api/agents/available-tokens',
+        ...options
+    });
+};
+
+/**
  * Send a message to Anthropic using the default agent
  */
 export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => {
@@ -172,11 +206,11 @@ export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean =
 };
 
 /**
- * Send a message to Anthropic using a specific agent
+ * Send a message to Anthropic using a specific agent (n8n URL format)
  */
 export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => {
     return (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
-        url: '/v1/anthropic/v1/{agentId}/messages',
+        url: '/v1/anthropic/{agentId}/v1/messages',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -520,9 +554,9 @@ export const getFeatures = <ThrowOnError extends boolean = false>(options?: Opti
  *
  * Generate content using Gemini (default agent)
  */
-export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:generateContent',
+export const postV1GeminiV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1GeminiV1BetaModelsByModelGenerateContentResponses, PostV1GeminiV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/v1beta/models/{model}:generateContent',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -536,9 +570,9 @@ export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends bo
  *
  * Stream generated content using Gemini (default agent)
  */
-export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:streamGenerateContent',
+export const postV1GeminiV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<unknown, PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -552,9 +586,9 @@ export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError exte
  *
  * Generate content using Gemini with specific agent
  */
-export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:generateContent',
+export const postV1GeminiByAgentIdV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -568,9 +602,9 @@ export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError e
  *
  * Stream generated content using Gemini with specific agent
  */
-export const postV1GeminiByAgentIdModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent',
+export const postV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<unknown, PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -649,6 +683,64 @@ export const getInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(
 export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateInternalMcpCatalogItemData, ThrowOnError>) => {
     return (options.client ?? client).put<UpdateInternalMcpCatalogItemResponses, UpdateInternalMcpCatalogItemErrors, ThrowOnError>({
         url: '/api/internal_mcp_catalog/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get all limits with optional filtering
+ */
+export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({
+        url: '/api/limits',
+        ...options
+    });
+};
+
+/**
+ * Create a new limit (Admin only)
+ */
+export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
+        url: '/api/limits',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete a limit (Admin only)
+ */
+export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({
+        url: '/api/limits/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get a limit by ID
+ */
+export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({
+        url: '/api/limits/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update a limit (Admin only)
+ */
+export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
+        url: '/api/limits/{id}',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -820,11 +912,105 @@ export const getMcpServer = <ThrowOnError extends boolean = false>(options: Opti
 };
 
 /**
+ * Get the installation status of an MCP server (for polling during local server installation)
+ */
+export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationStatusData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpServerInstallationStatusResponses, GetMcpServerInstallationStatusErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}/installation-status',
+        ...options
+    });
+};
+
+/**
  * Get all tools for an MCP server
  */
 export const getMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerToolsData, ThrowOnError>) => {
     return (options.client ?? client).get<GetMcpServerToolsResponses, GetMcpServerToolsErrors, ThrowOnError>({
         url: '/api/mcp_server/{id}/tools',
+        ...options
+    });
+};
+
+/**
+ * Get logs for a specific MCP server pod
+ */
+export const getMcpServerLogs = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerLogsData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpServerLogsResponses, GetMcpServerLogsErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}/logs',
+        ...options
+    });
+};
+
+/**
+ * Restart a single MCP server pod
+ */
+export const restartMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestartMcpServerData, ThrowOnError>) => {
+    return (options.client ?? client).post<RestartMcpServerResponses, RestartMcpServerErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}/restart',
+        ...options
+    });
+};
+
+/**
+ * Revoke a user's personal access to an MCP server by finding their personal-auth installation
+ */
+export const revokeUserMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeUserMcpServerAccessData, ThrowOnError>) => {
+    return (options.client ?? client).delete<RevokeUserMcpServerAccessResponses, RevokeUserMcpServerAccessErrors, ThrowOnError>({
+        url: '/api/mcp_server/catalog/{catalogId}/user/{userId}',
+        ...options
+    });
+};
+
+/**
+ * Revoke all team access to an MCP server by deleting the team-auth installation
+ */
+export const revokeAllTeamsMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeAllTeamsMcpServerAccessData, ThrowOnError>) => {
+    return (options.client ?? client).delete<RevokeAllTeamsMcpServerAccessResponses, RevokeAllTeamsMcpServerAccessErrors, ThrowOnError>({
+        url: '/api/mcp_server/catalog/{catalogId}/teams',
+        ...options
+    });
+};
+
+/**
+ * Grant team(s) access to an MCP server using current user's team-auth token (admin only)
+ */
+export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<GrantTeamMcpServerAccessData, ThrowOnError>) => {
+    return (options.client ?? client).post<GrantTeamMcpServerAccessResponses, GrantTeamMcpServerAccessErrors, ThrowOnError>({
+        url: '/api/mcp_server/catalog/{catalogId}/teams',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Revoke a team's access to an MCP server (admin only)
+ */
+export const revokeTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeTeamMcpServerAccessData, ThrowOnError>) => {
+    return (options.client ?? client).delete<RevokeTeamMcpServerAccessResponses, RevokeTeamMcpServerAccessErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}/team/{teamId}',
+        ...options
+    });
+};
+
+/**
+ * Get all MCP tool calls with pagination and sorting
+ */
+export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({
+        url: '/api/mcp-tool-calls',
+        ...options
+    });
+};
+
+/**
+ * Get MCP tool call by ID
+ */
+export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({
+        url: '/api/mcp-tool-calls/{mcpToolCallId}',
         ...options
     });
 };
@@ -857,104 +1043,6 @@ export const handleOAuthCallback = <ThrowOnError extends boolean = false>(option
     });
 };
 
-export const deleteV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<DeleteV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const getV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<GetV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const headV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<HeadV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const optionsV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<OptionsV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const patchV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<PatchV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const postV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<PostV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const putV1OpenaiByAgentId = <ThrowOnError extends boolean = false>(options: Options<PutV1OpenaiByAgentIdData, ThrowOnError>) => {
-    return (options.client ?? client).put<PutV1OpenaiByAgentIdResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/',
-        ...options
-    });
-};
-
-export const deleteV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const getV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const headV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const optionsV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const patchV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const postV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
-export const putV1OpenaiByAgentIdBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1OpenaiByAgentIdBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).put<PutV1OpenaiByAgentIdBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{agentId}/{*}',
-        ...options
-    });
-};
-
 /**
  * Create a chat completion with OpenAI (uses default agent)
  */
@@ -980,6 +1068,118 @@ export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
             'Content-Type': 'application/json',
             ...options.headers
         }
+    });
+};
+
+/**
+ * Update organization limit cleanup interval (Admin only)
+ */
+export const updateOrganizationCleanupInterval = <ThrowOnError extends boolean = false>(options: Options<UpdateOrganizationCleanupIntervalData, ThrowOnError>) => {
+    return (options.client ?? client).patch<UpdateOrganizationCleanupIntervalResponses, UpdateOrganizationCleanupIntervalErrors, ThrowOnError>({
+        url: '/api/organization/cleanup-interval',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get organization appearance settings
+ */
+export const getOrganizationAppearance = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationAppearanceData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetOrganizationAppearanceResponses, GetOrganizationAppearanceErrors, ThrowOnError>({
+        url: '/api/organization/appearance',
+        ...options
+    });
+};
+
+/**
+ * Update organization appearance settings
+ */
+export const updateOrganizationAppearance = <ThrowOnError extends boolean = false>(options?: Options<UpdateOrganizationAppearanceData, ThrowOnError>) => {
+    return (options?.client ?? client).put<UpdateOrganizationAppearanceResponses, UpdateOrganizationAppearanceErrors, ThrowOnError>({
+        url: '/api/organization/appearance',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options?.headers
+        }
+    });
+};
+
+/**
+ * Get organization details
+ */
+export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({
+        url: '/api/organization',
+        ...options
+    });
+};
+
+/**
+ * Remove custom organization logo and revert to default
+ */
+export const deleteOrganizationLogo = <ThrowOnError extends boolean = false>(options?: Options<DeleteOrganizationLogoData, ThrowOnError>) => {
+    return (options?.client ?? client).delete<DeleteOrganizationLogoResponses, DeleteOrganizationLogoErrors, ThrowOnError>({
+        url: '/api/organization/logo',
+        ...options
+    });
+};
+
+/**
+ * Upload a custom organization logo (PNG only, max 2MB)
+ */
+export const uploadOrganizationLogo = <ThrowOnError extends boolean = false>(options: Options<UploadOrganizationLogoData, ThrowOnError>) => {
+    return (options.client ?? client).post<UploadOrganizationLogoResponses, UploadOrganizationLogoErrors, ThrowOnError>({
+        url: '/api/organization/logo',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get team statistics
+ */
+export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({
+        url: '/api/statistics/teams',
+        ...options
+    });
+};
+
+/**
+ * Get agent statistics
+ */
+export const getAgentStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetAgentStatisticsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetAgentStatisticsResponses, GetAgentStatisticsErrors, ThrowOnError>({
+        url: '/api/statistics/agents',
+        ...options
+    });
+};
+
+/**
+ * Get model statistics
+ */
+export const getModelStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetModelStatisticsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetModelStatisticsResponses, GetModelStatisticsErrors, ThrowOnError>({
+        url: '/api/statistics/models',
+        ...options
+    });
+};
+
+/**
+ * Get overview statistics
+ */
+export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({
+        url: '/api/statistics/overview',
+        ...options
     });
 };
 
@@ -1072,6 +1272,64 @@ export const removeTeamMember = <ThrowOnError extends boolean = false>(options: 
     return (options.client ?? client).delete<RemoveTeamMemberResponses, RemoveTeamMemberErrors, ThrowOnError>({
         url: '/api/teams/{id}/members/{userId}',
         ...options
+    });
+};
+
+/**
+ * Get all token prices
+ */
+export const getTokenPrices = <ThrowOnError extends boolean = false>(options?: Options<GetTokenPricesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetTokenPricesResponses, GetTokenPricesErrors, ThrowOnError>({
+        url: '/api/token-prices',
+        ...options
+    });
+};
+
+/**
+ * Create a new token price (Admin only)
+ */
+export const createTokenPrice = <ThrowOnError extends boolean = false>(options: Options<CreateTokenPriceData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateTokenPriceResponses, CreateTokenPriceErrors, ThrowOnError>({
+        url: '/api/token-prices',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete a token price (Admin only)
+ */
+export const deleteTokenPrice = <ThrowOnError extends boolean = false>(options: Options<DeleteTokenPriceData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteTokenPriceResponses, DeleteTokenPriceErrors, ThrowOnError>({
+        url: '/api/token-prices/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get a token price by ID
+ */
+export const getTokenPrice = <ThrowOnError extends boolean = false>(options: Options<GetTokenPriceData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetTokenPriceResponses, GetTokenPriceErrors, ThrowOnError>({
+        url: '/api/token-prices/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update a token price (Admin only)
+ */
+export const updateTokenPrice = <ThrowOnError extends boolean = false>(options: Options<UpdateTokenPriceData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateTokenPriceResponses, UpdateTokenPriceErrors, ThrowOnError>({
+        url: '/api/token-prices/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };
 

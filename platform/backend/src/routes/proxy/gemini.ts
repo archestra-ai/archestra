@@ -141,6 +141,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     stream = false,
   ) => {
     let resolvedAgent: Agent;
+    if (body.tools && !Array.isArray(body.tools)) {
+      body.tools = [body.tools];
+    }
+    const tools = Array.isArray(body.tools) ? body.tools : [];
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);

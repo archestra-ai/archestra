@@ -99,7 +99,7 @@ COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 
-# Create supervisord configuration
+# Create base supervisord configuration (postgres will be added at runtime if needed)
 RUN cat > /etc/supervisord.conf <<'EOF'
 [supervisord]
 nodaemon=true
@@ -107,20 +107,9 @@ user=root
 logfile=/var/log/supervisor/supervisord.log
 pidfile=/var/run/supervisord.pid
 
-[program:postgres]
-user=postgres
-command=postgres -D /var/lib/postgresql/data
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-priority=1
-
 [program:backend]
 directory=/app/backend
-command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.js"
+command=/bin/sh -c "SLEEP_TIME && pnpm db:migrate && node dist/server.js"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -132,7 +121,7 @@ environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API
 
 [program:frontend]
 directory=/app/frontend
-command=/bin/sh -c "sleep 8 && node server.js"
+command=/bin/sh -c "SLEEP_TIME && node server.js"
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -151,43 +140,70 @@ set -e
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
-if [ -n "$EFFECTIVE_DATABASE_URL" ]; then
-    # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
-else
-    # Use defaults
+# Determine if we're using an external database
+# If DATABASE_URL is provided, it's always external. Otherwise, use internal postgres.
+if [ -z "$EFFECTIVE_DATABASE_URL" ]; then
+    # No DATABASE_URL provided - using internal postgres with defaults
     POSTGRES_USER=${POSTGRES_USER:-archestra}
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
-fi
 
-# Initialize PostgreSQL if data directory is empty
-if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-    echo "Initializing PostgreSQL database..."
-    su-exec postgres initdb -D /var/lib/postgresql/data
+    # Initialize PostgreSQL if data directory is empty
+    if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo "Initializing PostgreSQL database..."
+        su-exec postgres initdb -D /var/lib/postgresql/data
 
-    # Configure PostgreSQL
-    echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
-    echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
+        # Configure PostgreSQL
+        echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
+        echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
 
-    # Start PostgreSQL temporarily to create user and database
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        # Start PostgreSQL temporarily to create user and database
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
 
-    # Create user and database
-    psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
-        CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
-        CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
-        GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
+        # Create user and database
+        psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+            CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
+            CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
+            GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
-    # Stop PostgreSQL
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+        # Stop PostgreSQL
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 
-    echo "PostgreSQL initialized successfully"
+        echo "PostgreSQL initialized successfully"
+    fi
+
+    # Append postgres program to supervisord config
+    cat >> /etc/supervisord.conf <<'EOFPOSTGRES'
+
+[program:postgres]
+user=postgres
+command=postgres -D /var/lib/postgresql/data
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=1
+EOFPOSTGRES
+
+    # Set sleep times to wait for postgres
+    BACKEND_SLEEP="sleep 5"
+    FRONTEND_SLEEP="sleep 8"
+else
+    # Using external database - no need to start postgres or wait for it
+    echo "Using external database, skipping internal postgres startup"
+    BACKEND_SLEEP=""
+    FRONTEND_SLEEP="sleep 3"
 fi
+
+# Update sleep times in supervisord config
+# Replace first occurrence (backend)
+sed -i "0,/SLEEP_TIME/s|SLEEP_TIME|${BACKEND_SLEEP}|" /etc/supervisord.conf
+# Replace second occurrence (frontend)
+sed -i "s|SLEEP_TIME|${FRONTEND_SLEEP}|" /etc/supervisord.conf
 
 # Update supervisord config with actual environment variables
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf

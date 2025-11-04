@@ -51,11 +51,24 @@ export default class K8sPod {
     this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
   }
 
+  /**
+   * Converts an MCP server name into a valid Kubernetes DNS subdomain name.
+   *
+   * According to RFC 1123, Kubernetes DNS subdomain names must:
+   * - contain no more than 253 characters
+   * - contain only lowercase alphanumeric characters, '-' or '.'
+   * - start with an alphanumeric character
+   * - end with an alphanumeric character
+   */
   static slugifyMcpServerName(name: string): string {
     return name
       .toLowerCase()
       .replace(/ /g, "-")
-      .replace(/[^a-z0-9-]/g, "");
+      .replace(/[^a-z0-9.-]/g, "")
+      .replace(/-+/g, "-") // collapse consecutive hyphens
+      .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
+      .replace(/[^a-z0-9]+$/, "") // remove trailing non-alphanumeric
+      .substring(0, 253); // limit to 253 characters
   }
 
   /**

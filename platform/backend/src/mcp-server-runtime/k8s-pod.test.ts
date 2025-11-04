@@ -1,75 +1,65 @@
 import K8sPod from "./k8s-pod";
 
 describe("K8sPod.slugifyMcpServerName", () => {
-  test("converts uppercase to lowercase", () => {
-    expect(K8sPod.slugifyMcpServerName("MY-SERVER")).toBe("my-server");
-    expect(K8sPod.slugifyMcpServerName("TestServer")).toBe("testserver");
-  });
+  test.each([
+    // [input, expected output]
+    // Basic conversions
+    ["MY-SERVER", "my-server"],
+    ["TestServer", "testserver"],
 
-  test("replaces spaces with hyphens", () => {
-    expect(K8sPod.slugifyMcpServerName("My MCP Server")).toBe("my-mcp-server");
-    expect(K8sPod.slugifyMcpServerName("Server  Name")).toBe("server--name");
-    expect(K8sPod.slugifyMcpServerName("  LeadingSpaces")).toBe(
-      "--leadingspaces",
-    );
-  });
+    // Spaces to hyphens
+    ["My MCP Server", "my-mcp-server"],
+    ["Server  Name", "server-name"],
+    ["  LeadingSpaces", "leadingspaces"],
 
-  test("removes special characters", () => {
-    expect(K8sPod.slugifyMcpServerName("Test@123")).toBe("test123");
-    expect(K8sPod.slugifyMcpServerName("Server(v2)")).toBe("serverv2");
-    expect(K8sPod.slugifyMcpServerName("My-Server!")).toBe("my-server");
-    expect(K8sPod.slugifyMcpServerName("Test#Server$123")).toBe(
-      "testserver123",
-    );
-  });
+    // Special characters removed
+    ["Test@123", "test123"],
+    ["Server(v2)", "serverv2"],
+    ["My-Server!", "my-server"],
+    ["Test#Server$123", "testserver123"],
 
-  test("preserves valid characters (lowercase letters, digits, hyphens)", () => {
-    expect(K8sPod.slugifyMcpServerName("valid-name-123")).toBe(
-      "valid-name-123",
-    );
-    expect(K8sPod.slugifyMcpServerName("a-b-c-1-2-3")).toBe("a-b-c-1-2-3");
-  });
+    // Valid characters preserved
+    ["valid-name-123", "valid-name-123"],
+    ["a-b-c-1-2-3", "a-b-c-1-2-3"],
 
-  test("handles mixed case and special characters", () => {
-    expect(K8sPod.slugifyMcpServerName("My MCP Server!")).toBe("my-mcp-server");
-    expect(K8sPod.slugifyMcpServerName("Test@123 Server")).toBe(
-      "test123-server",
-    );
-    expect(K8sPod.slugifyMcpServerName("Server (v2.0)")).toBe("server-v20");
-  });
+    // Mixed case and special characters
+    ["My MCP Server!", "my-mcp-server"],
+    ["Test@123 Server", "test123-server"],
+    ["Server (v2.0)", "server-v2.0"],
 
-  test("handles empty string", () => {
-    expect(K8sPod.slugifyMcpServerName("")).toBe("");
-  });
+    // Edge cases
+    ["", ""],
+    ["!@#$%^&*()", ""],
+    ["   ", ""],
 
-  test("handles string with only special characters", () => {
-    expect(K8sPod.slugifyMcpServerName("!@#$%^&*()")).toBe("");
-    expect(K8sPod.slugifyMcpServerName("   ")).toBe("---");
-  });
+    // Unicode characters
+    ["Servér", "servr"],
+    ["测试Server", "server"],
 
-  test("handles unicode characters", () => {
-    expect(K8sPod.slugifyMcpServerName("Servér")).toBe("servr");
-    expect(K8sPod.slugifyMcpServerName("测试Server")).toBe("server");
-  });
+    // Consecutive spaces and special characters
+    ["Server    Name", "server-name"],
+    ["Test!!!Server", "testserver"],
 
-  test("handles consecutive spaces and special characters", () => {
-    expect(K8sPod.slugifyMcpServerName("Server    Name")).toBe(
-      "server----name",
-    );
-    expect(K8sPod.slugifyMcpServerName("Test!!!Server")).toBe("testserver");
-  });
+    // Leading/trailing special characters
+    ["@Server", "server"],
+    ["Server@", "server"],
+    ["!Server!", "server"],
 
-  test("handles strings starting or ending with special characters", () => {
-    expect(K8sPod.slugifyMcpServerName("@Server")).toBe("server");
-    expect(K8sPod.slugifyMcpServerName("Server@")).toBe("server");
-    expect(K8sPod.slugifyMcpServerName("!Server!")).toBe("server");
-  });
+    // Kubernetes DNS subdomain validation
+    ["My Server @123!", "my-server-123"],
 
-  test("produces valid Kubernetes DNS subdomain names", () => {
-    // Kubernetes DNS names must be lowercase alphanumeric with hyphens
-    const result = K8sPod.slugifyMcpServerName("My Server @123!");
-    expect(result).toBe("my-server-123");
-    // Verify it matches valid DNS name pattern
-    expect(result).toMatch(/^[a-z0-9-]+$/);
+    // The reported bug case
+    ["firecrawl - joey", "firecrawl-joey"],
+  ])("converts '%s' to '%s'", (input, expected) => {
+    const result = K8sPod.slugifyMcpServerName(input);
+    expect(result).toBe(expected);
+
+    // Verify all non-empty results are valid Kubernetes DNS subdomain names
+    if (result) {
+      // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
+      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+      // Must be no longer than 253 characters
+      expect(result.length).toBeLessThanOrEqual(253);
+    }
   });
 });

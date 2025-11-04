@@ -1,4 +1,5 @@
 import { env } from "next-runtime-env";
+import type { PostHogConfig } from "posthog-js";
 
 /**
  * Get the display proxy URL for showing to users.
@@ -36,5 +37,14 @@ export default {
   easterEgg: {
     targetSequence: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE"),
     videoUrl: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL"),
+  },
+  posthog: {
+    // Analytics is enabled by default, disabled only when explicitly set to "disabled"
+    enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled",
+    token: "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7",
+    config: {
+      api_host: "https://eu.i.posthog.com",
+      person_profiles: "identified_only",
+    } satisfies Partial<PostHogConfig>,
   },
 };

@@ -624,7 +624,6 @@ function CreateAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
@@ -791,7 +790,6 @@ function CreateAgentDialog({
                   labels={labels}
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
-                  availableValues={availableValues}
                 />
               </div>
               <DialogFooter className="mt-4">
@@ -857,7 +855,6 @@ function EditAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
   const agentLabelsRef = useRef<AgentLabelsRef>(null);
@@ -1009,7 +1006,6 @@ function EditAgentDialog({
               labels={labels}
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
-              availableValues={availableValues}
             />
           </div>
           <DialogFooter className="mt-4">

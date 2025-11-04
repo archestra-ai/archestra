@@ -1,5 +1,7 @@
+import type * as k8s from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import type { z } from "zod";
+import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 
 describe("K8sPod.createPodEnvFromConfig", () => {
@@ -498,5 +500,398 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
       expect(key).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
       expect(value).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
     }
+  });
+});
+
+describe("K8sPod.generatePodSpec", () => {
+  // Helper function to create a mock K8sPod instance
+  function createMockK8sPod(mcpServer: McpServer): K8sPod {
+    const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAttach = {} as k8s.Attach;
+    const mockK8sLog = {} as k8s.Log;
+    const namespace = "default";
+
+    return new K8sPod(
+      mcpServer,
+      mockK8sApi,
+      mockK8sAttach,
+      mockK8sLog,
+      namespace,
+    );
+  }
+
+  test("generates basic podSpec for stdio-based MCP server without HTTP port", () => {
+    const mcpServer: McpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "catalog-123",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "my-docker-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Verify metadata
+    expect(podSpec.metadata?.name).toBe("mcp-test-server");
+    expect(podSpec.metadata?.labels).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+      "mcp-server-name": "test-server",
+    });
+
+    // Verify spec
+    expect(podSpec.spec?.containers).toHaveLength(1);
+    const container = podSpec.spec?.containers[0];
+    expect(container?.name).toBe("mcp-server");
+    expect(container?.image).toBe(dockerImage);
+    expect(container?.command).toEqual(["node"]);
+    expect(container?.args).toEqual(["server.js"]);
+    expect(container?.stdin).toBe(true);
+    expect(container?.tty).toBe(false);
+    expect(container?.ports).toBeUndefined();
+    expect(podSpec.spec?.restartPolicy).toBe("Always");
+  });
+
+  test("generates podSpec for HTTP-based MCP server with exposed port", () => {
+    const mcpServer: McpServer = {
+      id: "http-server-id",
+      name: "http-server",
+      catalogId: "catalog-456",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "my-http-server:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "npm",
+      arguments: ["start"],
+      transportType: "streamable-http",
+      httpPort: 3000,
+    };
+    const needsHttp = true;
+    const httpPort = 3000;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.ports).toEqual([
+      {
+        containerPort: 3000,
+        protocol: "TCP",
+      },
+    ]);
+  });
+
+  test("generates podSpec without command when no command is provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-cmd-server-id",
+      name: "no-cmd-server",
+      catalogId: "catalog-789",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "default-cmd-image:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      // No command specified
+      arguments: ["--verbose"],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.command).toBeUndefined();
+    expect(container?.args).toEqual(["--verbose"]);
+  });
+
+  test("generates podSpec with environment variables", () => {
+    const mcpServer: McpServer = {
+      id: "env-server-id",
+      name: "env-server",
+      catalogId: "catalog-env",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "env-server:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["app.js"],
+      environment: {
+        API_KEY: "secret123",
+        PORT: "3000",
+        DEBUG: "true",
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.env).toEqual([
+      { name: "API_KEY", value: "secret123" },
+      { name: "PORT", value: "3000" },
+      { name: "DEBUG", value: "true" },
+    ]);
+  });
+
+  test("generates podSpec with sanitized metadata labels", () => {
+    const mcpServer: McpServer = {
+      id: "special-chars-123!@#",
+      name: "Server With Spaces & Special!",
+      catalogId: "catalog-special",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    // Verify that labels are RFC 1123 compliant
+    const labels = podSpec.metadata?.labels;
+    expect(labels?.app).toBe("mcp-server");
+    expect(labels?.["mcp-server-id"]).toBe("special-chars-123");
+    expect(labels?.["mcp-server-name"]).toBe("server-with-spaces-special");
+
+    // Verify all labels match RFC 1123 pattern
+    for (const [key, value] of Object.entries(labels || {})) {
+      expect(key).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+      expect(value).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+    }
+  });
+
+  test("generates podSpec with custom Docker image", () => {
+    const mcpServer: McpServer = {
+      id: "custom-image-id",
+      name: "custom-image-server",
+      catalogId: "catalog-custom",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "ghcr.io/my-org/custom-mcp-server:v2.1.0";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "python",
+      arguments: ["-m", "server"],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
+  });
+
+  test("generates podSpec with empty arguments array when not provided", () => {
+    const mcpServer: McpServer = {
+      id: "no-args-id",
+      name: "no-args-server",
+      catalogId: "catalog-no-args",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      // No arguments provided
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.args).toEqual([]);
+  });
+
+  test("generates podSpec with custom HTTP port", () => {
+    const mcpServer: McpServer = {
+      id: "custom-port-id",
+      name: "custom-port-server",
+      catalogId: "catalog-custom-port",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "custom-port:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["server.js"],
+      transportType: "streamable-http",
+      httpPort: 9000,
+    };
+    const needsHttp = true;
+    const httpPort = 9000;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.ports).toEqual([
+      {
+        containerPort: 9000,
+        protocol: "TCP",
+      },
+    ]);
+  });
+
+  test("generates consistent podSpecs for the same inputs", () => {
+    const mcpServer: McpServer = {
+      id: "consistent-id",
+      name: "consistent-server",
+      catalogId: "catalog-consistent",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "consistent:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "node",
+      arguments: ["index.js"],
+      environment: {
+        NODE_ENV: "production",
+      },
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec1 = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const podSpec2 = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    expect(podSpec1).toEqual(podSpec2);
+  });
+
+  test("generates podSpec with complex environment configuration", () => {
+    const mcpServer: McpServer = {
+      id: "complex-env-id",
+      name: "complex-env-server",
+      catalogId: "catalog-complex",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sPod = createMockK8sPod(mcpServer);
+
+    const dockerImage = "complex:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "python",
+      arguments: ["-m", "uvicorn", "main:app"],
+      environment: {
+        API_KEY: "'sk-1234567890'",
+        DATABASE_URL: '"postgresql://localhost:5432/db"',
+        WORKERS: "4",
+        DEBUG: "false",
+      },
+      transportType: "streamable-http",
+      httpPort: 8000,
+    };
+    const needsHttp = true;
+    const httpPort = 8000;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+
+    // Verify environment variables (quotes should be stripped by createPodEnvFromConfig)
+    expect(container?.env).toEqual([
+      { name: "API_KEY", value: "sk-1234567890" },
+      { name: "DATABASE_URL", value: "postgresql://localhost:5432/db" },
+      { name: "WORKERS", value: "4" },
+      { name: "DEBUG", value: "false" },
+    ]);
+
+    // Verify command and args
+    expect(container?.command).toEqual(["python"]);
+    expect(container?.args).toEqual(["-m", "uvicorn", "main:app"]);
+
+    // Verify HTTP port
+    expect(container?.ports).toEqual([
+      {
+        containerPort: 8000,
+        protocol: "TCP",
+      },
+    ]);
   });
 });

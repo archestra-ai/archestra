@@ -53,7 +53,7 @@ export function ArchestraCatalogTab({
     type: ServerType;
     category: SelectedCategory;
   }>({
-    type: "remote",
+    type: "all",
     category: "all",
   });
 
@@ -107,6 +107,16 @@ export function ArchestraCatalogTab({
           }
         : undefined;
 
+    // For local servers, extract local_config from manifest
+    const localConfig =
+      server.server.type === "local"
+        ? {
+            command: server.server.command,
+            arguments: server.server.args,
+            environment: server.server.env,
+          }
+        : undefined;
+
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
@@ -117,6 +127,7 @@ export function ArchestraCatalogTab({
         server.server.type === "remote"
           ? (server.server.docs_url ?? undefined)
           : undefined,
+      localConfig,
       userConfig: server.user_config,
       oauthConfig: rewrittenOauth,
     });

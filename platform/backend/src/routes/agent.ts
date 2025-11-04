@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { initializeMetrics } from "@/llm-metrics";
 import { AgentModel } from "@/models";
 import AgentLabelModel from "@/models/agent-label";
 import {
@@ -197,8 +198,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+        const agent = await AgentModel.create(request.body);
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
 
-        return reply.send(await AgentModel.create(request.body));
+        return reply.send(agent);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -307,6 +313,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
+
         return reply.send(agent);
       } catch (error) {
         fastify.log.error(error);
@@ -414,6 +425,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelValues,
         description: "Get all available label values",
         tags: ["Agents"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
         response: {
           200: z.array(z.string()),
           401: ErrorResponseSchema,
@@ -434,7 +448,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const values = await AgentLabelModel.getAllValues();
+        const { key } = request.query;
+        const values = key
+          ? await AgentLabelModel.getValuesByKey(key)
+          : await AgentLabelModel.getAllValues();
         return reply.send(values);
       } catch (error) {
         fastify.log.error(error);

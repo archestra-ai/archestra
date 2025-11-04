@@ -15,10 +15,10 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
+import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
-import * as routes from "@/routes";
 import {
   Anthropic,
   Gemini,
@@ -26,6 +26,8 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
+import AgentLabelModel from "./models/agent-label";
+import * as routes from "./routes";
 
 const {
   api: {
@@ -75,6 +77,14 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 const start = async () => {
   try {
     await seedRequiredStartingData();
+
+    // Initialize metrics with keys of custom agent labels
+    const labelKeys = await AgentLabelModel.getAllKeys();
+    initializeMetrics(labelKeys);
+
+    logger.info(
+      `Observability initialized with ${labelKeys.length} agent label keys`,
+    );
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

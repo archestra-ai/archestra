@@ -14,14 +14,17 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  workers: 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? 'html' : 'line',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
+    /* Record video only when test fails */
+    video: 'retain-on-failure',
+    /* Take screenshot only when test fails */
+    screenshot: 'only-on-failure',
   },
 
   /* Configure projects for major browsers */
@@ -43,5 +46,28 @@ export default defineConfig({
       // Run the setup project before tests
       dependencies: ['setup'],
     },
+
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ['setup'],
+    },
+
+    // TODO: uncomment this out once https://github.com/archestra-ai/archestra/issues/923 is fixed
+    // {
+    //   name: 'webkit',
+    //   use: {
+    //     ...devices['Desktop Safari'],
+    //     // Use the stored authentication state
+    //     storageState: authFile,
+    //   },
+    //   // Run the setup project before tests
+    //   dependencies: ['setup'],
+    // },
   ],
 });

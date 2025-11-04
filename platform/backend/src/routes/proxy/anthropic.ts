@@ -1,6 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -171,13 +170,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const resolvedAgentId = resolvedAgent.id;
 
-    // Add OpenTelemetry trace attributes
-    utils.tracing.sprinkleTraceAttributes(
-      "anthropic",
-      utils.tracing.RouteCategory.LLM_PROXY,
-      resolvedAgent,
-    );
-
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
       "Agent resolved",
@@ -326,29 +318,20 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (stream) {
         // Handle streaming response with span to measure LLM call duration
-        const tracer = trace.getTracer("archestra");
-        const messageStream = await tracer.startActiveSpan(
+        const messageStream = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
-          {
-            attributes: {
-              "llm.model": body.model,
-              "llm.stream": true,
-            },
-          },
+          "anthropic",
+          body.model,
+          true,
+          resolvedAgent,
           async (llmSpan) => {
-            try {
-              const stream = anthropicClient.messages.stream({
-                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                ...(body as any),
-                messages: filteredMessages,
-              });
-              llmSpan.end();
-              return stream;
-            } catch (error) {
-              llmSpan.recordException(error as Error);
-              llmSpan.end();
-              throw error;
-            }
+            const stream = anthropicClient.messages.stream({
+              // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+              ...(body as any),
+              messages: filteredMessages,
+            });
+            llmSpan.end();
+            return stream;
           },
         );
 
@@ -543,31 +526,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       } else {
         // Non-streaming response with span to measure LLM call duration
-        const tracer = trace.getTracer("archestra");
-        let response = await tracer.startActiveSpan(
+        let response = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
-          {
-            attributes: {
-              "llm.model": body.model,
-              "llm.stream": false,
-            },
-          },
+          "anthropic",
+          body.model,
+          false,
+          resolvedAgent,
           async (llmSpan) => {
-            try {
-              const response = await anthropicClient.messages.create({
-                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                ...(body as any),
-                messages: filteredMessages,
-                tools: mergedTools.length > 0 ? mergedTools : undefined,
-                stream: false,
-              });
-              llmSpan.end();
-              return response;
-            } catch (error) {
-              llmSpan.recordException(error as Error);
-              llmSpan.end();
-              throw error;
-            }
+            const response = await anthropicClient.messages.create({
+              // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+              ...(body as any),
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: false,
+            });
+            llmSpan.end();
+            return response;
           },
         );
 
@@ -670,31 +644,23 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ];
 
               // Make final call with tool results
-              const finalResponse = await tracer.startActiveSpan(
+              const finalResponse = await utils.tracing.startActiveLlmSpan(
                 "anthropic.messages.continuation",
-                {
-                  attributes: {
-                    "llm.model": body.model,
-                    "llm.stream": false,
-                    "llm.continuation": true,
-                  },
-                },
+                "anthropic",
+                body.model,
+                false,
+                resolvedAgent,
                 async (continuationSpan) => {
-                  try {
-                    const response = await anthropicClient.messages.create({
-                      // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                      ...(body as any),
-                      messages: updatedMessages,
-                      tools: mergedTools.length > 0 ? mergedTools : undefined,
-                      stream: false,
-                    });
-                    continuationSpan.end();
-                    return response;
-                  } catch (error) {
-                    continuationSpan.recordException(error as Error);
-                    continuationSpan.end();
-                    throw error;
-                  }
+                  continuationSpan.setAttribute("llm.continuation", true);
+                  const response = await anthropicClient.messages.create({
+                    // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                    ...(body as any),
+                    messages: updatedMessages,
+                    tools: mergedTools.length > 0 ? mergedTools : undefined,
+                    stream: false,
+                  });
+                  continuationSpan.end();
+                  return response;
                 },
               );
 

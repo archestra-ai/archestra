@@ -120,9 +120,12 @@ export function useLabelKeys() {
   });
 }
 
-export function useLabelValues() {
+export function useLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
   return useQuery({
-    queryKey: ["agents", "labels", "values"],
-    queryFn: async () => (await getLabelValues()).data ?? [],
+    queryKey: ["agents", "labels", "values", key],
+    queryFn: async () =>
+      (await getLabelValues({ query: key ? { key } : {} })).data ?? [],
+    enabled: key !== undefined,
   });
 }

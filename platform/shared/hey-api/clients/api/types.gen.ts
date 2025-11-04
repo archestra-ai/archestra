@@ -2683,7 +2683,12 @@ export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysRespo
 export type GetLabelValuesData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
     url: '/api/agents/labels/values';
 };
 

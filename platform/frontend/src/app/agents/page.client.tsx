@@ -16,10 +16,14 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
+import {
+  type AgentLabel,
+  AgentLabels,
+  type AgentLabelsRef,
+} from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -55,7 +59,6 @@ import {
   useCreateAgent,
   useDeleteAgent,
   useLabelKeys,
-  useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
@@ -620,13 +623,13 @@ function CreateAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -665,11 +668,15 @@ function CreateAgentDialog({
         return;
       }
 
+      // Save any unsaved label before submitting
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
+
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
           teams: assignedTeamIds,
-          labels,
+          labels: updatedLabels,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -779,10 +786,10 @@ function CreateAgentDialog({
                 </div>
 
                 <AgentLabels
+                  ref={agentLabelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
-                  availableValues={availableValues}
                 />
               </div>
               <DialogFooter className="mt-4">
@@ -848,9 +855,9 @@ function EditAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -877,13 +884,17 @@ function EditAgentDialog({
         return;
       }
 
+      // Save any unsaved label before submitting
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
+
       try {
         await updateAgent.mutateAsync({
           id: agent.id,
           data: {
             name: name.trim(),
             teams: assignedTeamIds,
-            labels,
+            labels: updatedLabels,
           },
         });
         toast.success("Agent updated successfully");
@@ -992,10 +1003,10 @@ function EditAgentDialog({
             </div>
 
             <AgentLabels
+              ref={agentLabelsRef}
               labels={labels}
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
-              availableValues={availableValues}
             />
           </div>
           <DialogFooter className="mt-4">

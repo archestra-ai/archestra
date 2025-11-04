@@ -26,6 +26,12 @@ import type {
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 
+type AgentWithToolsRow = {
+  agents: typeof schema.agentsTable.$inferSelect;
+  agent_tools: typeof schema.agentToolsTable.$inferSelect | null;
+  tools: typeof schema.toolsTable.$inferSelect | null;
+};
+
 class AgentModel {
   static async create({
     teams,
@@ -156,12 +162,6 @@ class AgentModel {
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
-    // When sorting by tools count, we need to use a different query approach
-    type AgentWithToolsRow = {
-      agents: typeof schema.agentsTable.$inferSelect;
-      agent_tools: typeof schema.agentToolsTable.$inferSelect | null;
-      tools: typeof schema.toolsTable.$inferSelect | null;
-    };
     let agentsData: AgentWithToolsRow[];
     let totalResult: number;
 

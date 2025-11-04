@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { useRole } from "@/lib/auth.hook";
 import { useSession } from "@/lib/auth.query";
 import { useUpdateUserOnboarding } from "@/lib/user.query";
 import { Button } from "../ui/button";
@@ -13,13 +14,16 @@ import OnboardingWizard, {
 export default function OnboardingModal() {
   const sessionQuery = useSession();
   const session = sessionQuery.data;
+  const userRole = useRole();
 
   const [open, setOpen] = useState(false);
 
   const wizardRef = useRef<OnboardingWizardHandle | null>(null);
 
   const shouldShowOnboarding = Boolean(
-    session?.user && session?.user.onboardingCompleted === false,
+    session?.user &&
+      session?.user.onboardingCompleted === false &&
+      userRole === "admin",
   );
 
   const updateUserOnboarding = useUpdateUserOnboarding();

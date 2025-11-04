@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -23,92 +23,115 @@ interface OnboardingDialogProps {
 }
 
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
+  const [step, setStep] = useState<1 | 2>(1);
   const { data: defaultAgent } = useDefaultAgent();
-  const { data: logsStatus } = useOnboardingLogs(open); // Only poll when dialog is open
+  const { data: logsStatus } = useOnboardingLogs(open && step === 2); // Only poll when on step 2
   const completeOnboardingMutation = useCompleteOnboarding();
 
   const handleFinishOnboarding = async () => {
     await completeOnboardingMutation.mutateAsync();
   };
 
+  const handleNext = () => {
+    setStep(2);
+  };
+
+  const handleBack = () => {
+    setStep(1);
+  };
+
   return (
     <Dialog open={open}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">Welcome to Archestra!</DialogTitle>
-          <DialogDescription>
-            Let's get you started by connecting your first agent
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-7xl h-[80vh] flex flex-col p-0">
+        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-2xl">
+              {step === 1 ? "Welcome to Archestra!" : "Connect and Verify"}
+            </DialogTitle>
+            <DialogDescription>
+              {step === 1
+                ? "Let's get you started with a quick overview"
+                : "Configure your agent and verify the connection"}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-6">
-          <ArchestraArchitectureDiagram />
-
-          <div className="border-t pt-6">
-            <ConnectionOptions agentId={defaultAgent?.id} />
-          </div>
-
-          {/* Status Section */}
-          <div className="border-t pt-6">
-            <h3 className="font-medium mb-4">Connection Status</h3>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-4 rounded-lg border">
-                {logsStatus?.hasLlmProxyLogs ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-sm font-medium">
-                      LLM Proxy request received
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm text-muted-foreground">
-                      Waiting for LLM Proxy request...
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 p-4 rounded-lg border">
-                {logsStatus?.hasMcpGatewayLogs ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-sm font-medium">
-                      MCP Gateway request received
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm text-muted-foreground">
-                      Waiting for MCP Gateway request...
-                    </span>
-                  </>
-                )}
-              </div>
+          {step === 1 ? (
+            <div className="space-y-6">
+              <ArchestraArchitectureDiagram />
             </div>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              <ConnectionOptions agentId={defaultAgent?.id} />
+            </div>
+          )}
         </div>
 
-        {(logsStatus?.hasLlmProxyLogs || logsStatus?.hasMcpGatewayLogs) && (
-          <DialogFooter>
-            <Button
-              onClick={handleFinishOnboarding}
-              disabled={completeOnboardingMutation.isPending}
-              size="lg"
-            >
-              {completeOnboardingMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Finishing...
-                </>
-              ) : (
-                "Finish Onboarding"
-              )}
-            </Button>
-          </DialogFooter>
-        )}
+        <div className="px-6 py-4 border-t">
+          {step === 1 ? (
+            <div className="w-full flex justify-end">
+              <Button onClick={handleNext} size="lg">
+                Next: Connect Agent
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-6">
+              <Button onClick={handleBack} variant="outline" size="lg">
+                Back
+              </Button>
+
+              <div className="flex-1 text-center">
+                <div className="text-sm font-medium mb-2">
+                  {!logsStatus?.hasLlmProxyLogs &&
+                  !logsStatus?.hasMcpGatewayLogs
+                    ? "Our Proxies are waiting to receive your first event"
+                    : logsStatus?.hasLlmProxyLogs &&
+                        logsStatus?.hasMcpGatewayLogs
+                      ? "Connection established!"
+                      : logsStatus?.hasLlmProxyLogs
+                        ? "LLM Proxy connected. You can also connect MCP Gateway"
+                        : "MCP Gateway connected. You can also connect LLM Proxy"}
+                </div>
+                <div className="flex items-center justify-center gap-4 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {logsStatus?.hasLlmProxyLogs ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                    ) : (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    )}
+                    <span>LLM Proxy</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {logsStatus?.hasMcpGatewayLogs ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                    ) : (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    )}
+                    <span>MCP Gateway</span>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleFinishOnboarding}
+                disabled={
+                  completeOnboardingMutation.isPending ||
+                  (!logsStatus?.hasLlmProxyLogs &&
+                    !logsStatus?.hasMcpGatewayLogs)
+                }
+                size="lg"
+              >
+                {completeOnboardingMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Finishing...
+                  </>
+                ) : (
+                  "Finish Onboarding"
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

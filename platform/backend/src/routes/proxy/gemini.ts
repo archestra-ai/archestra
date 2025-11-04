@@ -4,6 +4,7 @@ import {
   type FunctionResponse,
   type GenerateContentParameters,
   type GenerateContentResponse,
+  type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
   type Part,
 } from "@google/genai";
@@ -12,7 +13,7 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableGenAI } from "@/llm-metrics";
+import { getObservableGenAI, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 
@@ -304,8 +305,28 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Content-Type", "text/event-stream");
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
-        const result = await genAI.models.generateContentStream(
-          processedBody as GenerateContentParameters,
+        const tracer = trace.getTracer("archestra");
+        const streamingResponse = await tracer.startActiveSpan(
+          "gemini.generateContentStream",
+          {
+            attributes: {
+              "llm.model": model,
+              "llm.stream": true,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const stream = await genAI.models.generateContentStream(
+                processedBody as GenerateContentParameters,
+              );
+              llmSpan.end();
+              return stream;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
         );
 
         // Accumulate response for policy evaluation and persistence
@@ -318,7 +339,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Track accumulated parts for building final response
         const accumulatedParts: Part[] = [];
         let firstChunk: GenerateContentResponse | null = null;
-        for await (const chunk of result) {
+        for await (const chunk of streamingResponse) {
           chunks.push(chunk);
           if (!firstChunk) firstChunk = chunk;
 
@@ -379,8 +400,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 index: 0,
               },
             ],
-            // promptFeedback: firstChunk?.promptFeedback,
-            // usageMetadata: firstChunk?.usageMetadata,
             modelVersion: firstChunk?.modelVersion || modelName,
             responseId: firstChunk?.responseId || "unknown",
           };
@@ -417,11 +436,36 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: tc.name,
             arguments: JSON.parse(tc.arguments),
           }));
-
+          fastify.log.info(
+            {
+              resolvedAgentId,
+              toolCalls: commonToolCalls.map((tc) => ({
+                id: tc.id,
+                name: tc.name,
+                argumentKeys: Object.keys(tc.arguments),
+              })),
+            },
+            "Executing MCP tool calls (streaming)",
+          );
           const mcpResults = await utils.tools.executeMcpToolCalls(
             commonToolCalls,
             resolvedAgentId,
           );
+          fastify.log.info(
+            {
+              resolvedAgentId,
+              results: mcpResults.map((r) => ({
+                id: r.id,
+                isError: r.isError,
+                contentLength:
+                  typeof r.content === "string"
+                    ? r.content.length
+                    : JSON.stringify(r.content).length,
+              })),
+            },
+            "MCP tool calls completed (streaming)",
+          );
+
           if (mcpResults.length > 0) {
             // Stream the tool calls first
             const lastChunkWithToolCalls = chunks.find((c) =>
@@ -471,15 +515,34 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolConfig: undefined,
               },
             } as GenerateContentParameters;
-            const finalResult =
-              await genAI.models.generateContentStream(finalParams);
+            const finalResult = await tracer.startActiveSpan(
+              "gemini.generateContentStream.continuation",
+              {
+                attributes: {
+                  "llm.model": model,
+                  "llm.stream": true,
+                  "llm.continuation": true,
+                },
+              },
+              async (continuationSpan) => {
+                try {
+                  const response =
+                    await genAI.models.generateContentStream(finalParams);
+                  continuationSpan.end();
+                  return response;
+                } catch (error) {
+                  continuationSpan.recordException(error as Error);
+                  continuationSpan.end();
+                  throw error;
+                }
+              },
+            );
 
             const finalChunks: GenerateContentResponse[] = [];
             const finalParts: Part[] = [];
             let finalFirstChunk: GenerateContentResponse | null = null;
             let finalLastChunk: GenerateContentResponse | null = null;
-            let finalUsageMetadata: GenerateContentResponse["usageMetadata"] =
-              {};
+            let finalUsageMetadata: GenerateContentResponseUsageMetadata = {};
             for await (const finalChunk of finalResult) {
               finalChunks.push(finalChunk);
               if (!finalFirstChunk) finalFirstChunk = finalChunk;
@@ -489,7 +552,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 finalParts.push(...finalChunk.candidates[0].content.parts);
               }
               if (finalChunk.usageMetadata) {
-                finalUsageMetadata = finalChunk.usageMetadata;
+                finalUsageMetadata = { ...finalChunk.usageMetadata };
               }
               reply.raw.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
             }
@@ -517,8 +580,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 (finalFirstChunk || firstChunk)?.modelVersion || modelName,
               responseId:
                 (finalFirstChunk || firstChunk)?.responseId || "unknown",
-              // TODO fix sdk to rest metadata conversion
-              // usageMetadata: finalUsageMetadata,
+
+              usageMetadata:
+                utils.adapters.gemini.sdkUsageToRestUsageMetadata(
+                  finalUsageMetadata,
+                ),
             };
           } else {
             // No MCP results - convert accumulated parts to REST format
@@ -570,7 +636,16 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Extract token usage and store the complete interaction
         const tokenUsage = finalResponse.usageMetadata
           ? utils.adapters.gemini.getUsageTokens(finalResponse.usageMetadata)
-          : { input: null, output: null };
+          : { input: undefined, output: undefined };
+
+        if (!finalResponse.usageMetadata) {
+          reportLLMTokens(
+            "gemini",
+            resolvedAgent,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+        }
 
         await InteractionModel.create({
           agentId: resolvedAgentId,
@@ -644,12 +719,18 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             responseId: "blocked",
           };
 
+          const tokenUsage = response.usageMetadata
+            ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
+            : { input: null, output: null };
           // Store the interaction with refusal
           await InteractionModel.create({
             agentId: resolvedAgentId,
             type: "gemini:generateContent",
             request: body,
             response: refusalResponse,
+            model: model,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
           });
 
           return reply.send(refusalResponse);
@@ -668,6 +749,20 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const mcpResults = await utils.tools.executeMcpToolCalls(
             commonToolCalls,
             resolvedAgentId,
+          );
+          fastify.log.info(
+            {
+              resolvedAgentId,
+              results: mcpResults.map((r) => ({
+                id: r.id,
+                isError: r.isError,
+                contentLength:
+                  typeof r.content === "string"
+                    ? r.content.length
+                    : JSON.stringify(r.content).length,
+              })),
+            },
+            "MCP tool calls completed (non-streaming)",
           );
           if (mcpResults.length > 0) {
             // Convert MCP results to Gemini format
@@ -710,11 +805,18 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 finalResponse,
                 modelName,
               );
+
+            const tokenUsage = finalResponse.usageMetadata
+              ? utils.adapters.gemini.getUsageTokens(
+                  finalResponse.usageMetadata,
+                )
+              : { input: null, output: null };
             // Store the interaction with final response
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "gemini:generateContent",
               request: body,
+              model: model,
               response: {
                 ...restResponse,
                 candidates: [
@@ -725,6 +827,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ...restResponse.candidates,
                 ],
               },
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
             });
 
             return reply.send(restResponse);

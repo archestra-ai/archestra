@@ -6,6 +6,7 @@ import {
   type GenerateContentConfig,
   type GenerateContentParameters,
   type GenerateContentResponse,
+  type GenerateContentResponseUsageMetadata,
   type HarmCategory,
   type HarmProbability,
   type Part,
@@ -194,6 +195,9 @@ export function restToSdkGenerateContentParams(
       params.config = generationConfig as GenerateContentParameters["config"];
     }
   }
+  if (params.config === undefined) {
+    params.config = {} as GenerateContentConfig;
+  }
   if (mergedTools && mergedTools.length > 0) {
     const sdkTools = mergedTools.map((t) => {
       const functionDeclarations = t.functionDeclarations?.map((fd) => {
@@ -217,16 +221,12 @@ export function restToSdkGenerateContentParams(
       } as unknown as Record<string, unknown>;
     });
 
-    if (params.config === undefined) {
-      params.config = {} as GenerateContentConfig;
-    }
     params.config.tools = sdkTools;
   }
 
   if (body.systemInstruction) {
-    // todo : handle systemInstruction
+    params.config.systemInstruction = { ...body.systemInstruction };
   }
-  console.log("converted to sdk", params);
 
   return params as GenerateContentParameters;
 }
@@ -440,6 +440,46 @@ export function sdkContentToRestContent(
     role: sdkContents.role ?? "model",
     parts: sdkContents.parts?.map(sdkPartToRestPart) ?? [],
   };
+}
+
+/**
+ * Convert SDK GenerateContentResponseUsageMetadata into REST usageMetadata shape.
+ * Returns undefined if sdkUsage is falsy.
+ */
+export function sdkUsageToRestUsageMetadata(
+  sdkUsage?: GenerateContentResponseUsageMetadata | null,
+): Gemini.Types.UsageMetadata | undefined {
+  if (!sdkUsage) return undefined;
+
+  // Helper to defensively copy modality arrays (if present)
+  const mapModality = (
+    arr?: Array<{ modality?: string; tokenCount?: number }>,
+  ) =>
+    arr?.map((d) => ({
+      modality: d?.modality,
+      tokenCount: d?.tokenCount,
+    }));
+
+  const mapToolUsePromptTokensDetails = (
+    arr?: Array<{ modality?: string; tokenCount?: number }>,
+  ) => mapModality(arr);
+
+  return {
+    // These keys match the SDK fields; copy them defensively to plain objects
+    cacheTokensDetails: mapModality(sdkUsage.cacheTokensDetails),
+    cachedContentTokenCount: sdkUsage.cachedContentTokenCount,
+    candidatesTokenCount: sdkUsage.candidatesTokenCount,
+    candidatesTokensDetails: mapModality(sdkUsage.candidatesTokensDetails),
+    promptTokenCount: sdkUsage.promptTokenCount,
+    promptTokensDetails: mapModality(sdkUsage.promptTokensDetails),
+    thoughtsTokenCount: sdkUsage.thoughtsTokenCount,
+    toolUsePromptTokenCount: sdkUsage.toolUsePromptTokenCount,
+    toolUsePromptTokensDetails: mapToolUsePromptTokensDetails(
+      sdkUsage.toolUsePromptTokensDetails,
+    ),
+    totalTokenCount: sdkUsage.totalTokenCount,
+    trafficType: sdkUsage.trafficType,
+  } as Gemini.Types.UsageMetadata;
 }
 
 /**

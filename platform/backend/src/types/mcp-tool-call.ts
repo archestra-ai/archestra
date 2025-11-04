@@ -12,23 +12,18 @@ const CommonToolCallSchema = z.object({
 });
 
 /**
- * Schema for CommonToolResult
- */
-const CommonToolResultSchema = z.object({
-  id: z.string(),
-  content: z.unknown(),
-  isError: z.boolean(),
-  error: z.string().optional(),
-});
-
-/**
  * Select schema for MCP tool calls
+ * Note: toolResult structure varies by method type:
+ * - tools/call: { id, content, isError, error? }
+ * - tools/list: { tools: [...] }
+ * - initialize: { capabilities, serverInfo }
  */
 export const SelectMcpToolCallSchema = createSelectSchema(
   schema.mcpToolCallsTable,
   {
-    toolCall: CommonToolCallSchema,
-    toolResult: CommonToolResultSchema,
+    toolCall: CommonToolCallSchema.nullable(),
+    // toolResult can have different structures depending on the method type
+    toolResult: z.unknown().nullable(),
   },
 );
 
@@ -38,8 +33,9 @@ export const SelectMcpToolCallSchema = createSelectSchema(
 export const InsertMcpToolCallSchema = createInsertSchema(
   schema.mcpToolCallsTable,
   {
-    toolCall: CommonToolCallSchema,
-    toolResult: CommonToolResultSchema,
+    toolCall: CommonToolCallSchema.nullable(),
+    // toolResult can have different structures depending on the method type
+    toolResult: z.unknown().nullable(),
   },
 );
 

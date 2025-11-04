@@ -54,6 +54,7 @@ class McpClient {
         await McpToolCallModel.create({
           agentId,
           mcpServerName,
+          method: "tools/call",
           toolCall,
           toolResult,
         });
@@ -237,6 +238,7 @@ class McpClient {
                 const savedToolCall = await McpToolCallModel.create({
                   agentId,
                   mcpServerName: firstTool.mcpServerName,
+                  method: "tools/call",
                   toolCall,
                   toolResult,
                 });
@@ -273,6 +275,7 @@ class McpClient {
                 const savedToolCall = await McpToolCallModel.create({
                   agentId,
                   mcpServerName: firstTool.mcpServerName,
+                  method: "tools/call",
                   toolCall,
                   toolResult,
                 });
@@ -371,6 +374,7 @@ class McpClient {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
                 mcpServerName: firstTool.mcpServerName,
+                method: "tools/call",
                 toolCall,
                 toolResult,
               });
@@ -407,6 +411,7 @@ class McpClient {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
                 mcpServerName: firstTool.mcpServerName,
+                method: "tools/call",
                 toolCall,
                 toolResult,
               });
@@ -523,6 +528,7 @@ class McpClient {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
               mcpServerName: firstTool.mcpServerName,
+              method: "tools/call",
               toolCall,
               toolResult,
             });
@@ -556,6 +562,7 @@ class McpClient {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
               mcpServerName: firstTool.mcpServerName,
+              method: "tools/call",
               toolCall,
               toolResult,
             });
@@ -590,6 +597,7 @@ class McpClient {
           await McpToolCallModel.create({
             agentId,
             mcpServerName: firstTool.mcpServerName,
+            method: "tools/call",
             toolCall,
             toolResult,
           });

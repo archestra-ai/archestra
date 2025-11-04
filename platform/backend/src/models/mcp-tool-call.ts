@@ -116,6 +116,8 @@ class McpToolCallModel {
         return direction(schema.mcpToolCallsTable.agentId);
       case "mcpServerName":
         return direction(schema.mcpToolCallsTable.mcpServerName);
+      case "method":
+        return direction(schema.mcpToolCallsTable.method);
       default:
         // Default: newest first
         return desc(schema.mcpToolCallsTable.createdAt);

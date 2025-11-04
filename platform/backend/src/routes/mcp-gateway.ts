@@ -11,7 +11,7 @@ import { z } from "zod";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { McpToolCallModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -75,16 +75,36 @@ async function createAgentServer(
 
   const tools = await ToolModel.getToolsByAgent(agentId);
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map(({ name, description, parameters }) => ({
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const toolsList = tools.map(({ name, description, parameters }) => ({
       name,
       title: name,
       description,
       inputSchema: parameters,
       annotations: {},
       _meta: {},
-    })),
-  }));
+    }));
+
+    // Log tools/list request
+    try {
+      await McpToolCallModel.create({
+        agentId,
+        mcpServerName: "mcp-gateway",
+        method: "tools/list",
+        toolCall: null,
+        // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
+        toolResult: { tools: toolsList } as any,
+      });
+      logger.info(
+        { agentId, toolsCount: toolsList.length },
+        "✅ Saved tools/list request",
+      );
+    } catch (dbError) {
+      logger.info({ err: dbError }, "Failed to persist tools/list request:");
+    }
+
+    return { tools: toolsList };
+  });
 
   server.setRequestHandler(
     CallToolRequestSchema,
@@ -443,6 +463,37 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { agentId, sessionId },
           "Transport.handleRequest completed",
         );
+
+        // Log initialize request after successful handling
+        if (isInitialize) {
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: "mcp-gateway",
+              method: "initialize",
+              toolCall: null,
+              toolResult: {
+                capabilities: {
+                  tools: { listChanged: false },
+                },
+                serverInfo: {
+                  name: `archestra-agent-${agentId}`,
+                  version: config.api.version,
+                },
+                // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
+              } as any,
+            });
+            fastify.log.info(
+              { agentId, sessionId },
+              "✅ Saved initialize request",
+            );
+          } catch (dbError) {
+            fastify.log.error(
+              { err: dbError },
+              "Failed to persist initialize request:",
+            );
+          }
+        }
 
         // If this was an initialize request without a client session ID,
         // store the transport's generated session ID now

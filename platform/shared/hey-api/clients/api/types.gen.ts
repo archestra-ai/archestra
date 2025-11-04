@@ -7596,7 +7596,7 @@ export type GetMcpToolCallsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -7625,19 +7625,15 @@ export type GetMcpToolCallsResponses = {
             id: string;
             agentId: string;
             mcpServerName: string;
+            method: string;
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
-            };
-            toolResult: {
-                id: string;
-                content: unknown;
-                isError: boolean;
-                error?: string;
-            };
+            } | null;
+            toolResult: unknown;
             createdAt: string;
         }>;
         pagination: {
@@ -7693,19 +7689,15 @@ export type GetMcpToolCallResponses = {
         id: string;
         agentId: string;
         mcpServerName: string;
+        method: string;
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
-        };
-        toolResult: {
-            id: string;
-            content: unknown;
-            isError: boolean;
-            error?: string;
-        };
+        } | null;
+        toolResult: unknown;
         createdAt: string;
     };
 };

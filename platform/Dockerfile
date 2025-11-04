@@ -47,18 +47,11 @@ ARG ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=""
 ARG ARCHESTRA_EASTER_EGG_VIDEO_URL=""
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
-ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
-
+ENV ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
+ENV ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
 ENV NODE_ENV=production
 ENV ARCHESTRA_AUTH_SECRET=""
-
-# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
-# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
-# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
-ENV NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=${ARCHESTRA_API_BASE_URL}
-
 ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
 ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -104,24 +97,13 @@ COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 
-# Create supervisord configuration
+# Create base supervisord configuration (without postgres)
 RUN cat > /etc/supervisord.conf <<'EOF'
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
 pidfile=/var/run/supervisord.pid
-
-[program:postgres]
-user=postgres
-command=postgres -D /var/lib/postgresql/data
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-priority=1
 
 [program:backend]
 directory=/app/backend
@@ -133,7 +115,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",ARCHESTRA_OPENAI_BASE_URL="%(ENV_ARCHESTRA_OPENAI_BASE_URL)s",ARCHESTRA_ANTHROPIC_BASE_URL="%(ENV_ARCHESTRA_ANTHROPIC_BASE_URL)s",ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="%(ENV_ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER)s",ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="%(ENV_ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE)s",ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="%(ENV_ARCHESTRA_ORCHESTRATOR_KUBECONFIG)s",ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="%(ENV_ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT)s",ARCHESTRA_LOGGING_LEVEL="%(ENV_ARCHESTRA_LOGGING_LEVEL)s",ARCHESTRA_VERSION="%(ENV_ARCHESTRA_VERSION)s"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",ARCHESTRA_OPENAI_BASE_URL="%(ENV_ARCHESTRA_OPENAI_BASE_URL)s",ARCHESTRA_ANTHROPIC_BASE_URL="%(ENV_ARCHESTRA_ANTHROPIC_BASE_URL)s",ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="%(ENV_ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER)s",ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="%(ENV_ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE)s",ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="%(ENV_ARCHESTRA_ORCHESTRATOR_KUBECONFIG)s",ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="%(ENV_ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT)s",ARCHESTRA_LOGGING_LEVEL="%(ENV_ARCHESTRA_LOGGING_LEVEL)s",ARCHESTRA_VERSION="%(ENV_ARCHESTRA_VERSION)s"
 
 [program:frontend]
 directory=/app/frontend
@@ -145,7 +127,22 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL)s"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s"
+EOF
+
+# Create postgres program configuration (to be conditionally included)
+RUN cat > /etc/supervisord.postgres.conf <<'EOF'
+
+[program:postgres]
+user=postgres
+command=postgres -D /var/lib/postgresql/data
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=1
 EOF
 
 # Create initialization script
@@ -153,45 +150,57 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)
+USE_EXTERNAL_DB=false
+if [ -n "$ARCHESTRA_DATABASE_URL" ] || [ -n "$DATABASE_URL" ]; then
+    USE_EXTERNAL_DB=true
+fi
+
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
-if [ -n "$EFFECTIVE_DATABASE_URL" ]; then
-    # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
-else
-    # Use defaults
+if [ "$USE_EXTERNAL_DB" = "false" ]; then
+    echo "Using internal PostgreSQL database"
+
+    # Use defaults for internal database
     POSTGRES_USER=${POSTGRES_USER:-archestra}
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
-fi
 
-# Initialize PostgreSQL if data directory is empty
-if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-    echo "Initializing PostgreSQL database..."
-    su-exec postgres initdb -D /var/lib/postgresql/data
+    # Append postgres program to supervisord config
+    cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
 
-    # Configure PostgreSQL
-    echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
-    echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
+    # Initialize PostgreSQL if data directory is empty
+    if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo "Initializing PostgreSQL database..."
+        su-exec postgres initdb -D /var/lib/postgresql/data
 
-    # Start PostgreSQL temporarily to create user and database
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        # Configure PostgreSQL
+        echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
+        echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
 
-    # Create user and database
-    psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
-        CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
-        CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
-        GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
+        # Start PostgreSQL temporarily to create user and database
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+
+        # Create user and database
+        psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+            CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
+            CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
+            GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
-    # Stop PostgreSQL
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+        # Stop PostgreSQL
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 
-    echo "PostgreSQL initialized successfully"
+        echo "PostgreSQL initialized successfully"
+    fi
+else
+    echo "Using external PostgreSQL database"
+    # Extract credentials from DATABASE_URL if needed (postgresql://user:pass@host:port/db)
+    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
 fi
 
 # Update supervisord config with actual environment variables

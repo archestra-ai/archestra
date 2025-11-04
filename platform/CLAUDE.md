@@ -66,7 +66,9 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 ## Environment Variables
 
 ```bash
-# Required (ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL)
+# Database Configuration
+# ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL
+# When using external database, internal postgres container will not start
 ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
 # Provider API Keys

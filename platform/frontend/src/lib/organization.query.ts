@@ -277,6 +277,7 @@ export function useUpdateOrganizationCleanupInterval() {
  * Update organization appearance settings
  */
 export function useUpdateOrganizationAppearance() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: Partial<OrganizationAppearance>) => {
       const response = await updateOrganizationAppearance({
@@ -285,6 +286,9 @@ export function useUpdateOrganizationAppearance() {
       return response.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.appearance(),
+      });
       toast.success("Appearance settings updated");
     },
     onError: (error) => {

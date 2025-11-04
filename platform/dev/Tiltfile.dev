@@ -46,7 +46,7 @@ local_resource(
 
 local_resource(
   'lint:fix:unsafe',
-  cmd='pnpm lint:fix:unsafe',
+  cmd='pnpm lint:fix:unsafe && tilt trigger lint:fix',
   labels=['dev'],
   resource_deps=['pnpm-install'],
   trigger_mode=TRIGGER_MODE_MANUAL,

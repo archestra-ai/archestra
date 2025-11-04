@@ -26,7 +26,7 @@ export function ChatPage({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -47,7 +47,7 @@ function LogDetail({
 }: {
   initialData?: {
     interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -67,7 +67,7 @@ function LogDetail({
   }
 
   const interaction = new DynamicInteraction(dynamicInteraction);
-  const agent = initialData?.agents.find((a) => a.id === interaction.agentId);
+  const agent = initialData?.agents?.find((a) => a.id === interaction.agentId);
   const toolsUsed = interaction.getToolNamesUsed();
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();

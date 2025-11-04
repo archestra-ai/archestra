@@ -29,7 +29,7 @@ k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 # Database cleanup button (manual trigger only, for development)
 local_resource(
   'db-clean',
-  cmd='pnpm db:clean',
+  cmd='pnpm db:clean && tilt trigger db-migrate',
   dir='../backend',
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
@@ -55,6 +55,7 @@ local_resource(
     for i in {1..30}; do
       if pnpm db:migrate 2>/dev/null; then
         echo "✅ Migration completed successfully"
+        tilt trigger pnpm-dev
         exit 0
       fi
       echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"

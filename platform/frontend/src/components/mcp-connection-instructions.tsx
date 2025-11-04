@@ -70,7 +70,9 @@ export function McpConnectionInstructions({
         <div
           className={`rounded-md p-3 flex items-center justify-between ${bgCodeClass}`}
         >
-          <CodeText className={`text-sm ${bgCodeClass}`}>{mcpUrl}</CodeText>
+          <CodeText className={`text-sm break-all ${bgCodeClass}`}>
+            {mcpUrl}
+          </CodeText>
           <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
             {copiedUrl ? (
               <Check className="h-4 w-4 text-green-500" />
@@ -86,7 +88,7 @@ export function McpConnectionInstructions({
         <div
           className={`rounded-md p-3 flex items-center justify-between ${bgCodeClass}`}
         >
-          <CodeText className={`text-sm ${bgCodeClass}`}>
+          <CodeText className={`text-sm break-all ${bgCodeClass}`}>
             Authorization: Bearer {token}
           </CodeText>
           <Button variant="ghost" size="icon" onClick={handleCopyAuth}>
@@ -104,9 +106,13 @@ export function McpConnectionInstructions({
           Example configuration for MCP clients:
         </p>
 
-        <div className="relative">
-          <pre className={`rounded p-4 text-xs overflow-scroll ${bgCodeClass}`}>
-            <code>{mcpConfig}</code>
+        <div className="bg-muted rounded-md p-3 relative">
+          <pre
+            className={`text-xs whitespace-pre-wrap break-all ${bgCodeClass}`}
+          >
+            <CodeText className="text-sm whitespace pre-wrap break-all">
+              {mcpConfig}
+            </CodeText>
           </pre>
           <CopyButton text={mcpConfig} className="absolute top-2 right-2" />
         </div>

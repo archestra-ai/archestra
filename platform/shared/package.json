@@ -8,17 +8,18 @@
     ".": "./index.ts"
   },
   "scripts": {
-    "codegen:api-client": "tsx hey-api/openapi-ts.ts"
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts",
+    "codegen:theme-css": "tsx ./themes/generate-theme-css.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "^1.3.27",
+    "better-auth": "^1.3.34",
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.86.2",
+    "@hey-api/openapi-ts": "^0.86.11",
     "@types/node": "^24",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"

@@ -34,7 +34,8 @@ describe("K8sPod.createPodEnvFromConfig", () => {
       ],
     },
     {
-      testName: "strips surrounding single quotes from environment variable values",
+      testName:
+        "strips surrounding single quotes from environment variable values",
       input: {
         command: "node",
         environment: {
@@ -48,7 +49,8 @@ describe("K8sPod.createPodEnvFromConfig", () => {
       ],
     },
     {
-      testName: "strips surrounding double quotes from environment variable values",
+      testName:
+        "strips surrounding double quotes from environment variable values",
       input: {
         command: "node",
         environment: {
@@ -95,12 +97,12 @@ describe("K8sPod.createPodEnvFromConfig", () => {
         command: "node",
         environment: {
           VALUE1: "'mismatched\"",
-          VALUE2: '"mismatched\'',
+          VALUE2: "\"mismatched'",
         },
       },
       expected: [
         { name: "VALUE1", value: "'mismatched\"" },
-        { name: "VALUE2", value: '"mismatched\'' },
+        { name: "VALUE2", value: "\"mismatched'" },
       ],
     },
     {

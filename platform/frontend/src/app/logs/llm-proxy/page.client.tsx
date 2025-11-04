@@ -99,7 +99,7 @@ export default function LlmProxyLogsPage({
 }: {
   initialData?: {
     interactions: archestraApiTypes.GetInteractionsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   return (
@@ -116,7 +116,7 @@ function LogsTable({
 }: {
   initialData?: {
     interactions: archestraApiTypes.GetInteractionsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   const [pagination, setPagination] = useState({
@@ -150,7 +150,7 @@ function LogsTable({
     initialData: initialData?.interactions,
   });
 
-  const { data: agents = [] } = useAgents({
+  const { data: agents } = useAgents({
     initialData: initialData?.agents,
   });
 

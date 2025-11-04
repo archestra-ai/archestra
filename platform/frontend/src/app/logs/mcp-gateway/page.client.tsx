@@ -39,7 +39,7 @@ export default function McpGatewayLogsPage({
 }: {
   initialData?: {
     mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   return (
@@ -56,7 +56,7 @@ function McpToolCallsTable({
 }: {
   initialData?: {
     mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
   const [pagination, setPagination] = useState({
@@ -90,7 +90,7 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents = [] } = useAgents({
+  const { data: agents } = useAgents({
     initialData: initialData?.agents,
   });
 

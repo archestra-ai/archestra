@@ -141,7 +141,7 @@ DISABLE_CONSOLE_OUTPUT=true`}
                 className="absolute top-2 right-2 h-6 px-2 text-xs"
                 onClick={() =>
                   copyToClipboard(`ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp
-ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer 70c089bf-ba18-4a86-9eca-ba78aa46cc38","Accept":"application/json, text/event-stream"}
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <agent token from Step 1>","Accept":"application/json, text/event-stream"}
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`)
                 }
               >
@@ -149,7 +149,7 @@ ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`)
               </Button>
               <pre className="text-xs overflow-x-auto pr-16">
                 {`ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp
-ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer 70c089bf-ba18-4a86-9eca-ba78aa46cc38","Accept":"application/json, text/event-stream"}
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <agent token from Step 1>","Accept":"application/json, text/event-stream"}
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`}
               </pre>
             </div>

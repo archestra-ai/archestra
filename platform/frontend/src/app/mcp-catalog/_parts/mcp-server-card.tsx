@@ -89,7 +89,7 @@ export type McpServerCardProps = {
     | null;
   onInstall: () => void;
   onInstallTeam: () => void;
-  onInstallNoAuth: () => void;
+  onInstallLocalServer: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -110,7 +110,7 @@ export function McpServerCard({
   installationStatus,
   onInstall,
   onInstallTeam,
-  onInstallNoAuth,
+  onInstallLocalServer,
   onReinstall,
   onEdit,
   onDelete,
@@ -436,61 +436,32 @@ export function McpServerCard({
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
         </Button>
       )}
-      <WithRole requiredExactRole="member">
-        {installed ? (
-          <Button disabled size="sm" variant="outline" className="w-full">
-            Installed
-          </Button>
-        ) : (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    disabled
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Not installed
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Only Admins can install MCP servers</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </WithRole>
-      <WithRole requiredExactRole="admin">
-        {installed ? (
-          <Button
-            onClick={() =>
-              installedServer &&
-              setUninstallingServer({
-                id: installedServer.id,
-                name: item.label || item.name,
-              })
-            }
-            size="sm"
-            variant="outline"
-            className="w-full"
-          >
-            Uninstall
-          </Button>
-        ) : (
-          <Button
-            onClick={onInstallNoAuth}
-            disabled={isInstalling}
-            size="sm"
-            variant="outline"
-            className="w-full"
-          >
-            {isInstalling ? localInstalllingLabel : "Install"}
-          </Button>
-        )}
-      </WithRole>
+      {installed ? (
+        <Button
+          onClick={() =>
+            installedServer &&
+            setUninstallingServer({
+              id: installedServer.id,
+              name: item.label || item.name,
+            })
+          }
+          size="sm"
+          variant="outline"
+          className="w-full"
+        >
+          Uninstall
+        </Button>
+      ) : (
+        <Button
+          onClick={onInstallLocalServer}
+          disabled={isInstalling}
+          size="sm"
+          variant="outline"
+          className="w-full"
+        >
+          {isInstalling ? localInstalllingLabel : "Install"}
+        </Button>
+      )}
     </>
   );
 

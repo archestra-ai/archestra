@@ -2,8 +2,6 @@ import type { IncomingMessage } from "node:http";
 import { PassThrough, Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
-import type { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -27,6 +25,8 @@ export default class K8sPod {
   private podName: string;
   private state: K8sPodState = "not_created";
   private errorMessage: string | null = null;
+  private userConfigValues?: Record<string, string>;
+  private environmentValues?: Record<string, string>;
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
@@ -42,6 +42,8 @@ export default class K8sPod {
     k8sAttach: Attach,
     k8sLog: k8s.Log,
     namespace: string,
+    userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
@@ -49,6 +51,8 @@ export default class K8sPod {
     this.k8sLog = k8sLog;
     this.namespace = namespace;
     this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+    this.userConfigValues = userConfigValues;
+    this.environmentValues = environmentValues;
   }
 
   /**
@@ -89,37 +93,51 @@ export default class K8sPod {
    * that values are properly formatted. It strips surrounding quotes (both single
    * and double) from values, as they are often used as delimiters in the UI but
    * should not be part of the actual environment variable value.
+   *
+   * Additionally, it merges environment values passed from the frontend (for secrets
+   * and user-provided values) with the catalog's plain text environment variables.
    */
-  static createPodEnvFromConfig(
-    localConfig?: z.infer<typeof LocalConfigSchema>,
-  ): k8s.V1EnvVar[] {
+  createPodEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
+    const envMap = new Map<string, string>();
 
-    // Add environment variables from local config
-    if (localConfig?.environment) {
-      Object.entries(localConfig.environment).forEach(([key, value]) => {
-        let processedValue = String(value);
-
-        // Strip surrounding quotes (both single and double)
-        // Users may enter values like: API_KEY='my value' or API_KEY="my value"
-        // We want to extract the actual value without the quotes
-        // Only strip if the value has length > 1 to avoid stripping single quote chars
-        if (
-          processedValue.length > 1 &&
-          ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
-            (processedValue.startsWith('"') && processedValue.endsWith('"')))
-        ) {
-          processedValue = processedValue.slice(1, -1);
-        }
-
-        env.push({
-          name: key,
-          value: processedValue,
-        });
+    // Merge environment values from the payload (secrets and overrides)
+    if (this.environmentValues) {
+      Object.entries(this.environmentValues).forEach(([key, value]) => {
+        envMap.set(key, value);
       });
     }
 
-    // TODO: Load OAuth tokens and user config from secrets
+    // Add user config values as environment variables
+    if (this.userConfigValues) {
+      Object.entries(this.userConfigValues).forEach(([key, value]) => {
+        // Convert to uppercase with underscores for environment variable convention
+        const envKey = key.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+        envMap.set(envKey, value);
+      });
+    }
+
+    // Convert map to k8s env vars, processing values
+    envMap.forEach((value, key) => {
+      let processedValue = String(value);
+
+      // Strip surrounding quotes (both single and double)
+      // Users may enter values like: API_KEY='my value' or API_KEY="my value"
+      // We want to extract the actual value without the quotes
+      // Only strip if the value has length > 1 to avoid stripping single quote chars
+      if (
+        processedValue.length > 1 &&
+        ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
+          (processedValue.startsWith('"') && processedValue.endsWith('"')))
+      ) {
+        processedValue = processedValue.slice(1, -1);
+      }
+
+      env.push({
+        name: key,
+        value: processedValue,
+      });
+    });
 
     return env;
   }
@@ -243,7 +261,7 @@ export default class K8sPod {
             {
               name: "mcp-server",
               image: dockerImage,
-              env: K8sPod.createPodEnvFromConfig(catalogItem.localConfig),
+              env: this.createPodEnvFromConfig(),
               // Use the command and arguments from local config if provided
               // If not provided, Kubernetes will use the Docker image's default CMD
               ...(catalogItem.localConfig.command

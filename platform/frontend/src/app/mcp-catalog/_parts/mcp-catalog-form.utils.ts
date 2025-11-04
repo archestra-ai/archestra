@@ -27,26 +27,10 @@ export function transformFormToApiData(
           .filter((arg) => arg.length > 0)
       : [];
 
-    // Parse environment string into key-value pairs
-    let environment: Record<string, string> | undefined;
-    if (values.localConfig.environment?.trim()) {
-      environment = {};
-      values.localConfig.environment
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && line.includes("="))
-        .forEach((line) => {
-          const [key, ...valueParts] = line.split("=");
-          if (key && environment) {
-            environment[key] = valueParts.join("=");
-          }
-        });
-    }
-
     data.localConfig = {
       command: values.localConfig.command || undefined,
       arguments: argumentsArray.length > 0 ? argumentsArray : undefined,
-      environment,
+      environment: values.localConfig.environment,
       dockerImage: values.localConfig.dockerImage || undefined,
       transportType: values.localConfig.transportType || undefined,
       httpPort: values.localConfig.httpPort
@@ -149,7 +133,11 @@ export function transformCatalogItemToFormValues(
     | {
         command?: string;
         arguments: string;
-        environment: string;
+        environment: Array<{
+          key: string;
+          type: "plain_text" | "secret";
+          value?: string;
+        }>;
         dockerImage?: string;
         transportType?: "stdio" | "streamable-http";
         httpPort?: string;
@@ -160,19 +148,12 @@ export function transformCatalogItemToFormValues(
     // Convert arguments array back to string
     const argumentsString = item.localConfig.arguments?.join("\n") || "";
 
-    // Convert environment object back to string
-    const environmentString = item.localConfig.environment
-      ? Object.entries(item.localConfig.environment)
-          .map(([key, value]) => `${key}=${value}`)
-          .join("\n")
-      : "";
-
     const config = item.localConfig;
 
     localConfig = {
       command: item.localConfig.command || "",
       arguments: argumentsString,
-      environment: environmentString,
+      environment: item.localConfig.environment || [],
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,
@@ -187,7 +168,7 @@ export function transformCatalogItemToFormValues(
     authMethod,
     oauthConfig,
     localConfig,
-  };
+  } as McpCatalogFormValues;
 }
 
 /**

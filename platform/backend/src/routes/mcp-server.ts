@@ -161,7 +161,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        let { agentIds, secretId, accessToken, ...serverData } = request.body;
+        let {
+          agentIds,
+          secretId,
+          accessToken,
+          userConfigValues,
+          environmentValues,
+          ...serverData
+        } = request.body;
 
         // Get the current user for personal auth
         const user = await getUserFromRequest(request);
@@ -256,7 +263,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 localInstallationError: null,
               });
 
-              await McpServerRuntimeManager.startServer(mcpServer);
+              await McpServerRuntimeManager.startServer(
+                mcpServer,
+                userConfigValues,
+                environmentValues,
+              );
               fastify.log.info(
                 `Started K8s pod for local MCP server: ${mcpServer.name}`,
               );
@@ -323,6 +334,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     localInstallationStatus: "error",
                     localInstallationError: errorMessage,
                   });
+                  // then after 5secs, delete the MCP server record
+                  setTimeout(async () => {
+                    await McpServerModel.delete(mcpServer.id);
+                  }, 5000);
                 }
               })();
 

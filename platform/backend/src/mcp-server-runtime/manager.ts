@@ -158,7 +158,11 @@ class McpServerRuntimeManager {
   /**
    * Start a single MCP server pod
    */
-  async startServer(mcpServer: McpServer): Promise<void> {
+  async startServer(
+    mcpServer: McpServer,
+    userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
+  ): Promise<void> {
     const { id, name } = mcpServer;
     logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
 
@@ -169,6 +173,8 @@ class McpServerRuntimeManager {
         this.k8sAttach,
         this.k8sLog,
         this.namespace,
+        userConfigValues,
+        environmentValues,
       );
 
       // Register the pod BEFORE starting it

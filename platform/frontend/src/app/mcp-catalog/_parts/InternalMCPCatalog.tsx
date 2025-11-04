@@ -19,6 +19,7 @@ import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
+import { LocalServerInstallDialog } from "./local-server-install-dialog";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -64,6 +65,9 @@ export function InternalMCPCatalog({
   const [isTeamMode, setIsTeamMode] = useState(false);
   const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [isLocalServerDialogOpen, setIsLocalServerDialogOpen] = useState(false);
+  const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
@@ -121,27 +125,36 @@ export function InternalMCPCatalog({
     await handleInstall(catalogItem, true);
   };
 
-  const handleInstallNoAuth = async (catalogItem: CatalogItem) => {
-    // Local servers (serverType !== "remote") install directly without dialog
-    if (catalogItem.serverType !== "remote") {
-      try {
-        setInstallingItemId(catalogItem.id);
-        const installedServer = await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          teams: [],
-          dontShowToast: true,
-        });
-        // Track the installed server for polling
-        if (installedServer?.id) {
-          setInstallingServerIds((prev) =>
-            new Set(prev).add(installedServer.id),
-          );
-        }
-      } finally {
-        setInstallingItemId(null);
-      }
+  const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+    // Check if we need to show configuration dialog
+    const hasUserConfig =
+      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
+    const hasSecretEnvVars = catalogItem.localConfig?.environment?.some(
+      (env) => env.type === "secret",
+    );
+
+    if (hasUserConfig || hasSecretEnvVars) {
+      // Show configuration dialog
+      setLocalServerCatalogItem(catalogItem);
+      setIsLocalServerDialogOpen(true);
       return;
+    }
+
+    // No configuration needed, install directly
+    try {
+      setInstallingItemId(catalogItem.id);
+      const installedServer = await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        teams: [],
+        dontShowToast: true,
+      });
+      // Track the installed server for polling
+      if (installedServer?.id) {
+        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+      }
+    } finally {
+      setInstallingItemId(null);
     }
 
     // Remote servers without auth show dialog for team selection
@@ -160,6 +173,32 @@ export function InternalMCPCatalog({
     });
     setIsNoAuthDialogOpen(false);
     setNoAuthCatalogItem(null);
+    setInstallingItemId(null);
+  };
+
+  const handleLocalServerInstall = async (
+    userConfigValues: Record<string, string>,
+    environmentValues: Record<string, string>,
+  ) => {
+    if (!localServerCatalogItem) return;
+
+    setInstallingItemId(localServerCatalogItem.id);
+    const installedServer = await installMutation.mutateAsync({
+      name: localServerCatalogItem.name,
+      catalogId: localServerCatalogItem.id,
+      teams: [],
+      userConfigValues,
+      environmentValues,
+      dontShowToast: true,
+    });
+
+    // Track the installed server for polling
+    if (installedServer?.id) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    }
+
+    setIsLocalServerDialogOpen(false);
+    setLocalServerCatalogItem(null);
     setInstallingItemId(null);
   };
 
@@ -446,7 +485,7 @@ export function InternalMCPCatalog({
                   }
                   onInstall={() => handleInstall(item, false)}
                   onInstallTeam={() => handleInstallTeam(item)}
-                  onInstallNoAuth={() => handleInstallNoAuth(item)}
+                  onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
@@ -549,6 +588,17 @@ export function InternalMCPCatalog({
         catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
         isAdmin={isAdmin}
+      />
+
+      <LocalServerInstallDialog
+        isOpen={isLocalServerDialogOpen}
+        onClose={() => {
+          setIsLocalServerDialogOpen(false);
+          setLocalServerCatalogItem(null);
+        }}
+        onInstall={handleLocalServerInstall}
+        catalogItem={localServerCatalogItem}
+        isInstalling={installMutation.isPending}
       />
     </div>
   );

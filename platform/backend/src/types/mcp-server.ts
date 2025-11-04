@@ -46,6 +46,8 @@ export const InsertMcpServerSchema = createInsertSchema(
   teams: z.array(z.string()).optional(),
   userId: z.string().optional(), // For personal auth
   localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
+  userConfigValues: z.record(z.string(), z.string()).optional(),
+  environmentValues: z.record(z.string(), z.string()).optional(),
 });
 export const UpdateMcpServerSchema = createUpdateSchema(
   schema.mcpServersTable,

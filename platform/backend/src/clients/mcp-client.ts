@@ -667,6 +667,7 @@ class McpClient {
             method: "tools/list",
             params: {},
           }),
+          signal: AbortSignal.timeout(5_000),
         });
 
         if (!response.ok) {

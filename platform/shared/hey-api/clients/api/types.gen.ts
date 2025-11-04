@@ -4927,9 +4927,11 @@ export type GetInternalMcpCatalogResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -4999,9 +5001,11 @@ export type CreateInternalMcpCatalogItemData = {
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5088,9 +5092,11 @@ export type CreateInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5239,9 +5245,11 @@ export type GetInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5311,9 +5319,11 @@ export type UpdateInternalMcpCatalogItemData = {
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5411,9 +5421,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5935,9 +5947,11 @@ export type GetMcpServerInstallationRequestsResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6007,9 +6021,11 @@ export type CreateMcpServerInstallationRequestData = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6106,9 +6122,11 @@ export type CreateMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6295,9 +6313,11 @@ export type GetMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6367,9 +6387,11 @@ export type UpdateMcpServerInstallationRequestData = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6487,9 +6509,11 @@ export type UpdateMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6617,9 +6641,11 @@ export type ApproveMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6747,9 +6773,11 @@ export type DeclineMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6877,9 +6905,11 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6981,6 +7011,12 @@ export type InstallMcpServerData = {
         localInstallationError?: string | null;
         teams?: Array<string>;
         userId?: string;
+        userConfigValues?: {
+            [key: string]: string;
+        };
+        environmentValues?: {
+            [key: string]: string;
+        };
         agentIds?: Array<string>;
         accessToken?: string;
     };

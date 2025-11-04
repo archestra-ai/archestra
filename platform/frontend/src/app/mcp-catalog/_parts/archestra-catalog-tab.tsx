@@ -31,6 +31,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
+import { ConfigureEnvironmentDialog } from "./configure-environment-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
@@ -48,6 +49,8 @@ export function ArchestraCatalogTab({
   const [readmeServer, setReadmeServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
+  const [configureEnvServer, setConfigureEnvServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
@@ -83,6 +86,24 @@ export function ArchestraCatalogTab({
   const handleAddToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
+    // For local servers, open the environment configuration dialog
+    if (server.server.type === "local") {
+      setConfigureEnvServer(server);
+      return;
+    }
+
+    // For remote servers, proceed with direct addition
+    await addServerToCatalog(server, undefined);
+  };
+
+  const addServerToCatalog = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+    environment?: Array<{
+      key: string;
+      type: "plain_text" | "secret";
+      value?: string;
+    }>,
+  ) => {
     if (server.name === GITHUB_MCP_SERVER_NAME) {
       server.user_config = {
         access_token: {
@@ -113,7 +134,15 @@ export function ArchestraCatalogTab({
         ? {
             command: server.server.command,
             arguments: server.server.args,
-            environment: server.server.env,
+            environment:
+              environment ||
+              (server.server.env
+                ? Object.entries(server.server.env).map(([key, value]) => ({
+                    key,
+                    type: "plain_text" as const,
+                    value,
+                  }))
+                : undefined),
           }
         : undefined;
 
@@ -325,6 +354,30 @@ export function ArchestraCatalogTab({
       <RequestInstallationDialog
         server={requestServer}
         onClose={() => setRequestServer(null)}
+      />
+
+      <ConfigureEnvironmentDialog
+        isOpen={!!configureEnvServer}
+        onClose={() => setConfigureEnvServer(null)}
+        onConfirm={(environment) => {
+          if (configureEnvServer) {
+            addServerToCatalog(configureEnvServer, environment);
+            setConfigureEnvServer(null);
+          }
+        }}
+        serverName={configureEnvServer?.name || ""}
+        defaultEnvironment={
+          configureEnvServer?.server.type === "local" &&
+          configureEnvServer.server.env
+            ? Object.entries(configureEnvServer.server.env).map(
+                ([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                }),
+              )
+            : []
+        }
       />
     </div>
   );

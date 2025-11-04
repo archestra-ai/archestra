@@ -245,5 +245,9 @@ export const RouteId = {
   UpdateOrganizationAppearance: "updateOrganizationAppearance",
   UploadOrganizationLogo: "uploadOrganizationLogo",
   DeleteOrganizationLogo: "deleteOrganizationLogo",
+
+  // Onboarding Routes
+  GetOnboardingLogsStatus: "getOnboardingLogsStatus",
+  CompleteOnboarding: "completeOnboarding",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

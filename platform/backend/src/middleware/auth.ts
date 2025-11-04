@@ -119,11 +119,18 @@ class AuthMiddleware {
       };
     }
 
+    const permissions = routePermissionsConfig[routeId] ?? {};
+
+    // If permissions is empty, allow all authenticated users
+    if (Object.keys(permissions).length === 0) {
+      return { success: true, error: null };
+    }
+
     try {
       return await auth.api.hasPermission({
         headers: new Headers(request.headers as HeadersInit),
         body: {
-          permissions: routePermissionsConfig[routeId] ?? {},
+          permissions,
         },
       });
     } catch (_error) {
@@ -470,6 +477,9 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteOrganizationLogo]: {
     organization: ["update"],
   },
+  // Onboarding routes - available to all authenticated users (no specific permissions required)
+  [RouteId.GetOnboardingLogsStatus]: {},
+  [RouteId.CompleteOnboarding]: {},
 };
 
 const authMiddleware = new AuthMiddleware();

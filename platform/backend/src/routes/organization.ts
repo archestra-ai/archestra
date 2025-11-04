@@ -184,6 +184,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             limitCleanupInterval: z
               .enum(["1h", "12h", "24h", "1w", "1m"])
               .nullable(),
+            onboardingComplete: z.boolean(),
           }),
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
@@ -234,6 +235,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: organization.name,
           slug: organization.slug,
           limitCleanupInterval: organization.limitCleanupInterval,
+          onboardingComplete: organization.onboardingComplete,
         });
       } catch (error) {
         fastify.log.error(error);

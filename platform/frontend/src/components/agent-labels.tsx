@@ -22,7 +22,7 @@ interface AgentLabelsProps {
 }
 
 export interface AgentLabelsRef {
-  saveUnsavedLabel: () => boolean;
+  saveUnsavedLabel: () => AgentLabel[] | null;
 }
 
 export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
@@ -84,7 +84,7 @@ export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
         const value = newLabelValue.trim();
 
         if (!key || !value) {
-          return false;
+          return null;
         }
 
         // Check if key already exists
@@ -92,19 +92,20 @@ export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
           (label) => label.key === key,
         );
 
+        let updatedLabels: AgentLabel[];
         if (existingLabelIndex >= 0) {
           // Update existing label
-          const updatedLabels = [...labels];
+          updatedLabels = [...labels];
           updatedLabels[existingLabelIndex] = { key, value };
-          onLabelsChange(updatedLabels);
         } else {
           // Add new label
-          onLabelsChange([...labels, { key, value }]);
+          updatedLabels = [...labels, { key, value }];
         }
 
+        onLabelsChange(updatedLabels);
         setNewLabelKey("");
         setNewLabelValue("");
-        return true;
+        return updatedLabels;
       },
     }));
 

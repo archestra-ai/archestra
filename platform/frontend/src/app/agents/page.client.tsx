@@ -59,7 +59,6 @@ import {
   useCreateAgent,
   useDeleteAgent,
   useLabelKeys,
-  useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
@@ -670,13 +669,14 @@ function CreateAgentDialog({
       }
 
       // Save any unsaved label before submitting
-      agentLabelsRef.current?.saveUnsavedLabel();
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
           teams: assignedTeamIds,
-          labels,
+          labels: updatedLabels,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -885,7 +885,8 @@ function EditAgentDialog({
       }
 
       // Save any unsaved label before submitting
-      agentLabelsRef.current?.saveUnsavedLabel();
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
       try {
         await updateAgent.mutateAsync({
@@ -893,7 +894,7 @@ function EditAgentDialog({
           data: {
             name: name.trim(),
             teams: assignedTeamIds,
-            labels,
+            labels: updatedLabels,
           },
         });
         toast.success("Agent updated successfully");

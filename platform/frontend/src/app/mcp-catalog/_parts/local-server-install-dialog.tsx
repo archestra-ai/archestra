@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -61,8 +62,8 @@ export function LocalServerInstallDialog({
       (env) => env.type === "secret",
     ) || [];
 
-  const handleUserConfigChange = (key: string, value: string) => {
-    setUserConfigValues((prev) => ({ ...prev, [key]: value }));
+  const handleUserConfigChange = (key: string, value: string | boolean) => {
+    setUserConfigValues((prev) => ({ ...prev, [key]: String(value) }));
   };
 
   const handleEnvVarChange = (key: string, value: string) => {
@@ -126,7 +127,6 @@ export function LocalServerInstallDialog({
           {/* User Config Fields */}
           {userConfigFields.length > 0 && (
             <div className="space-y-4">
-              <h3 className="text-sm font-medium">Configuration</h3>
               {userConfigFields.map((field) => (
                 <div key={field.key} className="space-y-2">
                   <Label htmlFor={field.key}>
@@ -140,7 +140,65 @@ export function LocalServerInstallDialog({
                       {field.description}
                     </p>
                   )}
-                  {field.sensitive ? (
+                  {field.type === "boolean" ? (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={field.key}
+                        checked={userConfigValues[field.key] === "true"}
+                        onCheckedChange={(checked) =>
+                          handleUserConfigChange(field.key, checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor={field.key}
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        Enable {field.title.toLowerCase()}
+                      </Label>
+                    </div>
+                  ) : field.type === "number" ? (
+                    <Input
+                      id={field.key}
+                      type="number"
+                      value={userConfigValues[field.key] || ""}
+                      onChange={(e) =>
+                        handleUserConfigChange(field.key, e.target.value)
+                      }
+                      placeholder={`Enter ${field.title.toLowerCase()}`}
+                    />
+                  ) : field.type === "directory" ? (
+                    <>
+                      <Input
+                        id={field.key}
+                        type="text"
+                        value={userConfigValues[field.key] || ""}
+                        onChange={(e) =>
+                          handleUserConfigChange(field.key, e.target.value)
+                        }
+                        placeholder="/path/to/directory"
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the directory path on the server
+                      </p>
+                    </>
+                  ) : field.type === "file" ? (
+                    <>
+                      <Input
+                        id={field.key}
+                        type="text"
+                        value={userConfigValues[field.key] || ""}
+                        onChange={(e) =>
+                          handleUserConfigChange(field.key, e.target.value)
+                        }
+                        placeholder="/path/to/file"
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the file path on the server
+                      </p>
+                    </>
+                  ) : field.sensitive ? (
                     <Input
                       id={field.key}
                       type="password"

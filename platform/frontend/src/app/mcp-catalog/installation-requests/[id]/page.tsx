@@ -295,7 +295,7 @@ export default function InstallationRequestDetailPage({
                                           >
                                             {envVar.key}=
                                             {envVar.type === "secret"
-                                              ? "***SECRET***"
+                                              ? "SECRET (prompted during installation)"
                                               : envVar.value}
                                           </p>
                                         ),

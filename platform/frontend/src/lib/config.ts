@@ -34,8 +34,7 @@ export default {
   },
   debug: process.env.NODE_ENV !== "production",
   easterEgg: {
-    targetSequence:
-      process.env.NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE,
-    videoUrl: process.env.NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL,
+    targetSequence: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE"),
+    videoUrl: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL"),
   },
 };

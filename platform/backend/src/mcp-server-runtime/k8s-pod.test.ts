@@ -36,6 +36,14 @@ describe("K8sPod.slugifyMcpServerName", () => {
     ["Servér", "servr"],
     ["测试Server", "server"],
 
+    // Accented characters
+    ["Café José", "caf-jos"],
+    ["José Ramón", "jos-ramn"],
+
+    // Emojis
+    ["Server 🔥 Fast", "server-fast"],
+    ["Hello 😊 World", "hello-world"],
+
     // Consecutive spaces and special characters
     ["Server    Name", "server-name"],
     ["Test!!!Server", "testserver"],

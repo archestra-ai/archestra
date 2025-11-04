@@ -22,12 +22,12 @@ function AccountSettingsContent() {
       />
       <ApiKeysCard
         classNames={{
-          base: "w-full",
+          base: "w-full mt-6",
         }}
       />
       <DeleteAccountCard
         classNames={{
-          base: "w-full",
+          base: "w-full mt-6",
         }}
       />
     </div>

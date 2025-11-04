@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function McpGatewayLogsPageServer() {
   let initialData: {
     mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
-    agents: archestraApiTypes.GetAgentsResponses["200"];
+    agents: archestraApiTypes.GetAllAgentsResponses["200"];
   } = {
     mcpToolCalls: {
       data: [],
@@ -55,7 +55,7 @@ export default async function McpGatewayLogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await archestraApiSdk.getAgents({ headers })).data || [],
+      agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  # Allow manual triggering of the workflow
+  workflow_dispatch:
 
 concurrency:
   # Cancel any running workflow when new commits are pushed to main.

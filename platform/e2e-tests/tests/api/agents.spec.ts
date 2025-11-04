@@ -44,7 +44,7 @@ test.describe("Agents API CRUD", () => {
   });
 
   test("should get all agents", async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/api/agents`, {
+    const response = await request.get(`${API_BASE_URL}/api/agents/all`, {
       headers: {
         Authorization: apiKey,
       },

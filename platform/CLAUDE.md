@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key URLs
 
 - **Frontend**: <http://localhost:3000/>
+- **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools)
 - **Tools Inspector**: <http://localhost:3000/tools>
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
 - **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
@@ -30,7 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
-- **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
@@ -58,7 +59,7 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
 # Observability
-tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)
+tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
 docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
@@ -77,6 +78,12 @@ ANTHROPIC_API_KEY=your-api-key-here
 ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
+# Chat Feature Configuration (n8n automation expert)
+ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
+ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
+ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp  # Optional, for MCP tool integration
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer token"}  # Optional JSON headers
+
 # Kubernetes (for MCP server runtime)
 ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
@@ -91,7 +98,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts)
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools
 
 **Workspaces**:
 
@@ -109,11 +116,11 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Observability
 
-**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes for Jaeger filtering.
+**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes. Traces stored in Grafana Tempo, viewable via Grafana UI.
 
 **Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
 
-**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Jaeger, Prometheus, and Grafana with pre-configured datasources.
+**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
 ## Coding Conventions
 
@@ -192,10 +199,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **White-labeling**:
 - Admin-only via `/api/organization/appearance` endpoints  
 - Custom logos: PNG only, max 2MB, stored as base64
-- 18 themes: 9 single color, 2 vision assistive, 7 fun themes
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
-- OrganizationThemeProvider applies CSS variables dynamically
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logoType, logo
 

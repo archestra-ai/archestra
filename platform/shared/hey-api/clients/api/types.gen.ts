@@ -1374,7 +1374,12 @@ export type AnthropicMessagesRequestInput = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | unknown;
-    };
+    } | Array<{
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    }>;
     temperature?: number;
     thinking?: unknown;
     tool_choice?: {
@@ -2825,7 +2830,12 @@ export type AnthropicMessagesRequest = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | unknown;
-    };
+    } | Array<{
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    }>;
     temperature?: number;
     thinking?: unknown;
     tool_choice?: {
@@ -2929,7 +2939,16 @@ export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 export type GetAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Filter by agent name
+         */
+        name?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/agents';
 };
 
@@ -2960,39 +2979,55 @@ export type GetAgentsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        isDemo: boolean;
-        isDefault: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
+    200: {
+        data: Array<{
             id: string;
-            agentId: string | null;
-            mcpServerId: string | null;
             name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
+            isDemo: boolean;
+            isDefault: boolean;
             createdAt: string;
             updatedAt: string;
+            tools: Array<{
+                id: string;
+                agentId: string | null;
+                mcpServerId: string | null;
+                name: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                description: string | null;
+                createdAt: string;
+                updatedAt: string;
+            }>;
+            teams: Array<string>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
-        teams: Array<string>;
-    }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
@@ -3072,6 +3107,83 @@ export type CreateAgentResponses = {
 };
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type GetAllAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/all';
+};
+
+export type GetAllAgentsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAllAgentsError = GetAllAgentsErrors[keyof GetAllAgentsErrors];
+
+export type GetAllAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    }>;
+};
+
+export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
 export type GetDefaultAgentData = {
     body?: never;
@@ -4307,6 +4419,298 @@ export type UpdateTrustedDataPolicyResponses = {
 };
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
+
+export type StreamChatData = {
+    body: {
+        id?: string;
+        messages: Array<unknown>;
+        trigger?: 'submit-message' | 'regenerate-message';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat';
+};
+
+export type StreamChatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
+
+export type GetChatConversationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations';
+};
+
+export type GetChatConversationsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatConversationsError = GetChatConversationsErrors[keyof GetChatConversationsErrors];
+
+export type GetChatConversationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];
+
+export type CreateChatConversationData = {
+    body?: {
+        title?: string | null;
+        selectedModel?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations';
+};
+
+export type CreateChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateChatConversationError = CreateChatConversationErrors[keyof CreateChatConversationErrors];
+
+export type CreateChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateChatConversationResponse = CreateChatConversationResponses[keyof CreateChatConversationResponses];
+
+export type DeleteChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type DeleteChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteChatConversationError = DeleteChatConversationErrors[keyof DeleteChatConversationErrors];
+
+export type DeleteChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteChatConversationResponse = DeleteChatConversationResponses[keyof DeleteChatConversationResponses];
+
+export type GetChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type GetChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatConversationError = GetChatConversationErrors[keyof GetChatConversationErrors];
+
+export type GetChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        messages: Array<unknown>;
+    };
+};
+
+export type GetChatConversationResponse = GetChatConversationResponses[keyof GetChatConversationResponses];
+
+export type UpdateChatConversationData = {
+    body?: {
+        title?: string | null;
+        selectedModel?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}';
+};
+
+export type UpdateChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateChatConversationError = UpdateChatConversationErrors[keyof UpdateChatConversationErrors];
+
+export type UpdateChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type GetChatMcpToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/mcp-tools';
+};
+
+export type GetChatMcpToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatMcpToolsError = GetChatMcpToolsErrors[keyof GetChatMcpToolsErrors];
+
+export type GetChatMcpToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        description?: string;
+        inputSchema: unknown;
+    }>;
+};
+
+export type GetChatMcpToolsResponse = GetChatMcpToolsResponses[keyof GetChatMcpToolsResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -7094,6 +7498,541 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type UpdateOrganizationCleanupIntervalData = {
+    body: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/cleanup-interval';
+};
+
+export type UpdateOrganizationCleanupIntervalErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
+
+export type UpdateOrganizationCleanupIntervalResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
+
+export type GetOrganizationAppearanceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type GetOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
+
+export type GetOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
+
+export type UpdateOrganizationAppearanceData = {
+    body?: {
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/appearance';
+};
+
+export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
+
+export type UpdateOrganizationAppearanceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        logoType?: 'default' | 'custom';
+        logo?: string | null;
+    };
+};
+
+export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
+
+export type GetOrganizationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization';
+};
+
+export type GetOrganizationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOrganizationError = GetOrganizationErrors[keyof GetOrganizationErrors];
+
+export type GetOrganizationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+    };
+};
+
+export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
+
+export type DeleteOrganizationLogoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type DeleteOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+
+export type DeleteOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
+
+export type UploadOrganizationLogoData = {
+    body: {
+        logo: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/logo';
+};
+
+export type UploadOrganizationLogoErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
+
+export type UploadOrganizationLogoResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        logo: string | null;
+    };
+};
+
+export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+
+export type GetTeamStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/teams';
+};
+
+export type GetTeamStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamStatisticsError = GetTeamStatisticsErrors[keyof GetTeamStatisticsErrors];
+
+export type GetTeamStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        teamId: string;
+        teamName: string;
+        members: number;
+        agents: number;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetTeamStatisticsResponse = GetTeamStatisticsResponses[keyof GetTeamStatisticsResponses];
+
+export type GetAgentStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/agents';
+};
+
+export type GetAgentStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentStatisticsError = GetAgentStatisticsErrors[keyof GetAgentStatisticsErrors];
+
+export type GetAgentStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        agentId: string;
+        agentName: string;
+        teamName: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetAgentStatisticsResponse = GetAgentStatisticsResponses[keyof GetAgentStatisticsResponses];
+
+export type GetModelStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/models';
+};
+
+export type GetModelStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetModelStatisticsError = GetModelStatisticsErrors[keyof GetModelStatisticsErrors];
+
+export type GetModelStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        model: string;
+        requests: number;
+        inputTokens: number;
+        outputTokens: number;
+        cost: number;
+        percentage: number;
+        timeSeries: Array<{
+            timestamp: string;
+            value: number;
+        }>;
+    }>;
+};
+
+export type GetModelStatisticsResponse = GetModelStatisticsResponses[keyof GetModelStatisticsResponses];
+
+export type GetOverviewStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+    };
+    url: '/api/statistics/overview';
+};
+
+export type GetOverviewStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOverviewStatisticsError = GetOverviewStatisticsErrors[keyof GetOverviewStatisticsErrors];
+
+export type GetOverviewStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalRequests: number;
+        totalTokens: number;
+        totalCost: number;
+        topTeam: string;
+        topAgent: string;
+        topModel: string;
+    };
+};
+
+export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
 export type GetTeamsData = {
     body?: never;

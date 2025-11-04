@@ -239,8 +239,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
 
-      // Inject assigned MCP tools (assigned tools take priority)
+      // TODO: Injection is disabled as we connect only with mcp serverInject assigned MCP tools (assigned tools take priority)
       const mergedTools = await injectTools(tools, resolvedAgentId);
+      // const mergedTools = tools || [];
 
       fastify.log.info(
         {

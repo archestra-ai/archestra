@@ -1,11 +1,11 @@
 apiVersion: 1
 
 datasources:
-  # Jaeger data source for traces (running in docker-compose)
-  - name: Jaeger
-    type: jaeger
+  # Tempo data source for traces (running in docker-compose)
+  - name: Tempo
+    type: tempo
     access: proxy
-    url: http://jaeger:16686
+    url: http://tempo:3200
     isDefault: true
     editable: true
 

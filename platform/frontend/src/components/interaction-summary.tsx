@@ -24,7 +24,7 @@ export function InteractionSummary({
   agent,
 }: {
   interaction: InteractionData;
-  agent?: archestraApiTypes.GetAgentsResponses["200"][number];
+  agent?: archestraApiTypes.GetAllAgentsResponses["200"][number];
 }) {
   const [agentNameTruncated, _setAgentNameTruncated] = useState(false);
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);

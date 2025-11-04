@@ -51,11 +51,24 @@ export default class K8sPod {
     this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
   }
 
+  /**
+   * Converts an MCP server name into a valid Kubernetes DNS subdomain name.
+   *
+   * According to RFC 1123, Kubernetes DNS subdomain names must:
+   * - contain no more than 253 characters
+   * - contain only lowercase alphanumeric characters, '-' or '.'
+   * - start with an alphanumeric character
+   * - end with an alphanumeric character
+   */
   static slugifyMcpServerName(name: string): string {
     return name
       .toLowerCase()
       .replace(/ /g, "-")
-      .replace(/[^a-z0-9-]/g, "");
+      .replace(/[^a-z0-9.-]/g, "")
+      .replace(/-+/g, "-") // collapse consecutive hyphens
+      .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
+      .replace(/[^a-z0-9]+$/, "") // remove trailing non-alphanumeric
+      .substring(0, 253); // limit to 253 characters
   }
 
   /**
@@ -71,8 +84,13 @@ export default class K8sPod {
 
   /**
    * Create environment variables for the pod
+   *
+   * This method processes environment variables from the local config and ensures
+   * that values are properly formatted. It strips surrounding quotes (both single
+   * and double) from values, as they are often used as delimiters in the UI but
+   * should not be part of the actual environment variable value.
    */
-  private createPodEnvFromConfig(
+  static createPodEnvFromConfig(
     localConfig?: z.infer<typeof LocalConfigSchema>,
   ): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
@@ -80,9 +98,23 @@ export default class K8sPod {
     // Add environment variables from local config
     if (localConfig?.environment) {
       Object.entries(localConfig.environment).forEach(([key, value]) => {
+        let processedValue = String(value);
+
+        // Strip surrounding quotes (both single and double)
+        // Users may enter values like: API_KEY='my value' or API_KEY="my value"
+        // We want to extract the actual value without the quotes
+        // Only strip if the value has length > 1 to avoid stripping single quote chars
+        if (
+          processedValue.length > 1 &&
+          ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
+            (processedValue.startsWith('"') && processedValue.endsWith('"')))
+        ) {
+          processedValue = processedValue.slice(1, -1);
+        }
+
         env.push({
           name: key,
-          value: String(value),
+          value: processedValue,
         });
       });
     }
@@ -211,7 +243,7 @@ export default class K8sPod {
             {
               name: "mcp-server",
               image: dockerImage,
-              env: this.createPodEnvFromConfig(catalogItem.localConfig),
+              env: K8sPod.createPodEnvFromConfig(catalogItem.localConfig),
               // Use the command and arguments from local config if provided
               // If not provided, Kubernetes will use the Docker image's default CMD
               ...(catalogItem.localConfig.command

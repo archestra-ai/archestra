@@ -1,104 +1,58 @@
 "use client";
 
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTheme } from "next-themes";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { fontFamilyMap, getThemeById } from "@/config/themes";
+import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
-  useOrganizationAppearance,
   useUpdateOrganizationAppearance,
 } from "@/lib/organization.query";
+import { useOrgTheme } from "@/lib/theme.hook";
 import { FontSelector } from "./_components/font-selector";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function AppearanceSettingsPage() {
-  const { data: appearance, isLoading } = useOrganizationAppearance();
   const updateMutation = useUpdateOrganizationAppearance();
-  const queryClient = useQueryClient();
-  const { theme: colorMode } = useTheme();
-
-  const [selectedTheme, setSelectedTheme] = useState<OrganizationTheme>(
-    appearance?.theme || "cosmic-night",
-  );
-  const [selectedFont, setSelectedFont] = useState<OrganizationCustomFont>(
-    appearance?.customFont || "lato",
-  );
   const [hasChanges, setHasChanges] = useState(false);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (appearance) {
-      setSelectedTheme(appearance.theme || "cosmic-night");
-      setSelectedFont(appearance.customFont || "lato");
+  const {
+    currentUITheme,
+    currentUIFont,
+    themeFromBackend,
+    fontFromBackend,
+    setPreviewTheme,
+    setPreviewFont,
+    applyThemeOnUI,
+    applyFontOnUI,
+    saveTheme,
+    saveFont,
+    logo,
+    logoType,
+    DEFAULT_THEME,
+    DEFAULT_FONT,
+    isLoadingAppearance,
+  } = useOrgTheme();
+
+  useOnUnmount(() => {
+    if (themeFromBackend) {
+      applyThemeOnUI(themeFromBackend);
+      setPreviewTheme(themeFromBackend);
     }
-  }, [appearance]);
-
-  useEffect(() => {
-    const themeChanged =
-      selectedTheme !== (appearance?.theme || "cosmic-night");
-    const fontChanged = selectedFont !== (appearance?.customFont || "lato");
-    setHasChanges(themeChanged || fontChanged);
-  }, [selectedTheme, selectedFont, appearance]);
-
-  // Real-time preview effect
-  useEffect(() => {
-    if (!appearance) return;
-
-    const applyPreview = () => {
-      const theme = getThemeById(selectedTheme);
-      if (!theme) return;
-
-      // Get current color mode
-      const isDark = colorMode === "dark";
-      const colors = isDark ? theme.colors.dark : theme.colors.light;
-
-      // Apply theme colors as CSS variables
-      const root = document.documentElement;
-      root.style.setProperty("--primary", colors.primary);
-      root.style.setProperty("--secondary", colors.secondary);
-
-      if (colors.sidebar) {
-        root.style.setProperty("--sidebar-background", colors.sidebar);
-      }
-      if (colors.sidebarAccent) {
-        root.style.setProperty("--sidebar-accent", colors.sidebarAccent);
-      }
-      if (colors.accent) {
-        root.style.setProperty("--accent", colors.accent);
-      }
-
-      const fontValue = fontFamilyMap[selectedFont] || fontFamilyMap.lato;
-      root.style.setProperty("--font-sans", fontValue);
-    };
-
-    applyPreview();
-  }, [selectedTheme, selectedFont, appearance, colorMode]);
-
-  const handleSave = useCallback(async () => {
-    await updateMutation.mutateAsync({
-      theme: selectedTheme,
-      customFont: selectedFont,
-    });
-    // Invalidate appearance query to refresh the data
-    queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
-    setHasChanges(false);
-  }, [selectedTheme, selectedFont, updateMutation, queryClient]);
-
-  const handleReset = () => {
-    setSelectedTheme(appearance?.theme || "cosmic-night");
-    setSelectedFont(appearance?.customFont || "lato");
-    setHasChanges(false);
-  };
+    if (fontFromBackend) {
+      applyFontOnUI(fontFromBackend);
+      setPreviewFont(fontFromBackend);
+    }
+  });
 
   const handleLogoChange = () => {
     // Invalidate appearance query to refresh the logo
     queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
   };
 
-  if (isLoading) {
+  if (isLoadingAppearance) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
         <div className="flex items-center justify-center h-64">
@@ -112,26 +66,47 @@ export default function AppearanceSettingsPage() {
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
         <LogoUpload
-          currentLogo={appearance?.logo}
-          logoType={appearance?.logoType}
+          currentLogo={logo}
+          logoType={logoType}
           onLogoChange={handleLogoChange}
         />
         <ThemeSelector
-          selectedTheme={selectedTheme}
-          onThemeSelect={setSelectedTheme}
+          selectedTheme={currentUITheme}
+          onThemeSelect={(themeId) => {
+            setPreviewTheme(themeId);
+            setHasChanges(
+              themeId !== themeFromBackend || currentUIFont !== fontFromBackend,
+            );
+          }}
         />
         <FontSelector
-          selectedFont={selectedFont}
-          onFontSelect={setSelectedFont}
+          selectedFont={currentUIFont}
+          onFontSelect={(fontId) => {
+            setPreviewFont(fontId);
+            setHasChanges(
+              currentUITheme !== themeFromBackend || fontId !== fontFromBackend,
+            );
+          }}
         />
         {hasChanges && (
-          <div className="flex gap-3 sticky bottom-6 bg-background p-4 rounded-lg border border-border shadow-lg">
-            <Button onClick={handleSave} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
+            <Button
+              onClick={() => {
+                saveTheme(currentUITheme);
+                saveFont(currentUIFont);
+                setHasChanges(false);
+              }}
+              disabled={updateMutation.isPending}
+            >
+              Save
             </Button>
             <Button
               variant="outline"
-              onClick={handleReset}
+              onClick={() => {
+                setPreviewTheme(themeFromBackend || DEFAULT_THEME);
+                setPreviewFont(fontFromBackend || DEFAULT_FONT);
+                setHasChanges(false);
+              }}
               disabled={updateMutation.isPending}
             >
               Cancel

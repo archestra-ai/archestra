@@ -95,6 +95,7 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
 export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
+  GetAllAgents: "getAllAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
   GetDefaultAgent: "getDefaultAgent",
@@ -208,6 +209,14 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Chat Routes
+  StreamChat: "streamChat",
+  GetChatConversations: "getChatConversations",
+  GetChatConversation: "getChatConversation",
+  CreateChatConversation: "createChatConversation",
+  UpdateChatConversation: "updateChatConversation",
+  DeleteChatConversation: "deleteChatConversation",
+  GetChatMcpTools: "getChatMcpTools",
   // Limits Routes
   GetLimits: "getLimits",
   CreateLimit: "createLimit",

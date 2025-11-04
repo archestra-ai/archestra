@@ -17,6 +17,7 @@ import {
   useCompleteOnboarding,
   useOnboardingLogs,
 } from "@/lib/onboarding.query";
+import { cn } from "@/lib/utils";
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -25,7 +26,7 @@ interface OnboardingDialogProps {
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const { data: defaultAgent } = useDefaultAgent();
-  const { data: logsStatus } = useOnboardingLogs(open && step === 2); // Only poll when on step 2
+  const { data: logsStatus } = useOnboardingLogs(open && step === 2);
   const completeOnboardingMutation = useCompleteOnboarding();
 
   const handleFinishOnboarding = async () => {
@@ -39,6 +40,11 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const handleBack = () => {
     setStep(1);
   };
+
+  const bothConnected =
+    logsStatus?.hasLlmProxyLogs && logsStatus?.hasMcpGatewayLogs;
+  const hasAnyConnection =
+    logsStatus?.hasLlmProxyLogs || logsStatus?.hasMcpGatewayLogs;
 
   return (
     <Dialog open={open}>
@@ -74,61 +80,91 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
               </Button>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-6">
-              <Button onClick={handleBack} variant="outline" size="lg">
-                Back
-              </Button>
-
-              <div className="flex-1 text-center">
-                <div className="text-sm font-medium mb-2">
-                  {!logsStatus?.hasLlmProxyLogs &&
-                  !logsStatus?.hasMcpGatewayLogs
+            <div className="space-y-4">
+              {/* Status Card */}
+              <div
+                className={cn(
+                  "rounded-lg border p-4 transition-all duration-300",
+                  bothConnected
+                    ? "bg-green-500/10 border-green-500/50"
+                    : hasAnyConnection
+                      ? "bg-yellow-500/10 border-yellow-500/50"
+                      : "bg-muted border-muted-foreground/20",
+                )}
+              >
+                <div
+                  className={cn(
+                    "font-semibold mb-3 text-base",
+                    bothConnected
+                      ? "text-green-700 dark:text-green-400"
+                      : hasAnyConnection
+                        ? "text-yellow-700 dark:text-yellow-400"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {!hasAnyConnection
                     ? "Our Proxies are waiting to receive your first event"
-                    : logsStatus?.hasLlmProxyLogs &&
-                        logsStatus?.hasMcpGatewayLogs
+                    : bothConnected
                       ? "Connection established!"
                       : logsStatus?.hasLlmProxyLogs
                         ? "LLM Proxy connected. You can also connect MCP Gateway"
                         : "MCP Gateway connected. You can also connect LLM Proxy"}
                 </div>
-                <div className="flex items-center justify-center gap-4 text-xs">
-                  <div className="flex items-center gap-1.5">
+
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
                     {logsStatus?.hasLlmProxyLogs ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                      <div className="relative">
+                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        <div className="absolute inset-0 animate-ping">
+                          <CheckCircle2 className="w-5 h-5 text-green-500 opacity-75" />
+                        </div>
+                      </div>
                     ) : (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                     )}
-                    <span>LLM Proxy</span>
+                    <span className="text-sm font-medium">LLM Proxy</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+
+                  <div className="flex items-center gap-2">
                     {logsStatus?.hasMcpGatewayLogs ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                      <div className="relative">
+                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        <div className="absolute inset-0 animate-ping">
+                          <CheckCircle2 className="w-5 h-5 text-green-500 opacity-75" />
+                        </div>
+                      </div>
                     ) : (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                     )}
-                    <span>MCP Gateway</span>
+                    <span className="text-sm font-medium">MCP Gateway</span>
                   </div>
                 </div>
               </div>
 
-              <Button
-                onClick={handleFinishOnboarding}
-                disabled={
-                  completeOnboardingMutation.isPending ||
-                  (!logsStatus?.hasLlmProxyLogs &&
-                    !logsStatus?.hasMcpGatewayLogs)
-                }
-                size="lg"
-              >
-                {completeOnboardingMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Finishing...
-                  </>
-                ) : (
-                  "Finish Onboarding"
-                )}
-              </Button>
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-4">
+                <Button onClick={handleBack} variant="outline" size="lg">
+                  Back
+                </Button>
+
+                <Button
+                  onClick={handleFinishOnboarding}
+                  disabled={
+                    completeOnboardingMutation.isPending || !hasAnyConnection
+                  }
+                  size="lg"
+                >
+                  {completeOnboardingMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Finishing...
+                    </>
+                  ) : (
+                    "Finish Onboarding"
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </div>

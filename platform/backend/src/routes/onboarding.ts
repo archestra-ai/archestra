@@ -1,10 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  InteractionModel,
-  McpToolCallModel,
-  OrganizationModel,
-} from "@/models";
+import { InteractionModel, McpToolCallModel } from "@/models";
 import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
@@ -61,53 +57,6 @@ const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         hasLlmProxyLogs,
         hasMcpGatewayLogs,
       });
-    },
-  );
-
-  // Mark onboarding as complete
-  fastify.post(
-    "/api/onboarding/complete",
-    {
-      schema: {
-        operationId: RouteId.CompleteOnboarding,
-        description: "Mark onboarding as complete",
-        tags: ["Onboarding"],
-        body: z.object({}),
-        response: {
-          200: z.object({
-            success: z.boolean(),
-          }),
-          401: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      if (!user.organizationId) {
-        return reply.status(401).send({
-          error: {
-            message: "No active organization",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      // Update organization onboarding status
-      await OrganizationModel.update(user.organizationId, {
-        onboardingComplete: true,
-      });
-
-      return reply.send({ success: true });
     },
   );
 };

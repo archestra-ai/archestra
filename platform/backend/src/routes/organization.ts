@@ -230,12 +230,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        // Check for LLM proxy logs (interactions)
+        const [interaction] = await db
+          .select()
+          .from(schema.interactionsTable)
+          .limit(1);
+        const hasLlmProxyLogs = !!interaction;
+
+        // Check for MCP gateway logs (mcp tool calls)
+        const [mcpToolCall] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .limit(1);
+        const hasMcpGatewayLogs = !!mcpToolCall;
+
+        // Compute onboarding complete based on log existence
+        const onboardingComplete = hasLlmProxyLogs || hasMcpGatewayLogs;
+
         return reply.send({
           id: organization.id,
           name: organization.name,
           slug: organization.slug,
           limitCleanupInterval: organization.limitCleanupInterval,
-          onboardingComplete: organization.onboardingComplete,
+          onboardingComplete,
         });
       } catch (error) {
         fastify.log.error(error);

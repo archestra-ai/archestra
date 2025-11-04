@@ -37,27 +37,16 @@ export function useOnboardingLogs(enabled: boolean) {
 }
 
 /**
- * Complete onboarding mutation
+ * Complete onboarding mutation - simply invalidates organization query
+ * to refresh the onboardingComplete status (computed from log existence)
  */
 export function useCompleteOnboarding() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/onboarding/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(
-          error.error?.message || "Failed to complete onboarding",
-        );
-      }
-
-      return await response.json();
+      // No API call needed - onboardingComplete is computed from logs
+      return { success: true };
     },
     onSuccess: () => {
       // Invalidate organization details to refresh onboardingComplete status

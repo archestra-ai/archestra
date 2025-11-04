@@ -1,5 +1,5 @@
 {
-  "id": "2f8906a5-2fd3-4b8c-b796-fa1142a413d5",
+  "id": "6e80465e-84e5-4b25-86d2-1212d9c55704",
   "prevId": "cd78c819-8124-428b-8788-89a6d2212092",
   "version": "7",
   "dialect": "postgresql",
@@ -1951,17 +1951,23 @@
           "primaryKey": false,
           "notNull": true
         },
+        "method": {
+          "name": "method",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "tool_call": {
           "name": "tool_call",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "tool_result": {
           "name": "tool_result",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -2157,13 +2163,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'default'"
-        },
-        "onboarding_complete": {
-          "name": "onboarding_complete",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         }
       },
       "indexes": {},

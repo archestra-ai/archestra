@@ -1,1 +1,0 @@
-ALTER TABLE "organization" ADD COLUMN "onboarding_complete" boolean DEFAULT false NOT NULL;

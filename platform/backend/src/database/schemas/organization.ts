@@ -32,7 +32,6 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationAppearance["logoType"]>()
     .notNull()
     .default("default"),
-  onboardingComplete: boolean("onboarding_complete").default(false).notNull(),
 });
 
 export default organizationsTable;

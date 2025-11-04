@@ -3,7 +3,7 @@ import { UI_BASE_URL } from '../consts';
 
 export function goToPage(page: Page, path = '') {
   return page.goto(`${UI_BASE_URL}${path}`, {
-    waitUntil: 'networkidle',
+    waitUntil: 'domcontentloaded',
   });
 }
 

@@ -54,6 +54,22 @@ export const formSchema = z
       message: "Either command or Docker image must be provided.",
       path: [],
     },
+  )
+  .refine(
+    (data) => {
+      // For OAuth authentication, redirect_uris is required
+      if (data.authMethod === "oauth") {
+        return (
+          data.oauthConfig?.redirect_uris &&
+          data.oauthConfig.redirect_uris.trim().length > 0
+        );
+      }
+      return true;
+    },
+    {
+      message: "At least one redirect URI is required for OAuth authentication.",
+      path: ["oauthConfig", "redirect_uris"],
+    },
   );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;

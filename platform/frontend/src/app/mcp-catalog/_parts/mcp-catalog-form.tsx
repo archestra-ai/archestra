@@ -83,6 +83,21 @@ export function McpCatalogForm({
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
 
+  // Set default redirect URI on client-side mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && !initialValues) {
+      const currentRedirectUris = form.getValues("oauthConfig.redirect_uris");
+      // Only set if it's empty (from SSR)
+      if (!currentRedirectUris || currentRedirectUris.trim() === "") {
+        form.setValue(
+          "oauthConfig.redirect_uris",
+          `${window.location.origin}/oauth-callback`,
+          { shouldValidate: false }
+        );
+      }
+    }
+  }, [form, initialValues]);
+
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
     if (initialValues) {

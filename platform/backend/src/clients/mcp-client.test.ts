@@ -6,6 +6,7 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
+import db, { schema } from "@/database";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
@@ -491,6 +492,15 @@ describe("McpClient", () => {
       let localCatalogId: string;
 
       beforeEach(async () => {
+        // Create test user for local MCP servers
+        const testUserId = "test-user-id";
+        await db.insert(schema.usersTable).values({
+          id: testUserId,
+          name: "Test User",
+          email: "test@example.com",
+          emailVerified: true,
+        });
+
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({
           name: "local-streamable-http-server",
@@ -509,7 +519,6 @@ describe("McpClient", () => {
         localCatalogId = localCatalog.id;
 
         // Create MCP server for local streamable-http testing
-        const testUserId = "test-user-id";
         const localMcpServer = await McpServerModel.create({
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
@@ -640,7 +649,7 @@ describe("McpClient", () => {
         const toolCalls = [
           {
             id: "call_1",
-            name: "local-streamable-http-server__formatted_tool",
+            name: "local-streamable-http-server-test-user-id__formatted_tool",
             arguments: {},
           },
         ];

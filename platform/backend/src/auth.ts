@@ -2,7 +2,7 @@ import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, apiKey, organization } from "better-auth/plugins";
+import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
@@ -69,6 +69,9 @@ export const auth = betterAuth({
         defaultPermissions: allAvailableActions,
       },
     }),
+    twoFactor({
+      issuer: "Archestra",
+    }),
   ],
 
   user: {
@@ -91,6 +94,7 @@ export const auth = betterAuth({
       account: schema.account,
       team: schema.team,
       teamMember: schema.teamMember,
+      twoFactor: schema.twoFactor,
     },
   }),
 

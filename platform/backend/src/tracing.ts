@@ -38,6 +38,9 @@ const sdk = new NodeSDK({
   instrumentations: [
     new FastifyOtelInstrumentation({
       registerOnInitialization: true,
+      ignorePaths: (opts) => {
+        return opts.url.startsWith("/metrics");
+      },
     }),
     getNodeAutoInstrumentations({
       // Disable instrumentation for specific packages if needed

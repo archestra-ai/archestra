@@ -39,7 +39,7 @@ const sdk = new NodeSDK({
     new FastifyOtelInstrumentation({
       registerOnInitialization: true,
       ignorePaths: (opts) => {
-        return opts.url.startsWith("/metrics");
+        return opts.url.startsWith(config.observability.metrics.endpoint);
       },
     }),
     getNodeAutoInstrumentations({

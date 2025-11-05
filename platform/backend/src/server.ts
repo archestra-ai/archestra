@@ -171,8 +171,10 @@ const start = async () => {
     // Register metrics plugin on main server to track all HTTP requests
     // We set endpoint to null to prevent exposing /metrics on the main API port
     // The metrics endpoint is exposed separately on port 9050 by the metrics server
+    // We disable default metrics here since they're already collected by the metrics server
     await fastify.register(metricsPlugin, {
       endpoint: null,
+      defaultMetrics: { enabled: false },
     });
 
     // Register CORS plugin to allow cross-origin requests

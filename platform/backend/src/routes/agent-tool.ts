@@ -4,6 +4,7 @@ import {
   AgentModel,
   AgentTeamModel,
   AgentToolModel,
+  InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
   UserModel,
@@ -112,6 +113,24 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "not_found",
             },
           });
+        }
+
+        // Check if tool is from local server (requires executionSourceMcpServerId)
+        if (tool.catalogId) {
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            tool.catalogId,
+          );
+          if (catalogItem?.serverType === "local") {
+            if (!executionSourceMcpServerId) {
+              return reply.status(400).send({
+                error: {
+                  message:
+                    "Execution source installation is required for local MCP server tools",
+                  type: "validation_error",
+                },
+              });
+            }
+          }
         }
 
         // If a credential source is specified, validate it
@@ -317,6 +336,26 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           if (validationError) {
             return reply.status(validationError.status).send(validationError);
+          }
+        }
+
+        // Check if tool is from local server and executionSourceMcpServerId is being set to null
+        if (
+          executionSourceMcpServerId === null &&
+          agentToolForValidation &&
+          agentToolForValidation.tool.catalogId
+        ) {
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            agentToolForValidation.tool.catalogId,
+          );
+          if (catalogItem?.serverType === "local") {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "Execution source installation is required for local MCP server tools and cannot be set to null",
+                type: "validation_error",
+              },
+            });
           }
         }
 

@@ -2798,6 +2798,7 @@ export type GetAllAgentToolsResponses = {
             };
             createdAt: string;
             updatedAt: string;
+            catalogId: string | null;
             mcpServerId: string | null;
             mcpServerName: string | null;
             mcpServerCatalogId: string | null;

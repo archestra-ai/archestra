@@ -155,6 +155,7 @@ class AgentToolModel {
           parameters: schema.toolsTable.parameters,
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
           mcpServerId: schema.toolsTable.mcpServerId,
           mcpServerName: schema.mcpServersTable.name,
           mcpServerCatalogId: schema.mcpServersTable.catalogId,

@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,7 @@ import {
   useAgentToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
@@ -72,6 +74,7 @@ export function AssignedToolsList({
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
+  const { data: mcpServers } = useMcpServers();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sorting, setSorting] = useState<SortingState>([
@@ -377,13 +380,38 @@ export function AssignedToolsList({
       },
       {
         id: "token",
-        header: "Token to use",
+        header: "Credential",
         cell: ({ row }) => {
           const isMcpTool = !!row.original.tool.mcpServerName;
 
-          // Only show token selector for MCP tools
+          // Only show selector for MCP tools
           if (!isMcpTool) {
             return <span className="text-sm text-muted-foreground">—</span>;
+          }
+
+          // Determine if tool is from local server
+          const mcpServer = mcpServers?.find(
+            (s) =>
+              s.catalogId === row.original.tool.mcpServerCatalogId ||
+              s.id === row.original.tool.mcpServerId,
+          );
+          const isLocalServer = mcpServer?.serverType === "local";
+
+          // Show InstallationSelect for local servers, TokenSelect for remote
+          if (isLocalServer) {
+            return (
+              <InstallationSelect
+                value={row.original.executionSourceMcpServerId}
+                onValueChange={(value) => {
+                  agentToolPatchMutation.mutate({
+                    id: row.original.id,
+                    executionSourceMcpServerId: value,
+                  });
+                }}
+                catalogId={row.original.tool.mcpServerCatalogId ?? ""}
+                className="h-8 w-[200px] text-xs"
+              />
+            );
           }
 
           return (
@@ -569,6 +597,7 @@ export function AssignedToolsList({
       resultPolicies,
       agentToolPatchMutation,
       unassignToolMutation,
+      mcpServers?.find,
     ],
   );
 

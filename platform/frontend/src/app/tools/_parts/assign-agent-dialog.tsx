@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +44,16 @@ export function AssignAgentDialog({
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
+  const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
+    string | null
+  >(null);
+
+  // Determine if tool is from local server
+  const mcpServer = mcpServers.data?.find(
+    (server) => server.id === tool?.tool.mcpServerId,
+  );
+  const catalogId = mcpServer?.catalogId ?? "";
+  const isLocalServer = mcpServer?.serverType === "local";
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
@@ -70,7 +81,12 @@ export function AssignAgentDialog({
         assignMutation.mutateAsync({
           agentId,
           toolId: tool.tool.id,
-          credentialSourceMcpServerId: credentialSourceMcpServerId || null,
+          credentialSourceMcpServerId: isLocalServer
+            ? null
+            : credentialSourceMcpServerId || null,
+          executionSourceMcpServerId: isLocalServer
+            ? executionSourceMcpServerId || null
+            : null,
         }),
       ),
     );
@@ -112,11 +128,14 @@ export function AssignAgentDialog({
     setSelectedAgentIds([]);
     setSearchQuery("");
     setCredentialSourceMcpServerId(null);
+    setExecutionSourceMcpServerId(null);
     onOpenChange(false);
   }, [
     tool,
     selectedAgentIds,
     credentialSourceMcpServerId,
+    executionSourceMcpServerId,
+    isLocalServer,
     assignMutation,
     onOpenChange,
   ]);
@@ -138,6 +157,7 @@ export function AssignAgentDialog({
           setSelectedAgentIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
+          setExecutionSourceMcpServerId(null);
         }
       }}
     >
@@ -190,24 +210,45 @@ export function AssignAgentDialog({
 
         {selectedAgentIds.length > 0 && (
           <div className="pt-4 border-t">
-            <Label htmlFor="token-select" className="text-md font-medium mb-1">
-              Token to use
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select which token will be used when these agents execute this
-              tool
-            </p>
-            <TokenSelect
-              value={credentialSourceMcpServerId}
-              onValueChange={setCredentialSourceMcpServerId}
-              className="w-full"
-              catalogId={
-                mcpServers.data?.find(
-                  (server) => server.id === tool?.tool.mcpServerId,
-                )?.catalogId ?? ""
-              }
-              agentIds={selectedAgentIds}
-            />
+            {isLocalServer ? (
+              <>
+                <Label
+                  htmlFor="installation-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select whose MCP server installation will execute the tool
+                </p>
+                <InstallationSelect
+                  value={executionSourceMcpServerId}
+                  onValueChange={setExecutionSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                />
+              </>
+            ) : (
+              <>
+                <Label
+                  htmlFor="token-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select which token will be used when these agents execute this
+                  tool
+                </p>
+                <TokenSelect
+                  value={credentialSourceMcpServerId}
+                  onValueChange={setCredentialSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                  agentIds={selectedAgentIds}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -218,6 +259,7 @@ export function AssignAgentDialog({
               setSelectedAgentIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
+              setExecutionSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >

@@ -383,9 +383,7 @@ export function AssignedToolsList({
 
           // Only show token selector for MCP tools
           if (!isMcpTool) {
-            return (
-              <span className="text-sm text-muted-foreground">Derived</span>
-            );
+            return <span className="text-sm text-muted-foreground">—</span>;
           }
 
           return (

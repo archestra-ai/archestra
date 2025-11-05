@@ -471,12 +471,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         system: N8N_SYSTEM_PROMPT,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
-
-        providerOptions: {
-          anthropic: {
-            thinking: { type: "enabled", budgetTokens: 12000 },
-          },
-        },
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
           fastify.log.info(

@@ -149,7 +149,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Anthropic messages request received",
     );
 
-    // Debug: Log message structure to diagnose thinking block issues
+    // Debug: Log message structure
     if (body.messages.length > 0) {
       fastify.log.info(
         {
@@ -270,77 +270,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "MCP tools injected",
       );
 
-      // Fix AI SDK thinking block issue: The AI SDK sends thinking blocks back without
-      // valid signatures. Anthropic requires thinking blocks to have signatures from
-      // previous responses. We need to strip invalid thinking blocks and disable thinking
-      // for requests with incomplete conversation history.
-      let thinkingConfig = body.thinking;
-      let messagesWithThinking = body.messages;
-
-      if (body.thinking && typeof body.thinking === "object" && "type" in body.thinking) {
-        // First, strip any thinking blocks without valid signatures from assistant messages
-        let strippedThinkingBlocks = false;
-        messagesWithThinking = body.messages.map((message) => {
-          if (message.role === "assistant" && Array.isArray(message.content)) {
-            const filteredContent = message.content.filter((block) => {
-              // Remove thinking blocks without signatures
-              if (block.type === "thinking" && !block.signature) {
-                strippedThinkingBlocks = true;
-                fastify.log.warn(
-                  { resolvedAgentId },
-                  "Stripping thinking block without signature from assistant message",
-                );
-                return false;
-              }
-              // Remove redacted_thinking blocks without data
-              if (block.type === "redacted_thinking" && !block.data) {
-                strippedThinkingBlocks = true;
-                fastify.log.warn(
-                  { resolvedAgentId },
-                  "Stripping redacted_thinking block without data from assistant message",
-                );
-                return false;
-              }
-              return true;
-            });
-            return { ...message, content: filteredContent };
-          }
-          return message;
-        });
-
-        // Now check if any assistant messages have tool_use without valid thinking blocks
-        const hasIncompleteHistory = messagesWithThinking.some((message) => {
-          if (message.role === "assistant" && Array.isArray(message.content)) {
-            const hasToolUse = message.content.some(
-              (block) => block.type === "tool_use",
-            );
-            const hasThinking = message.content.some(
-              (block) =>
-                block.type === "thinking" || block.type === "redacted_thinking",
-            );
-            return hasToolUse && !hasThinking;
-          }
-          return false;
-        });
-
-        if (hasIncompleteHistory || strippedThinkingBlocks) {
-          fastify.log.warn(
-            {
-              resolvedAgentId,
-              messagesCount: body.messages.length,
-              strippedThinkingBlocks,
-              hasIncompleteHistory,
-            },
-            "AI SDK sent invalid thinking blocks or incomplete conversation history. Disabling thinking for this request to avoid Anthropic validation errors.",
-          );
-          // Disable thinking for this request since we have incomplete history
-          thinkingConfig = undefined;
-        }
-      }
-
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
-        messagesWithThinking,
+        body.messages,
       );
 
       // For streaming requests, set headers first
@@ -349,14 +281,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
 
-        // Forward Anthropic-specific headers that AI SDK might check
-        // These headers help AI SDK recognize thinking block support
+        // Forward Anthropic-specific rate limit headers
         reply.header("anthropic-ratelimit-requests-limit", "1000");
         reply.header("anthropic-ratelimit-requests-remaining", "999");
-        reply.header("anthropic-ratelimit-requests-reset", new Date(Date.now() + 60000).toISOString());
+        reply.header(
+          "anthropic-ratelimit-requests-reset",
+          new Date(Date.now() + 60000).toISOString(),
+        );
         reply.header("anthropic-ratelimit-tokens-limit", "100000");
         reply.header("anthropic-ratelimit-tokens-remaining", "99000");
-        reply.header("anthropic-ratelimit-tokens-reset", new Date(Date.now() + 60000).toISOString());
+        reply.header(
+          "anthropic-ratelimit-tokens-reset",
+          new Date(Date.now() + 60000).toISOString(),
+        );
         reply.header("request-id", `req-proxy-${Date.now()}`);
       }
 
@@ -403,9 +340,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : undefined,
         );
 
-      // Apply updates back to Anthropic messages (use messagesWithThinking which has placeholder thinking blocks)
+      // Apply updates back to Anthropic messages
       const filteredMessages = utils.adapters.anthropic.applyUpdates(
-        messagesWithThinking,
+        body.messages,
         toolResultUpdates,
       );
 
@@ -437,7 +374,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ...(body as any),
                 messages: filteredMessages,
                 tools: mergedTools.length > 0 ? mergedTools : undefined,
-                thinking: thinkingConfig, // Use potentially modified thinking config
               });
               llmSpan.end();
               return stream;
@@ -453,11 +389,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let accumulatedText = "";
         const accumulatedToolCalls: AnthropicProvider.Messages.ToolUseBlock[] =
           [];
-        const accumulatedThinkingBlocks: Array<{
-          type: "thinking";
-          thinking: string;
-          signature?: string;
-        }> = [];
         const events: AnthropicProvider.Messages.MessageStreamEvent[] = [];
 
         // Track indices of tool use blocks to know which content_block_stop events to skip
@@ -491,31 +422,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
 
-          // Stream content_block_start for thinking blocks immediately and start accumulating
-          if (
-            event.type === "content_block_start" &&
-            event.content_block.type === "thinking"
-          ) {
-            fastify.log.info(
-              {
-                eventType: event.type,
-                index: event.index,
-                hasSignature: !!event.content_block.signature,
-                eventJson: JSON.stringify(event)
-              },
-              "Streaming content_block_start (thinking)",
-            );
-            reply.raw.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-            // Start accumulating this thinking block
-            accumulatedThinkingBlocks.push({
-              type: "thinking",
-              thinking: "",
-              signature: event.content_block.signature,
-            });
-          }
-
           // Stream text content immediately
           if (
             event.type === "content_block_delta" &&
@@ -527,32 +433,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             accumulatedText += event.delta.text;
           }
 
-          // Stream thinking content immediately and accumulate
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "thinking_delta"
-          ) {
-            fastify.log.info(
-              { thinkingLength: event.delta.thinking?.length || 0 },
-              "Streaming thinking_delta",
-            );
-            reply.raw.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-            // Accumulate thinking content
-            const lastThinkingBlock =
-              accumulatedThinkingBlocks[accumulatedThinkingBlocks.length - 1];
-            if (lastThinkingBlock && event.delta.thinking) {
-              lastThinkingBlock.thinking += event.delta.thinking;
-            }
-          }
-
-          // Stream content_block_stop for text/thinking blocks immediately (skip tool blocks)
+          // Stream content_block_stop for text blocks immediately (skip tool blocks)
           if (event.type === "content_block_stop") {
             if (!toolUseBlockIndices.has(event.index)) {
               fastify.log.info(
                 { eventType: event.type, index: event.index },
-                "Streaming content_block_stop (text/thinking)",
+                "Streaming content_block_stop (text)",
               );
               reply.raw.write(
                 `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
@@ -658,7 +544,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Tool calls allowed, streaming them now",
             );
             responseContent = [
-              ...accumulatedThinkingBlocks,
               ...(accumulatedText
                 ? [
                     {
@@ -706,7 +591,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           } else {
             responseContent = [
-              ...accumulatedThinkingBlocks,
               {
                 type: "text",
                 text: accumulatedText,
@@ -803,7 +687,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ...(body as any),
                 messages: filteredMessages,
                 tools: mergedTools.length > 0 ? mergedTools : undefined,
-                thinking: thinkingConfig, // Use potentially modified thinking config
                 stream: false,
               });
               llmSpan.end();
@@ -931,7 +814,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ...(body as any),
                       messages: updatedMessages,
                       tools: mergedTools.length > 0 ? mergedTools : undefined,
-                      thinking: thinkingConfig, // Use potentially modified thinking config
                       stream: false,
                     });
                     continuationSpan.end();

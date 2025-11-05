@@ -21,7 +21,7 @@ class McpServerModel {
     // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values(serverData)
+      .values({ ...serverData, name: `${serverData.name}-${userId}` })
       .returning();
 
     // Assign teams to the MCP server if provided

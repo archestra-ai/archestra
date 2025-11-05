@@ -168,6 +168,13 @@ const start = async () => {
       // Continue server startup even if MCP runtime fails
     }
 
+    // Register metrics plugin on main server to track all HTTP requests
+    // We set endpoint to null to prevent exposing /metrics on the main API port
+    // The metrics endpoint is exposed separately on port 9050 by the metrics server
+    await fastify.register(metricsPlugin, {
+      endpoint: null,
+    });
+
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {
       origin: corsOrigins,

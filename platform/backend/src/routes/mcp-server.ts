@@ -315,9 +315,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     await McpServerModel.getToolsFromServer(mcpServer);
 
                   // Persist tools in the database
+                  // Use catalog item name (without userId) for tool naming to avoid duplicates across users
+                  const toolNamePrefix = catalogItem?.name || mcpServer.name;
                   for (const tool of tools) {
-                    const createdTool = await ToolModel.create({
-                      name: ToolModel.slugifyName(mcpServer.name, tool.name),
+                    // Use createToolIfNotExists to avoid duplicates when multiple users install the same server
+                    const createdTool = await ToolModel.createToolIfNotExists({
+                      name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                       description: tool.description,
                       parameters: tool.inputSchema,
                       mcpServerId: mcpServer.id,
@@ -380,8 +383,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
           // Persist tools in the database with source='mcp_server' and mcpServerId
+          // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
           for (const tool of tools) {
-            const createdTool = await ToolModel.create({
+            const createdTool = await ToolModel.createToolIfNotExists({
               name: ToolModel.slugifyName(mcpServer.name, tool.name),
               description: tool.description,
               parameters: tool.inputSchema,

@@ -45,6 +45,26 @@ class ToolModel {
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
+    // For MCP tools (agentId is null, mcpServerId is set), check if tool with same name already exists
+    // This is necessary because the unique constraint on (agentId, name) doesn't prevent duplicates
+    // when agentId is NULL (PostgreSQL treats NULL values as distinct)
+    if (!tool.agentId && tool.mcpServerId) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            isNull(schema.toolsTable.agentId),
+            isNotNull(schema.toolsTable.mcpServerId),
+            eq(schema.toolsTable.name, tool.name),
+          ),
+        );
+
+      if (existingTool) {
+        return existingTool;
+      }
+    }
+
     const [createdTool] = await db
       .insert(schema.toolsTable)
       .values(tool)
@@ -316,6 +336,7 @@ class ToolModel {
       mcpServerCatalogId: string;
       mcpServerId: string;
       credentialSourceMcpServerId: string | null;
+      catalogName: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -333,6 +354,7 @@ class ToolModel {
         credentialSourceMcpServerId:
           schema.agentToolsTable.credentialSourceMcpServerId,
         mcpServerId: schema.mcpServersTable.id,
+        catalogName: schema.internalMcpCatalogTable.name,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -342,6 +364,10 @@ class ToolModel {
       .innerJoin(
         schema.mcpServersTable,
         eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .where(
         and(

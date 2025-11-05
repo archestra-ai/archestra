@@ -196,7 +196,10 @@ class McpClient {
           for (const toolCall of mcpToolCalls) {
             try {
               // Strip the server prefix from tool name for MCP server call
-              const serverPrefix = `${firstTool.mcpServerName}__`;
+              // For local servers, use catalog name (without userId) for prefix
+              const prefixName =
+                firstTool.catalogName || firstTool.mcpServerName;
+              const serverPrefix = `${prefixName}__`;
               const mcpToolName = toolCall.name.startsWith(serverPrefix)
                 ? toolCall.name.substring(serverPrefix.length)
                 : toolCall.name;
@@ -303,7 +306,9 @@ class McpClient {
         for (const toolCall of mcpToolCalls) {
           try {
             // Strip the server prefix from tool name for MCP server call
-            const serverPrefix = `${firstTool.mcpServerName}__`;
+            // For local servers, use catalog name (without userId) for prefix
+            const prefixName = firstTool.catalogName || firstTool.mcpServerName;
+            const serverPrefix = `${prefixName}__`;
             const mcpToolName = toolCall.name.startsWith(serverPrefix)
               ? toolCall.name.substring(serverPrefix.length)
               : toolCall.name;
@@ -482,7 +487,9 @@ class McpClient {
           // Strip the server prefix from tool name for MCP server call
           // Tool name format: <server-name>__<native-tool-name>
           // Example: githubcopilot__remote-mcp__search_issues -> search_issues
-          const serverPrefix = `${firstTool.mcpServerName}__`;
+          // For local servers, use catalog name (without userId) for prefix
+          const prefixName = firstTool.catalogName || firstTool.mcpServerName;
+          const serverPrefix = `${prefixName}__`;
           const mcpToolName = toolCall.name.startsWith(serverPrefix)
             ? toolCall.name.substring(serverPrefix.length)
             : toolCall.name;

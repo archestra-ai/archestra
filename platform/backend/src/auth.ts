@@ -92,7 +92,7 @@ export const auth = betterAuth({
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
       secure: production, // Only use secure cookies in production (HTTPS required)
-      sameSite: production ? "none" : "lax", // "none" required for cross-domain in production with HTTPS
+      sameSite: production ? "none" : "strict", // "strict" for better Safari/WebKit compatibility in local dev
     },
   },
 

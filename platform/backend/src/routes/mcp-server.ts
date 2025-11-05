@@ -277,6 +277,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For local servers, start the K8s pod first
           if (catalogItem?.serverType === "local") {
             try {
+              // Capture catalogId before async callback to ensure it's available
+              const capturedCatalogId = catalogItem.id;
+              const capturedCatalogName = catalogItem.name;
+
               // Set status to pending before starting the pod
               await McpServerModel.update(mcpServer.id, {
                 localInstallationStatus: "pending",
@@ -316,20 +320,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                   // Persist tools in the database
                   // Use catalog item name (without userId) for tool naming to avoid duplicates across users
-                  const toolNamePrefix = catalogItem?.name || mcpServer.name;
+                  const toolNamePrefix = capturedCatalogName || mcpServer.name;
                   for (const tool of tools) {
                     // Use createToolIfNotExists to avoid duplicates when multiple users install the same server
                     const createdTool = await ToolModel.createToolIfNotExists({
                       name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                       description: tool.description,
                       parameters: tool.inputSchema,
+                      catalogId: capturedCatalogId,
                       mcpServerId: mcpServer.id,
                     });
 
-                    // If agentIds were provided, create agent-tool assignments
+                    // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
                     if (agentIds && agentIds.length > 0) {
                       for (const agentId of agentIds) {
-                        await AgentToolModel.create(agentId, createdTool.id);
+                        await AgentToolModel.create(agentId, createdTool.id, {
+                          executionSourceMcpServerId: mcpServer.id,
+                        });
                       }
                     }
                   }
@@ -382,6 +389,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For non-local servers, fetch tools synchronously during installation
           const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
+          // Catalog item must exist for remote servers
+          if (!catalogItem) {
+            throw new Error("Catalog item not found for remote server");
+          }
+
           // Persist tools in the database with source='mcp_server' and mcpServerId
           // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
           for (const tool of tools) {
@@ -389,10 +401,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: ToolModel.slugifyName(mcpServer.name, tool.name),
               description: tool.description,
               parameters: tool.inputSchema,
+              catalogId: catalogItem.id,
               mcpServerId: mcpServer.id,
             });
 
             // If agentIds were provided, create agent-tool assignments
+            // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
             if (agentIds && agentIds.length > 0) {
               for (const agentId of agentIds) {
                 await AgentToolModel.create(agentId, createdTool.id);
@@ -555,7 +569,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const tools = await ToolModel.findByMcpServerId(request.params.id);
+        // Get the MCP server first to check if it has a catalogId
+        const mcpServer = await McpServerModel.findById(request.params.id);
+
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found_error",
+            },
+          });
+        }
+
+        // For catalog-based servers (local installations), query tools by catalogId
+        // This ensures all installations of the same catalog show the same tools
+        // For legacy servers without catalogId, fall back to mcpServerId
+        const tools = mcpServer.catalogId
+          ? await ToolModel.findByCatalogId(mcpServer.catalogId)
+          : await ToolModel.findByMcpServerId(request.params.id);
+
         return reply.send(tools);
       } catch (error) {
         fastify.log.error(error);

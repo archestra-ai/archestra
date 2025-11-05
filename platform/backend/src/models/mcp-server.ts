@@ -9,6 +9,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
+import ToolModel from "./tool";
 
 // Get the API base URL from config
 const API_BASE_URL =
@@ -256,6 +257,33 @@ class McpServerModel {
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
       await SecretModel.delete(mcpServer.secretId);
+    }
+
+    // If the MCP server was deleted and had a catalogId, check if this was the last installation
+    // If so, clean up all tools for this catalog
+    if (deleted && mcpServer.catalogId) {
+      try {
+        // Check if any other servers exist for this catalog
+        const remainingServers = await McpServerModel.findByCatalogId(
+          mcpServer.catalogId,
+        );
+
+        if (remainingServers.length === 0) {
+          // No more servers for this catalog, delete all tools
+          const deletedToolsCount = await ToolModel.deleteByCatalogId(
+            mcpServer.catalogId,
+          );
+          logger.info(
+            `Deleted ${deletedToolsCount} tools for catalog ${mcpServer.catalogId} (last installation removed)`,
+          );
+        }
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up tools for catalog ${mcpServer.catalogId}:`,
+        );
+        // Don't fail the deletion if tool cleanup fails
+      }
     }
 
     return deleted;

@@ -2136,6 +2136,7 @@ export type GetAgentsResponses = {
             tools: Array<{
                 id: string;
                 agentId: string | null;
+                catalogId: string | null;
                 mcpServerId: string | null;
                 name: string;
                 /**
@@ -2233,6 +2234,7 @@ export type CreateAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2310,6 +2312,7 @@ export type GetAllAgentsResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2387,6 +2390,7 @@ export type GetDefaultAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2518,6 +2522,7 @@ export type GetAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2608,6 +2613,7 @@ export type UpdateAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2764,6 +2770,7 @@ export type GetAllAgentToolsResponses = {
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
         credentialSourceMcpServerId: string | null;
+        executionSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2838,6 +2845,7 @@ export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof
 export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -2929,6 +2937,7 @@ export type GetAgentToolsResponses = {
     200: Array<{
         id: string;
         agentId: string | null;
+        catalogId: string | null;
         mcpServerId: string | null;
         name: string;
         /**
@@ -2960,6 +2969,7 @@ export type UpdateAgentToolData = {
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -3012,6 +3022,7 @@ export type UpdateAgentToolResponses = {
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -9378,6 +9389,7 @@ export type GetToolsResponses = {
      */
     200: Array<{
         id: string;
+        catalogId: string | null;
         name: string;
         /**
          *
@@ -9446,6 +9458,7 @@ export type GetUnassignedToolsResponses = {
      */
     200: Array<{
         id: string;
+        catalogId: string | null;
         name: string;
         /**
          *

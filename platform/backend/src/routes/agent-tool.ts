@@ -75,6 +75,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
           })
           .nullish(),
         response: {
@@ -88,7 +89,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         const { agentId, toolId } = request.params;
-        const { credentialSourceMcpServerId } = request.body || {};
+        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+          request.body || {};
 
         // Validate that agent exists
         const agent = await AgentModel.findById(agentId);
@@ -124,11 +126,24 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // If an execution source is specified, validate it
+        if (executionSourceMcpServerId) {
+          const validationError = await validateExecutionSource(
+            toolId,
+            executionSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
+        }
+
         // Create the assignment (no-op if already exists)
         await AgentToolModel.createIfNotExists(
           agentId,
           toolId,
           credentialSourceMcpServerId,
+          executionSourceMcpServerId,
         );
 
         return reply.send({ success: true });
@@ -246,6 +261,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
+          executionSourceMcpServerId: true,
         }).partial(),
         response: {
           200: UpdateAgentToolSchema,
@@ -258,15 +274,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         const { id } = request.params;
-        const { credentialSourceMcpServerId } = request.body;
+        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+          request.body;
 
-        // If credentialSourceMcpServerId is being updated, validate it
-        if (credentialSourceMcpServerId) {
-          // First, get the agent-tool to find the agentId
+        // Get the agent-tool relationship for validation (needed for both credential and execution source)
+        let agentToolForValidation:
+          | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
+          | undefined;
+
+        if (credentialSourceMcpServerId || executionSourceMcpServerId) {
           const agentTools = await AgentToolModel.findAll();
-          const agentTool = agentTools.find((at) => at.id === id);
+          agentToolForValidation = agentTools.find((at) => at.id === id);
 
-          if (!agentTool) {
+          if (!agentToolForValidation) {
             return reply.status(404).send({
               error: {
                 message: `Agent-tool relationship with ID ${id} not found`,
@@ -274,9 +294,25 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             });
           }
+        }
+
+        // If credentialSourceMcpServerId is being updated, validate it
+        if (credentialSourceMcpServerId && agentToolForValidation) {
           const validationError = await validateCredentialSource(
-            agentTool.agent.id,
+            agentToolForValidation.agent.id,
             credentialSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
+        }
+
+        // If executionSourceMcpServerId is being updated, validate it
+        if (executionSourceMcpServerId && agentToolForValidation) {
+          const validationError = await validateExecutionSource(
+            agentToolForValidation.tool.id,
+            executionSourceMcpServerId,
           );
 
           if (validationError) {
@@ -545,6 +581,53 @@ async function validateCredentialSource(
         },
       };
     }
+  }
+
+  return null;
+}
+
+/**
+ * Validates that an executionSourceMcpServerId is valid for the given tool.
+ * Returns an error object if validation fails, or null if valid.
+ *
+ * Validation rules:
+ * - MCP server must exist
+ * - Tool must exist
+ * - Execution source must be from the same catalog as the tool (catalog compatibility)
+ */
+async function validateExecutionSource(
+  toolId: string,
+  executionSourceMcpServerId: string,
+): Promise<{
+  status: 400 | 404;
+  error: { message: string; type: string };
+} | null> {
+  // 1. Check MCP server exists
+  const mcpServer = await McpServerModel.findById(executionSourceMcpServerId);
+  if (!mcpServer) {
+    return {
+      status: 404,
+      error: { message: "MCP server not found", type: "not_found" },
+    };
+  }
+
+  // 2. Get tool and verify catalog compatibility
+  const tool = await ToolModel.findById(toolId);
+  if (!tool) {
+    return {
+      status: 404,
+      error: { message: "Tool not found", type: "not_found" },
+    };
+  }
+
+  if (tool.catalogId !== mcpServer.catalogId) {
+    return {
+      status: 400,
+      error: {
+        message: "Execution source must be from the same catalog as the tool",
+        type: "validation_error",
+      },
+    };
   }
 
   return null;

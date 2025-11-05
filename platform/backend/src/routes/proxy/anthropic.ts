@@ -524,7 +524,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           ];
 
-          // Stream the refusal
+          // Stream the refusal - must send content_block_start before delta
+          const startEvent = {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "text",
+              text: "",
+            },
+          };
+          reply.raw.write(
+            `event: content_block_start\ndata: ${JSON.stringify(startEvent)}\n\n`,
+          );
+
           const refusalEvent = {
             type: "content_block_delta",
             index: 0,
@@ -535,6 +547,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           reply.raw.write(
             `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
+          );
+
+          const stopEvent = {
+            type: "content_block_stop",
+            index: 0,
+          };
+          reply.raw.write(
+            `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
           );
         } else {
           // Tool calls are allowed - stream them now

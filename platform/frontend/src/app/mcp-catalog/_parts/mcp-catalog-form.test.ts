@@ -85,7 +85,7 @@ describe("formSchema", () => {
         localConfig: {
           command: "node",
           arguments: "",
-          environment: "",
+          environment: [],
           dockerImage: "",
           transportType: "stdio" as const,
           httpPort: "",
@@ -104,7 +104,7 @@ describe("formSchema", () => {
         localConfig: {
           command: "",
           arguments: "",
-          environment: "",
+          environment: [],
           dockerImage: "registry.example.com/my-mcp-server:latest",
           transportType: "stdio" as const,
           httpPort: "",
@@ -123,7 +123,13 @@ describe("formSchema", () => {
         localConfig: {
           command: "node",
           arguments: "/app/server.js",
-          environment: "NODE_ENV=production",
+          environment: [
+            {
+              key: "NODE_ENV",
+              type: "plain_text" as const,
+              value: "production",
+            },
+          ],
           dockerImage: "registry.example.com/my-mcp-server:latest",
           transportType: "streamable-http" as const,
           httpPort: "8080",
@@ -142,7 +148,7 @@ describe("formSchema", () => {
         localConfig: {
           command: "",
           arguments: "",
-          environment: "",
+          environment: [],
           dockerImage: "",
           transportType: "stdio" as const,
           httpPort: "",
@@ -163,7 +169,7 @@ describe("formSchema", () => {
         localConfig: {
           command: "   ",
           arguments: "",
-          environment: "",
+          environment: [],
           dockerImage: "",
           transportType: "stdio" as const,
           httpPort: "",
@@ -184,7 +190,7 @@ describe("formSchema", () => {
         localConfig: {
           command: "node",
           arguments: "",
-          environment: "",
+          environment: [],
           dockerImage: "",
           transportType: "streamable-http" as const,
           httpPort: "3000",

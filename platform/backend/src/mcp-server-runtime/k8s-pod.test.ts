@@ -695,8 +695,6 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
-
     const dockerImage = "env-server:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
@@ -707,6 +705,27 @@ describe("K8sPod.generatePodSpec", () => {
         { key: "DEBUG", type: "plain_text", value: "true" },
       ],
     };
+
+    // Mock environment values that would be passed from secrets
+    const environmentValues: Record<string, string> = {
+      API_KEY: "secret123",
+      PORT: "3000",
+      DEBUG: "true",
+    };
+
+    const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAttach = {} as k8s.Attach;
+    const mockK8sLog = {} as k8s.Log;
+    const k8sPod = new K8sPod(
+      mcpServer,
+      mockK8sApi,
+      mockK8sAttach,
+      mockK8sLog,
+      "default",
+      undefined,
+      environmentValues,
+    );
+
     const needsHttp = false;
     const httpPort = 8080;
 
@@ -864,8 +883,6 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
-
     const dockerImage = "complex:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "python",
@@ -879,6 +896,28 @@ describe("K8sPod.generatePodSpec", () => {
       transportType: "streamable-http",
       httpPort: 8000,
     };
+
+    // Mock environment values that would be passed from secrets
+    const environmentValues: Record<string, string> = {
+      API_KEY: "sk-1234567890",
+      DATABASE_URL: "postgresql://localhost:5432/db",
+      WORKERS: "4",
+      DEBUG: "false",
+    };
+
+    const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAttach = {} as k8s.Attach;
+    const mockK8sLog = {} as k8s.Log;
+    const k8sPod = new K8sPod(
+      mcpServer,
+      mockK8sApi,
+      mockK8sAttach,
+      mockK8sLog,
+      "default",
+      undefined,
+      environmentValues,
+    );
+
     const needsHttp = true;
     const httpPort = 8000;
 

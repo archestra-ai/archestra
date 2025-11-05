@@ -7,7 +7,7 @@ const authFile = path.join(__dirname, 'playwright/.auth/user.json');
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './tests/ui',
+  testDir: './tests',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -35,28 +35,26 @@ export default defineConfig({
       testMatch: /.*\.setup\.ts/,
       testDir: './',
     },
-
-    // {
-    //   name: 'chromium',
-    //   use: {
-    //     ...devices['Desktop Chrome'],
-    //     // Use the stored authentication state
-    //     storageState: authFile,
-    //   },
-    //   // Run the setup project before tests
-    //   dependencies: ['setup'],
-    // },
-
-    // {
-    //   name: 'firefox',
-    //   use: {
-    //     ...devices['Desktop Firefox'],
-    //     // Use the stored authentication state
-    //     storageState: authFile,
-    //   },
-    //   // Run the setup project before tests
-    //   dependencies: ['setup'],
-    // },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ['setup'],
+    },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ['setup'],
+    },
     {
       name: 'webkit',
       use: {

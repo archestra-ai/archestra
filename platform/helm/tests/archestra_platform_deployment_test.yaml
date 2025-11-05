@@ -637,3 +637,152 @@ tests:
               secretKeyRef:
                 name: external-service-creds
                 key: service-auth-token
+
+  # envFrom tests (import all key-value pairs from Secret/ConfigMap)
+  - it: should not add envFrom section when envFrom is empty
+    documentIndex: 1
+    set:
+      archestra.envFrom: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].envFrom
+
+  - it: should add envFrom with single secretRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+
+  - it: should add envFrom with single configMapRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - configMapRef:
+            name: my-configmap
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - configMapRef:
+                name: my-configmap
+
+  - it: should add envFrom with multiple secretRef and configMapRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: secret-one
+        - configMapRef:
+            name: configmap-one
+        - secretRef:
+            name: secret-two
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: secret-one
+            - configMapRef:
+                name: configmap-one
+            - secretRef:
+                name: secret-two
+
+  - it: should add envFrom with optional flag
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+            optional: true
+        - configMapRef:
+            name: my-configmap
+            optional: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+                optional: true
+            - configMapRef:
+                name: my-configmap
+                optional: false
+
+  - it: should work with both env and envFrom configured
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_VAR: "custom-value"
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+    asserts:
+      # Check env vars exist
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Check envFrom exists
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+
+  - it: should work with env, envFromSecrets, and envFrom all configured
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_VAR: "custom-value"
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: api-credentials
+          secretKey: key
+      archestra.envFrom:
+        - secretRef:
+            name: bulk-secrets
+    asserts:
+      # Regular env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Secret-based individual env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: api-credentials
+                key: key
+      # envFrom bulk import
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: bulk-secrets
+
+  - it: should add envFrom with prefix
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+          prefix: SECRET_
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - prefix: SECRET_
+              secretRef:
+                name: my-secret

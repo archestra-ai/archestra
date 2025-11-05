@@ -24,6 +24,20 @@ archestra:
   #       secretKey: password
   envFromSecrets: []
 
+  # Import all key-value pairs from Secrets or ConfigMaps as environment variables
+  # This is useful when you want to inject all keys from a Secret/ConfigMap without specifying each one individually
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables
+  # Example:
+  #   envFrom:
+  #     - secretRef:
+  #         name: my-secret
+  #     - configMapRef:
+  #         name: my-configmap
+  #     - secretRef:
+  #         name: another-secret
+  #         optional: true
+  envFrom: []
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers

@@ -4,10 +4,12 @@ services:
     container_name: archestra-platform-test
     ports:
       - "9000:9000"
+      - "9050:9050"
       - "3000:3000"
     environment:
       - ARCHESTRA_OPENAI_BASE_URL=http://wiremock:8080/v1
       - ARCHESTRA_ANTHROPIC_BASE_URL=http://wiremock:8080
+      - ARCHESTRA_METRICS_SECRET=foo-bar
     healthcheck:
       test:
         [

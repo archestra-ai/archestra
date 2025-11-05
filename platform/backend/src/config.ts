@@ -191,6 +191,7 @@ export default {
     metrics: {
       endpoint: "/metrics",
       port: 9050,
+      secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
   },
   debug: isDevelopment,

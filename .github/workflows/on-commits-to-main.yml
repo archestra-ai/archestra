@@ -93,5 +93,6 @@ jobs:
             --create-namespace \
             --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
+            --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --values .github/values-staging.yaml \
             --wait

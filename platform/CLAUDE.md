@@ -209,6 +209,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+- Secret-based env vars via `archestra.envFromSecrets` for sensitive data injection
 
 **White-labeling**:
 - Admin-only via `/api/organization/appearance` endpoints  

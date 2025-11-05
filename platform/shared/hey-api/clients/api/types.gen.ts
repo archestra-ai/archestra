@@ -6978,6 +6978,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
@@ -7079,6 +7080,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
@@ -7197,6 +7199,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';

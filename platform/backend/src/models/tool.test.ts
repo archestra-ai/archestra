@@ -310,6 +310,7 @@ describe("ToolModel", () => {
       const mcpServer = await McpServerModel.create({
         name: "test-github-server",
         catalogId: catalogItem.id,
+        serverType: "remote",
       });
 
       // Create an MCP tool
@@ -363,6 +364,7 @@ describe("ToolModel", () => {
       const mcpServer = await McpServerModel.create({
         name: "test-server",
         catalogId: catalogItem.id,
+        serverType: "remote",
       });
 
       // Create multiple MCP tools
@@ -417,6 +419,7 @@ describe("ToolModel", () => {
       const mcpServer = await McpServerModel.create({
         name: "test-server",
         catalogId: catalogItem.id,
+        serverType: "remote",
       });
 
       const mcpTool = await ToolModel.create({
@@ -454,6 +457,7 @@ describe("ToolModel", () => {
       const mcpServer = await McpServerModel.create({
         name: "test-server",
         catalogId: catalogItem.id,
+        serverType: "remote",
       });
 
       // Create a proxy-sniffed tool (with agentId)
@@ -501,6 +505,7 @@ describe("ToolModel", () => {
       const server1 = await McpServerModel.create({
         name: "github-server",
         catalogId: catalogItem.id,
+        serverType: "remote",
       });
 
       const catalogItem2 = await InternalMcpCatalogModel.create({
@@ -511,6 +516,7 @@ describe("ToolModel", () => {
       const server2 = await McpServerModel.create({
         name: "other-server",
         catalogId: catalogItem2.id,
+        serverType: "remote",
       });
 
       // Create tools for each server

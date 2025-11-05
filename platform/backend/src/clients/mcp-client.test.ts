@@ -67,6 +67,7 @@ describe("McpClient", () => {
       name: "github-mcp-server",
       secretId: secret.id,
       catalogId: catalogItem.id,
+      serverType: "remote",
     });
     mcpServerId = mcpServer.id;
 
@@ -511,6 +512,7 @@ describe("McpClient", () => {
         const localMcpServer = await McpServerModel.create({
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
+          serverType: "local",
         });
         localMcpServerId = localMcpServer.id;
 

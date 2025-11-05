@@ -12,6 +12,7 @@ import {
 import {
   ErrorResponseSchema,
   InsertMcpServerSchema,
+  type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
   RouteId,
   SelectMcpServerSchema,
@@ -143,6 +144,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: true,
           createdAt: true,
           updatedAt: true,
+          serverType: true, // derived from catalog item
         }).extend({
           agentIds: z.array(UuidIdSchema).optional(),
           secretId: UuidIdSchema.optional(),
@@ -167,8 +169,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken,
           userConfigValues,
           environmentValues,
-          ...serverData
+          ...restDataFromRequestBody
         } = request.body;
+        const serverData: typeof restDataFromRequestBody & {
+          serverType: InternalMcpCatalogServerType;
+        } = {
+          ...restDataFromRequestBody,
+          serverType: "local",
+        };
 
         // Get the current user for personal auth
         const user = await getUserFromRequest(request);
@@ -239,6 +247,26 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Fetch catalog item to get server type
+        let catalogItem = null;
+        if (serverData.catalogId) {
+          catalogItem = await InternalMcpCatalogModel.findById(
+            serverData.catalogId,
+          );
+
+          if (!catalogItem) {
+            return reply.status(400).send({
+              error: {
+                message: "Catalog item not found",
+                type: "validation_error",
+              },
+            });
+          }
+
+          // Set serverType from catalog item
+          serverData.serverType = catalogItem.serverType;
+        }
+
         // Create the MCP server with optional secret reference
         const mcpServer = await McpServerModel.create({
           ...serverData,
@@ -246,14 +274,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         try {
-          // Check if this is a local server that needs to be started in K8s
-          let catalogItem = null;
-          if (serverData.catalogId) {
-            catalogItem = await InternalMcpCatalogModel.findById(
-              serverData.catalogId,
-            );
-          }
-
           // For local servers, start the K8s pod first
           if (catalogItem?.serverType === "local") {
             try {

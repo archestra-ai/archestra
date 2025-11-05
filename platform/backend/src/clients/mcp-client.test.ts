@@ -1,3 +1,4 @@
+import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -6,7 +7,6 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
-import db, { schema } from "@/database";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK

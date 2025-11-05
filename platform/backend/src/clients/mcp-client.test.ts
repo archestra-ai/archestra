@@ -509,10 +509,12 @@ describe("McpClient", () => {
         localCatalogId = localCatalog.id;
 
         // Create MCP server for local streamable-http testing
+        const testUserId = "test-user-id";
         const localMcpServer = await McpServerModel.create({
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
           serverType: "local",
+          userId: testUserId,
         });
         localMcpServerId = localMcpServer.id;
 
@@ -527,7 +529,7 @@ describe("McpClient", () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
           agentId,
-          name: "local-streamable-http-server__test_tool",
+          name: "local-streamable-http-server-test-user-id__test_tool",
           description: "Test tool",
           parameters: {},
           mcpServerId: localMcpServerId,
@@ -548,7 +550,7 @@ describe("McpClient", () => {
         const toolCalls = [
           {
             id: "call_1",
-            name: "local-streamable-http-server__test_tool",
+            name: "local-streamable-http-server-test-user-id__test_tool",
             arguments: { input: "test" },
           },
         ];
@@ -578,7 +580,7 @@ describe("McpClient", () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
           agentId,
-          name: "local-streamable-http-server__test_tool",
+          name: "local-streamable-http-server-test-user-id__test_tool",
           description: "Test tool",
           parameters: {},
           mcpServerId: localMcpServerId,
@@ -593,7 +595,7 @@ describe("McpClient", () => {
         const toolCalls = [
           {
             id: "call_1",
-            name: "local-streamable-http-server__test_tool",
+            name: "local-streamable-http-server-test-user-id__test_tool",
             arguments: { input: "test" },
           },
         ];
@@ -614,7 +616,7 @@ describe("McpClient", () => {
         // Create tool with response modifier template
         const tool = await ToolModel.createToolIfNotExists({
           agentId,
-          name: "local-streamable-http-server__formatted_tool",
+          name: "local-streamable-http-server-test-user-id__formatted_tool",
           description: "Tool with template",
           parameters: {},
           mcpServerId: localMcpServerId,

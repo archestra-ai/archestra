@@ -93,7 +93,6 @@ describe("ToolModel", () => {
     });
 
     test("member with no access sees no tools", async () => {
-      const _user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
       const agent1 = await AgentModel.create({
@@ -235,8 +234,7 @@ describe("ToolModel", () => {
     });
 
     test("findByName returns null for user without agent access", async () => {
-      const _user1Id = await createTestUser();
-      const user2Id = await createTestUser();
+      const userId = await createTestUser();
 
       const agent = await AgentModel.create({
         name: "Test Agent",
@@ -252,7 +250,7 @@ describe("ToolModel", () => {
 
       const found = await ToolModel.findByName(
         "restricted-tool",
-        user2Id,
+        userId,
         false,
       );
       expect(found).toBeNull();
@@ -294,7 +292,7 @@ describe("ToolModel", () => {
     });
 
     test("returns MCP tools with server metadata for assigned tools", async () => {
-      const _userId = await createTestUser();
+      const userId = await createTestUser();
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
@@ -311,6 +309,7 @@ describe("ToolModel", () => {
         name: "test-github-server",
         catalogId: catalogItem.id,
         serverType: "remote",
+        userId,
       });
 
       // Create an MCP tool
@@ -338,7 +337,7 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        mcpServerName: "test-github-server",
+        mcpServerName: `test-github-server-${userId}`,
         mcpServerSecretId: null,
         mcpServerCatalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
@@ -348,7 +347,7 @@ describe("ToolModel", () => {
     });
 
     test("filters to only requested tool names", async () => {
-      const _userId = await createTestUser();
+      const userId = await createTestUser();
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
@@ -365,6 +364,7 @@ describe("ToolModel", () => {
         name: "test-server",
         catalogId: catalogItem.id,
         serverType: "remote",
+        userId,
       });
 
       // Create multiple MCP tools
@@ -397,8 +397,7 @@ describe("ToolModel", () => {
     });
 
     test("returns empty array when tools exist but not assigned to agent", async () => {
-      const _user1Id = await createTestUser();
-      const _user2Id = await createTestUser();
+      const userId = await createTestUser();
 
       const agent1 = await AgentModel.create({
         name: "Agent1",
@@ -420,6 +419,7 @@ describe("ToolModel", () => {
         name: "test-server",
         catalogId: catalogItem.id,
         serverType: "remote",
+        userId,
       });
 
       const mcpTool = await ToolModel.create({
@@ -442,7 +442,7 @@ describe("ToolModel", () => {
     });
 
     test("excludes proxy-sniffed tools (tools with agentId set)", async () => {
-      const _userId = await createTestUser();
+      const userId = await createTestUser();
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
@@ -458,6 +458,7 @@ describe("ToolModel", () => {
         name: "test-server",
         catalogId: catalogItem.id,
         serverType: "remote",
+        userId,
       });
 
       // Create a proxy-sniffed tool (with agentId)
@@ -490,7 +491,7 @@ describe("ToolModel", () => {
     });
 
     test("handles multiple MCP tools with different servers", async () => {
-      const _userId = await createTestUser();
+      const userId = await createTestUser();
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
@@ -506,6 +507,7 @@ describe("ToolModel", () => {
         name: "github-server",
         catalogId: catalogItem.id,
         serverType: "remote",
+        userId,
       });
 
       const catalogItem2 = await InternalMcpCatalogModel.create({

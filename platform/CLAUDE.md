@@ -97,6 +97,7 @@ ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
 ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
+NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Frontend display of base image
 
 # OpenTelemetry Authentication
 ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (requires password)

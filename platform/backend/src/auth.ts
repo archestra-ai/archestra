@@ -17,7 +17,8 @@ const {
 } = config;
 
 const isHttps = () => {
-  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production to determine if we're using HTTPS
+  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
+  // to determine if we're using HTTPS
   if (!baseURL) {
     return production;
   }
@@ -101,7 +102,7 @@ export const auth = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: isHttps(), // Use secure cookies when baseURL uses HTTPS
+      secure: isHttps(), // Use secure cookies when we're using HTTPS
       sameSite: isHttps() ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
     },
   },

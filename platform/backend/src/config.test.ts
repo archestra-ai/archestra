@@ -154,49 +154,49 @@ describe("getOtlpAuthHeaders", () => {
       });
     });
 
-    it("should return null and warn when only username is provided", () => {
+    it("should return undefined and warn when only username is provided", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
 
-    it("should return null and warn when only password is provided", () => {
+    it("should return undefined and warn when only password is provided", () => {
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
 
-    it("should return null and warn when username is empty string", () => {
+    it("should return undefined and warn when username is empty string", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
 
-    it("should return null and warn when password is empty string", () => {
+    it("should return undefined and warn when password is empty string", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
@@ -204,25 +204,25 @@ describe("getOtlpAuthHeaders", () => {
   });
 
   describe("No authentication", () => {
-    it("should return null when no authentication environment variables are set", () => {
+    it("should return undefined when no authentication environment variables are set", () => {
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER;
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it("should return null when all authentication variables are empty strings", () => {
+    it("should return undefined when all authentication variables are empty strings", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";
 
       const result = getOtlpAuthHeaders();
 
-      expect(result).toBeNull();
+      expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
     });
   });

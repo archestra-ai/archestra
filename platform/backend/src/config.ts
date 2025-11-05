@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
@@ -20,9 +21,9 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
 /**
  * Determines OTLP authentication headers based on environment variables
- * Returns null if authentication is not properly configured
+ * Returns undefined if authentication is not properly configured
  */
-export const getOtlpAuthHeaders = (): Record<string, string> | null => {
+export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
   const username =
     process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME?.trim();
   const password =
@@ -42,7 +43,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | null => {
       logger.warn(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
-      return null;
+      return undefined;
     }
 
     const credentials = Buffer.from(`${username}:${password}`).toString(
@@ -54,7 +55,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | null => {
   }
 
   // No authentication configured
-  return null;
+  return undefined;
 };
 
 /**
@@ -224,10 +225,12 @@ export default {
   },
   observability: {
     otel: {
-      otelExporterOtlpEndpoint:
-        process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
-        "http://localhost:4318/v1/traces",
-      authHeaders: getOtlpAuthHeaders(),
+      traceExporter: {
+        url:
+          process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
+          "http://localhost:4318/v1/traces",
+        headers: getOtlpAuthHeaders(),
+      } satisfies Partial<OTLPExporterNodeConfigBase>,
     },
     metrics: {
       endpoint: "/metrics",

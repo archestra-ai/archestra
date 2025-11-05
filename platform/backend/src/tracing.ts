@@ -14,13 +14,13 @@ import logger from "@/logging";
 
 const {
   api: { name, version },
+  observability: {
+    otel: { traceExporter: traceExporterConfig },
+  },
 } = config;
 
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
-const traceExporter = new OTLPTraceExporter({
-  url: config.observability.otel.otelExporterOtlpEndpoint,
-  headers: config.observability.otel.authHeaders || {},
-});
+const traceExporter = new OTLPTraceExporter(traceExporterConfig);
 
 // Create a resource with service information
 const resource = defaultResource().merge(

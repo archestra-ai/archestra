@@ -12,9 +12,10 @@ import logger from "@/logging";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
-  production,
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
+
+const isHttps = Boolean(baseURL?.startsWith("https://"));
 
 export const auth = betterAuth({
   baseURL,
@@ -91,8 +92,8 @@ export const auth = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: production, // Only use secure cookies in production (HTTPS required)
-      sameSite: production ? "none" : "strict", // "strict" for better Safari/WebKit compatibility in local dev
+      secure: isHttps, // Use secure cookies when baseURL uses HTTPS
+      sameSite: isHttps ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
     },
   },
 

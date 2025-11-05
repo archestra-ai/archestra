@@ -1,6 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { GoogleGenAI } from "@google/genai";
-import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -131,14 +130,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const resolvedAgentId = resolvedAgent.id;
-
-    // Add OpenTelemetry trace attributes
-    utils.tracing.sprinkleTraceAttributes(
-      "gemini",
-      utils.tracing.RouteCategory.LLM_PROXY,
-      resolvedAgent,
-    );
-
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
@@ -328,29 +319,20 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } else {
         // Non-streaming response with span to measure LLM call duration
-        const tracer = trace.getTracer("archestra");
-        const response = await tracer.startActiveSpan(
+        const response = await utils.tracing.startActiveLlmSpan(
           "gemini.generateContent",
-          {
-            attributes: {
-              "llm.model": modelName,
-              "llm.stream": false,
-            },
-          },
+          "gemini",
+          modelName,
+          false,
+          resolvedAgent,
           async (llmSpan) => {
-            try {
-              const response = await genAI.models.generateContent({
-                model: modelName,
-                ...processedBody,
-                // tools: mergedTools,
-              });
-              llmSpan.end();
-              return response;
-            } catch (error) {
-              llmSpan.recordException(error as Error);
-              llmSpan.end();
-              throw error;
-            }
+            const response = await genAI.models.generateContent({
+              model: modelName,
+              ...processedBody,
+              // tools: mergedTools,
+            });
+            llmSpan.end();
+            return response;
           },
         );
 

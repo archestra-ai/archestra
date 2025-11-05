@@ -40,6 +40,17 @@ tests:
             targetPort: frontend
             protocol: TCP
 
+  - it: should expose metrics port 9050
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9050
+            targetPort: metrics
+            protocol: TCP
+
   - it: should create a Deployment with correct metadata
     documentIndex: 1
     asserts:
@@ -61,7 +72,7 @@ tests:
           path: spec.template.spec.containers[0].image
           value: archestra/platform:test-version
 
-  - it: should expose both backend and frontend ports
+  - it: should expose backend, metrics, and frontend ports
     documentIndex: 1
     asserts:
       - equal:
@@ -72,9 +83,15 @@ tests:
           value: 9000
       - equal:
           path: spec.template.spec.containers[0].ports[1].name
-          value: frontend
+          value: metrics
       - equal:
           path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 9050
+      - equal:
+          path: spec.template.spec.containers[0].ports[2].name
+          value: frontend
+      - equal:
+          path: spec.template.spec.containers[0].ports[2].containerPort
           value: 3000
 
   - it: should set ARCHESTRA_DATABASE_URL to internal postgres when external_database_url is null

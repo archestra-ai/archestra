@@ -2,6 +2,8 @@ import type { IncomingMessage } from "node:http";
 import { PassThrough, Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
+import type { LocalConfigSchema } from "@shared";
+import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -108,6 +110,65 @@ export default class K8sPod {
     }
 
     return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+  }
+
+  /**
+   * Generate the pod specification for this MCP server
+   *
+   * @param dockerImage - The Docker image to use for the container
+   * @param localConfig - The local configuration for the MCP server
+   * @param needsHttp - Whether the pod needs HTTP port exposure
+   * @param httpPort - The HTTP port to expose (if needsHttp is true)
+   * @returns The Kubernetes pod specification
+   */
+  generatePodSpec(
+    dockerImage: string,
+    localConfig: z.infer<typeof LocalConfigSchema>,
+    needsHttp: boolean,
+    httpPort: number,
+  ): k8s.V1Pod {
+    return {
+      metadata: {
+        name: this.podName,
+        labels: K8sPod.sanitizeMetadataLabels({
+          app: "mcp-server",
+          "mcp-server-id": this.mcpServer.id,
+          "mcp-server-name": this.mcpServer.name,
+        }),
+      },
+      spec: {
+        containers: [
+          {
+            name: "mcp-server",
+            image: dockerImage,
+            env: this.createPodEnvFromConfig(),
+            /**
+             * Use the command from local config if provided
+             * If not provided, Kubernetes will use the Docker image's default CMD
+             */
+            ...(localConfig.command
+              ? {
+                  command: [localConfig.command],
+                }
+              : {}),
+            args: localConfig.arguments || [],
+            // For stdio-based MCP servers, we use stdin/stdout
+            stdin: true,
+            tty: false,
+            // For HTTP-based MCP servers, expose port
+            ports: needsHttp
+              ? [
+                  {
+                    containerPort: httpPort,
+                    protocol: "TCP",
+                  },
+                ]
+              : undefined,
+          },
+        ],
+        restartPolicy: "Always",
+      },
+    };
   }
 
   /**
@@ -271,50 +332,14 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      const podSpec: k8s.V1Pod = {
-        metadata: {
-          name: this.podName,
-          labels: K8sPod.sanitizeMetadataLabels({
-            app: "mcp-server",
-            "mcp-server-id": this.mcpServer.id,
-            "mcp-server-name": this.mcpServer.name,
-          }),
-        },
-        spec: {
-          containers: [
-            {
-              name: "mcp-server",
-              image: dockerImage,
-              env: this.createPodEnvFromConfig(),
-              // Use the command and arguments from local config if provided
-              // If not provided, Kubernetes will use the Docker image's default CMD
-              ...(catalogItem.localConfig.command
-                ? {
-                    command: [catalogItem.localConfig.command],
-                    args: catalogItem.localConfig.arguments || [],
-                  }
-                : {}),
-              // For stdio-based MCP servers, we use stdin/stdout
-              stdin: true,
-              tty: false,
-              // For HTTP-based MCP servers, expose port
-              ports: needsHttp
-                ? [
-                    {
-                      containerPort: httpPort,
-                      protocol: "TCP",
-                    },
-                  ]
-                : undefined,
-            },
-          ],
-          restartPolicy: "Always",
-        },
-      };
-
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
-        body: podSpec,
+        body: this.generatePodSpec(
+          dockerImage,
+          catalogItem.localConfig,
+          needsHttp,
+          httpPort,
+        ),
       });
 
       logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);

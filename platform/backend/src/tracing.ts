@@ -1,3 +1,4 @@
+import { FastifyOtelInstrumentation } from "@fastify/otel";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import {
@@ -35,6 +36,9 @@ const sdk = new NodeSDK({
   resource,
   traceExporter,
   instrumentations: [
+    new FastifyOtelInstrumentation({
+      registerOnInitialization: true,
+    }),
     getNodeAutoInstrumentations({
       // Disable instrumentation for specific packages if needed
       "@opentelemetry/instrumentation-fs": {

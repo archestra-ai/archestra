@@ -53,6 +53,9 @@ importers:
       '@kubernetes/client-node':
         specifier: ^1.4.0
         version: 1.4.0
+      '@kubiks/otel-drizzle':
+        specifier: ^2.1.0
+        version: 2.1.0(@opentelemetry/api@1.9.0)(drizzle-orm@0.44.7(@electric-sql/pglite@0.3.12)(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(kysely@0.28.8)(pg@8.16.3))
       '@modelcontextprotocol/sdk':
         specifier: ^1.21.0
         version: 1.21.0
@@ -1455,6 +1458,13 @@ packages:
 
   '@kubernetes/client-node@1.4.0':
     resolution: {integrity: sha512-Zge3YvF7DJi264dU1b3wb/GmzR99JhUpqTvp+VGHfwZT+g7EOOYNScDJNZwXy9cszyIGPIs0VHr+kk8e95qqrA==}
+
+  '@kubiks/otel-drizzle@2.1.0':
+    resolution: {integrity: sha512-9UHb0od3jwa6zTWMyEYPIZcUq5PDaziCmQLMLakSK2zeqy12SFZ3SAGWXJTgEr8valn/Wa+DKVs+Z3aqKQUpvg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0 <2.0.0'
+      drizzle-orm: '>=0.28.0'
 
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
@@ -7441,6 +7451,11 @@ snapshots:
       - react-native-b4a
       - supports-color
       - utf-8-validate
+
+  '@kubiks/otel-drizzle@2.1.0(@opentelemetry/api@1.9.0)(drizzle-orm@0.44.7(@electric-sql/pglite@0.3.12)(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(kysely@0.28.8)(pg@8.16.3))':
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+      drizzle-orm: 0.44.7(@electric-sql/pglite@0.3.12)(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(kysely@0.28.8)(pg@8.16.3)
 
   '@kurkle/color@0.3.4': {}
 

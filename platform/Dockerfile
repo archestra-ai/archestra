@@ -242,7 +242,7 @@ EOF
 RUN chmod +x /docker-entrypoint.sh
 
 # Expose ports
-EXPOSE 5432 9000 3000
+EXPOSE 5432 9000 9050 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

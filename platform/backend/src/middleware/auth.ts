@@ -49,7 +49,6 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
-      url === "/metrics" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       /**

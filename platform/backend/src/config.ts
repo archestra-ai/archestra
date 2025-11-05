@@ -188,6 +188,10 @@ export default {
         process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
         "http://localhost:4318/v1/traces",
     },
+    metrics: {
+      endpoint: "/metrics",
+      port: 9050,
+    },
   },
   debug: isDevelopment,
   logging: {

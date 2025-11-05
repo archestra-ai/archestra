@@ -337,7 +337,7 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        mcpServerName: `test-github-server-${userId}`,
+        mcpServerName: `test-github-server`,
         mcpServerSecretId: null,
         mcpServerCatalogId: catalogItem.id,
         mcpServerId: mcpServer.id,

@@ -18,10 +18,16 @@ class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
     const { teams, userId, ...serverData } = server;
 
+    // For local servers, add the user ID to the name to avoid conflicts when multiple users install the same server
+    const mcpServerName =
+      serverData.serverType === "local"
+        ? `${serverData.name}-${userId}`
+        : serverData.name;
+
     // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, name: `${serverData.name}-${userId}` })
+      .values({ ...serverData, name: mcpServerName })
       .returning();
 
     // Assign teams to the MCP server if provided

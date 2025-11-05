@@ -270,16 +270,46 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "MCP tools injected",
       );
 
-      // Fix AI SDK thinking block issue: The AI SDK strips thinking blocks when building
-      // conversation history. When thinking is enabled, Anthropic requires assistant messages
-      // to have thinking blocks with valid signatures. Since we can't generate valid signatures,
-      // we need to disable thinking for requests with incomplete conversation history.
+      // Fix AI SDK thinking block issue: The AI SDK sends thinking blocks back without
+      // valid signatures. Anthropic requires thinking blocks to have signatures from
+      // previous responses. We need to strip invalid thinking blocks and disable thinking
+      // for requests with incomplete conversation history.
       let thinkingConfig = body.thinking;
       let messagesWithThinking = body.messages;
 
       if (body.thinking && typeof body.thinking === "object" && "type" in body.thinking) {
-        // Check if any assistant messages have tool_use without thinking blocks
-        const hasIncompleteHistory = body.messages.some((message) => {
+        // First, strip any thinking blocks without valid signatures from assistant messages
+        let strippedThinkingBlocks = false;
+        messagesWithThinking = body.messages.map((message) => {
+          if (message.role === "assistant" && Array.isArray(message.content)) {
+            const filteredContent = message.content.filter((block) => {
+              // Remove thinking blocks without signatures
+              if (block.type === "thinking" && !block.signature) {
+                strippedThinkingBlocks = true;
+                fastify.log.warn(
+                  { resolvedAgentId },
+                  "Stripping thinking block without signature from assistant message",
+                );
+                return false;
+              }
+              // Remove redacted_thinking blocks without data
+              if (block.type === "redacted_thinking" && !block.data) {
+                strippedThinkingBlocks = true;
+                fastify.log.warn(
+                  { resolvedAgentId },
+                  "Stripping redacted_thinking block without data from assistant message",
+                );
+                return false;
+              }
+              return true;
+            });
+            return { ...message, content: filteredContent };
+          }
+          return message;
+        });
+
+        // Now check if any assistant messages have tool_use without valid thinking blocks
+        const hasIncompleteHistory = messagesWithThinking.some((message) => {
           if (message.role === "assistant" && Array.isArray(message.content)) {
             const hasToolUse = message.content.some(
               (block) => block.type === "tool_use",
@@ -293,13 +323,15 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return false;
         });
 
-        if (hasIncompleteHistory) {
+        if (hasIncompleteHistory || strippedThinkingBlocks) {
           fastify.log.warn(
             {
               resolvedAgentId,
               messagesCount: body.messages.length,
+              strippedThinkingBlocks,
+              hasIncompleteHistory,
             },
-            "AI SDK stripped thinking blocks from conversation history. Disabling thinking for this request to avoid Anthropic validation errors.",
+            "AI SDK sent invalid thinking blocks or incomplete conversation history. Disabling thinking for this request to avoid Anthropic validation errors.",
           );
           // Disable thinking for this request since we have incomplete history
           thinkingConfig = undefined;
@@ -316,6 +348,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Content-Type", "text/event-stream");
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
+
+        // Forward Anthropic-specific headers that AI SDK might check
+        // These headers help AI SDK recognize thinking block support
+        reply.header("anthropic-ratelimit-requests-limit", "1000");
+        reply.header("anthropic-ratelimit-requests-remaining", "999");
+        reply.header("anthropic-ratelimit-requests-reset", new Date(Date.now() + 60000).toISOString());
+        reply.header("anthropic-ratelimit-tokens-limit", "100000");
+        reply.header("anthropic-ratelimit-tokens-remaining", "99000");
+        reply.header("anthropic-ratelimit-tokens-reset", new Date(Date.now() + 60000).toISOString());
+        reply.header("request-id", `req-proxy-${Date.now()}`);
       }
 
       const { toolResultUpdates, contextIsTrusted } =
@@ -455,7 +497,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             event.content_block.type === "thinking"
           ) {
             fastify.log.info(
-              { eventType: event.type, index: event.index },
+              {
+                eventType: event.type,
+                index: event.index,
+                hasSignature: !!event.content_block.signature,
+                eventJson: JSON.stringify(event)
+              },
               "Streaming content_block_start (thinking)",
             );
             reply.raw.write(

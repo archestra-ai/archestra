@@ -471,6 +471,20 @@ export function InternalMCPCatalog({
               const isInstallInProgress =
                 installedServer && installingServerIds.has(installedServer.id);
 
+              // For local servers, count installations and check ownership
+              const localServers =
+                installedServers?.filter(
+                  (server) =>
+                    server.serverType === "local" &&
+                    server.catalogId === item.id,
+                ) || [];
+              const currentUserInstalledLocalServer = Boolean(
+                currentUserId &&
+                  localServers.some(
+                    (server) => server.ownerId === currentUserId,
+                  ),
+              );
+
               return (
                 <McpServerCard
                   variant={item.serverType === "remote" ? "remote" : "local"}
@@ -490,6 +504,10 @@ export function InternalMCPCatalog({
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
                   isAdmin={isAdmin}
+                  localServerInstallationCount={localServers.length}
+                  currentUserInstalledLocalServer={
+                    currentUserInstalledLocalServer
+                  }
                 />
               );
             })}

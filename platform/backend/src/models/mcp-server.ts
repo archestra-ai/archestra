@@ -225,28 +225,22 @@ class McpServerModel {
       return false;
     }
 
-    // Check if this is a local server with a running K8s pod
-    if (mcpServer.catalogId) {
-      const catalogItem = await InternalMcpCatalogModel.findById(
-        mcpServer.catalogId,
-      );
-
-      // For local servers, stop and remove the K8s pod
-      if (catalogItem?.serverType === "local") {
-        try {
-          await McpServerRuntimeManager.removeMcpServer(id);
-          logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
-        } catch (error) {
-          logger.error(
-            { err: error },
-            `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
-          );
-          // Continue with deletion even if pod cleanup fails
-        }
+    // For local servers, stop and remove the K8s pod
+    if (mcpServer.serverType === "local") {
+      try {
+        await McpServerRuntimeManager.removeMcpServer(id);
+        logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+        );
+        // Continue with deletion even if pod cleanup fails
       }
     }
 
     // Delete the MCP server from database
+    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));

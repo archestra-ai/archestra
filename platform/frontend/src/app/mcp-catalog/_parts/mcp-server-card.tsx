@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
+import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,6 +95,8 @@ export type McpServerCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   isAdmin: boolean;
+  localServerInstallationCount?: number; // For local servers: count of all installations
+  currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
 };
 
 export type McpServerCardVariant = "remote" | "local";
@@ -115,6 +118,8 @@ export function McpServerCard({
   onEdit,
   onDelete,
   isAdmin,
+  localServerInstallationCount = 0,
+  currentUserInstalledLocalServer = false,
 }: McpServerCardBaseProps) {
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
     installedServer?.id ?? null,
@@ -150,11 +155,7 @@ export function McpServerCard({
   const needsReinstall = installedServer?.reinstallRequired ?? false;
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
-  const toolsDiscoveredCount = tools?.length ?? 0;
-  const toolsAssignedCount = !tools
-    ? 0
-    : tools.filter((tool) => tool.assignedAgentCount > 0).length;
-  const installed = !!installedServer && toolsDiscoveredCount > 0;
+
   const isInstalling = Boolean(
     installingItemId === item.id ||
       installationStatus === "pending" ||
@@ -170,6 +171,14 @@ export function McpServerCard({
       ? installedServer.users.includes(currentUserId)
       : false;
   const currentUserHasTeamAuth = installedServer?.currentUserHasTeamAuth;
+  const toolsDiscoveredCount = tools?.length ?? 0;
+  const getToolsAssignedCount = () => {
+    if (installationStatus === "discovering-tools")
+      return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+    return !tools
+      ? 0
+      : tools.filter((tool) => tool.assignedAgentCount > 0).length;
+  };
 
   const isRemoteVariant = variant === "remote";
 
@@ -239,6 +248,26 @@ export function McpServerCard({
       </DropdownMenu>
     </div>
   );
+
+  const localServersInstalled = (
+    <div className="flex items-center gap-2">
+      <User className="h-4 w-4 text-muted-foreground" />
+      <span className="text-muted-foreground">
+        Users authenticated:{" "}
+        <span className="font-medium text-foreground">
+          {localServerInstallationCount}
+        </span>
+        {currentUserInstalledLocalServer && (
+          <Badge
+            variant="secondary"
+            className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
+          >
+            You
+          </Badge>
+        )}
+      </span>
+    </div>
+  );
   const usersAuthenticated = (
     <>
       <div className="flex items-center gap-2">
@@ -298,7 +327,7 @@ export function McpServerCard({
         <span className="text-muted-foreground">
           Tools assigned:{" "}
           <span className="font-medium text-foreground">
-            {toolsAssignedCount}{" "}
+            {getToolsAssignedCount()}{" "}
             {toolsDiscoveredCount ? `(out of ${toolsDiscoveredCount})` : ""}
           </span>
         </span>
@@ -419,9 +448,18 @@ export function McpServerCard({
     <>
       <WithRole requiredExactRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {toolsAssigned}
-          </div>
+          {[
+            { id: "1", content: localServersInstalled },
+            { id: "2", content: teamsAccess },
+            { id: "3", content: toolsAssigned },
+          ].map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
+            >
+              {item.content}
+            </div>
+          ))}
         </div>
       </WithRole>
       {needsReinstall && (
@@ -436,7 +474,10 @@ export function McpServerCard({
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
         </Button>
       )}
-      {installed ? (
+      <WithRole requiredExactRole="admin">
+        <div className="h-[32px]" />
+      </WithRole>
+      {isCurrentUserAuthenticated && !isInstalling ? (
         <Button
           onClick={() =>
             installedServer &&

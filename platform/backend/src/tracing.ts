@@ -19,7 +19,7 @@ const {
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
 const traceExporter = new OTLPTraceExporter({
   url: config.observability.otel.otelExporterOtlpEndpoint,
-  headers: {},
+  headers: config.observability.otel.authHeaders || {},
 });
 
 // Create a resource with service information

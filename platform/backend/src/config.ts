@@ -7,6 +7,7 @@ import {
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
 } from "@shared";
 import dotenv from "dotenv";
+import logger from "@/logging";
 import packageJson from "../../package.json";
 
 /**
@@ -16,6 +17,45 @@ import packageJson from "../../package.json";
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+
+/**
+ * Determines OTLP authentication headers based on environment variables
+ * Returns null if authentication is not properly configured
+ */
+export const getOtlpAuthHeaders = (): Record<string, string> | null => {
+  const username =
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME?.trim();
+  const password =
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD?.trim();
+  const bearer = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER?.trim();
+
+  // Bearer token takes precedence
+  if (bearer) {
+    return {
+      Authorization: `Bearer ${bearer}`,
+    };
+  }
+
+  // Basic auth requires both username and password
+  if (username || password) {
+    if (!username || !password) {
+      logger.warn(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+      return null;
+    }
+
+    const credentials = Buffer.from(`${username}:${password}`).toString(
+      "base64",
+    );
+    return {
+      Authorization: `Basic ${credentials}`,
+    };
+  }
+
+  // No authentication configured
+  return null;
+};
 
 /**
  * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
@@ -187,6 +227,7 @@ export default {
       otelExporterOtlpEndpoint:
         process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
         "http://localhost:4318/v1/traces",
+      authHeaders: getOtlpAuthHeaders(),
     },
     metrics: {
       endpoint: "/metrics",
@@ -195,9 +236,6 @@ export default {
     },
   },
   debug: isDevelopment,
-  logging: {
-    level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
-  },
   production: isProduction,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",

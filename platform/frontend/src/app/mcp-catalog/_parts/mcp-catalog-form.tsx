@@ -40,6 +40,8 @@ interface McpCatalogFormProps {
   serverType?: "remote" | "local";
 }
 
+const { baseMcpServerDockerImage } = config.orchestrator;
+
 export function McpCatalogForm({
   mode,
   initialValues,
@@ -182,7 +184,7 @@ export function McpCatalogForm({
                     <FormLabel>Docker Image (optional)</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="registry.example.com/my-mcp-server:latest"
+                        placeholder={baseMcpServerDockerImage}
                         className="font-mono"
                         {...field}
                       />
@@ -191,7 +193,7 @@ export function McpCatalogForm({
                       Custom Docker image URL. If not specified, Archestra's
                       default base image will be used (
                       <code className="text-xs">
-                        {config.mcp.baseDockerImage}
+                        {baseMcpServerDockerImage}
                       </code>
                       ).
                     </FormDescription>

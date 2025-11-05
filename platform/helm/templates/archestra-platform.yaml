@@ -75,6 +75,10 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+          {{- with .Values.archestra.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
           volumeMounts:
             - name: kubeconfig

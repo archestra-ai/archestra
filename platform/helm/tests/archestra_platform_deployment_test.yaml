@@ -477,3 +477,312 @@ tests:
       - equal:
           path: metadata.annotations["annotation3"]
           value: "value3"
+
+  # Environment variables from secrets tests
+  - it: should not add secret-based env vars when envFromSecrets is empty
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets: []
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            valueFrom:
+              secretKeyRef:
+
+  - it: should add single secret-based environment variable
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: my-api-credentials
+          secretKey: api-key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-api-credentials
+                key: api-key
+
+  - it: should add multiple secret-based environment variables
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: my-api-credentials
+          secretKey: api-key
+        - name: DATABASE_PASSWORD
+          secretName: db-credentials
+          secretKey: password
+        - name: SECRET_TOKEN
+          secretName: app-secrets
+          secretKey: token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-api-credentials
+                key: api-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-credentials
+                key: password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: token
+
+  - it: should include both regular and secret-based environment variables
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        CUSTOM_VAR: "custom-value"
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: my-api-credentials
+          secretKey: api-key
+        - name: DATABASE_PASSWORD
+          secretName: db-credentials
+          secretKey: password
+    asserts:
+      # Regular env vars
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_API_BASE_URL
+            value: "https://api.example.com"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Secret-based env vars
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-api-credentials
+                key: api-key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-credentials
+                key: password
+
+  - it: should include built-in, regular, and secret-based env vars together
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_VAR: "custom-value"
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: my-api-credentials
+          secretKey: api-key
+    asserts:
+      # Built-in env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+      # Regular env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Secret-based env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-api-credentials
+                key: api-key
+
+  - it: should handle secret with different key name than env var name
+    documentIndex: 1
+    set:
+      archestra.envFromSecrets:
+        - name: MY_SERVICE_TOKEN
+          secretName: external-service-creds
+          secretKey: service-auth-token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_SERVICE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: external-service-creds
+                key: service-auth-token
+
+  # envFrom tests (import all key-value pairs from Secret/ConfigMap)
+  - it: should not add envFrom section when envFrom is empty
+    documentIndex: 1
+    set:
+      archestra.envFrom: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].envFrom
+
+  - it: should add envFrom with single secretRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+
+  - it: should add envFrom with single configMapRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - configMapRef:
+            name: my-configmap
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - configMapRef:
+                name: my-configmap
+
+  - it: should add envFrom with multiple secretRef and configMapRef
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: secret-one
+        - configMapRef:
+            name: configmap-one
+        - secretRef:
+            name: secret-two
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: secret-one
+            - configMapRef:
+                name: configmap-one
+            - secretRef:
+                name: secret-two
+
+  - it: should add envFrom with optional flag
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+            optional: true
+        - configMapRef:
+            name: my-configmap
+            optional: false
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+                optional: true
+            - configMapRef:
+                name: my-configmap
+                optional: false
+
+  - it: should work with both env and envFrom configured
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_VAR: "custom-value"
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+    asserts:
+      # Check env vars exist
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Check envFrom exists
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: my-secret
+
+  - it: should work with env, envFromSecrets, and envFrom all configured
+    documentIndex: 1
+    set:
+      archestra.env:
+        CUSTOM_VAR: "custom-value"
+      archestra.envFromSecrets:
+        - name: API_KEY
+          secretName: api-credentials
+          secretKey: key
+      archestra.envFrom:
+        - secretRef:
+            name: bulk-secrets
+    asserts:
+      # Regular env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "custom-value"
+      # Secret-based individual env var
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: api-credentials
+                key: key
+      # envFrom bulk import
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: bulk-secrets
+
+  - it: should add envFrom with prefix
+    documentIndex: 1
+    set:
+      archestra.envFrom:
+        - secretRef:
+            name: my-secret
+          prefix: SECRET_
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - prefix: SECRET_
+              secretRef:
+                name: my-secret

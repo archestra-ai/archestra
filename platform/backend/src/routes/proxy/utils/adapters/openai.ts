@@ -1,5 +1,6 @@
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
+import { jsonToToon } from "@/utils/toon-converter";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -169,13 +170,16 @@ export function toolCallsToCommon(
  */
 export function toolResultsToMessages(
   results: CommonToolResult[],
+  convertToToon = false,
 ): Array<{ role: "tool"; tool_call_id: string; content: string }> {
   return results.map((result) => ({
     role: "tool" as const,
     tool_call_id: result.id,
     content: result.isError
       ? `Error: ${result.error || "Tool execution failed"}`
-      : JSON.stringify(result.content),
+      : convertToToon
+        ? jsonToToon(result.content)
+        : JSON.stringify(result.content),
   }));
 }
 

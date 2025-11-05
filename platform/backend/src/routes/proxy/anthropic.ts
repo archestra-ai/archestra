@@ -631,7 +631,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (mcpResults.length > 0) {
               // Convert MCP results to Anthropic tool result messages
               const toolResultMessages =
-                utils.adapters.anthropic.toolResultsToMessages(mcpResults);
+                utils.adapters.anthropic.toolResultsToMessages(
+                  mcpResults,
+                  resolvedAgent.convertToolResultsToToon,
+                );
 
               // Make another call with the tool results
               const updatedMessages = [

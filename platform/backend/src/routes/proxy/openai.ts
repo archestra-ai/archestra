@@ -616,7 +616,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               if (mcpResults.length > 0) {
                 // Convert MCP results to OpenAI tool messages
                 const toolMessages =
-                  utils.adapters.openai.toolResultsToMessages(mcpResults);
+                  utils.adapters.openai.toolResultsToMessages(
+                    mcpResults,
+                    resolvedAgent.convertToolResultsToToon,
+                  );
 
                 // Update conversation with tool results
                 const updatedMessages = [
@@ -800,7 +803,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (mcpResults.length > 0) {
             // Convert MCP results to OpenAI tool messages and append to response
             const toolMessages =
-              utils.adapters.openai.toolResultsToMessages(mcpResults);
+              utils.adapters.openai.toolResultsToMessages(
+                mcpResults,
+                resolvedAgent.convertToolResultsToToon,
+              );
 
             // For non-streaming, we need to make another LLM call with the tool results
             const updatedMessages = [

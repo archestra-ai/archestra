@@ -1,5 +1,6 @@
 import type { Anthropic, CommonToolCall, CommonToolResult } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
+import { jsonToToon } from "@/utils/toon-converter";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -175,7 +176,10 @@ export function toolCallsToCommon(
 /**
  * Convert common tool results to Anthropic user message with tool_result blocks
  */
-export function toolResultsToMessages(results: CommonToolResult[]): Array<{
+export function toolResultsToMessages(
+  results: CommonToolResult[],
+  convertToToon = false,
+): Array<{
   role: "user";
   content: Array<{
     type: "tool_result";
@@ -196,7 +200,9 @@ export function toolResultsToMessages(results: CommonToolResult[]): Array<{
         tool_use_id: result.id,
         content: result.isError
           ? `Error: ${result.error || "Tool execution failed"}`
-          : JSON.stringify(result.content),
+          : convertToToon
+            ? jsonToToon(result.content)
+            : JSON.stringify(result.content),
         is_error: result.isError,
       })),
     },

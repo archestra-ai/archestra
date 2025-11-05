@@ -95,5 +95,9 @@ jobs:
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
+            --set archestra.env.ARCHESTRA_AUTH_COOKIE_DOMAIN="${{ secrets.ARCHESTRA_STAGING_AUTH_COOKIE_DOMAIN }}" \
+            --set archestra.env.ARCHESTRA_AUTH_SECRET="${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}" \
+            --set archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}" \
+            --set archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}" \
             --values .github/values-staging.yaml \
             --wait

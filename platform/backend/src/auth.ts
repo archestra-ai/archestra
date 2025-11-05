@@ -36,6 +36,10 @@ export const auth = betterAuth({
       requireEmailVerificationOnInvitation: false,
       allowUserToCreateOrganization: false, // Disable organization creation by users
       ac,
+      dynamicAccessControl: {
+        enabled: true,
+        maximumRolesPerOrganization: 50, // Configurable limit for custom roles
+      },
       roles: {
         admin: adminRole,
         member: memberRole,

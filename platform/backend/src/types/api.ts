@@ -163,6 +163,13 @@ export const RouteId = {
   AddTeamMember: "addTeamMember",
   RemoveTeamMember: "removeTeamMember",
 
+  // Role Routes
+  GetRoles: "getRoles",
+  CreateRole: "createRole",
+  GetRole: "getRole",
+  UpdateRole: "updateRole",
+  DeleteRole: "deleteRole",
+
   // Tool Routes
   GetTools: "getTools",
   GetUnassignedTools: "getUnassignedTools",

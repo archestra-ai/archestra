@@ -34,7 +34,48 @@ export type Action = "create" | "read" | "update" | "delete";
  */
 export type Permission = `${Resource}:${Action}`;
 
-export type Role = "admin" | "member";
+export type Role = "admin" | "member" | string; // Allow custom role names
+
+/**
+ * Type for creating a custom role
+ */
+export interface CustomRoleRequest {
+  name: string;
+  permissions: Partial<Record<Resource, Action[]>>;
+  organizationId: string;
+}
+
+/**
+ * Type for role definition (response from API)
+ */
+export interface RoleDefinition {
+  id: string;
+  name: string;
+  permissions: Record<Resource, Action[]>;
+  isCustom: boolean;
+  organizationId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Check if a role is a custom role (not predefined)
+ */
+export function isCustomRole(role: string): boolean {
+  return !["admin", "member"].includes(role);
+}
+
+/**
+ * Get permissions for a predefined role
+ */
+export function getPredefinedRolePermissions(
+  role: "admin" | "member",
+): Record<Resource, Action[]> {
+  if (role === "admin") {
+    return allAvailableActions;
+  }
+  return memberRole.permissions as Record<Resource, Action[]>;
+}
 
 export const allAvailableActions: Record<Resource, Action[]> = {
   agent: ["create", "read", "update", "delete"],

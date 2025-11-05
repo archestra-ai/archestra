@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateInvitation } from "@/lib/organization.query";
+import { useRoles } from "@/lib/role.query";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
@@ -35,11 +36,12 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<string>("member");
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
   const createMutation = useCreateInvitation(organizationId);
+  const { data: roles } = useRoles();
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -107,15 +109,22 @@ function InviteByLinkCardContent({
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(value: "member" | "admin") => setRole(value)}
+                onValueChange={(value: string) => setRole(value)}
                 disabled={createMutation.isPending}
               >
                 <SelectTrigger id="role">
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="member">Member</SelectItem>
+                  {roles
+                    ?.filter((r) => r.isCustom)
+                    .map((r) => (
+                      <SelectItem key={r.id} value={r.name}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

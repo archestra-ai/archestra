@@ -19,6 +19,7 @@ export default function SettingsLayout({
       ? [
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },
+          { label: "Roles", href: "/settings/roles" },
           { label: "Appearance", href: "/settings/appearance" },
         ]
       : []),

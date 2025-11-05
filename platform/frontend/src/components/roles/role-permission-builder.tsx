@@ -1,0 +1,302 @@
+"use client";
+
+import { allAvailableActions, type Action, type Resource } from "@shared";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+
+interface RolePermissionBuilderProps {
+  permissions: Partial<Record<Resource, Action[]>>;
+  onChange: (permissions: Partial<Record<Resource, Action[]>>) => void;
+  userPermissions: Record<Resource, Action[]>;
+}
+
+// Group resources by category for better organization
+const resourceCategories: Record<string, Resource[]> = {
+  "Core Resources": [
+    "agent",
+    "tool",
+    "policy",
+    "interaction",
+    "conversation",
+  ],
+  "MCP & Integrations": [
+    "mcpServer",
+    "mcpServerInstallationRequest",
+    "mcpToolCall",
+    "internalMcpCatalog",
+  ],
+  "Dual LLM": ["dualLlmConfig", "dualLlmResult"],
+  "Organization": [
+    "organization",
+    "member",
+    "invitation",
+    "team",
+    "settings",
+    "limit",
+    "tokenPrice",
+  ],
+};
+
+// Human-readable labels for resources
+const resourceLabels: Record<Resource, string> = {
+  agent: "Agents",
+  tool: "Tools",
+  policy: "Policies",
+  interaction: "Interactions",
+  dualLlmConfig: "Dual LLM Configs",
+  dualLlmResult: "Dual LLM Results",
+  settings: "Settings",
+  organization: "Organization",
+  member: "Members",
+  invitation: "Invitations",
+  internalMcpCatalog: "Internal MCP Catalog",
+  mcpServer: "MCP Servers",
+  mcpServerInstallationRequest: "MCP Server Installation Requests",
+  mcpToolCall: "MCP Tool Calls",
+  team: "Teams",
+  conversation: "Conversations",
+  limit: "Limits",
+  tokenPrice: "Token Prices",
+};
+
+// Human-readable labels for actions
+const actionLabels: Record<Action, string> = {
+  create: "Create",
+  read: "Read",
+  update: "Update",
+  delete: "Delete",
+};
+
+export function RolePermissionBuilder({
+  permissions,
+  onChange,
+  userPermissions,
+}: RolePermissionBuilderProps) {
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(Object.keys(resourceCategories)),
+  );
+
+  const toggleCategory = (category: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const toggleAction = (resource: Resource, action: Action) => {
+    const currentActions = permissions[resource] || [];
+    const newActions = currentActions.includes(action)
+      ? currentActions.filter((a) => a !== action)
+      : [...currentActions, action];
+
+    if (newActions.length === 0) {
+      // Remove resource if no actions selected
+      const newPermissions = { ...permissions };
+      delete newPermissions[resource];
+      onChange(newPermissions);
+    } else {
+      onChange({
+        ...permissions,
+        [resource]: newActions,
+      });
+    }
+  };
+
+  const selectAllForResource = (resource: Resource) => {
+    const availableActions = userPermissions[resource] || [];
+    onChange({
+      ...permissions,
+      [resource]: [...availableActions],
+    });
+  };
+
+  const deselectAllForResource = (resource: Resource) => {
+    const newPermissions = { ...permissions };
+    delete newPermissions[resource];
+    onChange(newPermissions);
+  };
+
+  const isResourceFullySelected = (resource: Resource): boolean => {
+    const currentActions = permissions[resource] || [];
+    const availableActions = userPermissions[resource] || [];
+    return (
+      currentActions.length === availableActions.length &&
+      availableActions.length > 0
+    );
+  };
+
+  const isResourcePartiallySelected = (resource: Resource): boolean => {
+    const currentActions = permissions[resource] || [];
+    return currentActions.length > 0 && !isResourceFullySelected(resource);
+  };
+
+  const getTotalPermissionCount = (): number => {
+    return Object.values(permissions).reduce(
+      (sum, actions) => sum + actions.length,
+      0,
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Selected Permissions</p>
+            <p className="text-xs text-muted-foreground">
+              {getTotalPermissionCount()} permission
+              {getTotalPermissionCount() !== 1 ? "s" : ""} across{" "}
+              {Object.keys(permissions).length} resource
+              {Object.keys(permissions).length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({})}
+            disabled={getTotalPermissionCount() === 0}
+          >
+            Clear All
+          </Button>
+        </div>
+      </Card>
+
+      {/* Permission Selection */}
+      <div className="space-y-3">
+        {Object.entries(resourceCategories).map(([category, resources]) => (
+          <Card key={category} className="p-3">
+            <button
+              className="flex w-full items-center justify-between text-left"
+              onClick={() => toggleCategory(category)}
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                {expandedCategories.has(category) ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <span className="font-semibold text-sm">{category}</span>
+              </div>
+            </button>
+
+            {expandedCategories.has(category) && (
+              <div className="mt-3 space-y-2">
+                {resources
+                  .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
+                  .map((resource) => {
+                    const availableActions = userPermissions[resource] || [];
+                    const selectedActions = permissions[resource] || [];
+                    const isFullySelected = isResourceFullySelected(resource);
+                    const isPartiallySelected =
+                      isResourcePartiallySelected(resource);
+
+                    return (
+                      <div
+                        key={resource}
+                        className="rounded-md border bg-card p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`${resource}-all`}
+                              checked={isFullySelected}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  selectAllForResource(resource);
+                                } else {
+                                  deselectAllForResource(resource);
+                                }
+                              }}
+                              className={
+                                isPartiallySelected ? "opacity-50" : ""
+                              }
+                            />
+                            <Label
+                              htmlFor={`${resource}-all`}
+                              className="font-medium cursor-pointer"
+                            >
+                              {resourceLabels[resource] || resource}
+                            </Label>
+                            {isPartiallySelected && (
+                              <span className="text-xs text-muted-foreground">
+                                (Partial)
+                              </span>
+                            )}
+                          </div>
+                          {selectedActions.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {selectedActions.length}/{availableActions.length}
+                            </span>
+                          )}
+                        </div>
+
+                        <Separator className="my-2" />
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {(
+                            [
+                              "create",
+                              "read",
+                              "update",
+                              "delete",
+                            ] as Action[]
+                          ).map((action) => {
+                            const isAvailable =
+                              availableActions.includes(action);
+                            const isSelected = selectedActions.includes(action);
+
+                            return (
+                              <div
+                                key={action}
+                                className={`flex items-center gap-2 ${
+                                  !isAvailable
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : ""
+                                }`}
+                              >
+                                <Checkbox
+                                  id={`${resource}-${action}`}
+                                  checked={isSelected}
+                                  disabled={!isAvailable}
+                                  onCheckedChange={() => {
+                                    if (isAvailable) {
+                                      toggleAction(resource, action);
+                                    }
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={`${resource}-${action}`}
+                                  className={`text-sm ${
+                                    !isAvailable ? "cursor-not-allowed" : "cursor-pointer"
+                                  }`}
+                                >
+                                  {actionLabels[action]}
+                                  {isSelected && (
+                                    <Check className="ml-1 inline h-3 w-3" />
+                                  )}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -14,6 +14,7 @@ export * from "./mcp-server-installation-request";
 export * from "./mcp-tool-call";
 export * from "./message";
 export * from "./organization";
+export * from "./role";
 export * from "./team";
 export * from "./token-price";
 export * from "./tool";

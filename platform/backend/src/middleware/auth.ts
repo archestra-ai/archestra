@@ -382,6 +382,21 @@ const routePermissionsConfig: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["update"],
   },
+  [RouteId.GetRoles]: {
+    organization: ["read"],
+  },
+  [RouteId.CreateRole]: {
+    organization: ["update"],
+  },
+  [RouteId.GetRole]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateRole]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteRole]: {
+    organization: ["update"],
+  },
   [RouteId.GetMcpToolCalls]: {
     mcpToolCall: ["read"],
   },

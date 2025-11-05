@@ -66,6 +66,8 @@ jobs:
           push: false
           load: true
           tags: archestra/platform:ci-test
+          build-args: |
+            ARCHESTRA_FRONTEND_URL=http://localhost:3000
 
       - name: Start platform with docker compose
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

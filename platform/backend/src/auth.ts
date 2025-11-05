@@ -12,10 +12,19 @@ import logger from "@/logging";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
+  production,
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
 
-const isHttps = Boolean(baseURL?.startsWith("https://"));
+const isHttps = () => {
+  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production to determine if we're using HTTPS
+  if (!baseURL) {
+    return production;
+  }
+  // otherwise, use baseURL to determine if we're using HTTPS
+  // this is useful for envs where NODE_ENV=production but using HTTP localhost
+  return baseURL.startsWith("https://");
+};
 
 export const auth = betterAuth({
   baseURL,
@@ -92,8 +101,8 @@ export const auth = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: isHttps, // Use secure cookies when baseURL uses HTTPS
-      sameSite: isHttps ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
+      secure: isHttps(), // Use secure cookies when baseURL uses HTTPS
+      sameSite: isHttps() ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
     },
   },
 

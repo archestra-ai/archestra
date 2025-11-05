@@ -25,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import config from "@/lib/config";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -188,7 +189,11 @@ export function McpCatalogForm({
                     </FormControl>
                     <FormDescription>
                       Custom Docker image URL. If not specified, Archestra's
-                      default base image will be used.
+                      default base image will be used (
+                      <code className="text-xs">
+                        {config.mcp.baseDockerImage}
+                      </code>
+                      ).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

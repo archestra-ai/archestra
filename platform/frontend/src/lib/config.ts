@@ -47,4 +47,12 @@ export default {
       person_profiles: "identified_only",
     } satisfies Partial<PostHogConfig>,
   },
+  mcp: {
+    /**
+     * Base Docker image used for MCP servers (shown in UI for reference).
+     */
+    baseDockerImage:
+      env("NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE") ||
+      "python:3.12-alpine",
+  },
 };

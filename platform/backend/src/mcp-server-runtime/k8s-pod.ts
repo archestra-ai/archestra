@@ -48,14 +48,51 @@ export default class K8sPod {
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
-    this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+    this.podName = K8sPod.constructPodName(mcpServer);
   }
 
-  static slugifyMcpServerName(name: string): string {
-    return name
+  /**
+   * Constructs a valid Kubernetes pod name for an MCP server.
+   *
+   * Creates a pod name in the format "mcp-<slugified-name>".
+   */
+  static constructPodName(mcpServer: McpServer): string {
+    const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
+    return `mcp-${slugified}`.substring(0, 253);
+  }
+
+  /**
+   * Ensures a string is RFC 1123 compliant for Kubernetes DNS subdomain names and label values.
+   *
+   * According to RFC 1123, Kubernetes DNS subdomain names must:
+   * - contain no more than 253 characters
+   * - contain only lowercase alphanumeric characters, '-' or '.'
+   * - start with an alphanumeric character
+   * - end with an alphanumeric character
+   */
+  static ensureStringIsRfc1123Compliant(input: string): string {
+    return input
       .toLowerCase()
-      .replace(/ /g, "-")
-      .replace(/[^a-z0-9-]/g, "");
+      .replace(/\s+/g, "-") // replace any whitespace with hyphens
+      .replace(/[^a-z0-9.-]/g, "") // remove invalid characters
+      .replace(/-+/g, "-") // collapse consecutive hyphens
+      .replace(/\.+/g, ".") // collapse consecutive dots
+      .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
+      .replace(/[^a-z0-9]+$/, ""); // remove trailing non-alphanumeric
+  }
+
+  /**
+   * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
+   */
+  static sanitizeMetadataLabels(
+    labels: Record<string, string>,
+  ): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(labels)) {
+      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] =
+        K8sPod.ensureStringIsRfc1123Compliant(value);
+    }
+    return sanitized;
   }
 
   /**
@@ -70,9 +107,73 @@ export default class K8sPod {
   }
 
   /**
-   * Create environment variables for the pod
+   * Generate the pod specification for this MCP server
+   *
+   * @param dockerImage - The Docker image to use for the container
+   * @param localConfig - The local configuration for the MCP server
+   * @param needsHttp - Whether the pod needs HTTP port exposure
+   * @param httpPort - The HTTP port to expose (if needsHttp is true)
+   * @returns The Kubernetes pod specification
    */
-  private createPodEnvFromConfig(
+  generatePodSpec(
+    dockerImage: string,
+    localConfig: z.infer<typeof LocalConfigSchema>,
+    needsHttp: boolean,
+    httpPort: number,
+  ): k8s.V1Pod {
+    return {
+      metadata: {
+        name: this.podName,
+        labels: K8sPod.sanitizeMetadataLabels({
+          app: "mcp-server",
+          "mcp-server-id": this.mcpServer.id,
+          "mcp-server-name": this.mcpServer.name,
+        }),
+      },
+      spec: {
+        containers: [
+          {
+            name: "mcp-server",
+            image: dockerImage,
+            env: K8sPod.createPodEnvFromConfig(localConfig),
+            /**
+             * Use the command from local config if provided
+             * If not provided, Kubernetes will use the Docker image's default CMD
+             */
+            ...(localConfig.command
+              ? {
+                  command: [localConfig.command],
+                }
+              : {}),
+            args: localConfig.arguments || [],
+            // For stdio-based MCP servers, we use stdin/stdout
+            stdin: true,
+            tty: false,
+            // For HTTP-based MCP servers, expose port
+            ports: needsHttp
+              ? [
+                  {
+                    containerPort: httpPort,
+                    protocol: "TCP",
+                  },
+                ]
+              : undefined,
+          },
+        ],
+        restartPolicy: "Always",
+      },
+    };
+  }
+
+  /**
+   * Create environment variables for the pod
+   *
+   * This method processes environment variables from the local config and ensures
+   * that values are properly formatted. It strips surrounding quotes (both single
+   * and double) from values, as they are often used as delimiters in the UI but
+   * should not be part of the actual environment variable value.
+   */
+  static createPodEnvFromConfig(
     localConfig?: z.infer<typeof LocalConfigSchema>,
   ): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
@@ -80,9 +181,23 @@ export default class K8sPod {
     // Add environment variables from local config
     if (localConfig?.environment) {
       Object.entries(localConfig.environment).forEach(([key, value]) => {
+        let processedValue = String(value);
+
+        // Strip surrounding quotes (both single and double)
+        // Users may enter values like: API_KEY='my value' or API_KEY="my value"
+        // We want to extract the actual value without the quotes
+        // Only strip if the value has length > 1 to avoid stripping single quote chars
+        if (
+          processedValue.length > 1 &&
+          ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
+            (processedValue.startsWith('"') && processedValue.endsWith('"')))
+        ) {
+          processedValue = processedValue.slice(1, -1);
+        }
+
         env.push({
           name: key,
-          value: String(value),
+          value: processedValue,
         });
       });
     }
@@ -197,50 +312,14 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      const podSpec: k8s.V1Pod = {
-        metadata: {
-          name: this.podName,
-          labels: {
-            app: "mcp-server",
-            "mcp-server-id": this.mcpServer.id,
-            "mcp-server-name": this.mcpServer.name,
-          },
-        },
-        spec: {
-          containers: [
-            {
-              name: "mcp-server",
-              image: dockerImage,
-              env: this.createPodEnvFromConfig(catalogItem.localConfig),
-              // Use the command and arguments from local config if provided
-              // If not provided, Kubernetes will use the Docker image's default CMD
-              ...(catalogItem.localConfig.command
-                ? {
-                    command: [catalogItem.localConfig.command],
-                    args: catalogItem.localConfig.arguments || [],
-                  }
-                : {}),
-              // For stdio-based MCP servers, we use stdin/stdout
-              stdin: true,
-              tty: false,
-              // For HTTP-based MCP servers, expose port
-              ports: needsHttp
-                ? [
-                    {
-                      containerPort: httpPort,
-                      protocol: "TCP",
-                    },
-                  ]
-                : undefined,
-            },
-          ],
-          restartPolicy: "Always",
-        },
-      };
-
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
-        body: podSpec,
+        body: this.generatePodSpec(
+          dockerImage,
+          catalogItem.localConfig,
+          needsHttp,
+          httpPort,
+        ),
       });
 
       logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);

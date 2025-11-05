@@ -3,7 +3,6 @@
   "changelog-path": "CHANGELOG.md",
   "changelog-type": "default",
   "bump-minor-pre-major": true,
-  "bump-patch-for-minor-pre-major": true,
   "pull-request-footer": "",
   "include-v-in-tag": true,
   "draft": false,
@@ -71,13 +70,15 @@
       "release-type": "node",
       "prerelease": true,
       "include-component-in-tag": false,
-      "initial-version": "0.0.1"
+      "initial-version": "0.0.1",
+      "bump-patch-for-minor-pre-major": true
     },
     "platform": {
       "component": "platform",
       "release-type": "node",
       "prerelease": true,
       "initial-version": "0.0.1",
+      "bump-patch-for-minor-pre-major": false,
       "extra-files": [
         {
           "type": "json",

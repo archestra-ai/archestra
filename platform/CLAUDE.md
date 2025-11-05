@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key URLs
 
 - **Frontend**: <http://localhost:3000/>
+- **Backend**: <http://localhost:9000/> (Fastify API server)
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools)
 - **Tools Inspector**: <http://localhost:3000/tools>
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
@@ -33,7 +34,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
+- **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
+- **Backend Metrics**: <http://localhost:9050/metrics> (Prometheus metrics endpoint, separate from main API)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
@@ -45,7 +48,7 @@ pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
-pnpm test:e2e                           # Run e2e tests with Playwright (includes WireMock)
+pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox) (chromium, webkit, firefox)
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -66,7 +69,9 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 ## Environment Variables
 
 ```bash
-# Required (ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL)
+# Database Configuration
+# ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL
+# When using external database, internal postgres container will not start
 ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
 # Provider API Keys
@@ -77,6 +82,9 @@ ANTHROPIC_API_KEY=your-api-key-here
 # Provider Base URLs (optional - for testing)
 ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
+
+# Analytics (optional - disabled for local dev and e2e tests)
+ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
@@ -89,6 +97,12 @@ ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
 ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
+NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Frontend display of base image
+
+# OpenTelemetry Authentication
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (requires password)
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=  # Password for OTLP basic auth (requires username)
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes precedence over basic auth)
 
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
@@ -96,7 +110,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Architecture
 
-**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
+**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
 **Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools
 
@@ -116,9 +130,9 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Observability
 
-**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes. Traces stored in Grafana Tempo, viewable via Grafana UI.
+**Tracing**: LLM proxy routes add agent data via `startActiveLlmSpan()`. Traces include `agent.id`, `agent.name` and dynamic `agent.<label>` attributes. Agent label keys are fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo.
 
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic agent labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
@@ -157,7 +171,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Keys and values stored separately for consistency and reuse
 - One value per key per agent (updating same key replaces value)
 - Labels returned in alphabetical order by key for consistency
-- API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
+- API endpoints: GET `/api/agents/labels/keys`, GET `/api/agents/labels/values?key=<key>` (key param filters values by key)
 
 **MCP Server Installation Requests**:
 
@@ -195,6 +209,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+- Secret-based env vars via `archestra.envFromSecrets` for sensitive data injection (e.g., API keys from K8s Secrets)
+- Bulk env var import via `archestra.envFrom` for importing all keys from Secrets/ConfigMaps at once
 
 **White-labeling**:
 - Admin-only via `/api/organization/appearance` endpoints  
@@ -204,4 +220,4 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logoType, logo
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking
+**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking

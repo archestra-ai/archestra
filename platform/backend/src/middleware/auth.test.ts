@@ -81,7 +81,6 @@ describe("AuthMiddleware", () => {
         "/json",
         "/openapi.json",
         "/health",
-        "/metrics",
         "/api/features",
       ];
 
@@ -110,6 +109,7 @@ describe("AuthMiddleware", () => {
         "/.well-known-acme-challenge/test", // missing slash
         "/well-known/acme-challenge/test", // missing leading dot
         "/api/protected-endpoint",
+        "/metrics",
       ];
 
       for (const url of protectedPaths) {

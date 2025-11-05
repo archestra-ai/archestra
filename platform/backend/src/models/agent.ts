@@ -1,9 +1,36 @@
 import { DEFAULT_AGENT_NAME } from "@shared";
-import { eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  min,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Agent, InsertAgent, UpdateAgent } from "@/types";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  Agent,
+  InsertAgent,
+  PaginationQuery,
+  SortingQuery,
+  UpdateAgent,
+} from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+
+type AgentWithToolsRow = {
+  agents: typeof schema.agentsTable.$inferSelect;
+  agent_tools: typeof schema.agentToolsTable.$inferSelect | null;
+  tools: typeof schema.toolsTable.$inferSelect | null;
+};
 
 class AgentModel {
   static async create({
@@ -95,6 +122,226 @@ class AgentModel {
     }
 
     return agents;
+  }
+
+  /**
+   * Find all agents with pagination, sorting, and filtering support
+   */
+  static async findAllPaginated(
+    pagination: PaginationQuery,
+    sorting?: SortingQuery,
+    filters?: { name?: string },
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<PaginatedResult<Agent>> {
+    // Determine the ORDER BY clause based on sorting params
+    const orderByClause = AgentModel.getOrderByClause(sorting);
+
+    // Build where clause for filters and access control
+    const whereConditions: SQL[] = [];
+
+    // Add name filter if provided
+    if (filters?.name) {
+      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+
+    // Apply access control filtering for non-admins
+    if (userId && !isAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+
+      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+    }
+
+    const whereClause =
+      whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+    let agentsData: AgentWithToolsRow[];
+    let totalResult: number;
+
+    if (sorting?.sortBy === "toolsCount" || sorting?.sortBy === "team") {
+      const direction = sorting.sortDirection === "asc" ? asc : desc;
+      let sortedAgents: { id: string }[];
+
+      if (sorting.sortBy === "toolsCount") {
+        // Create a subquery to count tools per agent
+        const toolsCountSubquery = db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+          })
+          .from(schema.agentToolsTable)
+          .groupBy(schema.agentToolsTable.agentId)
+          .as("toolsCounts");
+
+        // Use COALESCE to treat NULL as 0 when sorting
+        const toolsCountWithDefault = sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            toolsCountSubquery,
+            eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(toolsCountWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      } else {
+        // sorting.sortBy === "team"
+        // Create a subquery to get the first team name (alphabetically) per agent
+        const teamNameSubquery = db
+          .select({
+            agentId: schema.agentTeamTable.agentId,
+            teamName: min(schema.team.name).as("teamName"),
+          })
+          .from(schema.agentTeamTable)
+          .leftJoin(
+            schema.team,
+            eq(schema.agentTeamTable.teamId, schema.team.id),
+          )
+          .groupBy(schema.agentTeamTable.agentId)
+          .as("teamNames");
+
+        // Use COALESCE to treat NULL as empty string when sorting
+        const teamNameWithDefault = sql`COALESCE(${teamNameSubquery.teamName}, '')`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            teamNameSubquery,
+            eq(schema.agentsTable.id, teamNameSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(teamNameWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      }
+
+      const sortedAgentIds = sortedAgents.map((a) => a.id);
+
+      // If no agents match, return early
+      if (sortedAgentIds.length === 0) {
+        const [{ total }] = await db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause);
+        return createPaginatedResult([], Number(total), pagination);
+      }
+
+      // Get full agent data with tools for sorted agents, maintaining order
+      agentsData = await db
+        .select()
+        .from(schema.agentsTable)
+        .leftJoin(
+          schema.agentToolsTable,
+          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+        )
+        .leftJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(inArray(schema.agentsTable.id, sortedAgentIds));
+
+      // Sort in memory to maintain the order from the sorted query
+      const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
+      agentsData.sort(
+        (a, b) =>
+          (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
+      );
+
+      [{ total: totalResult }] = await db
+        .select({ total: count() })
+        .from(schema.agentsTable)
+        .where(whereClause);
+    } else {
+      // Standard query for other sorting options
+      [agentsData, [{ total: totalResult }]] = await Promise.all([
+        db
+          .select()
+          .from(schema.agentsTable)
+          .leftJoin(
+            schema.agentToolsTable,
+            eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+          )
+          .leftJoin(
+            schema.toolsTable,
+            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          )
+          .where(whereClause)
+          .orderBy(orderByClause)
+          .limit(pagination.limit)
+          .offset(pagination.offset),
+        db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause),
+      ]);
+    }
+
+    // Group the flat join results by agent
+    const agentsMap = new Map<string, Agent>();
+
+    for (const row of agentsData) {
+      const agent = row.agents;
+      const tool = row.tools;
+
+      if (!agentsMap.has(agent.id)) {
+        agentsMap.set(agent.id, {
+          ...agent,
+          tools: [],
+          teams: [],
+          labels: [],
+        });
+      }
+
+      // Add tool if it exists (leftJoin returns null for agents with no tools)
+      if (tool) {
+        agentsMap.get(agent.id)?.tools.push(tool);
+      }
+    }
+
+    const agents = Array.from(agentsMap.values());
+
+    // Populate teams and labels for each agent
+    for (const agent of agents) {
+      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
+      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+    }
+
+    return createPaginatedResult(agents, Number(totalResult), pagination);
+  }
+
+  /**
+   * Helper to get the appropriate ORDER BY clause based on sorting params
+   */
+  private static getOrderByClause(sorting?: SortingQuery) {
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+
+    switch (sorting?.sortBy) {
+      case "name":
+        return direction(schema.agentsTable.name);
+      case "createdAt":
+        return direction(schema.agentsTable.createdAt);
+      case "toolsCount":
+      case "team":
+        // toolsCount and team sorting use a separate query path (see lines 168-267).
+        // This fallback should never be reached for these sort types.
+        return direction(schema.agentsTable.createdAt); // Fallback
+      default:
+        // Default: newest first
+        return desc(schema.agentsTable.createdAt);
+    }
   }
 
   static async findById(

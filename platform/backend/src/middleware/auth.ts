@@ -49,7 +49,6 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
-      url === "/metrics" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
       /**
@@ -165,6 +164,9 @@ const routePermissionsConfig: Partial<
   Record<RouteId, Partial<Record<Resource, Action[]>>>
 > = {
   [RouteId.GetAgents]: {
+    agent: ["read"],
+  },
+  [RouteId.GetAllAgents]: {
     agent: ["read"],
   },
   [RouteId.GetAgent]: {

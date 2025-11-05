@@ -4,6 +4,7 @@ import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();
+const registerRemoveSingleMetric = vi.fn();
 
 vi.mock("prom-client", () => {
   return {
@@ -18,11 +19,19 @@ vi.mock("prom-client", () => {
           return counterInc(...args);
         }
       },
+      register: {
+        removeSingleMetric: (...args: unknown[]) =>
+          registerRemoveSingleMetric(...args),
+      },
     },
   };
 });
 
-import { getObservableFetch, getObservableGenAI } from "./llm-metrics";
+import {
+  getObservableFetch,
+  getObservableGenAI,
+  initializeMetrics,
+} from "./llm-metrics";
 
 describe("getObservableFetch", () => {
   let testAgent: Agent;
@@ -33,6 +42,8 @@ describe("getObservableFetch", () => {
       name: "Test Agent",
       teams: [],
     });
+    // Initialize metrics so the observable fetch can record metrics
+    initializeMetrics([]);
   });
 
   it("records duration and tokens on successful request", async () => {
@@ -257,6 +268,8 @@ describe("getObservableGenAI", () => {
       name: "Test Agent",
       teams: [],
     });
+    // Initialize metrics so the observable GenAI can record metrics
+    initializeMetrics([]);
   });
 
   it("records duration and tokens on successful Gemini request", async () => {
@@ -396,5 +409,74 @@ describe("getObservableGenAI", () => {
     ).rejects.toThrow("Gemini API failed");
 
     expect(mockGenerateContent).toHaveBeenCalled();
+  });
+});
+
+describe("initializeMetrics", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("skips reinitialization when label keys haven't changed", () => {
+    initializeMetrics(["environment", "team", "region"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["environment", "team", "region"]);
+
+    expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
+  });
+
+  it("reinitializes metrics when label keys are added", () => {
+    initializeMetrics(["environment", "team"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["environment", "team", "region"]);
+
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith(
+      "llm_request_duration_seconds",
+    );
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
+  });
+
+  it("reinitializes metrics when label keys are removed", () => {
+    initializeMetrics(["environment", "team", "region"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["environment", "team"]);
+
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith(
+      "llm_request_duration_seconds",
+    );
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
+  });
+
+  it("reinitializes metrics when label keys are changed", () => {
+    initializeMetrics(["environment", "team"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["environment", "region"]);
+
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith(
+      "llm_request_duration_seconds",
+    );
+    expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
+  });
+
+  it("doesn't reinit if keys with special characters didn't change", () => {
+    initializeMetrics(["env-name", "team.id", "region@aws"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["env-name", "team.id", "region@aws"]);
+
+    expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
+  });
+
+  it("doesn't reinit if keys are the same but in different order", () => {
+    initializeMetrics(["team", "environment", "region"]);
+    registerRemoveSingleMetric.mockClear();
+
+    initializeMetrics(["region", "team", "environment"]);
+
+    expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
   });
 });

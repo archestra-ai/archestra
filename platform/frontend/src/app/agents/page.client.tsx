@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -9,15 +9,21 @@ import {
   Pencil,
   Plug,
   Plus,
+  Search,
   Tag,
   Trash2,
   Wrench,
   X,
 } from "lucide-react";
-import { Suspense, useCallback, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
+import {
+  type AgentLabel,
+  AgentLabels,
+  type AgentLabelsRef,
+} from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -49,26 +55,21 @@ import {
 } from "@/components/ui/tooltip";
 import { WithPermission } from "@/components/with-permission";
 import {
-  useAgents,
+  useAgentsPaginated,
   useCreateAgent,
   useDeleteAgent,
   useLabelKeys,
-  useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
-export default function AgentsPage({
-  initialData,
-}: {
-  initialData: archestraApiTypes.GetAgentsResponses["200"];
-}) {
+export default function AgentsPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Agents initialData={initialData} />
+          <Agents />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -150,12 +151,45 @@ function AgentTeamsBadges({
   );
 }
 
-function Agents({
-  initialData,
-}: {
-  initialData: archestraApiTypes.GetAgentsResponses["200"];
-}) {
-  const { data: agents } = useAgents({ initialData });
+function Agents() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Get pagination/filter params from URL
+  const pageFromUrl = searchParams.get("page");
+  const pageSizeFromUrl = searchParams.get("pageSize");
+  const nameFilter = searchParams.get("name") || "";
+  const sortByFromUrl = searchParams.get("sortBy") as
+    | "name"
+    | "createdAt"
+    | "toolsCount"
+    | "team"
+    | null;
+  const sortDirectionFromUrl = searchParams.get("sortDirection") as
+    | "asc"
+    | "desc"
+    | null;
+
+  const pageIndex = Number(pageFromUrl || "1") - 1;
+  const pageSize = Number(pageSizeFromUrl || "20");
+  const offset = pageIndex * pageSize;
+
+  // Default sorting
+  const sortBy = sortByFromUrl || "createdAt";
+  const sortDirection = sortDirectionFromUrl || "desc";
+
+  const { data: agentsResponse } = useAgentsPaginated({
+    limit: pageSize,
+    offset,
+    sortBy,
+    sortDirection,
+    name: nameFilter || undefined,
+  });
+
+  const agents = agentsResponse?.data || [];
+  const pagination = agentsResponse?.pagination;
+
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -164,16 +198,45 @@ function Agents({
     },
   });
 
+  const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
+    { id: sortBy, desc: sortDirection === "desc" },
   ]);
+
+  // Sync sorting state with URL params
+  useEffect(() => {
+    setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
+  }, [sortBy, sortDirection]);
+
+  // Debounce search query updates to URL
+  useEffect(() => {
+    // Only run if search query differs from URL
+    const currentNameParam = searchParams.get("name") || "";
+    if (searchQuery === currentNameParam) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (searchQuery) {
+        params.set("name", searchQuery);
+      } else {
+        params.delete("name");
+      }
+      params.set("page", "1"); // Reset to first page on search
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchParams, router, pathname]);
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
-    archestraApiTypes.GetAgentsResponses["200"][number] | null
+    (typeof agents)[number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
@@ -183,7 +246,44 @@ function Agents({
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
-  type AgentData = archestraApiTypes.GetAgentsResponses["200"][number];
+  type AgentData = (typeof agents)[number];
+
+  // Update local search state only - URL update is debounced in useEffect
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+  }, []);
+
+  // Update URL when sorting changes
+  const handleSortingChange = useCallback(
+    (updater: SortingState | ((old: SortingState) => SortingState)) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+      setSorting(newSorting);
+
+      const params = new URLSearchParams(searchParams.toString());
+      if (newSorting.length > 0) {
+        params.set("sortBy", newSorting[0].id);
+        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+      } else {
+        params.delete("sortBy");
+        params.delete("sortDirection");
+      }
+      params.set("page", "1"); // Reset to first page when sorting changes
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [sorting, searchParams, router, pathname],
+  );
+
+  // Update URL when pagination changes
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(newPagination.pageIndex + 1));
+      params.set("pageSize", String(newPagination.pageSize));
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
 
   const columns: ColumnDef<AgentData>[] = [
     {
@@ -263,13 +363,32 @@ function Agents({
       ),
     },
     {
-      id: "tools",
-      header: "Connected Tools",
+      id: "toolsCount",
+      accessorKey: "toolsCount",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Connected Tools
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => <div>{row.original.tools.length}</div>,
     },
     {
-      id: "teams",
-      header: "Teams",
+      id: "team",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Teams
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => (
         <AgentTeamsBadges teamIds={row.original.teams || []} teams={teams} />
       ),
@@ -277,10 +396,11 @@ function Agents({
     {
       id: "actions",
       header: "Actions",
+      size: 100,
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <div className="flex items-center gap-1 justify-end">
+          <div className="flex items-center gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -405,16 +525,41 @@ function Agents({
       </div>
 
       <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+        {agents.length > 0 ? (
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search agents by name..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+        ) : null}
+
         {!agents || agents.length === 0 ? (
-          <div className="text-muted-foreground">No agents found</div>
+          <div className="text-muted-foreground">
+            {nameFilter
+              ? "No agents found matching your search"
+              : "No agents found"}
+          </div>
         ) : (
           <div data-testid={E2eTestId.AgentsTable}>
             <DataTable
               columns={columns}
               data={agents}
               sorting={sorting}
-              onSortingChange={setSorting}
+              onSortingChange={handleSortingChange}
               manualSorting={true}
+              manualPagination={true}
+              pagination={{
+                pageIndex,
+                pageSize,
+                total: pagination?.total || 0,
+              }}
+              onPaginationChange={handlePaginationChange}
             />
           </div>
         )}
@@ -478,13 +623,13 @@ function CreateAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -523,11 +668,15 @@ function CreateAgentDialog({
         return;
       }
 
+      // Save any unsaved label before submitting
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
+
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
           teams: assignedTeamIds,
-          labels,
+          labels: updatedLabels,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -590,7 +739,11 @@ function CreateAgentDialog({
                       <SelectValue placeholder="Select a team to assign" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getUnassignedTeams().length === 0 ? (
+                      {teams?.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No teams available
+                        </div>
+                      ) : getUnassignedTeams().length === 0 ? (
                         <div className="px-2 py-1.5 text-sm text-muted-foreground">
                           All teams are already assigned
                         </div>
@@ -633,10 +786,10 @@ function CreateAgentDialog({
                 </div>
 
                 <AgentLabels
+                  ref={agentLabelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
-                  availableValues={availableValues}
                 />
               </div>
               <DialogFooter className="mt-4">
@@ -702,9 +855,9 @@ function EditAgentDialog({
     },
   });
   const { data: availableKeys = [] } = useLabelKeys();
-  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
+  const agentLabelsRef = useRef<AgentLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -731,13 +884,17 @@ function EditAgentDialog({
         return;
       }
 
+      // Save any unsaved label before submitting
+      const updatedLabels =
+        agentLabelsRef.current?.saveUnsavedLabel() || labels;
+
       try {
         await updateAgent.mutateAsync({
           id: agent.id,
           data: {
             name: name.trim(),
             teams: assignedTeamIds,
-            labels,
+            labels: updatedLabels,
           },
         });
         toast.success("Agent updated successfully");
@@ -799,7 +956,11 @@ function EditAgentDialog({
                   <SelectValue placeholder="Select a team to assign" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getUnassignedTeams().length === 0 ? (
+                  {teams?.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No teams available
+                    </div>
+                  ) : getUnassignedTeams().length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
                       All teams are already assigned
                     </div>
@@ -842,10 +1003,10 @@ function EditAgentDialog({
             </div>
 
             <AgentLabels
+              ref={agentLabelsRef}
               labels={labels}
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
-              availableValues={availableValues}
             />
           </div>
           <DialogFooter className="mt-4">

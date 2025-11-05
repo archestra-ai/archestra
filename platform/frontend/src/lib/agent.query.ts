@@ -10,19 +10,51 @@ const {
   createAgent,
   deleteAgent,
   getAgents,
+  getAllAgents,
   getDefaultAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
 } = archestraApiSdk;
 
+// For backward compatibility - returns all agents as an array
 export function useAgents(params?: {
-  initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
 }) {
   return useSuspenseQuery({
-    queryKey: ["agents"],
-    queryFn: async () => (await getAgents()).data ?? null,
+    queryKey: ["agents", "all"],
+    queryFn: async () => {
+      const response = await getAllAgents();
+      return response.data ?? [];
+    },
     initialData: params?.initialData,
+  });
+}
+
+// New paginated hook for the agents page
+export function useAgentsPaginated(params?: {
+  limit?: number;
+  offset?: number;
+  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
+  sortDirection?: "asc" | "desc";
+  name?: string;
+}) {
+  const { limit, offset, sortBy, sortDirection, name } = params || {};
+
+  return useSuspenseQuery({
+    queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
+    queryFn: async () =>
+      (
+        await getAgents({
+          query: {
+            limit,
+            offset,
+            sortBy,
+            sortDirection,
+            name,
+          },
+        })
+      ).data ?? null,
   });
 }
 
@@ -88,9 +120,12 @@ export function useLabelKeys() {
   });
 }
 
-export function useLabelValues() {
+export function useLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
   return useQuery({
-    queryKey: ["agents", "labels", "values"],
-    queryFn: async () => (await getLabelValues()).data ?? [],
+    queryKey: ["agents", "labels", "values", key],
+    queryFn: async () =>
+      (await getLabelValues({ query: key ? { key } : {} })).data ?? [],
+    enabled: key !== undefined,
   });
 }

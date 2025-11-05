@@ -65,3 +65,4 @@ benchmark-config.env
 
 # Playwright
 /playwright/
+playwright-report/

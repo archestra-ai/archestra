@@ -1,4 +1,14 @@
-import { getDatabaseUrl } from "./config";
+import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
+
+// Mock the logger
+vi.mock("./logging", () => ({
+  __esModule: true,
+  default: {
+    warn: vi.fn(),
+  },
+}));
+
+import logger from "./logging";
 
 describe("getDatabaseUrl", () => {
   const originalEnv = process.env;
@@ -67,5 +77,153 @@ describe("getDatabaseUrl", () => {
     const result = getDatabaseUrl();
 
     expect(result).toBe("postgresql://other:pass@host:5432/other_db");
+  });
+});
+
+describe("getOtlpAuthHeaders", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    // Create a fresh copy of process.env for each test
+    process.env = { ...originalEnv };
+    // Clear mock calls
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // Restore the original environment
+    process.env = originalEnv;
+  });
+
+  describe("Bearer token authentication", () => {
+    it("should return Bearer authorization header when bearer token is provided", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "my-bearer-token";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toEqual({
+        Authorization: "Bearer my-bearer-token",
+      });
+    });
+
+    it("should prioritize bearer token over basic auth when both are provided", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "my-bearer-token";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "user";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "pass";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toEqual({
+        Authorization: "Bearer my-bearer-token",
+      });
+    });
+
+    it("should trim whitespace from bearer token", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER =
+        "  my-bearer-token  ";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toEqual({
+        Authorization: "Bearer my-bearer-token",
+      });
+    });
+  });
+
+  describe("Basic authentication", () => {
+    it("should return Basic authorization header when both username and password are provided", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
+
+      const result = getOtlpAuthHeaders();
+
+      // testuser:testpass in base64 is dGVzdHVzZXI6dGVzdHBhc3M=
+      expect(result).toEqual({
+        Authorization: "Basic dGVzdHVzZXI6dGVzdHBhc3M=",
+      });
+    });
+
+    it("should trim whitespace from username and password", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "  testuser  ";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "  testpass  ";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toEqual({
+        Authorization: "Basic dGVzdHVzZXI6dGVzdHBhc3M=",
+      });
+    });
+
+    it("should return undefined and warn when only username is provided", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+    });
+
+    it("should return undefined and warn when only password is provided", () => {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+    });
+
+    it("should return undefined and warn when username is empty string", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+    });
+
+    it("should return undefined and warn when password is empty string", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+    });
+  });
+
+  describe("No authentication", () => {
+    it("should return undefined when no authentication environment variables are set", () => {
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER;
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
+      delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it("should return undefined when all authentication variables are empty strings", () => {
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";
+
+      const result = getOtlpAuthHeaders();
+
+      expect(result).toBeUndefined();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
   });
 });

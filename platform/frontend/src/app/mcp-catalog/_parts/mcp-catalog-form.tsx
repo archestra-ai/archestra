@@ -25,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import config from "@/lib/config";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -38,6 +39,8 @@ interface McpCatalogFormProps {
   submitButtonRef?: React.RefObject<HTMLButtonElement | null>;
   serverType?: "remote" | "local";
 }
+
+const { baseMcpServerDockerImage } = config.orchestrator;
 
 export function McpCatalogForm({
   mode,
@@ -181,14 +184,18 @@ export function McpCatalogForm({
                     <FormLabel>Docker Image (optional)</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="registry.example.com/my-mcp-server:latest"
+                        placeholder={baseMcpServerDockerImage}
                         className="font-mono"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
                       Custom Docker image URL. If not specified, Archestra's
-                      default base image will be used.
+                      default base image will be used (
+                      <code className="text-xs">
+                        {baseMcpServerDockerImage}
+                      </code>
+                      ).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

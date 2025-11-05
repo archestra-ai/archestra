@@ -1,10 +1,14 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { initializeMetrics } from "@/llm-metrics";
 import { AgentModel } from "@/models";
 import AgentLabelModel from "@/models/agent-label";
 import {
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   ErrorResponseSchema,
   InsertAgentSchema,
+  PaginationQuerySchema,
   RouteId,
   SelectAgentSchema,
   UpdateAgentSchema,
@@ -18,7 +22,73 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAgents,
-        description: "Get all agents",
+        description: "Get all agents with pagination, sorting, and filtering",
+        tags: ["Agents"],
+        querystring: z
+          .object({
+            name: z.string().optional().describe("Filter by agent name"),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema([
+              "name",
+              "createdAt",
+              "toolsCount",
+              "team",
+            ] as const),
+          ),
+        response: {
+          200: createPaginatedResponseSchema(SelectAgentSchema),
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const { name, limit, offset, sortBy, sortDirection } = request.query;
+        const pagination = { limit, offset };
+        const sorting = { sortBy, sortDirection };
+        const filters = { name };
+
+        const result = await AgentModel.findAllPaginated(
+          pagination,
+          sorting,
+          filters,
+          user.id,
+          user.isAdmin,
+        );
+        return reply.send(result);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/agents/all",
+    {
+      schema: {
+        operationId: RouteId.GetAllAgents,
+        description: "Get all agents without pagination",
         tags: ["Agents"],
         response: {
           200: z.array(SelectAgentSchema),
@@ -128,8 +198,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+        const agent = await AgentModel.create(request.body);
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
 
-        return reply.send(await AgentModel.create(request.body));
+        return reply.send(agent);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -238,6 +313,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
+
         return reply.send(agent);
       } catch (error) {
         fastify.log.error(error);
@@ -345,6 +425,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelValues,
         description: "Get all available label values",
         tags: ["Agents"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
         response: {
           200: z.array(z.string()),
           401: ErrorResponseSchema,
@@ -365,7 +448,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const values = await AgentLabelModel.getAllValues();
+        const { key } = request.query;
+        const values = key
+          ? await AgentLabelModel.getValuesByKey(key)
+          : await AgentLabelModel.getAllValues();
         return reply.send(values);
       } catch (error) {
         fastify.log.error(error);

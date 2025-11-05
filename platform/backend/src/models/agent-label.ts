@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentLabelWithDetails } from "@/types/label";
 
@@ -115,78 +115,62 @@ class AgentLabelModel {
         await tx.insert(schema.agentLabelTable).values(labelInserts);
       }
     });
+
+    await AgentLabelModel.pruneKeysAndValues();
   }
 
   /**
-   * Add a single label to an agent
+   * Prune orphaned label keys and values that are no longer referenced
+   * by any agent labels
    */
-  static async addLabelToAgent(
-    agentId: string,
-    key: string,
-    value: string,
-  ): Promise<void> {
-    const keyId = await AgentLabelModel.getOrCreateKey(key);
-    const valueId = await AgentLabelModel.getOrCreateValue(value);
+  static async pruneKeysAndValues(): Promise<{
+    deletedKeys: number;
+    deletedValues: number;
+  }> {
+    return await db.transaction(async (tx) => {
+      // Find orphaned keys (not referenced in agent_labels)
+      const orphanedKeys = await tx
+        .select({ id: schema.labelKeyTable.id })
+        .from(schema.labelKeyTable)
+        .leftJoin(
+          schema.agentLabelTable,
+          eq(schema.labelKeyTable.id, schema.agentLabelTable.keyId),
+        )
+        .where(isNull(schema.agentLabelTable.keyId));
 
-    // Check if this key already exists for this agent
-    const existing = await db
-      .select()
-      .from(schema.agentLabelTable)
-      .where(
-        and(
-          eq(schema.agentLabelTable.agentId, agentId),
-          eq(schema.agentLabelTable.keyId, keyId),
-        ),
-      )
-      .limit(1);
+      // Find orphaned values (not referenced in agent_labels)
+      const orphanedValues = await tx
+        .select({ id: schema.labelValueTable.id })
+        .from(schema.labelValueTable)
+        .leftJoin(
+          schema.agentLabelTable,
+          eq(schema.labelValueTable.id, schema.agentLabelTable.valueId),
+        )
+        .where(isNull(schema.agentLabelTable.valueId));
 
-    if (existing.length > 0) {
-      // Update the value if key exists
-      await db
-        .update(schema.agentLabelTable)
-        .set({ valueId })
-        .where(
-          and(
-            eq(schema.agentLabelTable.agentId, agentId),
-            eq(schema.agentLabelTable.keyId, keyId),
-          ),
-        );
-    } else {
-      // Insert new label
-      await db
-        .insert(schema.agentLabelTable)
-        .values({ agentId, keyId, valueId });
-    }
-  }
+      let deletedKeys = 0;
+      let deletedValues = 0;
 
-  /**
-   * Remove a label from an agent by key
-   */
-  static async removeLabelFromAgent(
-    agentId: string,
-    key: string,
-  ): Promise<boolean> {
-    // Find the key ID
-    const [keyRecord] = await db
-      .select()
-      .from(schema.labelKeyTable)
-      .where(eq(schema.labelKeyTable.key, key))
-      .limit(1);
+      // Delete orphaned keys
+      if (orphanedKeys.length > 0) {
+        const keyIds = orphanedKeys.map((k) => k.id);
+        const result = await tx
+          .delete(schema.labelKeyTable)
+          .where(inArray(schema.labelKeyTable.id, keyIds));
+        deletedKeys = result.rowCount || 0;
+      }
 
-    if (!keyRecord) {
-      return false;
-    }
+      // Delete orphaned values
+      if (orphanedValues.length > 0) {
+        const valueIds = orphanedValues.map((v) => v.id);
+        const result = await tx
+          .delete(schema.labelValueTable)
+          .where(inArray(schema.labelValueTable.id, valueIds));
+        deletedValues = result.rowCount || 0;
+      }
 
-    const result = await db
-      .delete(schema.agentLabelTable)
-      .where(
-        and(
-          eq(schema.agentLabelTable.agentId, agentId),
-          eq(schema.agentLabelTable.keyId, keyRecord.id),
-        ),
-      );
-
-    return result.rowCount !== null && result.rowCount > 0;
+      return { deletedKeys, deletedValues };
+    });
   }
 
   /**
@@ -202,6 +186,38 @@ class AgentLabelModel {
    */
   static async getAllValues(): Promise<string[]> {
     const values = await db.select().from(schema.labelValueTable);
+    return values.map((v) => v.value);
+  }
+
+  /**
+   * Get all available label values for a specific key
+   */
+  static async getValuesByKey(key: string): Promise<string[]> {
+    // Find the key ID
+    const [keyRecord] = await db
+      .select()
+      .from(schema.labelKeyTable)
+      .where(eq(schema.labelKeyTable.key, key))
+      .limit(1);
+
+    if (!keyRecord) {
+      return [];
+    }
+
+    // Get all values associated with this key
+    const values = await db
+      .select({
+        value: schema.labelValueTable.value,
+      })
+      .from(schema.agentLabelTable)
+      .innerJoin(
+        schema.labelValueTable,
+        eq(schema.agentLabelTable.valueId, schema.labelValueTable.id),
+      )
+      .where(eq(schema.agentLabelTable.keyId, keyRecord.id))
+      .groupBy(schema.labelValueTable.value)
+      .orderBy(asc(schema.labelValueTable.value));
+
     return values.map((v) => v.value);
   }
 }

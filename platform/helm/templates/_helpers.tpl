@@ -72,6 +72,13 @@ Environment variables for the Archestra Platform container
 - name: {{ $key }}
   value: {{ $value | quote }}
 {{- end }}
+{{- range .Values.archestra.envFromSecrets }}
+- name: {{ .name }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: {{ .secretKey }}
+{{- end }}
 {{- end }}
 
 {{/*

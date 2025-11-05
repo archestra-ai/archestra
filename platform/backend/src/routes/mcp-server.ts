@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   AgentToolModel,
@@ -265,6 +266,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Set serverType from catalog item
           serverData.serverType = catalogItem.serverType;
+
+          // For local servers, filter out secret-type env vars and store in database
+          if (
+            catalogItem.serverType === "local" &&
+            environmentValues &&
+            catalogItem.localConfig?.environment
+          ) {
+            const secretEnvVars: Record<string, string> = {};
+
+            // Filter secret-type env vars
+            for (const envDef of catalogItem.localConfig.environment) {
+              if (envDef.type === "secret" && environmentValues[envDef.key]) {
+                secretEnvVars[envDef.key] = environmentValues[envDef.key];
+              }
+            }
+
+            // Create secret in database if there are any secret env vars
+            if (Object.keys(secretEnvVars).length > 0) {
+              const secret =
+                await SecretModel.createMcpServerSecret(secretEnvVars);
+              secretId = secret.id;
+              createdSecretId = secret.id;
+              logger.info(
+                {
+                  secretId: secret.id,
+                  envVarCount: Object.keys(secretEnvVars).length,
+                },
+                "Created secret for local MCP server environment variables",
+              );
+            }
+          }
         }
 
         // Create the MCP server with optional secret reference
@@ -468,9 +500,59 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        return reply.send({
-          success: await McpServerModel.delete(request.params.id),
-        });
+        const mcpServerId = request.params.id;
+
+        // Fetch the MCP server first to get secretId and serverType
+        const mcpServer = await McpServerModel.findById(mcpServerId);
+
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // For local servers, stop the server (this will delete the K8s Secret)
+        if (mcpServer.serverType === "local") {
+          try {
+            await McpServerRuntimeManager.stopServer(mcpServerId);
+            logger.info(
+              { mcpServerId },
+              "Stopped K8s pod and deleted K8s Secret for local MCP server",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error, mcpServerId },
+              "Failed to stop local MCP server pod",
+            );
+            // Continue with deletion even if pod stop fails
+          }
+        }
+
+        // Delete database secret if it exists and is for a local server
+        // (don't delete OAuth tokens for remote servers)
+        if (mcpServer.secretId && mcpServer.serverType === "local") {
+          try {
+            await SecretModel.deleteMcpServerSecret(mcpServer.secretId);
+            logger.info(
+              { secretId: mcpServer.secretId, mcpServerId },
+              "Deleted database secret for local MCP server",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error, secretId: mcpServer.secretId },
+              "Failed to delete database secret",
+            );
+            // Continue with MCP server deletion even if secret deletion fails
+          }
+        }
+
+        // Delete the MCP server record
+        const success = await McpServerModel.delete(mcpServerId);
+
+        return reply.send({ success });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

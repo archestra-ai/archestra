@@ -27,6 +27,7 @@ export default class K8sPod {
   private podName: string;
   private state: K8sPodState = "not_created";
   private errorMessage: string | null = null;
+  private catalogItem?: InternalMcpCatalog | null;
   private userConfigValues?: Record<string, string>;
   private environmentValues?: Record<string, string>;
 
@@ -44,6 +45,7 @@ export default class K8sPod {
     k8sAttach: Attach,
     k8sLog: k8s.Log,
     namespace: string,
+    catalogItem?: InternalMcpCatalog | null,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ) {
@@ -52,6 +54,7 @@ export default class K8sPod {
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
+    this.catalogItem = catalogItem;
     this.userConfigValues = userConfigValues;
     this.environmentValues = environmentValues;
     this.podName = K8sPod.constructPodName(mcpServer);
@@ -65,6 +68,15 @@ export default class K8sPod {
   static constructPodName(mcpServer: McpServer): string {
     const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
     return `mcp-${slugified}`.substring(0, 253);
+  }
+
+  /**
+   * Constructs the Kubernetes Secret name for an MCP server.
+   *
+   * Creates a secret name in the format "mcp-server-{id}-secrets".
+   */
+  static constructK8sSecretName(mcpServerId: string): string {
+    return `mcp-server-${mcpServerId}-secrets`;
   }
 
   /**
@@ -110,6 +122,116 @@ export default class K8sPod {
     }
 
     return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
+  }
+
+  /**
+   * Create a Kubernetes Secret for environment variables marked as "secret" type
+   */
+  async createK8sSecret(secretData: Record<string, string>): Promise<void> {
+    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+
+    if (Object.keys(secretData).length === 0) {
+      logger.debug(
+        { mcpServerId: this.mcpServer.id },
+        "No secret data provided, skipping K8s Secret creation",
+      );
+      return;
+    }
+
+    try {
+      // Convert secret data to base64 (K8s requires base64 encoding for secret values)
+      const data: Record<string, string> = {};
+      for (const [key, value] of Object.entries(secretData)) {
+        data[key] = Buffer.from(value).toString("base64");
+      }
+
+      const secret: k8s.V1Secret = {
+        metadata: {
+          name: k8sSecretName,
+          labels: K8sPod.sanitizeMetadataLabels({
+            app: "mcp-server",
+            "mcp-server-id": this.mcpServer.id,
+            "mcp-server-name": this.mcpServer.name,
+          }),
+        },
+        type: "Opaque",
+        data,
+      };
+
+      await this.k8sApi.createNamespacedSecret({
+        namespace: this.namespace,
+        body: secret,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+          namespace: this.namespace,
+        },
+        "Created K8s Secret for MCP server",
+      );
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+        },
+        "Failed to create K8s Secret",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete the Kubernetes Secret for this MCP server
+   */
+  async deleteK8sSecret(): Promise<void> {
+    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+
+    try {
+      await this.k8sApi.deleteNamespacedSecret({
+        name: k8sSecretName,
+        namespace: this.namespace,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+          namespace: this.namespace,
+        },
+        "Deleted K8s Secret for MCP server",
+      );
+    } catch (error: unknown) {
+      // If secret doesn't exist (404), that's okay
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        error.statusCode === 404
+      ) {
+        logger.debug(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName: k8sSecretName,
+          },
+          "K8s Secret not found (already deleted or never created)",
+        );
+        return;
+      }
+
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+        },
+        "Failed to delete K8s Secret",
+      );
+      throw error;
+    }
   }
 
   /**
@@ -181,10 +303,24 @@ export default class K8sPod {
    *
    * Additionally, it merges environment values passed from the frontend (for secrets
    * and user-provided values) with the catalog's plain text environment variables.
+   *
+   * For environment variables marked as "secret" type in the catalog, this method
+   * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
+   * including the value directly in the pod spec.
    */
   createPodEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
     const envMap = new Map<string, string>();
+    const secretEnvVars = new Set<string>();
+
+    // Build a set of env var keys that are marked as "secret" type
+    if (this.catalogItem?.localConfig?.environment) {
+      for (const envDef of this.catalogItem.localConfig.environment) {
+        if (envDef.type === "secret") {
+          secretEnvVars.add(envDef.key);
+        }
+      }
+    }
 
     // Merge environment values from the payload (secrets and overrides)
     if (this.environmentValues) {
@@ -202,26 +338,41 @@ export default class K8sPod {
       });
     }
 
-    // Convert map to k8s env vars, processing values
+    // Convert map to k8s env vars, using conditional logic for secrets
     envMap.forEach((value, key) => {
-      let processedValue = String(value);
+      // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
+      if (secretEnvVars.has(key)) {
+        const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+        env.push({
+          name: key,
+          valueFrom: {
+            secretKeyRef: {
+              name: k8sSecretName,
+              key: key,
+            },
+          },
+        });
+      } else {
+        // For plain text env vars, use value directly
+        let processedValue = String(value);
 
-      // Strip surrounding quotes (both single and double)
-      // Users may enter values like: API_KEY='my value' or API_KEY="my value"
-      // We want to extract the actual value without the quotes
-      // Only strip if the value has length > 1 to avoid stripping single quote chars
-      if (
-        processedValue.length > 1 &&
-        ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
-          (processedValue.startsWith('"') && processedValue.endsWith('"')))
-      ) {
-        processedValue = processedValue.slice(1, -1);
+        // Strip surrounding quotes (both single and double)
+        // Users may enter values like: API_KEY='my value' or API_KEY="my value"
+        // We want to extract the actual value without the quotes
+        // Only strip if the value has length > 1 to avoid stripping single quote chars
+        if (
+          processedValue.length > 1 &&
+          ((processedValue.startsWith("'") && processedValue.endsWith("'")) ||
+            (processedValue.startsWith('"') && processedValue.endsWith('"')))
+        ) {
+          processedValue = processedValue.slice(1, -1);
+        }
+
+        env.push({
+          name: key,
+          value: processedValue,
+        });
       }
-
-      env.push({
-        name: key,
-        value: processedValue,
-      });
     });
 
     return env;

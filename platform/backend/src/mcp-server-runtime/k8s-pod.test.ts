@@ -46,6 +46,7 @@ function createK8sPodInstance(
     mockK8sAttach,
     mockK8sLog,
     "default",
+    null, // catalogItem
     userConfigValues,
     stringEnvironmentValues,
   );

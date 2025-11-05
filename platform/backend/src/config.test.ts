@@ -1,5 +1,15 @@
 import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
 
+// Mock the logger
+vi.mock("./logging", () => ({
+  __esModule: true,
+  default: {
+    warn: vi.fn(),
+  },
+}));
+
+import logger from "./logging";
+
 describe("getDatabaseUrl", () => {
   const originalEnv = process.env;
 
@@ -72,19 +82,17 @@ describe("getDatabaseUrl", () => {
 
 describe("getOtlpAuthHeaders", () => {
   const originalEnv = process.env;
-  const originalConsoleWarn = console.warn;
 
   beforeEach(() => {
     // Create a fresh copy of process.env for each test
     process.env = { ...originalEnv };
-    // Mock console.warn to avoid noise in test output
-    console.warn = jest.fn();
+    // Clear mock calls
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    // Restore the original environment and console.warn
+    // Restore the original environment
     process.env = originalEnv;
-    console.warn = originalConsoleWarn;
   });
 
   describe("Bearer token authentication", () => {
@@ -111,7 +119,8 @@ describe("getOtlpAuthHeaders", () => {
     });
 
     it("should trim whitespace from bearer token", () => {
-      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "  my-bearer-token  ";
+      process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER =
+        "  my-bearer-token  ";
 
       const result = getOtlpAuthHeaders();
 
@@ -152,7 +161,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
@@ -164,7 +173,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
@@ -176,7 +185,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
@@ -188,7 +197,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
       );
     });
@@ -203,7 +212,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it("should return null when all authentication variables are empty strings", () => {
@@ -214,7 +223,7 @@ describe("getOtlpAuthHeaders", () => {
       const result = getOtlpAuthHeaders();
 
       expect(result).toBeNull();
-      expect(console.warn).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
   });
 });

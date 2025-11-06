@@ -24,7 +24,7 @@ import {
   useAssignTool,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
 
 interface AssignToolsDialogProps {
@@ -40,8 +40,8 @@ export function AssignToolsDialog({
 }: AssignToolsDialogProps) {
   // Fetch all tools and filter for MCP tools
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
-  const mcpTools = allTools?.filter((tool) => tool.mcpServer !== null) || [];
-  const mcpServers = useMcpServers();
+  const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
   // Fetch currently assigned tools for this agent (use getAllAgentTools to get credentialSourceMcpServerId)
   const { data: allAgentTools } = useAllAgentTools({});
@@ -267,11 +267,12 @@ export function AssignToolsDialog({
                     </Label>
                     {selectedTools.some((t) => t.toolId === tool.id) &&
                       (() => {
-                        const mcpServer = mcpServers.data?.find(
-                          (server) => server.id === tool.mcpServer?.id,
+                        const mcpCatalogItem = internalMcpCatalogItems?.find(
+                          (item) => item.id === tool.catalogId,
                         );
-                        const catalogId = mcpServer?.catalogId ?? "";
-                        const isLocalServer = mcpServer?.serverType === "local";
+                        const catalogId = tool.catalogId ?? "";
+                        const isLocalServer =
+                          mcpCatalogItem?.serverType === "local";
                         const selectedTool = selectedTools.find(
                           (t) => t.toolId === tool.id,
                         );
@@ -281,7 +282,7 @@ export function AssignToolsDialog({
                             {isLocalServer ? (
                               <>
                                 <span className="text-xs text-muted-foreground">
-                                  Credential to use:
+                                  Credential to use: *
                                 </span>
                                 <InstallationSelect
                                   catalogId={catalogId}
@@ -301,7 +302,7 @@ export function AssignToolsDialog({
                             ) : (
                               <>
                                 <span className="text-xs text-muted-foreground">
-                                  Credential to use:
+                                  Credential to use: *
                                 </span>
                                 <TokenSelect
                                   catalogId={catalogId}
@@ -347,7 +348,23 @@ export function AssignToolsDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isLoading || isSaving}>
+          <Button
+            onClick={handleSave}
+            disabled={
+              isLoading ||
+              isSaving ||
+              selectedTools.some((tool) => {
+                const mcpTool = mcpTools.find((t) => t.id === tool.toolId);
+                const mcpCatalogItem = internalMcpCatalogItems?.find(
+                  (item) => item.id === mcpTool?.catalogId,
+                );
+                const isLocalServer = mcpCatalogItem?.serverType === "local";
+                return isLocalServer
+                  ? !tool.executionSourceId
+                  : !tool.credentialsSourceId;
+              })
+            }
+          >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>

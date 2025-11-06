@@ -131,6 +131,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
             }
           }
+          // Check if tool is from remote server (requires credentialSourceMcpServerId)
+          if (catalogItem?.serverType === "remote") {
+            if (!credentialSourceMcpServerId) {
+              return reply.status(400).send({
+                error: {
+                  message:
+                    "Credential source is required for remote MCP server tools",
+                  type: "validation_error",
+                },
+              });
+            }
+          }
         }
 
         // If a credential source is specified, validate it
@@ -353,6 +365,26 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               error: {
                 message:
                   "Execution source installation is required for local MCP server tools and cannot be set to null",
+                type: "validation_error",
+              },
+            });
+          }
+        }
+
+        // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+        if (
+          credentialSourceMcpServerId === null &&
+          agentToolForValidation &&
+          agentToolForValidation.tool.catalogId
+        ) {
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            agentToolForValidation.tool.catalogId,
+          );
+          if (catalogItem?.serverType === "remote") {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "Credential source is required for remote MCP server tools and cannot be set to null",
                 type: "validation_error",
               },
             });

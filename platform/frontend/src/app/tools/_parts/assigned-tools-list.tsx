@@ -401,10 +401,13 @@ export function AssignedToolsList({
               <InstallationSelect
                 value={row.original.executionSourceMcpServerId}
                 onValueChange={(value) => {
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    executionSourceMcpServerId: value,
-                  });
+                  // Prevent clearing required field
+                  if (value !== null) {
+                    agentToolPatchMutation.mutate({
+                      id: row.original.id,
+                      executionSourceMcpServerId: value,
+                    });
+                  }
                 }}
                 catalogId={row.original.tool.catalogId ?? ""}
                 agentIds={[row.original.agent.id]}
@@ -417,10 +420,13 @@ export function AssignedToolsList({
             <TokenSelect
               value={row.original.credentialSourceMcpServerId}
               onValueChange={(value) => {
-                agentToolPatchMutation.mutate({
-                  id: row.original.id,
-                  credentialSourceMcpServerId: value,
-                });
+                // Prevent clearing required field
+                if (value !== null) {
+                  agentToolPatchMutation.mutate({
+                    id: row.original.id,
+                    credentialSourceMcpServerId: value,
+                  });
+                }
               }}
               catalogId={row.original.tool.catalogId ?? ""}
               agentIds={[row.original.agent.id]}

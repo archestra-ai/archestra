@@ -226,7 +226,7 @@ export function BulkAssignAgentDialog({
                   htmlFor="installation-select"
                   className="text-md font-medium mb-1"
                 >
-                  Credential to use
+                  Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Select whose MCP server installation will execute the tool
@@ -245,7 +245,7 @@ export function BulkAssignAgentDialog({
                   htmlFor="token-select"
                   className="text-md font-medium mb-1"
                 >
-                  Credential to use
+                  Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Select which token will be used when agents execute these
@@ -278,7 +278,12 @@ export function BulkAssignAgentDialog({
           </Button>
           <Button
             onClick={handleAssign}
-            disabled={selectedAgentIds.length === 0 || assignMutation.isPending}
+            disabled={
+              selectedAgentIds.length === 0 ||
+              assignMutation.isPending ||
+              (isLocalServer && !executionSourceMcpServerId) ||
+              (!isLocalServer && !credentialSourceMcpServerId)
+            }
           >
             {assignMutation.isPending
               ? "Assigning..."

@@ -451,34 +451,8 @@ export function sdkUsageToRestUsageMetadata(
 ): Gemini.Types.UsageMetadata | undefined {
   if (!sdkUsage) return undefined;
 
-  // Helper to defensively copy modality arrays (if present)
-  const mapModality = (
-    arr?: Array<{ modality?: string; tokenCount?: number }>,
-  ) =>
-    arr?.map((d) => ({
-      modality: d?.modality,
-      tokenCount: d?.tokenCount,
-    }));
-
-  const mapToolUsePromptTokensDetails = (
-    arr?: Array<{ modality?: string; tokenCount?: number }>,
-  ) => mapModality(arr);
-
   return {
-    // These keys match the SDK fields; copy them defensively to plain objects
-    cacheTokensDetails: mapModality(sdkUsage.cacheTokensDetails),
-    cachedContentTokenCount: sdkUsage.cachedContentTokenCount,
-    candidatesTokenCount: sdkUsage.candidatesTokenCount,
-    candidatesTokensDetails: mapModality(sdkUsage.candidatesTokensDetails),
-    promptTokenCount: sdkUsage.promptTokenCount,
-    promptTokensDetails: mapModality(sdkUsage.promptTokensDetails),
-    thoughtsTokenCount: sdkUsage.thoughtsTokenCount,
-    toolUsePromptTokenCount: sdkUsage.toolUsePromptTokenCount,
-    toolUsePromptTokensDetails: mapToolUsePromptTokensDetails(
-      sdkUsage.toolUsePromptTokensDetails,
-    ),
-    totalTokenCount: sdkUsage.totalTokenCount,
-    trafficType: sdkUsage.trafficType,
+    ...sdkUsage,
   } as Gemini.Types.UsageMetadata;
 }
 

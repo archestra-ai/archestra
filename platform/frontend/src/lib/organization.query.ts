@@ -223,7 +223,7 @@ export function useOrganizationDetails() {
 /**
  * Fetch organization appearance settings
  */
-export function useOrganizationAppearance() {
+export function useOrganizationAppearance(enabled = true) {
   const session = authClient.useSession();
 
   return useQuery({
@@ -232,7 +232,9 @@ export function useOrganizationAppearance() {
       const response = await getOrganizationAppearance();
       return response.data;
     },
-    enabled: !!session.data?.user,
+    enabled: enabled && !!session.data?.user,
+    retry: false, // Don't retry on auth pages to avoid repeated 401 errors
+    throwOnError: false, // Don't throw errors to prevent crashes
   });
 }
 

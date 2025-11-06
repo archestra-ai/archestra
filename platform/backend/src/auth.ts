@@ -2,13 +2,14 @@ import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, apiKey, organization } from "better-auth/plugins";
+import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
+const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
@@ -28,6 +29,7 @@ const isHttps = () => {
 };
 
 export const auth = betterAuth({
+  appName: APP_NAME,
   baseURL,
   secret,
 
@@ -69,6 +71,9 @@ export const auth = betterAuth({
         defaultPermissions: allAvailableActions,
       },
     }),
+    twoFactor({
+      issuer: APP_NAME,
+    }),
   ],
 
   user: {
@@ -91,6 +96,8 @@ export const auth = betterAuth({
       account: schema.account,
       team: schema.team,
       teamMember: schema.teamMember,
+      twoFactor: schema.twoFactor,
+      verification: schema.verification,
     },
   }),
 

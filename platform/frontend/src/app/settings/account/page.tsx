@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ApiKeysCard,
-  DeleteAccountCard,
-  SecuritySettingsCards,
-} from "@daveyplate/better-auth-ui";
+import { SecuritySettingsCards } from "@daveyplate/better-auth-ui";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
@@ -18,16 +14,6 @@ function AccountSettingsContent() {
           card: {
             base: "w-full",
           },
-        }}
-      />
-      <ApiKeysCard
-        classNames={{
-          base: "w-full",
-        }}
-      />
-      <DeleteAccountCard
-        classNames={{
-          base: "w-full",
         }}
       />
     </div>

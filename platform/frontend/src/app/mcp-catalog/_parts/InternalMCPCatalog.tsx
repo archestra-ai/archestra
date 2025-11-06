@@ -164,10 +164,6 @@ export function InternalMCPCatalog({
     } finally {
       setInstallingItemId(null);
     }
-
-    // Remote servers without auth show dialog for team selection
-    setNoAuthCatalogItem(catalogItem);
-    setIsNoAuthDialogOpen(true);
   };
 
   const handleNoAuthConfirm = async (teams: string[] = []) => {

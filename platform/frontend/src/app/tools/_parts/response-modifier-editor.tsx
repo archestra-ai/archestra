@@ -55,7 +55,7 @@ export function ResponseModifierEditor({
   const hasChanges = template !== (responseModifierTemplate || "");
 
   // Show message if not an MCP tool
-  if (!tool.mcpServerId) {
+  if (!tool.catalogId) {
     return (
       <Card>
         <CardHeader>

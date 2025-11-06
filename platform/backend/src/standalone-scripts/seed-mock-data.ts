@@ -2,12 +2,16 @@ import { pathToFileURL } from "node:url";
 import db, { schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
-import { OrganizationModel, TeamModel } from "@/models";
+import { AgentModel, OrganizationModel, TeamModel } from "@/models";
 import {
   generateMockAgents,
   generateMockInteractions,
   generateMockTools,
 } from "./mocks";
+
+// Set to true to create tools and interactions
+// Don't delete this const for development convenience
+const CREATE_TOOLS_AND_INTERACTIONS = false;
 
 async function seedMockData() {
   logger.info("\n🌱 Starting mock data seed...\n");
@@ -63,10 +67,13 @@ async function seedMockData() {
 
   // Step 2: Create agents
   logger.info("\nCreating agents...");
+  await AgentModel.getAgentOrCreateDefault(); // always recreate default agent
   const agentData = generateMockAgents();
 
   await db.insert(schema.agentsTable).values(agentData);
   logger.info(`✅ Created ${agentData.length} agents`);
+
+  if (CREATE_TOOLS_AND_INTERACTIONS === false) return;
 
   // Step 3: Create tools linked to agents
   logger.info("\nCreating tools...");

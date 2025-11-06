@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -36,10 +37,12 @@ import {
   useAgentToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
+import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
 
 type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
@@ -72,6 +75,7 @@ export function AssignedToolsList({
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sorting, setSorting] = useState<SortingState>([
@@ -117,8 +121,8 @@ export function AssignedToolsList({
             bValue = b.agent?.name || "";
             break;
           case "origin":
-            aValue = a.tool.mcpServerName ? "1-mcp" : "2-intercepted";
-            bValue = b.tool.mcpServerName ? "1-mcp" : "2-intercepted";
+            aValue = isMcpTool(a.tool) ? "1-mcp" : "2-intercepted";
+            bValue = isMcpTool(b.tool) ? "1-mcp" : "2-intercepted";
             break;
           case "createdAt":
             aValue = a.createdAt;
@@ -271,10 +275,9 @@ export function AssignedToolsList({
           </Button>
         ),
         cell: ({ row }) => {
-          const isMcpTool = !!row.original.tool.mcpServerName;
           const agentName = row.original.agent?.name || "-";
 
-          if (!isMcpTool) {
+          if (!isMcpTool(row.original.tool)) {
             return <TruncatedText message={agentName} />;
           }
 
@@ -320,8 +323,7 @@ export function AssignedToolsList({
       },
       {
         id: "origin",
-        accessorFn: (row) =>
-          row.tool.mcpServerName ? "1-mcp" : "2-intercepted",
+        accessorFn: (row) => (isMcpTool(row.tool) ? "1-mcp" : "2-intercepted"),
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -333,9 +335,12 @@ export function AssignedToolsList({
           </Button>
         ),
         cell: ({ row }) => {
-          const mcpServerName = row.original.tool.mcpServerName;
+          const catalogItemId = row.original.tool.catalogId;
+          const catalogItem = internalMcpCatalogItems?.find(
+            (item) => item.id === catalogItemId,
+          );
 
-          if (mcpServerName) {
+          if (catalogItem) {
             return (
               <TooltipProvider>
                 <Tooltip>
@@ -344,11 +349,11 @@ export function AssignedToolsList({
                       variant="default"
                       className="bg-indigo-500 max-w-[100px]"
                     >
-                      <span className="truncate">{mcpServerName}</span>
+                      <span className="truncate">{catalogItem.name}</span>
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>MCP Server: {mcpServerName}</p>
+                    <p>{catalogItem.name}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -377,14 +382,37 @@ export function AssignedToolsList({
       },
       {
         id: "token",
-        header: "Token to use",
+        header: "Credential",
         cell: ({ row }) => {
-          const isMcpTool = !!row.original.tool.mcpServerName;
+          // Only show selector for MCP tools
+          if (!isMcpTool(row.original.tool)) {
+            return <span className="text-sm text-muted-foreground">—</span>;
+          }
 
-          // Only show token selector for MCP tools
-          if (!isMcpTool) {
+          // Determine if tool is from local server using catalog
+          const mcpCatalogItem = internalMcpCatalogItems?.find(
+            (item) => item.id === row.original.tool.catalogId,
+          );
+          const isLocalServer = mcpCatalogItem?.serverType === "local";
+
+          // Show InstallationSelect for local servers, TokenSelect for remote
+          if (isLocalServer) {
             return (
-              <span className="text-sm text-muted-foreground">Derived</span>
+              <InstallationSelect
+                value={row.original.executionSourceMcpServerId}
+                onValueChange={(value) => {
+                  // Prevent clearing required field
+                  if (value !== null) {
+                    agentToolPatchMutation.mutate({
+                      id: row.original.id,
+                      executionSourceMcpServerId: value,
+                    });
+                  }
+                }}
+                catalogId={row.original.tool.catalogId ?? ""}
+                agentIds={[row.original.agent.id]}
+                className="h-8 w-[200px] text-xs"
+              />
             );
           }
 
@@ -392,12 +420,15 @@ export function AssignedToolsList({
             <TokenSelect
               value={row.original.credentialSourceMcpServerId}
               onValueChange={(value) => {
-                agentToolPatchMutation.mutate({
-                  id: row.original.id,
-                  credentialSourceMcpServerId: value,
-                });
+                // Prevent clearing required field
+                if (value !== null) {
+                  agentToolPatchMutation.mutate({
+                    id: row.original.id,
+                    credentialSourceMcpServerId: value,
+                  });
+                }
               }}
-              catalogId={row.original.tool.mcpServerCatalogId ?? ""}
+              catalogId={row.original.tool.catalogId ?? ""}
               agentIds={[row.original.agent.id]}
               className="h-8 w-[200px] text-xs"
             />
@@ -571,6 +602,7 @@ export function AssignedToolsList({
       resultPolicies,
       agentToolPatchMutation,
       unassignToolMutation,
+      internalMcpCatalogItems?.find,
     ],
   );
 

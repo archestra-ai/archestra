@@ -123,6 +123,20 @@ class McpClient {
       );
     }
 
+    // Determine which MCP server to route to
+    // Use executionSourceMcpServerId if present (for local servers), otherwise fall back to mcpServerId
+    const targetMcpServerId =
+      firstTool.executionSourceMcpServerId || firstTool.mcpServerId;
+
+    if (!targetMcpServerId) {
+      return await this.persistErrorResults(
+        mcpToolCalls,
+        agentId,
+        firstTool.mcpServerName || "unknown",
+        "No execution source specified for MCP tool",
+      );
+    }
+
     // Load secrets from the secrets table
     // The credential source MCP server must be explicitly selected (team or user token)
     let secrets: Record<string, unknown> = {};
@@ -146,57 +160,64 @@ class McpClient {
     }
 
     try {
+      // Use catalogId from the tool (required for MCP tools)
+      if (!firstTool.catalogId) {
+        return await this.persistErrorResults(
+          mcpToolCalls,
+          agentId,
+          firstTool.mcpServerName || "unknown",
+          "Tool is missing catalogId",
+        );
+      }
+
       const catalogItem = await InternalMcpCatalogModel.findById(
-        firstTool.mcpServerCatalogId,
+        firstTool.catalogId,
       );
 
       if (!catalogItem) {
         return await this.persistErrorResults(
           mcpToolCalls,
           agentId,
-          firstTool.mcpServerName,
-          `No catalog item found for MCP server ${firstTool.mcpServerName}`,
+          firstTool.mcpServerName || "unknown",
+          `No catalog item found for tool catalog ID ${firstTool.catalogId}`,
         );
       }
 
       // For local servers, check if they use streamable-http transport
       if (catalogItem.serverType === "local") {
         const usesStreamableHttp =
-          await McpServerRuntimeManager.usesStreamableHttp(
-            firstTool.mcpServerId,
-          );
+          await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
 
         if (usesStreamableHttp) {
           // Use streamable HTTP transport for these servers
-          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
-            firstTool.mcpServerId,
-          );
+          const httpEndpointUrl =
+            McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
 
           if (!httpEndpointUrl) {
             return await this.persistErrorResults(
               mcpToolCalls,
               agentId,
-              firstTool.mcpServerName,
-              `No HTTP endpoint URL found for streamable-http server ${firstTool.mcpServerName}`,
+              firstTool.mcpServerName || "unknown",
+              `No HTTP endpoint URL found for streamable-http server ${firstTool.mcpServerName || "unknown"}`,
             );
           }
 
           // Use the same logic as remote servers with StreamableHTTPClientTransport
-          const client = await this.getOrCreateConnection(
-            firstTool.mcpServerId,
-            {
-              id: firstTool.mcpServerId,
-              url: httpEndpointUrl,
-              name: firstTool.mcpServerName,
-              headers: {},
-            },
-          );
+          const client = await this.getOrCreateConnection(targetMcpServerId, {
+            id: targetMcpServerId,
+            url: httpEndpointUrl,
+            name: firstTool.mcpServerName || "unknown",
+            headers: {},
+          });
 
           // Execute each MCP tool call via the HTTP client
           for (const toolCall of mcpToolCalls) {
             try {
               // Strip the server prefix from tool name for MCP server call
-              const serverPrefix = `${firstTool.mcpServerName}__`;
+              // For local servers, use catalog name (without userId) for prefix
+              const prefixName =
+                firstTool.catalogName || firstTool.mcpServerName || "unknown";
+              const serverPrefix = `${prefixName}__`;
               const mcpToolName = toolCall.name.startsWith(serverPrefix)
                 ? toolCall.name.substring(serverPrefix.length)
                 : toolCall.name;
@@ -236,7 +257,7 @@ class McpClient {
               try {
                 const savedToolCall = await McpToolCallModel.create({
                   agentId,
-                  mcpServerName: firstTool.mcpServerName,
+                  mcpServerName: firstTool.mcpServerName || "unknown",
                   toolCall,
                   toolResult,
                 });
@@ -272,7 +293,7 @@ class McpClient {
               try {
                 const savedToolCall = await McpToolCallModel.create({
                   agentId,
-                  mcpServerName: firstTool.mcpServerName,
+                  mcpServerName: firstTool.mcpServerName || "unknown",
                   toolCall,
                   toolResult,
                 });
@@ -297,13 +318,16 @@ class McpClient {
         }
 
         // For stdio-based local servers, use direct JSON-RPC calls via proxy
-        const proxyUrl = `${API_BASE_URL}/mcp_proxy/${firstTool.mcpServerId}`;
+        const proxyUrl = `${API_BASE_URL}/mcp_proxy/${targetMcpServerId}`;
 
         // Execute each MCP tool call via direct JSON-RPC
         for (const toolCall of mcpToolCalls) {
           try {
             // Strip the server prefix from tool name for MCP server call
-            const serverPrefix = `${firstTool.mcpServerName}__`;
+            // For local servers, use catalog name (without userId) for prefix
+            const prefixName =
+              firstTool.catalogName || firstTool.mcpServerName || "unknown";
+            const serverPrefix = `${prefixName}__`;
             const mcpToolName = toolCall.name.startsWith(serverPrefix)
               ? toolCall.name.substring(serverPrefix.length)
               : toolCall.name;
@@ -370,7 +394,7 @@ class McpClient {
             try {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
-                mcpServerName: firstTool.mcpServerName,
+                mcpServerName: firstTool.mcpServerName || "unknown",
                 toolCall,
                 toolResult,
               });
@@ -406,7 +430,7 @@ class McpClient {
             try {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
-                mcpServerName: firstTool.mcpServerName,
+                mcpServerName: firstTool.mcpServerName || "unknown",
                 toolCall,
                 toolResult,
               });
@@ -437,7 +461,7 @@ class McpClient {
       if (catalogItem.serverType === "remote") {
         // Generic remote server with catalog info
         const config = this.createServerConfig({
-          name: firstTool.mcpServerName,
+          name: firstTool.mcpServerName || "unknown",
           /**
            * TODO: update SelectInternalMcpCatalogSchema to be a discriminated union of remote and local types
            * this way that typescript knows that when serverType is remote, serverUrl will ALWAYS be set
@@ -445,22 +469,19 @@ class McpClient {
           url: catalogItem.serverUrl as string,
           secrets,
         });
-        client = await this.getOrCreateConnection(
-          firstTool.mcpServerCatalogId,
-          config,
-        );
+        client = await this.getOrCreateConnection(catalogItem.id, config);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
           // Generic remote server with catalog info
           const config = this.createServerConfig({
-            name: firstTool.mcpServerName,
+            name: firstTool.mcpServerName || "unknown",
             url: catalogItem.serverUrl,
             secrets,
           });
           // Use catalog ID + secret ID as cache key to ensure different credentials = different connections
           const connectionKey = secretId
-            ? `${firstTool.mcpServerCatalogId}:${secretId}`
-            : firstTool.mcpServerCatalogId;
+            ? `${catalogItem.id}:${secretId}`
+            : catalogItem.id;
           client = await this.getOrCreateConnection(connectionKey, config);
         }
       } else {
@@ -471,7 +492,7 @@ class McpClient {
         return await this.persistErrorResults(
           mcpToolCalls,
           agentId,
-          firstTool.mcpServerName,
+          firstTool.mcpServerName || "unknown",
           "Failed to create MCP client",
         );
       }
@@ -482,7 +503,10 @@ class McpClient {
           // Strip the server prefix from tool name for MCP server call
           // Tool name format: <server-name>__<native-tool-name>
           // Example: githubcopilot__remote-mcp__search_issues -> search_issues
-          const serverPrefix = `${firstTool.mcpServerName}__`;
+          // For local servers, use catalog name (without userId) for prefix
+          const prefixName =
+            firstTool.catalogName || firstTool.mcpServerName || "unknown";
+          const serverPrefix = `${prefixName}__`;
           const mcpToolName = toolCall.name.startsWith(serverPrefix)
             ? toolCall.name.substring(serverPrefix.length)
             : toolCall.name;
@@ -522,7 +546,7 @@ class McpClient {
           try {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
-              mcpServerName: firstTool.mcpServerName,
+              mcpServerName: firstTool.mcpServerName || "unknown",
               toolCall,
               toolResult,
             });
@@ -555,7 +579,7 @@ class McpClient {
           try {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
-              mcpServerName: firstTool.mcpServerName,
+              mcpServerName: firstTool.mcpServerName || "unknown",
               toolCall,
               toolResult,
             });
@@ -589,7 +613,7 @@ class McpClient {
         try {
           await McpToolCallModel.create({
             agentId,
-            mcpServerName: firstTool.mcpServerName,
+            mcpServerName: firstTool.mcpServerName || "unknown",
             toolCall,
             toolResult,
           });
@@ -667,6 +691,7 @@ class McpClient {
             method: "tools/list",
             params: {},
           }),
+          signal: AbortSignal.timeout(5_000),
         });
 
         if (!response.ok) {

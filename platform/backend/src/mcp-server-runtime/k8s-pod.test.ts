@@ -1,8 +1,56 @@
 import type * as k8s from "@kubernetes/client-node";
+import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import type { z } from "zod";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
+
+// Helper function to create a K8sPod instance with mocked dependencies
+function createK8sPodInstance(
+  environmentValues?: Record<string, string | number | boolean>,
+  userConfigValues?: Record<string, string>,
+): K8sPod {
+  // Create mock McpServer
+  const mockMcpServer = {
+    id: "test-server-id",
+    name: "test-server",
+    catalogId: "test-catalog-id",
+    secretId: null,
+    ownerId: null,
+    authType: null,
+    reinstallRequired: false,
+    localInstallationStatus: "idle",
+    localInstallationError: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as McpServer;
+
+  // Create mock K8s API objects
+  const mockK8sApi = {} as k8s.CoreV1Api;
+  const mockK8sAttach = {} as Attach;
+  const mockK8sLog = {} as Log;
+
+  // Convert environment values to strings as the constructor expects
+  const stringEnvironmentValues = environmentValues
+    ? Object.fromEntries(
+        Object.entries(environmentValues).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      )
+    : undefined;
+
+  return new K8sPod(
+    mockMcpServer,
+    mockK8sApi,
+    mockK8sAttach,
+    mockK8sLog,
+    "default",
+    null, // catalogItem
+    userConfigValues,
+    stringEnvironmentValues,
+  );
+}
 
 describe("K8sPod.createPodEnvFromConfig", () => {
   test.each([
@@ -208,9 +256,17 @@ describe("K8sPod.createPodEnvFromConfig", () => {
       ],
     },
   ])("$testName", ({ input, expected }) => {
-    const result = K8sPod.createPodEnvFromConfig(
-      input as z.infer<typeof LocalConfigSchema> | undefined,
-    );
+    // Filter out undefined values from environment to match the strict Record type
+    const environmentValues = input?.environment
+      ? (Object.fromEntries(
+          Object.entries(input.environment).filter(
+            ([, value]) => value !== undefined,
+          ),
+        ) as Record<string, string | number | boolean>)
+      : undefined;
+
+    const instance = createK8sPodInstance(environmentValues);
+    const result = instance.createPodEnvFromConfig();
     expect(result).toEqual(expected);
   });
 });
@@ -640,18 +696,47 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
-
     const dockerImage = "env-server:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "node",
       arguments: ["app.js"],
-      environment: {
-        API_KEY: "secret123",
-        PORT: "3000",
-        DEBUG: "true",
-      },
+      environment: [
+        { key: "API_KEY", type: "secret", promptOnInstallation: true },
+        {
+          key: "PORT",
+          type: "plain_text",
+          value: "3000",
+          promptOnInstallation: false,
+        },
+        {
+          key: "DEBUG",
+          type: "plain_text",
+          value: "true",
+          promptOnInstallation: false,
+        },
+      ],
     };
+
+    // Mock environment values that would be passed from secrets
+    const environmentValues: Record<string, string> = {
+      API_KEY: "secret123",
+      PORT: "3000",
+      DEBUG: "true",
+    };
+
+    const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAttach = {} as k8s.Attach;
+    const mockK8sLog = {} as k8s.Log;
+    const k8sPod = new K8sPod(
+      mcpServer,
+      mockK8sApi,
+      mockK8sAttach,
+      mockK8sLog,
+      "default",
+      undefined,
+      environmentValues,
+    );
+
     const needsHttp = false;
     const httpPort = 8080;
 
@@ -809,21 +894,51 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
     } as any;
 
-    const k8sPod = createMockK8sPod(mcpServer);
-
     const dockerImage = "complex:latest";
     const localConfig: z.infer<typeof LocalConfigSchema> = {
       command: "python",
       arguments: ["-m", "uvicorn", "main:app"],
-      environment: {
-        API_KEY: "'sk-1234567890'",
-        DATABASE_URL: '"postgresql://localhost:5432/db"',
-        WORKERS: "4",
-        DEBUG: "false",
-      },
+      environment: [
+        { key: "API_KEY", type: "secret", promptOnInstallation: true },
+        { key: "DATABASE_URL", type: "secret", promptOnInstallation: true },
+        {
+          key: "WORKERS",
+          type: "plain_text",
+          value: "4",
+          promptOnInstallation: false,
+        },
+        {
+          key: "DEBUG",
+          type: "plain_text",
+          value: "false",
+          promptOnInstallation: false,
+        },
+      ],
       transportType: "streamable-http",
       httpPort: 8000,
     };
+
+    // Mock environment values that would be passed from secrets
+    const environmentValues: Record<string, string> = {
+      API_KEY: "sk-1234567890",
+      DATABASE_URL: "postgresql://localhost:5432/db",
+      WORKERS: "4",
+      DEBUG: "false",
+    };
+
+    const mockK8sApi = {} as k8s.CoreV1Api;
+    const mockK8sAttach = {} as k8s.Attach;
+    const mockK8sLog = {} as k8s.Log;
+    const k8sPod = new K8sPod(
+      mcpServer,
+      mockK8sApi,
+      mockK8sAttach,
+      mockK8sLog,
+      "default",
+      undefined,
+      environmentValues,
+    );
+
     const needsHttp = true;
     const httpPort = 8000;
 

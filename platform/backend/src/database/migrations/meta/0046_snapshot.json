@@ -1,6 +1,6 @@
 {
-  "id": "b0a4ad75-2436-4b22-a82a-0d5b37940caf",
-  "prevId": "cd78c819-8124-428b-8788-89a6d2212092",
+  "id": "4526b3e6-127a-4496-ada2-453cbe55a69b",
+  "prevId": "b0a4ad75-2436-4b22-a82a-0d5b37940caf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -206,6 +206,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "execution_source_mcp_server_id": {
+          "name": "execution_source_mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -255,6 +261,19 @@
           "tableTo": "mcp_server",
           "columnsFrom": [
             "credential_source_mcp_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk": {
+          "name": "agent_tools_execution_source_mcp_server_id_mcp_server_id_fk",
+          "tableFrom": "agent_tools",
+          "tableTo": "mcp_server",
+          "columnsFrom": [
+            "execution_source_mcp_server_id"
           ],
           "columnsTo": [
             "id"
@@ -1892,6 +1911,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "server_type": {
+          "name": "server_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "secret_id": {
           "name": "secret_id",
           "type": "uuid",
@@ -2611,6 +2636,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "catalog_id": {
+          "name": "catalog_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "mcp_server_id": {
           "name": "mcp_server_id",
           "type": "uuid",
@@ -2666,6 +2697,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "tools_catalog_id_internal_mcp_catalog_id_fk": {
+          "name": "tools_catalog_id_internal_mcp_catalog_id_fk",
+          "tableFrom": "tools",
+          "tableTo": "internal_mcp_catalog",
+          "columnsFrom": [
+            "catalog_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "tools_mcp_server_id_mcp_server_id_fk": {
           "name": "tools_mcp_server_id_mcp_server_id_fk",
           "tableFrom": "tools",
@@ -2676,18 +2720,19 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "tools_agent_id_name_unique": {
-          "name": "tools_agent_id_name_unique",
+        "tools_catalog_id_name_agent_id_unique": {
+          "name": "tools_catalog_id_name_agent_id_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "agent_id",
-            "name"
+            "catalog_id",
+            "name",
+            "agent_id"
           ]
         }
       },

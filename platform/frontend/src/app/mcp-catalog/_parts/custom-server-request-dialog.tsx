@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,8 +34,25 @@ export function CustomServerRequestDialog({
   isOpen: boolean;
   onClose: () => void;
 }) {
-  const [formData, setFormData] = useState({
-    serverType: "remote" as ServerType,
+  const [formData, setFormData] = useState<{
+    serverType: ServerType;
+    label: string;
+    name: string;
+    version: string;
+    serverUrl: string;
+    docsUrl: string;
+    command: string;
+    arguments: string;
+    environment: Array<{
+      id: string;
+      key: string;
+      type: "plain_text" | "secret";
+      value?: string;
+      promptOnInstallation: boolean;
+    }>;
+    requestReason: string;
+  }>({
+    serverType: "remote",
     label: "",
     name: "",
     version: "",
@@ -43,11 +60,51 @@ export function CustomServerRequestDialog({
     docsUrl: "",
     command: "",
     arguments: "",
-    environment: "",
+    environment: [],
     requestReason: "",
   });
 
   const createRequest = useCreateMcpServerInstallationRequest();
+
+  const handleAddEnvironmentVariable = () => {
+    setFormData({
+      ...formData,
+      environment: [
+        ...formData.environment,
+        {
+          id: `env-${Date.now()}`,
+          key: "",
+          type: "plain_text",
+          value: "",
+          promptOnInstallation: false,
+        },
+      ],
+    });
+  };
+
+  const handleRemoveEnvironmentVariable = (index: number) => {
+    setFormData({
+      ...formData,
+      environment: formData.environment.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleEnvironmentVariableChange = (
+    index: number,
+    field: "key" | "type" | "value",
+    value: string,
+  ) => {
+    const newEnvironment = [...formData.environment];
+    if (field === "type") {
+      newEnvironment[index] = {
+        ...newEnvironment[index],
+        type: value as "plain_text" | "secret",
+      };
+    } else {
+      newEnvironment[index] = { ...newEnvironment[index], [field]: value };
+    }
+    setFormData({ ...formData, environment: newEnvironment });
+  };
 
   const handleSubmit = async () => {
     if (!formData.label || !formData.name) return;
@@ -79,18 +136,10 @@ export function CustomServerRequestDialog({
                 .split("\n")
                 .map((arg) => arg.trim())
                 .filter((arg) => arg.length > 0),
-              environment: formData.environment.trim()
-                ? Object.fromEntries(
-                    formData.environment
-                      .split("\n")
-                      .map((line) => line.trim())
-                      .filter((line) => line.length > 0 && line.includes("="))
-                      .map((line) => {
-                        const [key, ...valueParts] = line.split("=");
-                        return [key, valueParts.join("=")];
-                      }),
-                  )
-                : undefined,
+              environment:
+                formData.environment.length > 0
+                  ? formData.environment.map(({ id, ...env }) => env)
+                  : undefined,
             },
           };
 
@@ -110,7 +159,7 @@ export function CustomServerRequestDialog({
       docsUrl: "",
       command: "",
       arguments: "",
-      environment: "",
+      environment: [],
       requestReason: "",
     });
     onClose();
@@ -232,19 +281,102 @@ export function CustomServerRequestDialog({
                   rows={3}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="environment">
-                  Environment Variables (KEY=value format)
-                </Label>
-                <Textarea
-                  id="environment"
-                  placeholder={`API_KEY=your-key\nPORT=3000`}
-                  value={formData.environment}
-                  onChange={(e) =>
-                    handleInputChange("environment", e.target.value)
-                  }
-                  rows={3}
-                />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Environment Variables</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddEnvironmentVariable}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Variable
+                  </Button>
+                </div>
+                {formData.environment.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No environment variables configured.
+                  </p>
+                ) : (
+                  <div className="border rounded-lg">
+                    {/* Header Row */}
+                    <div className="grid grid-cols-[2fr_1.5fr_2fr_auto] gap-2 p-3 bg-muted/50 border-b">
+                      <div className="text-xs font-medium">Key</div>
+                      <div className="text-xs font-medium">Type</div>
+                      <div className="text-xs font-medium">Value</div>
+                      <div className="w-9" /> {/* Spacer for trash icon */}
+                    </div>
+                    {/* Data Rows */}
+                    {formData.environment.map((envVar, index) => (
+                      <div
+                        key={envVar.id}
+                        className="grid grid-cols-[2fr_1.5fr_2fr_auto] gap-2 p-3 items-start border-b last:border-b-0"
+                      >
+                        <Input
+                          placeholder="API_KEY"
+                          className="font-mono"
+                          value={envVar.key}
+                          onChange={(e) =>
+                            handleEnvironmentVariableChange(
+                              index,
+                              "key",
+                              e.target.value,
+                            )
+                          }
+                        />
+                        <Select
+                          value={envVar.type}
+                          onValueChange={(value) =>
+                            handleEnvironmentVariableChange(
+                              index,
+                              "type",
+                              value,
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="plain_text">
+                              Plain text
+                            </SelectItem>
+                            <SelectItem value="secret">Secret</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {envVar.type === "plain_text" ? (
+                          <Input
+                            placeholder="your-value"
+                            className="font-mono"
+                            value={envVar.value || ""}
+                            onChange={(e) =>
+                              handleEnvironmentVariableChange(
+                                index,
+                                "value",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        ) : (
+                          <div className="flex items-center h-10">
+                            <p className="text-xs text-muted-foreground">
+                              Prompted at installation
+                            </p>
+                          </div>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveEnvironmentVariable(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}

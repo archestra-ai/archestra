@@ -1,11 +1,17 @@
 import { pathToFileURL } from "node:url";
 import db, { schema } from "@/database";
+import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
+import { AgentModel, OrganizationModel, TeamModel } from "@/models";
 import {
   generateMockAgents,
   generateMockInteractions,
   generateMockTools,
 } from "./mocks";
+
+// Set to true to create tools and interactions
+// Don't delete this const for development convenience
+const CREATE_TOOLS_AND_INTERACTIONS = false;
 
 async function seedMockData() {
   logger.info("\n🌱 Starting mock data seed...\n");
@@ -17,14 +23,59 @@ async function seedMockData() {
   }
   logger.info("✅ Cleaned existing data");
 
-  // Step 1: Create agents
+  // Step 1: Create additional users
+  const defaultAdmin = await seedDefaultUserAndOrg();
+  const admin2User = await seedDefaultUserAndOrg({
+    email: "admin-2@example.com",
+    password: "password",
+    role: "admin",
+    name: "Admin-2",
+  });
+  const member1User = await seedDefaultUserAndOrg({
+    email: "member-1@example.com",
+    password: "password",
+    role: "member",
+    name: "Member-1",
+  });
+  const member2User = await seedDefaultUserAndOrg({
+    email: "member-2@example.com",
+    password: "password",
+    role: "member",
+    name: "Member-2",
+  });
+
+  // Step 2: Create teams and add members
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  const managementTeam = await TeamModel.create({
+    name: "Management Team",
+    description:
+      "Management department responsible for overseeing the platform",
+    organizationId: org.id,
+    createdBy: admin2User.id,
+  });
+  const marketingTeam = await TeamModel.create({
+    name: "Marketing Team",
+    description: "Marketing department responsible for promoting the platform",
+    organizationId: org.id,
+    createdBy: admin2User.id,
+  });
+  await TeamModel.addMember(managementTeam.id, defaultAdmin.id, "admin");
+  await TeamModel.addMember(managementTeam.id, admin2User.id, "admin");
+  await TeamModel.addMember(marketingTeam.id, defaultAdmin.id, "admin");
+  await TeamModel.addMember(marketingTeam.id, member1User.id, "member");
+  await TeamModel.addMember(marketingTeam.id, member2User.id, "member");
+
+  // Step 2: Create agents
   logger.info("\nCreating agents...");
+  await AgentModel.getAgentOrCreateDefault(); // always recreate default agent
   const agentData = generateMockAgents();
 
   await db.insert(schema.agentsTable).values(agentData);
   logger.info(`✅ Created ${agentData.length} agents`);
 
-  // Step 2: Create tools linked to agents
+  if (CREATE_TOOLS_AND_INTERACTIONS === false) return;
+
+  // Step 3: Create tools linked to agents
   logger.info("\nCreating tools...");
   const agentIds = agentData
     .map((agent) => agent.id)
@@ -34,7 +85,7 @@ async function seedMockData() {
   await db.insert(schema.toolsTable).values(toolData);
   logger.info(`✅ Created ${toolData.length} tools`);
 
-  // Step 3: Create agent-tool relationships
+  // Step 4: Create agent-tool relationships
   logger.info("\nCreating agent-tool relationships...");
   const agentToolData = toolData.map((tool) => ({
     agentId: tool.agentId,
@@ -49,7 +100,7 @@ async function seedMockData() {
   await db.insert(schema.agentToolsTable).values(agentToolData);
   logger.info(`✅ Created ${agentToolData.length} agent-tool relationships`);
 
-  // Step 4: Create 200 mock interactions
+  // Step 5: Create 200 mock interactions
   logger.info("\nCreating interactions...");
 
   // Group tools by agent for efficient lookup

@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2, Search, Server } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,7 +24,7 @@ import {
   useAssignTool,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
 
 interface AssignToolsDialogProps {
@@ -39,8 +40,8 @@ export function AssignToolsDialog({
 }: AssignToolsDialogProps) {
   // Fetch all tools and filter for MCP tools
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
-  const mcpTools = allTools?.filter((tool) => tool.mcpServer !== null) || [];
-  const mcpServers = useMcpServers();
+  const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
   // Fetch currently assigned tools for this agent (use getAllAgentTools to get credentialSourceMcpServerId)
   const { data: allAgentTools } = useAllAgentTools({});
@@ -49,9 +50,14 @@ export function AssignToolsDialog({
     [allAgentTools, agent.id],
   );
 
-  // Track selected tools with their credentials and agent-tool IDs
+  // Track selected tools with their credentials, execution source, and agent-tool IDs
   const [selectedTools, setSelectedTools] = useState<
-    { toolId: string; credentialsSourceId?: string; agentToolId?: string }[]
+    {
+      toolId: string;
+      credentialsSourceId?: string;
+      executionSourceId?: string;
+      agentToolId?: string;
+    }[]
   >([]);
 
   // Track search query
@@ -72,6 +78,7 @@ export function AssignToolsDialog({
         agentToolRelations.map((at) => ({
           toolId: at.tool.id,
           credentialsSourceId: at.credentialSourceMcpServerId || undefined,
+          executionSourceId: at.executionSourceMcpServerId || undefined,
           agentToolId: at.id,
         })),
       );
@@ -109,6 +116,17 @@ export function AssignToolsDialog({
     [],
   );
 
+  const handleExecutionSourceChange = useCallback(
+    (toolId: string, executionSourceId?: string) => {
+      setSelectedTools((prev) => {
+        return prev.map((tool) =>
+          tool.toolId === toolId ? { ...tool, executionSourceId } : tool,
+        );
+      });
+    },
+    [],
+  );
+
   const handleSave = useCallback(async () => {
     // Get current tool IDs and their state
     const currentToolIds = new Set(agentToolRelations.map((at) => at.tool.id));
@@ -128,8 +146,10 @@ export function AssignToolsDialog({
       );
       return (
         current &&
-        current.credentialSourceMcpServerId !==
-          (tool.credentialsSourceId || null)
+        (current.credentialSourceMcpServerId !==
+          (tool.credentialsSourceId || null) ||
+          current.executionSourceMcpServerId !==
+            (tool.executionSourceId || null))
       );
     });
 
@@ -140,6 +160,7 @@ export function AssignToolsDialog({
           agentId: agent.id,
           toolId: tool.toolId,
           credentialSourceMcpServerId: tool.credentialsSourceId || null,
+          executionSourceMcpServerId: tool.executionSourceId || null,
         });
       }
 
@@ -151,12 +172,13 @@ export function AssignToolsDialog({
         });
       }
 
-      // Update credentials for existing tools
+      // Update credentials and execution source for existing tools
       for (const tool of toUpdate) {
         if (tool.agentToolId) {
           await patchAgentTool.mutateAsync({
             id: tool.agentToolId,
             credentialSourceMcpServerId: tool.credentialsSourceId || null,
+            executionSourceMcpServerId: tool.executionSourceId || null,
           });
         }
       }
@@ -243,32 +265,65 @@ export function AssignToolsDialog({
                     >
                       {tool.name}
                     </Label>
-                    {selectedTools.some((t) => t.toolId === tool.id) && (
-                      <div className="flex flex-col gap-1 mt-4">
-                        <span className="text-xs text-muted-foreground">
-                          Token to use:
-                        </span>
-                        <TokenSelect
-                          catalogId={
-                            mcpServers.data?.find(
-                              (server) => server.id === tool.mcpServer?.id,
-                            )?.catalogId ?? ""
-                          }
-                          agentIds={[agent.id]}
-                          onValueChange={(credentialsSourceId) =>
-                            handleCredentialsSourceChange(
-                              tool.id,
-                              credentialsSourceId ?? undefined,
-                            )
-                          }
-                          value={
-                            selectedTools.find((t) => t.toolId === tool.id)
-                              ?.credentialsSourceId ?? undefined
-                          }
-                          className="mb-4"
-                        />
-                      </div>
-                    )}
+                    {selectedTools.some((t) => t.toolId === tool.id) &&
+                      (() => {
+                        const mcpCatalogItem = internalMcpCatalogItems?.find(
+                          (item) => item.id === tool.catalogId,
+                        );
+                        const catalogId = tool.catalogId ?? "";
+                        const isLocalServer =
+                          mcpCatalogItem?.serverType === "local";
+                        const selectedTool = selectedTools.find(
+                          (t) => t.toolId === tool.id,
+                        );
+
+                        return (
+                          <div className="flex flex-col gap-1 mt-4">
+                            {isLocalServer ? (
+                              <>
+                                <span className="text-xs text-muted-foreground">
+                                  Credential to use: *
+                                </span>
+                                <InstallationSelect
+                                  catalogId={catalogId}
+                                  agentIds={[agent.id]}
+                                  onValueChange={(executionSourceId) =>
+                                    handleExecutionSourceChange(
+                                      tool.id,
+                                      executionSourceId ?? undefined,
+                                    )
+                                  }
+                                  value={
+                                    selectedTool?.executionSourceId ?? undefined
+                                  }
+                                  className="mb-4"
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-muted-foreground">
+                                  Credential to use: *
+                                </span>
+                                <TokenSelect
+                                  catalogId={catalogId}
+                                  agentIds={[agent.id]}
+                                  onValueChange={(credentialsSourceId) =>
+                                    handleCredentialsSourceChange(
+                                      tool.id,
+                                      credentialsSourceId ?? undefined,
+                                    )
+                                  }
+                                  value={
+                                    selectedTool?.credentialsSourceId ??
+                                    undefined
+                                  }
+                                  className="mb-4"
+                                />
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     {tool.description && (
                       <p className="text-sm text-muted-foreground">
                         {tool.description}
@@ -293,7 +348,23 @@ export function AssignToolsDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isLoading || isSaving}>
+          <Button
+            onClick={handleSave}
+            disabled={
+              isLoading ||
+              isSaving ||
+              selectedTools.some((tool) => {
+                const mcpTool = mcpTools.find((t) => t.id === tool.toolId);
+                const mcpCatalogItem = internalMcpCatalogItems?.find(
+                  (item) => item.id === mcpTool?.catalogId,
+                );
+                const isLocalServer = mcpCatalogItem?.serverType === "local";
+                return isLocalServer
+                  ? !tool.executionSourceId
+                  : !tool.credentialsSourceId;
+              })
+            }
+          >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>

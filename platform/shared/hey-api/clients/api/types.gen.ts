@@ -951,7 +951,6 @@ export type AnthropicMessagesRequestInput = {
         citations?: Array<unknown> | unknown;
     }>;
     temperature?: number;
-    thinking?: unknown;
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -1009,13 +1008,6 @@ export type AnthropicMessagesResponseInput = {
         citations: Array<unknown> | unknown;
         text: string;
         type: 'text';
-    } | {
-        signature: string;
-        thinking: string;
-        type: 'thinking';
-    } | {
-        data: string;
-        type: 'redacted_thinking';
     } | {
         id: string;
         input: unknown;
@@ -1980,7 +1972,6 @@ export type AnthropicMessagesRequest = {
         citations?: Array<unknown> | unknown;
     }>;
     temperature?: number;
-    thinking?: unknown;
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -2038,13 +2029,6 @@ export type AnthropicMessagesResponse = {
         citations: Array<unknown> | unknown;
         text: string;
         type: 'text';
-    } | {
-        signature: string;
-        thinking: string;
-        type: 'thinking';
-    } | {
-        data: string;
-        type: 'redacted_thinking';
     } | {
         id: string;
         input: unknown;
@@ -2136,6 +2120,7 @@ export type GetAgentsResponses = {
             tools: Array<{
                 id: string;
                 agentId: string | null;
+                catalogId: string | null;
                 mcpServerId: string | null;
                 name: string;
                 /**
@@ -2233,6 +2218,7 @@ export type CreateAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2310,6 +2296,7 @@ export type GetAllAgentsResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2387,6 +2374,7 @@ export type GetDefaultAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2518,6 +2506,7 @@ export type GetAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2608,6 +2597,7 @@ export type UpdateAgentResponses = {
         tools: Array<{
             id: string;
             agentId: string | null;
+            catalogId: string | null;
             mcpServerId: string | null;
             name: string;
             /**
@@ -2764,6 +2754,7 @@ export type GetAllAgentToolsResponses = {
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
         credentialSourceMcpServerId: string | null;
+        executionSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2791,6 +2782,7 @@ export type GetAllAgentToolsResponses = {
             };
             createdAt: string;
             updatedAt: string;
+            catalogId: string | null;
             mcpServerId: string | null;
             mcpServerName: string | null;
             mcpServerCatalogId: string | null;
@@ -2838,6 +2830,7 @@ export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof
 export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -2929,6 +2922,7 @@ export type GetAgentToolsResponses = {
     200: Array<{
         id: string;
         agentId: string | null;
+        catalogId: string | null;
         mcpServerId: string | null;
         name: string;
         /**
@@ -2960,6 +2954,7 @@ export type UpdateAgentToolData = {
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -3012,6 +3007,7 @@ export type UpdateAgentToolResponses = {
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -3078,6 +3074,7 @@ export type GetAgentAvailableTokensResponses = {
         id: string;
         name: string;
         authType: 'personal' | 'team';
+        serverType: 'local' | 'remote';
         catalogId: string | null;
         ownerId: string | null;
         ownerEmail: string | null;
@@ -4932,9 +4929,12 @@ export type GetInternalMcpCatalogResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5004,9 +5004,12 @@ export type CreateInternalMcpCatalogItemData = {
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5093,9 +5096,12 @@ export type CreateInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5244,9 +5250,12 @@ export type GetInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5316,9 +5325,12 @@ export type UpdateInternalMcpCatalogItemData = {
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5416,9 +5428,12 @@ export type UpdateInternalMcpCatalogItemResponses = {
         localConfig: {
             command?: string;
             arguments?: Array<string>;
-            environment?: {
-                [key: string]: string;
-            };
+            environment?: Array<{
+                key: string;
+                type: 'plain_text' | 'secret';
+                value?: string;
+                promptOnInstallation: boolean;
+            }>;
             dockerImage?: string;
             transportType?: 'stdio' | 'streamable-http';
             httpPort?: number;
@@ -5940,9 +5955,12 @@ export type GetMcpServerInstallationRequestsResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6012,9 +6030,12 @@ export type CreateMcpServerInstallationRequestData = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6111,9 +6132,12 @@ export type CreateMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6300,9 +6324,12 @@ export type GetMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6372,9 +6399,12 @@ export type UpdateMcpServerInstallationRequestData = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6492,9 +6522,12 @@ export type UpdateMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6622,9 +6655,12 @@ export type ApproveMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6752,9 +6788,12 @@ export type DeclineMcpServerInstallationRequestResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6882,9 +6921,12 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             localConfig: {
                 command?: string;
                 arguments?: Array<string>;
-                environment?: {
-                    [key: string]: string;
-                };
+                environment?: Array<{
+                    key: string;
+                    type: 'plain_text' | 'secret';
+                    value?: string;
+                    promptOnInstallation: boolean;
+                }>;
                 dockerImage?: string;
                 transportType?: 'stdio' | 'streamable-http';
                 httpPort?: number;
@@ -6948,6 +6990,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
@@ -6986,6 +7029,12 @@ export type InstallMcpServerData = {
         localInstallationError?: string | null;
         teams?: Array<string>;
         userId?: string;
+        userConfigValues?: {
+            [key: string]: string;
+        };
+        environmentValues?: {
+            [key: string]: string;
+        };
         agentIds?: Array<string>;
         accessToken?: string;
     };
@@ -7043,6 +7092,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
@@ -7161,6 +7211,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string;
+        serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
@@ -9339,6 +9390,7 @@ export type GetToolsResponses = {
      */
     200: Array<{
         id: string;
+        catalogId: string | null;
         name: string;
         /**
          *
@@ -9407,6 +9459,7 @@ export type GetUnassignedToolsResponses = {
      */
     200: Array<{
         id: string;
+        catalogId: string | null;
         name: string;
         /**
          *

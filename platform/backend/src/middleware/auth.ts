@@ -35,10 +35,21 @@ class AuthMiddleware {
     );
   };
 
-  private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
+  private shouldSkipAuthCheck = ({ url, method, headers }: FastifyRequest) => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
+    }
+
+    // For /mcp_proxy endpoints, check if Bearer token matches ARCHESTRA_AUTH_SECRET
+    if (url.startsWith("/mcp_proxy/")) {
+      const authHeader = headers.authorization;
+      if (authHeader && config.auth.secret) {
+        const expectedAuth = `Bearer ${config.auth.secret}`;
+        if (authHeader === expectedAuth) {
+          return true;
+        }
+      }
     }
 
     if (

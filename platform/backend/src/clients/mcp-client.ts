@@ -336,6 +336,7 @@ class McpClient {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${config.auth.secret}`,
               },
               body: JSON.stringify({
                 jsonrpc: "2.0",

@@ -12,7 +12,7 @@ import type { InsertMcpServerInstallationRequest } from "@/types";
 /**
  * Constants for Archestra MCP server
  */
-const MCP_SERVER_NAME = "archestra";
+export const MCP_SERVER_NAME = "archestra";
 const TOOL_WHOAMI_NAME = "whoami";
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
 const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
@@ -24,11 +24,12 @@ const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERV
 const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
 
 /**
- * User context for the Archestra MCP server
+ * Context for the Archestra MCP server
  */
-export interface ArchestraUserContext {
+export interface ArchestraContext {
+  agentId: string;
+  agentName: string;
   userId: string;
-  email: string;
   organizationId: string;
 }
 
@@ -38,18 +39,18 @@ export interface ArchestraUserContext {
 export async function executeArchestraTool(
   toolName: string,
   args: Record<string, unknown> | undefined,
-  userContext: ArchestraUserContext,
+  context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { userId, email, organizationId } = userContext;
+  const { agentId, agentName, userId, organizationId } = context;
 
   if (toolName === TOOL_WHOAMI_FULL_NAME) {
-    logger.info({ userId, email }, "whoami tool called");
+    logger.info({ agentId, agentName }, "whoami tool called");
 
     return {
       content: [
         {
           type: "text",
-          text: `Current user email: ${email}\nUser ID: ${userId}\nOrganization ID: ${organizationId}`,
+          text: `Agent Name: ${agentName}\nAgent ID: ${agentId}`,
         },
       ],
       isError: false,
@@ -231,7 +232,7 @@ export function getArchestraMcpTools(): Tool[] {
       name: TOOL_WHOAMI_FULL_NAME,
       title: "Who Am I",
       description:
-        "Returns the email address and user information of the currently authenticated user",
+        "Returns the name and ID of the current agent",
       inputSchema: {
         type: "object",
         properties: {},

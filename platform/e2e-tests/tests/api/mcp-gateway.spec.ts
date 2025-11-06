@@ -133,7 +133,7 @@ test.describe("MCP Gateway - Archestra Tools", () => {
     expect(archestraWhoami).toBeDefined();
     expect(archestraWhoami.title).toBe("Who Am I");
     expect(archestraWhoami.description).toContain(
-      "email address and user information"
+      "name and ID of the current agent"
     );
 
     // Verify search_private_mcp_registry tool

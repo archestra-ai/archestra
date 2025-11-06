@@ -3,7 +3,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   executeArchestraTool,
   getArchestraMcpTools,
-  type ArchestraUserContext,
+  MCP_SERVER_NAME,
+  type ArchestraContext,
 } from "./archestra-mcp-server";
 
 // Mock the database
@@ -91,9 +92,10 @@ describe("getArchestraMcpTools", () => {
 });
 
 describe("executeArchestraTool", () => {
-  const mockUserContext: ArchestraUserContext = {
+  const mockContext: ArchestraContext = {
+    agentId: "agent-123",
+    agentName: "Test Agent",
     userId: "user-123",
-    email: "test@example.com",
     organizationId: "org-456",
   };
 
@@ -102,19 +104,19 @@ describe("executeArchestraTool", () => {
   });
 
   describe("whoami tool", () => {
-    it("should return user information", async () => {
+    it("should return agent information", async () => {
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
         undefined,
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toHaveProperty("type", "text");
-      expect((result.content[0] as any).text).toContain("test@example.com");
-      expect((result.content[0] as any).text).toContain("user-123");
-      expect((result.content[0] as any).text).toContain("org-456");
+      expect((result.content[0] as any).text).toContain("Test Agent");
+      expect((result.content[0] as any).text).toContain("agent-123");
+      expect((result.content[0] as any).text).not.toContain("user-123");
     });
   });
 
@@ -135,9 +137,9 @@ describe("executeArchestraTool", () => {
       vi.mocked(InternalMcpCatalogModel.findAll).mockResolvedValue(mockCatalogItems as any);
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(false);
@@ -150,9 +152,9 @@ describe("executeArchestraTool", () => {
       vi.mocked(InternalMcpCatalogModel.findAll).mockResolvedValue([]);
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(false);
@@ -177,9 +179,9 @@ describe("executeArchestraTool", () => {
       vi.mocked(db).select = mockSelect;
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         { query: "test" },
-        mockUserContext
+        mockContext
       );
 
       expect(mockSelect).toHaveBeenCalled();
@@ -196,9 +198,9 @@ describe("executeArchestraTool", () => {
       );
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(true);
@@ -215,12 +217,12 @@ describe("executeArchestraTool", () => {
       } as any);
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
         {
           external_catalog_id: "catalog-123",
           request_reason: "Need this server for testing",
         },
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(false);
@@ -237,9 +239,9 @@ describe("executeArchestraTool", () => {
 
     it("should return error when neither external_catalog_id nor custom_server_config provided", async () => {
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
         {},
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(true);
@@ -253,9 +255,9 @@ describe("executeArchestraTool", () => {
       } as any);
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
         { external_catalog_id: "catalog-123" },
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(false);
@@ -271,9 +273,9 @@ describe("executeArchestraTool", () => {
       );
 
       const result = await executeArchestraTool(
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
         { external_catalog_id: "catalog-123" },
-        mockUserContext
+        mockContext
       );
 
       expect(result.isError).toBe(true);
@@ -284,7 +286,7 @@ describe("executeArchestraTool", () => {
   describe("unknown tool", () => {
     it("should throw error for unknown tool name", async () => {
       await expect(
-        executeArchestraTool("unknown_tool", undefined, mockUserContext)
+        executeArchestraTool("unknown_tool", undefined, mockContext)
       ).rejects.toMatchObject({
         code: -32601,
         message: "Tool 'unknown_tool' not found",

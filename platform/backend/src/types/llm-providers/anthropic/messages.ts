@@ -8,17 +8,6 @@ const TextBlockSchema = z.object({
   type: z.enum(["text"]),
 });
 
-const ThinkingBlockSchema = z.object({
-  signature: z.string(),
-  thinking: z.string(),
-  type: z.enum(["thinking"]),
-});
-
-const RedactedThinkingBlockSchema = z.object({
-  data: z.string(),
-  type: z.enum(["redacted_thinking"]),
-});
-
 const ToolUseBlockSchema = z.object({
   id: z.string(),
   input: z.any(),
@@ -31,8 +20,6 @@ const WebSearchToolResultBlockSchema = z.any();
 
 export const MessageContentBlockSchema = z.union([
   TextBlockSchema,
-  ThinkingBlockSchema,
-  RedactedThinkingBlockSchema,
   ToolUseBlockSchema,
   ServerToolUseBlockSchema,
   WebSearchToolResultBlockSchema,
@@ -48,8 +35,6 @@ const TextBlockParamSchema = z.object({
 // const ImageBlockParamSchema = z.any();
 // const DocumentBlockParamSchema = z.any();
 // const SearchResultBlockParamSchema = z.any();
-// const ThinkingBlockParamSchema = z.any();
-// const RedactedThinkingBlockParamSchema = z.any();
 const ToolUseBlockParamSchema = z.object({
   id: z.string(),
   input: z.any(),
@@ -84,8 +69,6 @@ const ContentBlockParamSchema = z.union([
   // ImageBlockParamSchema,
   // DocumentBlockParamSchema,
   // SearchResultBlockParamSchema,
-  // ThinkingBlockParamSchema,
-  // RedactedThinkingBlockParamSchema,
   ToolUseBlockParamSchema,
   ToolResultBlockParamSchema,
   // ServerToolUseBlockParamSchema,

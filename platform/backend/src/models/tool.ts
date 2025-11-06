@@ -1,3 +1,4 @@
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import {
   and,
   desc,
@@ -8,7 +9,6 @@ import {
   notInArray,
   or,
 } from "drizzle-orm";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";

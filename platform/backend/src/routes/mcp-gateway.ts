@@ -10,17 +10,16 @@ import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  executeArchestraTool,
+  getArchestraMcpTools,
+  MCP_SERVER_NAME,
+} from "@/archestra-mcp-server";
 import { auth } from "@/auth";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import {
-  executeArchestraTool,
-  getArchestraMcpTools,
-  MCP_SERVER_NAME,
-  type ArchestraContext,
-} from "@/archestra-mcp-server";
 import { AgentModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
@@ -69,9 +68,6 @@ function cleanupExpiredSessions(): void {
  */
 async function createAgentServer(
   agentId: string,
-  userId: string,
-  userEmail: string,
-  organizationId: string,
   logger: { info: (obj: unknown, msg: string) => void },
 ): Promise<Server> {
   const server = new Server(
@@ -120,31 +116,19 @@ async function createAgentServer(
             {
               agentId,
               toolName: name,
-              userId,
-              userEmail,
             },
             "Archestra MCP tool call received",
           );
 
           // Handle Archestra tools directly
-          const context: ArchestraContext = {
-            agentId,
-            agentName: agent.name,
-            userId,
-            organizationId,
-          };
-
-          const archestraResponse = await executeArchestraTool(
-            name,
-            args,
-            context,
-          );
+          const archestraResponse = await executeArchestraTool(name, args, {
+            agent,
+          });
 
           logger.info(
             {
               agentId,
               toolName: name,
-              userId,
             },
             "Archestra MCP tool call completed",
           );
@@ -436,7 +420,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             jsonrpc: "2.0",
             error: {
               code: -32000,
-              message: "Unauthorized: User not associated with any organization",
+              message:
+                "Unauthorized: User not associated with any organization",
             },
             id: null,
           };
@@ -486,13 +471,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Initialize request - creating NEW session",
           );
-          server = await createAgentServer(
-            agentId,
-            userId,
-            userEmail,
-            organizationId,
-            fastify.log,
-          );
+          server = await createAgentServer(agentId, fastify.log);
           transport = createTransport(agentId, sessionId, fastify.log);
 
           // Connect server to transport (this also starts the transport)

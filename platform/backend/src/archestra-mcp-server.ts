@@ -1,13 +1,8 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { ilike, or } from "drizzle-orm";
-import db, { schema } from "@/database";
 import logger from "@/logging";
-import {
-  InternalMcpCatalogModel,
-  McpServerInstallationRequestModel,
-} from "@/models";
-import type { InsertMcpServerInstallationRequest } from "@/types";
+import { InternalMcpCatalogModel } from "@/models";
+import type { Agent, InternalMcpCatalog } from "@/types";
 
 /**
  * Constants for Archestra MCP server
@@ -21,16 +16,13 @@ const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
-const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
+const _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
 
 /**
  * Context for the Archestra MCP server
  */
-export interface ArchestraContext {
-  agentId: string;
-  agentName: string;
-  userId: string;
-  organizationId: string;
+interface ArchestraContext {
+  agent: Agent;
 }
 
 /**
@@ -41,16 +33,19 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  const { agentId, agentName, userId, organizationId } = context;
+  const { agent } = context;
 
   if (toolName === TOOL_WHOAMI_FULL_NAME) {
-    logger.info({ agentId, agentName }, "whoami tool called");
+    logger.info(
+      { agentId: agent.id, agentName: agent.name },
+      "whoami tool called",
+    );
 
     return {
       content: [
         {
           type: "text",
-          text: `Agent Name: ${agentName}\nAgent ID: ${agentId}`,
+          text: `Agent Name: ${agent.name}\nAgent ID: ${agent.id}`,
         },
       ],
       isError: false,
@@ -59,26 +54,18 @@ export async function executeArchestraTool(
 
   if (toolName === TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME) {
     logger.info(
-      { userId, searchArgs: args },
+      { agentId: agent.id, searchArgs: args },
       "search_private_mcp_registry tool called",
     );
 
     try {
       const query = args?.query as string | undefined;
 
-      let catalogItems;
+      let catalogItems: InternalMcpCatalog[];
 
       if (query && query.trim() !== "") {
         // Search by name or description
-        catalogItems = await db
-          .select()
-          .from(schema.internalMcpCatalogTable)
-          .where(
-            or(
-              ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
-              ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
-            ),
-          );
+        catalogItems = await InternalMcpCatalogModel.searchByQuery(query);
       } else {
         // Return all catalog items
         catalogItems = await InternalMcpCatalogModel.findAll();
@@ -135,9 +122,16 @@ export async function executeArchestraTool(
     }
   }
 
+  /**
+   * TODO: Currently there is no user available in the mcp-gateway context. In order to be able to create
+   * an MCP server installation request, we'd either need to have an explicit user, create a "fake archestra mcp server" user
+   * (probably a bad idea), or modify McpServerInstallationRequestModel such that createdBy is renamed to createdByUser
+   * (and can be null) + we add createdByAgent
+   */
+  /*
   if (toolName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
     logger.info(
-      { userId, requestArgs: args },
+      { agentId: agent.id, requestArgs: args },
       "create_mcp_server_installation_request tool called",
     );
 
@@ -184,7 +178,7 @@ export async function executeArchestraTool(
       const installationRequest =
         await McpServerInstallationRequestModel.create({
           externalCatalogId: externalCatalogId || null,
-          requestedBy: userId,
+          requestedBy: userId, // This would need to be changed as per TODO above
           requestReason: requestReason || null,
           customServerConfig: customServerConfig || null,
           status: "pending",
@@ -215,6 +209,7 @@ export async function executeArchestraTool(
       };
     }
   }
+  */
 
   // If the tool is not an Archestra tool, throw an error
   throw {
@@ -231,8 +226,7 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_WHOAMI_FULL_NAME,
       title: "Who Am I",
-      description:
-        "Returns the name and ID of the current agent",
+      description: "Returns the name and ID of the current agent",
       inputSchema: {
         type: "object",
         properties: {},
@@ -260,54 +254,55 @@ export function getArchestraMcpTools(): Tool[] {
       annotations: {},
       _meta: {},
     },
-    {
-      name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-      title: "Create MCP Server Installation Request",
-      description:
-        "Create a request to install an MCP server. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          external_catalog_id: {
-            type: "string",
-            description:
-              "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
-          },
-          request_reason: {
-            type: "string",
-            description:
-              "Reason for requesting the installation (optional but recommended)",
-          },
-          custom_server_config: {
-            type: "object",
-            description:
-              "Custom server configuration (optional if external_catalog_id is provided)",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["remote", "local"],
-                description: "The type of the custom server",
-              },
-              label: {
-                type: "string",
-                description: "A label for the custom server",
-              },
-              name: {
-                type: "string",
-                description: "The name of the custom server",
-              },
-              version: {
-                type: "string",
-                description: "The version of the custom server (optional)",
-              },
-            },
-            required: ["type", "label", "name"],
-          },
-        },
-        required: [],
-      },
-      annotations: {},
-      _meta: {},
-    },
+    // TODO: MCP server installation request tool is temporarily disabled until user context is available
+    // {
+    //   name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+    //   title: "Create MCP Server Installation Request",
+    //   description:
+    //     "Create a request to install an MCP server. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
+    //   inputSchema: {
+    //     type: "object",
+    //     properties: {
+    //       external_catalog_id: {
+    //         type: "string",
+    //         description:
+    //           "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
+    //       },
+    //       request_reason: {
+    //         type: "string",
+    //         description:
+    //           "Reason for requesting the installation (optional but recommended)",
+    //       },
+    //       custom_server_config: {
+    //         type: "object",
+    //         description:
+    //           "Custom server configuration (optional if external_catalog_id is provided)",
+    //         properties: {
+    //           type: {
+    //             type: "string",
+    //             enum: ["remote", "local"],
+    //             description: "The type of the custom server",
+    //           },
+    //           label: {
+    //             type: "string",
+    //             description: "A label for the custom server",
+    //           },
+    //           name: {
+    //             type: "string",
+    //             description: "The name of the custom server",
+    //           },
+    //           version: {
+    //             type: "string",
+    //             description: "The version of the custom server (optional)",
+    //           },
+    //         },
+    //         required: ["type", "label", "name"],
+    //       },
+    //     },
+    //     required: [],
+    //   },
+    //   annotations: {},
+    //   _meta: {},
+    // },
   ];
 }

@@ -20,7 +20,8 @@ export function WithAuthCheck({
 
   const isAuthPage =
     pathname?.startsWith("/auth/sign-in") ||
-    pathname?.startsWith("/auth/sign-up");
+    pathname?.startsWith("/auth/sign-up") ||
+    pathname?.startsWith("/auth/two-factor");
   const isPublicPage = pathname === "/test-agent"; // "How it works" page is public
   const isAuthPageAndUserLoggedIn = isAuthPage && session?.user;
   const isNotAuthPageAndUserNotLoggedIn =

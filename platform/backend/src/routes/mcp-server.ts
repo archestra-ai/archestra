@@ -1156,6 +1156,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/mcp_proxy/:id",
     {
       schema: {
+        operationId: RouteId.McpProxy,
         hide: true,
         description:
           "Proxy requests to the MCP server running in a Kubernetes pod",

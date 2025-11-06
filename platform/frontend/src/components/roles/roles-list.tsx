@@ -1,15 +1,9 @@
 "use client";
 
-import { allAvailableActions, type Action, type Resource } from "@shared";
+import { type Action, allAvailableActions, type Resource } from "@shared";
 import { Plus, Shield, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  useCreateRole,
-  useDeleteRole,
-  useRoles,
-  useUpdateRole,
-} from "@/lib/role.query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +22,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  useCreateRole,
+  useDeleteRole,
+  useRoles,
+  useUpdateRole,
+} from "@/lib/role.query";
 import { RolePermissionBuilder } from "./role-permission-builder";
 
 export function RolesList() {

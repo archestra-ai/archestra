@@ -16,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useRole } from "@/lib/auth.hook";
 import {
   useAddMcpServerInstallationRequestNote,
   useApproveMcpServerInstallationRequest,
@@ -30,8 +29,6 @@ export default function InstallationRequestDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const userRole = useRole();
-  const isAdmin = userRole === "admin";
 
   const { data: request, isLoading } = useMcpServerInstallationRequest(id);
   const approveMutation = useApproveMcpServerInstallationRequest();
@@ -360,7 +357,7 @@ export default function InstallationRequestDetailPage({
               </CardContent>
             </Card>
 
-            {isAdmin && isPending && (
+            {hasPermissionTODO && isPending && (
               <Card>
                 <CardHeader>
                   <CardTitle>Admin Actions</CardTitle>

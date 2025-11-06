@@ -37,28 +37,6 @@ export type Permission = `${Resource}:${Action}`;
 export type Role = "admin" | "member" | string; // Allow custom role names
 
 /**
- * Type for creating a custom role
- */
-export interface CustomRoleRequest {
-  name: string;
-  permissions: Partial<Record<Resource, Action[]>>;
-  organizationId: string;
-}
-
-/**
- * Type for role definition (response from API)
- */
-export interface RoleDefinition {
-  id: string;
-  name: string;
-  permissions: Record<Resource, Action[]>;
-  isCustom: boolean;
-  organizationId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
  * Check if a role is a custom role (not predefined)
  */
 export function isCustomRole(role: string): boolean {
@@ -105,14 +83,6 @@ export const adminRole = ac.newRole({
   ...allAvailableActions,
 });
 
-// - read-only access for agents
-// - full access to tools, policies, interactions
-// - read-only access to dual LLM configs and results
-// - read-only access to MCP catalog
-// - can create MCP servers (personal auth only), read, and delete (personal auth only)
-// - can create and read MCP server installation requests
-// - read-only access to teams
-// - full access to conversations
 export const memberRole = ac.newRole({
   agent: ["read"],
   tool: ["create", "read", "update", "delete"],

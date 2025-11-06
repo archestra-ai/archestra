@@ -1,4 +1,4 @@
-import type { OrganizationAppearance } from "@shared";
+import type { OrganizationAppearance, Role } from "@shared";
 import { archestraApiSdk } from "@shared";
 import {
   deleteOrganizationLogo,
@@ -173,13 +173,7 @@ export function useCancelInvitation() {
  */
 export function useCreateInvitation(organizationId: string | undefined) {
   return useMutation({
-    mutationFn: async ({
-      email,
-      role,
-    }: {
-      email: string;
-      role: "member" | "admin";
-    }) => {
+    mutationFn: async ({ email, role }: { email: string; role: Role }) => {
       const response = await authClient.organization.inviteMember({
         email,
         role,

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Role } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
 import { Suspense, useState } from "react";
@@ -36,7 +37,7 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("member");
+  const [role, setRole] = useState<Role>("member");
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
@@ -109,7 +110,7 @@ function InviteByLinkCardContent({
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(value: string) => setRole(value)}
+                onValueChange={(value: Role) => setRole(value)}
                 disabled={createMutation.isPending}
               >
                 <SelectTrigger id="role">

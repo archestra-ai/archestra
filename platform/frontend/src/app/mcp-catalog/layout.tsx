@@ -1,14 +1,12 @@
 "use client";
 
 import { PageLayout } from "@/components/page-layout";
-import { useRole } from "@/lib/auth.hook";
 
 export default function McpCatalogLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const a = useRole();
   return (
     <PageLayout
       title="MCP Registry"
@@ -18,7 +16,7 @@ export default function McpCatalogLayout({
           servers and make them available to your agents.
           <br />
           You can also{" "}
-          {a === "admin"
+          {hasPermissionTODO
             ? "review and manage installation requests from your team members"
             : "view your installation requests and their status"}
         </>

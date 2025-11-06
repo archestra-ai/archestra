@@ -96,7 +96,6 @@ export type McpServerCardProps = {
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  isAdmin: boolean;
   localServerInstallationCount?: number; // For local servers: count of all personal installations
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
   currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
@@ -121,7 +120,6 @@ export function McpServerCard({
   onReinstall,
   onEdit,
   onDelete,
-  isAdmin,
   localServerInstallationCount = 0,
   currentUserInstalledLocalServer = false,
   currentUserHasLocalTeamInstallation = false,
@@ -714,7 +712,7 @@ export function McpServerCard({
               )}
             </div>
           </div>
-          {isAdmin && manageCatalogItemDropdownMenu}
+          {hasPermissionTODO && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

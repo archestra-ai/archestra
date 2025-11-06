@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRole } from "@/lib/auth.hook";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
@@ -59,8 +58,6 @@ export function ArchestraCatalogTab({
     type: "all",
     category: "all",
   });
-
-  const userRole = useRole();
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
@@ -319,7 +316,6 @@ export function ArchestraCatalogTab({
                     isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
-                    userRole={userRole}
                   />
                 ))}
               </div>
@@ -394,7 +390,6 @@ function ServerCard({
   isAdding,
   onOpenReadme,
   isInCatalog,
-  userRole,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -408,9 +403,7 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
-  userRole: "admin" | "member";
 }) {
-  const isAdmin = userRole === "admin";
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -498,7 +491,9 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              isAdmin ? onAddToCatalog(server) : onRequestInstallation(server)
+              hasPermissionTODO
+                ? onAddToCatalog(server)
+                : onRequestInstallation(server)
             }
             disabled={isAdding || isInCatalog}
             size="sm"
@@ -506,7 +501,7 @@ function ServerCard({
           >
             {isInCatalog
               ? "Added"
-              : isAdmin
+              : hasPermissionTODO
                 ? "Add to Your Registry"
                 : "Request to add to internal registry"}
           </Button>

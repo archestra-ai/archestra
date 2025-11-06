@@ -33,7 +33,6 @@ interface NoAuthInstallDialogProps {
   onInstall: (teams: string[]) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
-  isAdmin: boolean;
 }
 
 export function NoAuthInstallDialog({
@@ -42,7 +41,6 @@ export function NoAuthInstallDialog({
   onInstall,
   catalogItem,
   isInstalling,
-  isAdmin,
 }: NoAuthInstallDialogProps) {
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -94,13 +92,13 @@ export function NoAuthInstallDialog({
           </DialogTitle>
           <DialogDescription>
             This MCP server doesn't require authentication.
-            {isAdmin
+            {hasPermissionTODO
               ? " You can optionally assign it to specific teams."
               : " Click Install to proceed."}
           </DialogDescription>
         </DialogHeader>
 
-        {isAdmin && (
+        {hasPermissionTODO && (
           <div className="grid gap-4 py-4">
             <Alert>
               <Info className="h-4 w-4" />

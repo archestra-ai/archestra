@@ -86,6 +86,11 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
+# Authentication Secret (auto-generated in Helm/Docker if not set)
+# In Helm: Auto-generated on first install and persisted
+# In Docker: Auto-generated and saved to /app/data/.auth_secret
+ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
+
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805

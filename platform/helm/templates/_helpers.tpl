@@ -56,6 +56,11 @@ Environment variables for the Archestra Platform container
 {{- define "archestra-platform.env" -}}
 - name: ARCHESTRA_DATABASE_URL
   value: {{ if .Values.postgresql.external_database_url }}{{ .Values.postgresql.external_database_url }}{{ else }}postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}{{ end }}
+- name: ARCHESTRA_AUTH_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "archestra-platform.fullname" . }}-auth
+      key: auth-secret
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
 {{- if .Values.archestra.orchestrator.baseImage }}

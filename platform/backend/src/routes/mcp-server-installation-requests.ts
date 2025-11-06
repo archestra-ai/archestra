@@ -53,9 +53,11 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
         const { status } = request.query;
 
-        // Admins can see all requests, non-admins can only see their own requests
+        const isMcpServerAdmin = "TODO:";
+
         let requests: McpServerInstallationRequest[];
-        if (user.isAdmin) {
+        if (isMcpServerAdmin) {
+          // MCP server admins can see all requests
           requests = status
             ? await McpServerInstallationRequestModel.findByStatus(status)
             : await McpServerInstallationRequestModel.findAll();
@@ -205,8 +207,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Non-admins can only view their own requests
-        if (!user.isAdmin && installationRequest.requestedBy !== user.id) {
+        const isMcpServerAdmin = "TODO:";
+
+        // MCP server admins can view all requests, non-MCP server admins can only view their own requests
+        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
           return reply.status(403).send({
             error: {
               message: "Forbidden",
@@ -234,8 +238,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.UpdateMcpServerInstallationRequest,
-        description:
-          "Update an MCP server installation request (admin only for approval/decline)",
+        description: "Update an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -281,14 +284,16 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Only admins can update status
+        // MCP server admins can update status, non-MCP server admins can only update their own requests
         if (
           request.body.status ||
           request.body.adminResponse ||
           request.body.reviewedBy ||
           request.body.reviewedAt
         ) {
-          if (!user.isAdmin) {
+          const isMcpServerAdmin = "TODO:";
+
+          if (!isMcpServerAdmin) {
             return reply.status(403).send({
               error: {
                 message: "Only admins can approve or decline requests",
@@ -331,7 +336,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.ApproveMcpServerInstallationRequest,
-        description: "Approve an MCP server installation request (admin only)",
+        description: "Approve an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -357,15 +362,6 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can approve requests",
-              type: "forbidden",
             },
           });
         }
@@ -416,7 +412,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.DeclineMcpServerInstallationRequest,
-        description: "Decline an MCP server installation request (admin only)",
+        description: "Decline an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -442,15 +438,6 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can decline requests",
-              type: "forbidden",
             },
           });
         }
@@ -543,8 +530,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Non-admins can only add notes to their own requests
-        if (!user.isAdmin && installationRequest.requestedBy !== user.id) {
+        const isMcpServerAdmin = "TODO:";
+
+        // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
+        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
           return reply.status(403).send({
             error: {
               message: "Forbidden",
@@ -594,7 +583,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.DeleteMcpServerInstallationRequest,
-        description: "Delete an MCP server installation request (admin only)",
+        description: "Delete an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -617,15 +606,6 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete requests",
-              type: "forbidden",
             },
           });
         }

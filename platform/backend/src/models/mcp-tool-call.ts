@@ -22,10 +22,8 @@ class McpToolCallModel {
     return mcpToolCall;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<McpToolCall[]> {
+  static async findAll(userId?: string): Promise<McpToolCall[]> {
+    const isMcpServerAdmin = "TODO:";
     let query = db
       .select()
       .from(schema.mcpToolCallsTable)
@@ -33,11 +31,9 @@ class McpToolCallModel {
       .$dynamic();
 
     // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isMcpServerAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -59,18 +55,16 @@ class McpToolCallModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
+    const isMcpServerAdmin = "TODO:";
 
     // Build where clause for access control
     let whereClause: SQL | undefined;
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isMcpServerAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
@@ -125,8 +119,9 @@ class McpToolCallModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<McpToolCall | null> {
+    const isMcpServerAdmin = "TODO:";
+
     const [mcpToolCall] = await db
       .select()
       .from(schema.mcpToolCallsTable)
@@ -137,18 +132,17 @@ class McpToolCallModel {
     }
 
     // Check access control for non-admins
-    if (userId && !isAdmin) {
+    if (userId && !isMcpServerAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         mcpToolCall.agentId,
-        false,
       );
       if (!hasAccess) {
         return null;
       }
     }
 
-    return mcpToolCall as McpToolCall;
+    return mcpToolCall;
   }
 
   static async getAllMcpToolCallsForAgent(

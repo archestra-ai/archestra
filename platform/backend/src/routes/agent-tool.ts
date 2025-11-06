@@ -30,6 +30,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.array(SelectAgentToolSchema),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -47,7 +48,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const agentTools = await AgentToolModel.findAll(user.id, user.isAdmin);
+        const agentTools = await AgentToolModel.findAll(user.id);
         return reply.send(agentTools);
       } catch (error) {
         fastify.log.error(error);
@@ -82,6 +83,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.object({ success: z.boolean() }),
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -204,6 +207,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: z.object({ success: z.boolean() }),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -241,6 +246,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: z.array(SelectToolSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -297,6 +304,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: UpdateAgentToolSchema,
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -450,6 +459,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -490,7 +500,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get all MCP servers accessible to the user
-        const allServers = await McpServerModel.findAll(user.id, user.isAdmin);
+        const allServers = await McpServerModel.findAll(user.id);
 
         // Filter by catalogId if provided
         const filteredServers = catalogId
@@ -514,7 +524,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Member personal tokens: check if owner belongs to any of the agents' teams
               const hasAccessResults = await Promise.all(
                 agentIds.map((agentId) =>
-                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, false),
+                  AgentTeamModel.userHasAgentAccess(ownerId, agentId),
                 ),
               );
               const hasAccessToAny = hasAccessResults.some(
@@ -629,18 +639,10 @@ async function validateCredentialSource(
       };
     }
   } else if (mcpServer.authType === "personal") {
-    // For personal tokens: check if owner is admin OR if owner belongs to a team that the agent is assigned to
-    // Admins can use their tokens with any agent
-    // TODO: what to do here... we need to check permissions instead of checking role name
-    if (owner.role === "admin") {
-      return null;
-    }
-
-    // Members must belong to a team that the agent is assigned to
+    // For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent is assigned to
     const hasAccess = await AgentTeamModel.userHasAgentAccess(
       owner.id,
       agentId,
-      false, // isAdmin = false to check actual team membership
     );
 
     if (!hasAccess) {

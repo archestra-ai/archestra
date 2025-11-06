@@ -68,7 +68,6 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pagination,
         sorting,
         user.id,
-        user.isAdmin,
       );
 
       return reply.send(result);
@@ -107,7 +106,6 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const mcpToolCall = await McpToolCallModel.findById(
         request.params.mcpToolCallId,
         user.id,
-        user.isAdmin,
       );
 
       if (!mcpToolCall) {

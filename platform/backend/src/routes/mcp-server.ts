@@ -52,7 +52,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const allServers = await McpServerModel.findAll(user.id, user.isAdmin);
+        const allServers = await McpServerModel.findAll(user.id);
         const { authType } = request.query;
 
         // Filter by authType if provided
@@ -108,7 +108,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const server = await McpServerModel.findById(
           request.params.id,
           user.id,
-          user.isAdmin,
         );
 
         if (!server) {
@@ -198,11 +197,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           serverData.authType = "personal";
           serverData.userId = user.id;
         } else {
+          const isMcpServerAdmin = "TODO:";
+
           // Team installation requires admin role
-          if (!user.isAdmin) {
+          if (!isMcpServerAdmin) {
             return reply.status(403).send({
               error: {
-                message: "Only admins can install MCP servers for teams",
+                message:
+                  "Only MCP server admins can install MCP servers for teams",
                 type: "forbidden",
               },
             });

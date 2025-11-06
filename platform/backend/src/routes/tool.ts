@@ -36,7 +36,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const tools = await ToolModel.findAll(user.id, user.isAdmin);
+        const tools = await ToolModel.findAll(user.id);
         return reply.send(tools);
       } catch (error) {
         fastify.log.error(error);

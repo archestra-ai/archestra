@@ -40,6 +40,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: createPaginatedResponseSchema(SelectAgentSchema),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -67,7 +68,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sorting,
           filters,
           user.id,
-          user.isAdmin,
         );
         return reply.send(result);
       } catch (error) {
@@ -93,6 +93,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.array(SelectAgentSchema),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -110,8 +111,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const agents = await AgentModel.findAll(user.id, user.isAdmin);
-        return reply.send(agents);
+        return reply.send(await AgentModel.findAll(user.id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -135,6 +135,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: SelectAgentSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -182,6 +183,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: SelectAgentSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -231,6 +233,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: SelectAgentSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -249,11 +252,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const agent = await AgentModel.findById(
-          request.params.id,
-          user.id,
-          user.isAdmin,
-        );
+        const agent = await AgentModel.findById(request.params.id, user.id);
 
         if (!agent) {
           return reply.status(404).send({
@@ -295,6 +294,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }).partial(),
         response: {
           200: SelectAgentSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -344,6 +345,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: z.object({ success: z.boolean() }),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -386,6 +389,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.array(z.string()),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -431,6 +435,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: {
           200: z.array(z.string()),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },

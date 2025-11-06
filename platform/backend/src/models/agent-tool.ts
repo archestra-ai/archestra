@@ -136,10 +136,9 @@ class AgentToolModel {
     return agentTool;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<AgentTool[]> {
+  static async findAll(userId?: string): Promise<AgentTool[]> {
+    const isAgentAdmin = "TODO:";
+
     // Get all agent-tool relationships with joined agent and tool details
     let query = db
       .select({
@@ -176,12 +175,10 @@ class AgentToolModel {
       )
       .$dynamic();
 
-    // Apply access control filtering for non-admins if needed
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    // Apply access control filtering for users that are not agent admins if needed
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -270,7 +267,6 @@ class AgentToolModel {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         agentId,
-        false,
       );
 
       // If user no longer has access, clean up their personal tokens

@@ -31,10 +31,9 @@ class InteractionModel {
     return interaction;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Interaction[]> {
+  static async findAll(userId?: string): Promise<Interaction[]> {
+    const isAgentAdmin = "TODO:";
+
     let query = db
       .select()
       .from(schema.interactionsTable)
@@ -42,11 +41,9 @@ class InteractionModel {
       .$dynamic();
 
     // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -68,18 +65,17 @@ class InteractionModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<PaginatedResult<Interaction>> {
+    const isAgentAdmin = "TODO:";
+
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
 
     // Build where clause for access control
     let whereClause: SQL | undefined;
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
@@ -138,8 +134,9 @@ class InteractionModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<Interaction | null> {
+    const isAgentAdmin = "TODO:";
+
     const [interaction] = await db
       .select()
       .from(schema.interactionsTable)
@@ -150,11 +147,10 @@ class InteractionModel {
     }
 
     // Check access control for non-admins
-    if (userId && !isAdmin) {
+    if (userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.agentId,
-        false,
       );
       if (!hasAccess) {
         return null;

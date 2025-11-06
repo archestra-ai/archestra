@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import StatisticsModel, { type TimeFrame } from "@/models/statistics";
+import StatisticsModel from "@/models/statistics";
 import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
@@ -86,9 +86,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { timeframe } = request.query;
       const statistics = await StatisticsModel.getTeamStatistics(
-        timeframe as TimeFrame,
+        timeframe,
         user.id,
-        user.isAdmin,
       );
 
       return reply.send(statistics);
@@ -123,9 +122,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { timeframe } = request.query;
       const statistics = await StatisticsModel.getAgentStatistics(
-        timeframe as TimeFrame,
+        timeframe,
         user.id,
-        user.isAdmin,
       );
 
       return reply.send(statistics);
@@ -160,9 +158,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { timeframe } = request.query;
       const statistics = await StatisticsModel.getModelStatistics(
-        timeframe as TimeFrame,
+        timeframe,
         user.id,
-        user.isAdmin,
       );
 
       return reply.send(statistics);
@@ -197,9 +194,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const { timeframe } = request.query;
       const statistics = await StatisticsModel.getOverviewStatistics(
-        timeframe as TimeFrame,
+        timeframe,
         user.id,
-        user.isAdmin,
       );
 
       return reply.send(statistics);

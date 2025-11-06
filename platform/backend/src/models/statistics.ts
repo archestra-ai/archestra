@@ -282,20 +282,19 @@ class StatisticsModel {
   static async getTeamStatistics(
     timeframe: TimeFrame,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<TeamStatistics[]> {
+    const isAgentAdmin = "TODO:";
+
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are not agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
       if (accessibleAgentIds.length === 0) {
         return [];
       }
@@ -433,20 +432,19 @@ class StatisticsModel {
   static async getAgentStatistics(
     timeframe: TimeFrame,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<AgentStatistics[]> {
+    const isAgentAdmin = "TODO:";
+
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are not agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
       if (accessibleAgentIds.length === 0) {
         return [];
       }
@@ -552,20 +550,20 @@ class StatisticsModel {
   static async getModelStatistics(
     timeframe: TimeFrame,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<ModelStatistics[]> {
+    const isAgentAdmin = "TODO:";
+
     const interval = StatisticsModel.getTimeframeInterval(timeframe);
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
     const { avgInputPrice, avgOutputPrice } =
       await StatisticsModel.getAverageTokenPrices();
 
-    // Get accessible agent IDs for non-admin users
+    // Get accessible agent IDs for users that are not agent admins
     let accessibleAgentIds: string[] = [];
-    if (userId && !isAdmin) {
-      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
+
       if (accessibleAgentIds.length === 0) {
         return [];
       }
@@ -664,12 +662,13 @@ class StatisticsModel {
   static async getOverviewStatistics(
     timeframe: TimeFrame,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<OverviewStatistics> {
+    const isAgentAdmin = "TODO:";
+
     const [teamStats, agentStats, modelStats] = await Promise.all([
-      StatisticsModel.getTeamStatistics(timeframe, userId, isAdmin),
-      StatisticsModel.getAgentStatistics(timeframe, userId, isAdmin),
-      StatisticsModel.getModelStatistics(timeframe, userId, isAdmin),
+      StatisticsModel.getTeamStatistics(timeframe, userId),
+      StatisticsModel.getAgentStatistics(timeframe, userId),
+      StatisticsModel.getModelStatistics(timeframe, userId),
     ]);
 
     const totalRequests = teamStats.reduce(

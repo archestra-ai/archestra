@@ -1,7 +1,6 @@
 "use client";
 
 import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
-import { ADMIN_ROLE_NAME, OWNER_ROLE_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -34,13 +33,11 @@ function MembersSettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const isAdminOrOwner =
-    activeMemberRole === ADMIN_ROLE_NAME ||
-    activeMemberRole === OWNER_ROLE_NAME;
+  const hasPermissionTodo = "TODO:";
 
   const members = activeOrg ? (
     <div className="space-y-6">
-      {activeMemberRole && isAdminOrOwner && (
+      {activeMemberRole && hasPermissionTodo && (
         <Dialog
           open={inviteDialogOpen}
           onOpenChange={(open) => {
@@ -65,7 +62,7 @@ function MembersSettingsContent() {
       )}
       <OrganizationMembersCard
         action={() => {
-          if (isAdminOrOwner) {
+          if (hasPermissionTodo) {
             setInviteDialogOpen(true);
           }
         }}

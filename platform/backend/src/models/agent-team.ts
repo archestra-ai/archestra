@@ -5,12 +5,10 @@ class AgentTeamModel {
   /**
    * Get all agent IDs that a user has access to (through team membership)
    */
-  static async getUserAccessibleAgentIds(
-    userId: string,
-    isAdmin: boolean,
-  ): Promise<string[]> {
-    // Admins have access to all agents
-    if (isAdmin) {
+  static async getUserAccessibleAgentIds(userId: string): Promise<string[]> {
+    const isAgentAdmin = "TODO:";
+
+    if (isAgentAdmin) {
       const allAgents = await db
         .select({ id: schema.agentsTable.id })
         .from(schema.agentsTable);
@@ -44,10 +42,10 @@ class AgentTeamModel {
   static async userHasAgentAccess(
     userId: string,
     agentId: string,
-    isAdmin: boolean,
   ): Promise<boolean> {
-    // Admins always have access
-    if (isAdmin) {
+    const isAgentAdmin = "TODO:";
+
+    if (isAgentAdmin) {
       return true;
     }
 

@@ -128,15 +128,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can create limits",
-              type: "forbidden",
-            },
-          });
-        }
-
         const [limit] = await db
           .insert(schema.limitsTable)
           .values(request.body)
@@ -254,15 +245,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update limits",
-              type: "forbidden",
-            },
-          });
-        }
-
         const [limit] = await db
           .update(schema.limitsTable)
           .set({ ...request.body, updatedAt: new Date() })
@@ -323,15 +305,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete limits",
-              type: "forbidden",
             },
           });
         }

@@ -116,11 +116,9 @@ class ToolModel {
     return createdTool;
   }
 
-  static async findById(
-    id: string,
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Tool | null> {
+  static async findById(id: string, userId?: string): Promise<Tool | null> {
+    const isAgentAdmin = "TODO:";
+
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
@@ -131,11 +129,10 @@ class ToolModel {
     }
 
     // Check access control for non-admins
-    if (tool.agentId && userId && !isAdmin) {
+    if (tool.agentId && userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
-        false,
       );
       if (!hasAccess) {
         return null;
@@ -145,10 +142,9 @@ class ToolModel {
     return tool;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<ExtendedTool[]> {
+  static async findAll(userId?: string): Promise<ExtendedTool[]> {
+    const isAgentAdmin = "TODO:";
+
     // Get all tools
     let query = db
       .select({
@@ -181,16 +177,14 @@ class ToolModel {
       .$dynamic();
 
     /**
-     * Apply access control filtering for non-admins
+     * Apply access control filtering for users that are not agent admins
      *
      * If the user is not an admin, we basically allow them to see all tools that are assigned to agents
      * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
      */
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
@@ -209,11 +203,9 @@ class ToolModel {
     return query;
   }
 
-  static async findByName(
-    name: string,
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Tool | null> {
+  static async findByName(name: string, userId?: string): Promise<Tool | null> {
+    const isAgentAdmin = "TODO:";
+
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
@@ -224,11 +216,10 @@ class ToolModel {
     }
 
     // Check access control for non-admins
-    if (tool.agentId && userId && !isAdmin) {
+    if (tool.agentId && userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
-        false,
       );
       if (!hasAccess) {
         return null;

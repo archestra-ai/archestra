@@ -58,6 +58,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
           ),
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },

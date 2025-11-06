@@ -1,6 +1,5 @@
 import { eq, inArray, isNull } from "drizzle-orm";
-import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
+import mcpClient, { constructMcpProxyUrl } from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -10,10 +9,6 @@ import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
 import ToolModel from "./tool";
-
-// Get the API base URL from config
-const API_BASE_URL =
-  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -52,10 +47,9 @@ class McpServerModel {
     };
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<McpServer[]> {
+  static async findAll(userId?: string): Promise<McpServer[]> {
+    const isMcpServerAdmin = "TODO:";
+
     let query = db
       .select({
         server: schema.mcpServersTable,
@@ -68,11 +62,11 @@ class McpServerModel {
       )
       .$dynamic();
 
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
+    // Apply access control filtering for users that are not MCP server admins
+    if (userId && !isMcpServerAdmin) {
       // Get MCP servers accessible through team membership
       const teamAccessibleMcpServerIds =
-        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId);
 
       // Get MCP servers with personal access
       const personalMcpServerIds =
@@ -120,14 +114,14 @@ class McpServerModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<McpServer | null> {
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
+    const isMcpServerAdmin = "TODO:";
+
+    // Check access control for users that are not MCP server admins
+    if (userId && !isMcpServerAdmin) {
       const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
         userId,
         id,
-        false,
       );
       const hasPersonalAccess =
         await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
@@ -367,7 +361,7 @@ class McpServerModel {
           url = httpEndpointUrl;
         } else {
           // Use the MCP proxy endpoint for stdio servers
-          url = `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`;
+          url = constructMcpProxyUrl(mcpServer.id);
         }
 
         const config = mcpClient.createServerConfig({

@@ -68,7 +68,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pagination,
         sorting,
         user.id,
-        user.isAdmin,
       );
       return reply.send(result);
     },
@@ -106,7 +105,6 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const interaction = await InteractionModel.findById(
         request.params.interactionId,
         user.id,
-        user.isAdmin,
       );
 
       if (!interaction) {

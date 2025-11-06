@@ -91,15 +91,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can create token prices",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Check if model already exists
         const existingTokenPrice = await TokenPriceModel.findByModel(
           request.body.model,
@@ -223,15 +214,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update token prices",
-              type: "forbidden",
-            },
-          });
-        }
-
         const tokenPrice = await TokenPriceModel.update(
           request.params.id,
           request.body,
@@ -291,15 +273,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete token prices",
-              type: "forbidden",
             },
           });
         }

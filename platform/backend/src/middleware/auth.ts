@@ -341,10 +341,10 @@ const routePermissionsConfig: Partial<
     mcpServerInstallationRequest: ["update"],
   },
   [RouteId.ApproveMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["update"],
+    mcpServerInstallationRequest: ["admin"],
   },
   [RouteId.DeclineMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["update"],
+    mcpServerInstallationRequest: ["admin"],
   },
   [RouteId.AddMcpServerInstallationRequestNote]: {
     mcpServerInstallationRequest: ["update"],

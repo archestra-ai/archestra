@@ -8,15 +8,12 @@ import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Update organization limit cleanup interval (Admin only)
-   */
   fastify.patch(
     "/api/organization/cleanup-interval",
     {
       schema: {
         operationId: RouteId.UpdateOrganizationCleanupInterval,
-        description: "Update organization limit cleanup interval (Admin only)",
+        description: "Update organization limit cleanup interval",
         tags: ["Organization"],
         body: z.object({
           limitCleanupInterval: z
@@ -45,15 +42,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update cleanup interval",
-              type: "forbidden",
             },
           });
         }
@@ -92,9 +80,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get organization appearance settings
-   */
   fastify.get(
     "/api/organization/appearance",
     {
@@ -157,9 +142,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get organization details including cleanup interval
-   */
   fastify.get(
     "/api/organization",
     {
@@ -239,9 +221,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update organization appearance settings
-   */
   fastify.put(
     "/api/organization/appearance",
     {
@@ -277,16 +256,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "No organization found",
               type: "bad_request",
-            },
-          });
-        }
-
-        // Only admins can update appearance settings
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Forbidden: Admin access required",
-              type: "forbidden",
             },
           });
         }
@@ -360,16 +329,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        // Only admins can upload logos
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Forbidden: Admin access required",
-              type: "forbidden",
             },
           });
         }
@@ -463,16 +422,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        // Only admins can delete logos
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Forbidden: Admin access required",
-              type: "forbidden",
             },
           });
         }

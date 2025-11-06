@@ -20,9 +20,8 @@ import type {
   McpServerConfig,
 } from "@/types";
 
-// Get the API base URL from config
-const API_BASE_URL =
-  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
+export const constructMcpProxyUrl = (mcpServerId: string) =>
+  `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;
 
 class McpClient {
   private clients = new Map<string, Client>();
@@ -317,9 +316,6 @@ class McpClient {
           return results;
         }
 
-        // For stdio-based local servers, use direct JSON-RPC calls via proxy
-        const proxyUrl = `${API_BASE_URL}/mcp_proxy/${targetMcpServerId}`;
-
         // Execute each MCP tool call via direct JSON-RPC
         for (const toolCall of mcpToolCalls) {
           try {
@@ -332,21 +328,25 @@ class McpClient {
               ? toolCall.name.substring(serverPrefix.length)
               : toolCall.name;
 
-            const response = await fetch(proxyUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: Date.now(),
-                method: "tools/call",
-                params: {
-                  name: mcpToolName,
-                  arguments: toolCall.arguments,
+            // For stdio-based local servers, use direct JSON-RPC calls via proxy
+            const response = await fetch(
+              constructMcpProxyUrl(targetMcpServerId),
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
                 },
-              }),
-            });
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: Date.now(),
+                  method: "tools/call",
+                  params: {
+                    name: mcpToolName,
+                    arguments: toolCall.arguments,
+                  },
+                }),
+              },
+            );
 
             if (!response.ok) {
               throw new Error(

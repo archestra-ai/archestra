@@ -1,7 +1,7 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import { z } from "zod";
 
-export const ActionSchema = z.enum(["create", "read", "update", "delete"]);
+export const ActionSchema = z.enum(["create", "read", "update", "delete", "admin"]);
 
 export const ResourceSchema = z.enum([
   "agent",
@@ -32,9 +32,15 @@ export type Action = z.infer<typeof ActionSchema>;
 
 /**
  * Permission string format: "resource:action"
- * Examples: "agent:create", "tool:read", "org:delete"
+ * Examples: "agent:create", "tool:read", "org:delete", "agent:admin", "mcpServer:admin"
+ *
+ * Note: "admin" action is only valid for certain resources
  */
-export type Permission = `${Resource}:${Action}`;
+export type Permission =
+  | `${Resource}:${"create" | "read" | "update" | "delete"}`
+  | "agent:admin"
+  | "mcpServer:admin"
+  | "mcpServerInstallationRequest:admin";
 
 /**
  * TODO: it's not very clear how owner role is assigned/inferred, it is mentioned in the
@@ -73,7 +79,7 @@ export function getPredefinedRolePermissions(
 }
 
 export const allAvailableActions: Record<Resource, Action[]> = {
-  agent: ["create", "read", "update", "delete"],
+  agent: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   dualLlmConfig: ["create", "read", "update", "delete"],
@@ -84,8 +90,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   member: ["create", "update", "delete"],
   invitation: ["create"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
-  mcpServer: ["create", "read", "update", "delete"],
-  mcpServerInstallationRequest: ["create", "read", "update", "delete"],
+  mcpServer: ["create", "read", "update", "delete", "admin"],
+  mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
   team: ["create", "read", "update", "delete"],
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],

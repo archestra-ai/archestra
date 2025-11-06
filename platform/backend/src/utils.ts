@@ -13,9 +13,10 @@ export function prepareErrorResponse(
 /**
  * Extracts the user from the current request session or API key
  */
-export async function getUserFromRequest(
-  request: FastifyRequest,
-): Promise<{ id: string; organizationId: string } | null> {
+export async function getUserFromRequest(request: FastifyRequest): Promise<{
+  id: string;
+  organizationId: string;
+} | null> {
   const session = await auth.api.getSession({
     headers: new Headers(request.headers as HeadersInit),
     query: { disableCookieCache: true },
@@ -50,4 +51,46 @@ export async function getUserFromRequest(
     id: session.user.id,
     organizationId,
   };
+}
+
+/**
+ * Check if a user has admin permission for a specific resource
+ */
+export async function userHasAdminPermission(
+  request: FastifyRequest,
+  resource: "agent" | "mcpServer",
+): Promise<boolean> {
+  try {
+    const { success } = await auth.api.hasPermission({
+      headers: new Headers(request.headers as HeadersInit),
+      body: {
+        permissions: {
+          [resource]: ["admin"],
+        },
+      },
+    });
+    return success;
+  } catch (_error) {
+    // Handle API key sessions that don't have organization context
+    // API keys have all permissions by default (see auth config)
+    const headers = new Headers(request.headers as HeadersInit);
+    const authHeader = headers.get("authorization");
+
+    if (authHeader) {
+      try {
+        // Verify if this is a valid API key
+        const apiKeyResult = await auth.api.verifyApiKey({
+          body: { key: authHeader },
+        });
+        if (apiKeyResult?.valid) {
+          // API keys have all permissions, including admin
+          return true;
+        }
+      } catch (_apiKeyError) {
+        // Not a valid API key
+        return false;
+      }
+    }
+    return false;
+  }
 }

@@ -80,7 +80,6 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const interaction = await InteractionModel.findById(
           request.params.interactionId,
           user.id,
-          user.isAdmin,
         );
         if (!interaction) {
           return reply.status(404).send({

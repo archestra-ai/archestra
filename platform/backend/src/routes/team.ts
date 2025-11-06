@@ -90,15 +90,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can create teams",
-              type: "forbidden",
-            },
-          });
-        }
-
         const team = await TeamModel.create({
           name: request.body.name,
           description: request.body.description,
@@ -225,15 +216,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update teams",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
         const existingTeam = await TeamModel.findById(request.params.id);
         if (
@@ -304,15 +286,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete teams",
-              type: "forbidden",
             },
           });
         }
@@ -452,15 +425,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can add team members",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
         const team = await TeamModel.findById(request.params.id);
         if (!team || team.organizationId !== user.organizationId) {
@@ -524,15 +488,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: {
               message: "Unauthorized",
               type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can remove team members",
-              type: "forbidden",
             },
           });
         }

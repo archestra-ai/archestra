@@ -61,7 +61,8 @@ class AgentModel {
     };
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean): Promise<Agent[]> {
+  static async findAll(userId?: string): Promise<Agent[]> {
+    const isAgentAdmin = "TODO:";
     let query = db
       .select()
       .from(schema.agentsTable)
@@ -76,11 +77,9 @@ class AgentModel {
       .$dynamic();
 
     // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -132,8 +131,9 @@ class AgentModel {
     sorting?: SortingQuery,
     filters?: { name?: string },
     userId?: string,
-    isAdmin?: boolean,
   ): Promise<PaginatedResult<Agent>> {
+    const isAgentAdmin = "TODO:";
+
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
 
@@ -146,11 +146,9 @@ class AgentModel {
     }
 
     // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds =
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
@@ -344,18 +342,12 @@ class AgentModel {
     }
   }
 
-  static async findById(
-    id: string,
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Agent | null> {
+  static async findById(id: string, userId?: string): Promise<Agent | null> {
+    const isAgentAdmin = "TODO:";
+
     // Check access control for non-admins
-    if (userId && !isAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        id,
-        false,
-      );
+    if (userId && !isAgentAdmin) {
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(userId, id);
       if (!hasAccess) {
         return null;
       }

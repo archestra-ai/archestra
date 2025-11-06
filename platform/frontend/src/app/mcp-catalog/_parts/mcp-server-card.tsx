@@ -195,14 +195,10 @@ export function McpServerCard({
 
   // JSX parts
   const manageCatalogItemDropdownMenu = (
-    <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
+    <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2"
-          >
+          <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -520,18 +516,16 @@ export function McpServerCard({
         }}
       />
 
-      {logsData && (
-        <McpLogsDialog
-          open={isLogsDialogOpen}
-          onOpenChange={setIsLogsDialogOpen}
-          serverName={installedServer?.name ?? item.name}
-          serverId={installedServer?.id}
-          logs={logsData.logs}
-          command={logsData.command}
-          isLoading={isLoadingLogs}
-          error={logsError}
-        />
-      )}
+      <McpLogsDialog
+        open={isLogsDialogOpen}
+        onOpenChange={setIsLogsDialogOpen}
+        serverName={installedServer?.name ?? item.name}
+        serverId={installedServer?.id}
+        logs={logsData?.logs ?? ""}
+        command={logsData?.command ?? "No command available"}
+        isLoading={isLoadingLogs}
+        error={logsError}
+      />
 
       <BulkAssignAgentDialog
         tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
@@ -597,11 +591,20 @@ export function McpServerCard({
   return (
     <Card className="flex flex-col relative pt-4">
       <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="min-w-0">
-            <CardTitle className="text-lg truncate mb-1 flex items-center">
-              {item.name}
-            </CardTitle>
+        <div className="flex items-start justify-between gap-4 overflow-hidden">
+          <div className="min-w-0 flex-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="text-lg font-semibold mb-1 cursor-help overflow-hidden whitespace-nowrap text-ellipsis w-full">
+                    {item.name}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs break-words">{item.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <div className="flex items-center gap-2">
               {item.oauthConfig && (
                 <Badge variant="secondary" className="text-xs">

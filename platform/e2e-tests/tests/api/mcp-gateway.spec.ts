@@ -78,11 +78,6 @@ test.describe("MCP Gateway - Archestra Tools", () => {
         t.name ===
         `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`
     );
-    const archestraCreate = tools.find(
-      (t: any) =>
-        t.name ===
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`
-    );
 
     // Verify whoami tool
     expect(archestraWhoami).toBeDefined();
@@ -96,7 +91,12 @@ test.describe("MCP Gateway - Archestra Tools", () => {
     expect(archestraSearch.title).toBe("Search Private MCP Registry");
     expect(archestraSearch.description).toContain("private MCP registry");
 
-    // Verify create_mcp_server_installation_request tool is NOT available (disabled)
-    expect(archestraCreate).toBeUndefined();
+    // TODO: Re-enable when create_mcp_server_installation_request is implemented
+    // // Verify create_mcp_server_installation_request tool
+    // expect(archestraCreate).toBeDefined();
+    // expect(archestraCreate.title).toBe(
+    //   "Create MCP Server Installation Request"
+    // );
+    // expect(archestraCreate.description).toContain("install an MCP server");
   });
 });

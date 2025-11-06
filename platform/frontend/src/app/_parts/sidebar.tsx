@@ -121,7 +121,7 @@ export function AppSidebar() {
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
   const { data: starCount } = useGithubStars();
-  const { logo, logoType, isLoadingAppearance } = useOrgTheme();
+  const { logo, logoType, isLoadingAppearance } = useOrgTheme() ?? {};
 
   const logoToShow =
     logoType === "custom" && logo ? (

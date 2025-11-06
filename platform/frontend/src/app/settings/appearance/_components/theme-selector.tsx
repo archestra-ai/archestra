@@ -17,7 +17,7 @@ import {
 } from "@/config/themes";
 
 interface ThemeSelectorProps {
-  selectedTheme: OrganizationTheme;
+  selectedTheme: OrganizationTheme | undefined;
   onThemeSelect: (themeId: OrganizationTheme) => void;
 }
 

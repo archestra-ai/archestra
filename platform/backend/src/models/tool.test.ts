@@ -323,6 +323,7 @@ describe("ToolModel", () => {
             count: { type: "number" },
           },
         },
+        catalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
       });
 
@@ -343,6 +344,9 @@ describe("ToolModel", () => {
         mcpServerId: mcpServer.id,
         responseModifierTemplate: null,
         credentialSourceMcpServerId: null,
+        executionSourceMcpServerId: null,
+        catalogId: catalogItem.id,
+        catalogName: "github-mcp-server",
       });
     });
 
@@ -372,6 +376,7 @@ describe("ToolModel", () => {
         name: "tool_one",
         description: "First tool",
         parameters: {},
+        catalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
       });
 
@@ -379,6 +384,7 @@ describe("ToolModel", () => {
         name: "tool_two",
         description: "Second tool",
         parameters: {},
+        catalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
       });
 
@@ -474,6 +480,7 @@ describe("ToolModel", () => {
         name: "mcp_tool",
         description: "MCP Tool",
         parameters: {},
+        catalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
       });
 
@@ -526,6 +533,7 @@ describe("ToolModel", () => {
         name: "github_list_issues",
         description: "List GitHub issues",
         parameters: {},
+        catalogId: catalogItem.id,
         mcpServerId: server1.id,
       });
 
@@ -533,6 +541,7 @@ describe("ToolModel", () => {
         name: "other_tool",
         description: "Other tool",
         parameters: {},
+        catalogId: catalogItem2.id,
         mcpServerId: server2.id,
       });
 

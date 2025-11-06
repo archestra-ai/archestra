@@ -336,6 +336,12 @@ export default class K8sPod {
           envMap.set(envDef.key, value);
         }
       }
+    } else if (this.environmentValues) {
+      // Fallback: If no catalog item but environmentValues provided,
+      // process them directly (backward compatibility for tests and direct usage)
+      Object.entries(this.environmentValues).forEach(([key, value]) => {
+        envMap.set(key, value);
+      });
     }
 
     // Add user config values as environment variables

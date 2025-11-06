@@ -30,13 +30,13 @@ export function PageLayout({
                   href={tab.href}
                   className={cn(
                     "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                    pathname === tab.href
+                    pathname.includes(tab.href)
                       ? "text-foreground"
                       : "text-muted-foreground",
                   )}
                 >
                   {tab.label}
-                  {pathname === tab.href && (
+                  {pathname.includes(tab.href) && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                   )}
                 </Link>

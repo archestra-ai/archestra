@@ -111,8 +111,9 @@ export function EnvironmentVariablesFormField<
               >
                 <FormField
                   control={control}
-                  // biome-ignore lint/suspicious/noExplicitAny: Dynamic field path requires any
-                  name={`${fieldNamePrefix}.${index}.key` as any}
+                  name={
+                    `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>
+                  }
                   render={({ field }) => (
                     <FormItem>
                       <FormControl>
@@ -128,8 +129,9 @@ export function EnvironmentVariablesFormField<
                 />
                 <FormField
                   control={control}
-                  // biome-ignore lint/suspicious/noExplicitAny: Dynamic field path requires any
-                  name={`${fieldNamePrefix}.${index}.type` as any}
+                  name={
+                    `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>
+                  }
                   render={({ field }) => (
                     <FormItem>
                       <Select
@@ -172,8 +174,9 @@ export function EnvironmentVariablesFormField<
                 {!promptOnInstallation ? (
                   <FormField
                     control={control}
-                    // biome-ignore lint/suspicious/noExplicitAny: Dynamic field path requires any
-                    name={`${fieldNamePrefix}.${index}.value` as any}
+                    name={
+                      `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
+                    }
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>

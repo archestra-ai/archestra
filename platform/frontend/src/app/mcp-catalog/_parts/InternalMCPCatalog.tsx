@@ -487,13 +487,15 @@ export function InternalMCPCatalog({
                     server.serverType === "local" &&
                     server.catalogId === item.id,
                 ) || [];
-              const currentUserInstalledLocalServer = Boolean(
-                currentUserId &&
-                  localServers.some(
+              const currentUserLocalServerInstallation = currentUserId
+                ? localServers.find(
                     (server) =>
                       server.ownerId === currentUserId &&
                       server.authType === "personal",
-                  ),
+                  )
+                : undefined;
+              const currentUserInstalledLocalServer = Boolean(
+                currentUserLocalServerInstallation,
               );
               const currentUserHasLocalTeamInstallation = Boolean(
                 localServers.some((server) => server.authType === "team"),
@@ -527,6 +529,9 @@ export function InternalMCPCatalog({
                   }
                   currentUserHasLocalTeamInstallation={
                     currentUserHasLocalTeamInstallation
+                  }
+                  currentUserLocalServerInstallation={
+                    currentUserLocalServerInstallation
                   }
                 />
               );

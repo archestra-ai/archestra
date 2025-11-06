@@ -81,20 +81,18 @@ const createFastifyInstance = () =>
 /**
  * This is a helper function to register the metrics plugin on a fastify instance.
  *
- * Basically if we are collecting metrics for a given fastify instance, we will not
- * expose the metrics endpoint for that instance.
+ * This configures metrics collection with route-level tracking enabled for all servers.
+ * The endpoint parameter controls whether to expose /metrics endpoint on that server.
  */
 const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
-  const metricsEnabled = !endpointEnabled;
-
   await fastify.register(metricsPlugin, {
     endpoint: endpointEnabled ? observability.metrics.endpoint : null,
-    defaultMetrics: { enabled: metricsEnabled },
+    defaultMetrics: { enabled: false }, // Always disable default metrics to prevent duplicate registration
     routeMetrics: {
-      enabled: metricsEnabled,
+      enabled: true, // Always enable route metrics for both servers
       methodBlacklist: ["OPTIONS", "HEAD"],
       routeBlacklist: ["/health"],
     },

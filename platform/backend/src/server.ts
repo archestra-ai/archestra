@@ -67,10 +67,16 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
   id: "AnthropicMessagesResponse",
 });
 
+/**
+ * Sets up logging and zod type provider + request validation & response serialization
+ */
 const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
-  }).withTypeProvider<ZodTypeProvider>();
+  })
+    .withTypeProvider<ZodTypeProvider>()
+    .setValidatorCompiler(validatorCompiler)
+    .setSerializerCompiler(serializerCompiler);
 
 /**
  * This is a helper function to register the metrics plugin on a fastify instance.
@@ -145,10 +151,6 @@ const startMetricsServer = async () => {
 
 const start = async () => {
   const fastify = createFastifyInstance();
-
-  // Set up Zod validation and serialization
-  fastify.setValidatorCompiler(validatorCompiler);
-  fastify.setSerializerCompiler(serializerCompiler);
 
   try {
     await seedRequiredStartingData();

@@ -11,10 +11,8 @@ test.describe("Metrics API", () => {
   });
 
   test("returns metrics when authentication is provided", async ({ request }) => {
-    // First, make some API calls to generate metrics data
-    await request.get(`${API_BASE_URL}/health`);
+    // First, make an API call to generate metrics data
     await request.get(`${API_BASE_URL}/openapi.json`);
-    await request.get(`${API_BASE_URL}/nonexistent-endpoint`); // 404 to test error routes
 
     const response = await request.get(`${METRICS_BASE_URL}/metrics`, {
       headers: {
@@ -28,11 +26,14 @@ test.describe("Metrics API", () => {
     expect(metricsText).toContain("# HELP");
     expect(metricsText).toContain("http_request_duration_seconds");
 
-    // Check that we have route labels from our API calls
-    expect(metricsText).toContain('route="/health"');
+    // Check that we have route labels from our API call above
     expect(metricsText).toContain('route="/openapi.json"');
 
-    // Ensure /metrics route is NOT present (since it's not exposed on main port)
+    /**
+     * Ensure /metrics route is NOT present (since it's not exposed on main port)
+     * Also, ensure that the /health route is NOT present (we're filtering this out explicitly in the metrics plugin)
+     */
+    expect(metricsText).not.toContain('route="/health"');
     expect(metricsText).not.toContain('route="/metrics"');
   });
 

@@ -1,4 +1,4 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -210,7 +210,7 @@ export async function executeArchestraTool(
 /**
  * Get the list of Archestra MCP tools
  */
-export function getArchestraMcpTools() {
+export function getArchestraMcpTools(): Tool[] {
   return [
     {
       name: "archestra__whoami",

@@ -1,13 +1,13 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+// biome-ignore-all lint/suspicious/noExplicitAny: test...
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { AgentModel, InternalMcpCatalogModel } from "@/models";
+import type { Agent, InternalMcpCatalogServerType } from "@/types";
 import {
   type ArchestraContext,
   executeArchestraTool,
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "./archestra-mcp-server";
-import { AgentModel, InternalMcpCatalogModel } from "@/models";
-import type { Agent } from "@/types";
 
 async function createTestAgent(name?: string): Promise<Agent> {
   return await AgentModel.create({
@@ -21,13 +21,12 @@ async function createTestInternalMcpCatalogItem(data: {
   name: string;
   description?: string;
   version?: string;
-  serverType: string;
+  serverType: InternalMcpCatalogServerType;
   serverUrl?: string;
   repository?: string;
 }) {
   return await InternalMcpCatalogModel.create({
     ...data,
-    createdAt: new Date(),
   });
 }
 
@@ -106,7 +105,7 @@ describe("executeArchestraTool", () => {
 
   describe("search_private_mcp_registry tool", () => {
     it("should return all catalog items when no query provided", async () => {
-      const testServer = await createTestInternalMcpCatalogItem({
+      await createTestInternalMcpCatalogItem({
         name: "Test Server",
         version: "1.0.0",
         description: "A test server",
@@ -138,6 +137,7 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
+
       expect((result.content[0] as any).text).toContain("No MCP servers found");
     });
 
@@ -147,7 +147,7 @@ describe("executeArchestraTool", () => {
         description: "A server for testing",
         serverType: "remote",
       });
-      
+
       await createTestInternalMcpCatalogItem({
         name: "Other Server",
         description: "A different server",
@@ -171,9 +171,9 @@ describe("executeArchestraTool", () => {
     it("should handle errors gracefully", async () => {
       // Mock the InternalMcpCatalogModel.findAll method to throw an error
       const originalFindAll = InternalMcpCatalogModel.findAll;
-      InternalMcpCatalogModel.findAll = vi.fn().mockRejectedValue(
-        new Error("Database error"),
-      );
+      InternalMcpCatalogModel.findAll = vi
+        .fn()
+        .mockRejectedValue(new Error("Database error"));
 
       const result = await executeArchestraTool(
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,

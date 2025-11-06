@@ -21,7 +21,7 @@ const _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAM
 /**
  * Context for the Archestra MCP server
  */
-interface ArchestraContext {
+export interface ArchestraContext {
   agent: Agent;
 }
 

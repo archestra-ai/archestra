@@ -3,6 +3,7 @@ import {
   type OrganizationCustomFont,
   type OrganizationTheme,
 } from "@shared";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
 import {
@@ -16,7 +17,14 @@ const DEFAULT_THEME: OrganizationTheme = DEFAULT_THEME_ID as OrganizationTheme;
 const DEFAULT_FONT: OrganizationCustomFont = "lato";
 
 export function useOrgTheme() {
-  const { data, isLoading: isLoadingAppearance } = useOrganizationAppearance();
+  const pathname = usePathname();
+
+  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  const isAuthPage = pathname?.startsWith("/auth/");
+
+  const { data, isLoading: isLoadingAppearance } = useOrganizationAppearance(
+    !isAuthPage,
+  );
   const {
     theme: themeFromBackend,
     customFont: fontFromBackend,
@@ -101,9 +109,14 @@ export function useOrgTheme() {
     }
   }, [fontFromBackend, fontFromLocalStorage]);
 
+  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  if (isAuthPage) {
+    return null;
+  }
+
   return {
-    currentUITheme,
-    currentUIFont,
+    currentUITheme: currentUITheme || DEFAULT_THEME,
+    currentUIFont: currentUIFont || DEFAULT_FONT,
     themeFromBackend,
     fontFromBackend,
     setPreviewTheme,

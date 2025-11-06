@@ -9,6 +9,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
+const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
@@ -28,6 +29,7 @@ const isHttps = () => {
 };
 
 export const auth = betterAuth({
+  appName: APP_NAME,
   baseURL,
   secret,
 
@@ -70,7 +72,7 @@ export const auth = betterAuth({
       },
     }),
     twoFactor({
-      issuer: "Archestra",
+      issuer: APP_NAME,
     }),
   ],
 
@@ -95,6 +97,7 @@ export const auth = betterAuth({
       team: schema.team,
       teamMember: schema.teamMember,
       twoFactor: schema.twoFactor,
+      verification: schema.verification,
     },
   }),
 

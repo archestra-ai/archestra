@@ -45,6 +45,25 @@ class ToolModel {
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
+    // For proxy-sniffed tools (agentId is set, catalogId is null), check if tool already exists
+    // This prevents duplicate proxy-sniffed tools for the same agent
+    if (tool.agentId && !tool.catalogId) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.agentId, tool.agentId),
+            eq(schema.toolsTable.name, tool.name),
+            isNull(schema.toolsTable.catalogId),
+          ),
+        );
+
+      if (existingTool) {
+        return existingTool;
+      }
+    }
+
     // For MCP tools (agentId is null, catalogId is set), check if tool with same catalog and name already exists
     // This allows multiple installations of the same catalog to share tool definitions
     if (!tool.agentId && tool.catalogId) {

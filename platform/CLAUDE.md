@@ -224,10 +224,10 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Built-in tools automatically injected into all agents
 - Tools prefixed with "archestra__" to avoid conflicts
 - Available tools:
-  - `archestra__whoami`: Returns authenticated user info
+  - `archestra__whoami`: Returns agent name and ID
   - `archestra__search_private_mcp_registry`: Search internal MCP catalog
-  - `archestra__create_mcp_server_installation_request`: Request MCP server installation
-- User context extracted from session and passed to tools
-- Implementation: `backend/src/mcp-servers/archestra.ts`
+- Planned tool (temporarily disabled):
+  - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
+- Implementation: `backend/src/archestra-mcp-server.ts`
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking

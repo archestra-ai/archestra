@@ -12,6 +12,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { vi } from "vitest";
 
+process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let pgliteClient: PGlite | null = null;

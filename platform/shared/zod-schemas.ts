@@ -24,11 +24,19 @@ export const OAuthConfigSchema = z.object({
   streamable_http_port: z.number().optional(),
 });
 
+// Environment variable schema for UI forms
+export const EnvironmentVariableSchema = z.object({
+  key: z.string().min(1, "Key is required"),
+  type: z.enum(["plain_text", "secret"]),
+  value: z.string().optional(), // Optional static value (when not prompted)
+  promptOnInstallation: z.boolean(), // Whether to prompt user during installation
+});
+
 export const LocalConfigSchema = z
   .object({
     command: z.string().optional(),
     arguments: z.array(z.string()).optional(),
-    environment: z.record(z.string(), z.string()).optional(),
+    environment: z.array(EnvironmentVariableSchema).optional(),
     dockerImage: z.string().optional(),
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.number().optional(),
@@ -51,7 +59,7 @@ export const LocalConfigFormSchema = z
   .object({
     command: z.string().optional(),
     arguments: z.string(), // UI uses string, gets parsed to array
-    environment: z.string(), // UI uses string, gets parsed to record
+    environment: z.array(EnvironmentVariableSchema), // Structured environment variables
     dockerImage: z.string().optional(), // Custom Docker image URL
     transportType: z.enum(["stdio", "streamable-http"]).optional(),
     httpPort: z.string().optional(), // UI uses string, gets parsed to number

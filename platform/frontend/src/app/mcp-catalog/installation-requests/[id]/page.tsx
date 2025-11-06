@@ -280,26 +280,26 @@ export default function InstallationRequestDetailPage({
 
                               {request.customServerConfig.localConfig
                                 .environment &&
-                                Object.keys(
-                                  request.customServerConfig.localConfig
-                                    .environment,
-                                ).length > 0 && (
+                                request.customServerConfig.localConfig
+                                  .environment.length > 0 && (
                                   <div>
                                     <p className="text-xs font-medium text-muted-foreground mb-1">
                                       Environment Variables
                                     </p>
                                     <div className="space-y-1">
-                                      {Object.entries(
-                                        request.customServerConfig.localConfig
-                                          .environment,
-                                      ).map(([key, value]) => (
-                                        <p
-                                          key={key}
-                                          className="text-sm font-mono bg-muted px-2 py-1 rounded"
-                                        >
-                                          {key}={value}
-                                        </p>
-                                      ))}
+                                      {request.customServerConfig.localConfig.environment?.map(
+                                        (envVar) => (
+                                          <p
+                                            key={envVar.key}
+                                            className="text-sm font-mono bg-muted px-2 py-1 rounded"
+                                          >
+                                            {envVar.key}=
+                                            {envVar.type === "secret"
+                                              ? "SECRET (prompted during installation)"
+                                              : envVar.value}
+                                          </p>
+                                        ),
+                                      )}
                                     </div>
                                   </div>
                                 )}

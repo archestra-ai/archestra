@@ -124,15 +124,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can view appearance settings",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();

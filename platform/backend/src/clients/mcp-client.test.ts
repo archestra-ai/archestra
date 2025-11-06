@@ -1,3 +1,4 @@
+import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -42,6 +43,7 @@ vi.mock("@/mcp-server-runtime", () => ({
 describe("McpClient", () => {
   let agentId: string;
   let mcpServerId: string;
+  let catalogId: string;
 
   beforeEach(async () => {
     // Create test agent
@@ -61,12 +63,14 @@ describe("McpClient", () => {
       serverType: "remote",
       serverUrl: "https://api.githubcopilot.com/mcp/",
     });
+    catalogId = catalogItem.id;
 
     // Create MCP server for testing with secret and catalog reference
     const mcpServer = await McpServerModel.create({
       name: "github-mcp-server",
       secretId: secret.id,
       catalogId: catalogItem.id,
+      serverType: "remote",
     });
     mcpServerId = mcpServer.id;
 
@@ -101,7 +105,6 @@ describe("McpClient", () => {
     test("skips non-MCP tools and only executes MCP tools", async () => {
       // Create a proxy-sniffed tool (no mcpServerId)
       await ToolModel.createToolIfNotExists({
-        agentId,
         name: "proxy_tool",
         description: "Proxy tool",
         parameters: {},
@@ -131,10 +134,10 @@ describe("McpClient", () => {
       test("applies simple text template to tool response", async () => {
         // Create MCP tool with response modifier template
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__test_tool",
           description: "Test MCP tool",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -181,10 +184,10 @@ describe("McpClient", () => {
       test("applies JSON template to tool response", async () => {
         // Create MCP tool with JSON response modifier template
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__json_tool",
           description: "Test MCP tool with JSON",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -218,10 +221,10 @@ describe("McpClient", () => {
 
       test("transforms GitHub issues to id:title mapping using json helper", async () => {
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__github_issues",
           description: "GitHub issues tool",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -269,10 +272,10 @@ describe("McpClient", () => {
 
       test("uses {{response}} to access full response content", async () => {
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__content_tool",
           description: "Test tool accessing full content",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -307,10 +310,10 @@ describe("McpClient", () => {
 
       test("falls back to original content when template fails", async () => {
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__bad_template",
           description: "Test tool with bad template",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -346,10 +349,10 @@ describe("McpClient", () => {
 
       test("handles non-text content gracefully", async () => {
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__image_tool",
           description: "Test tool with image content",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -382,10 +385,10 @@ describe("McpClient", () => {
 
       test("executes tool without template when none is set", async () => {
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__no_template",
           description: "Test tool without template",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -421,18 +424,18 @@ describe("McpClient", () => {
       test("applies different templates to different tools", async () => {
         // Create two tools with different templates
         const tool1 = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__tool1",
           description: "First tool",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
         const tool2 = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "github-mcp-server__tool2",
           description: "Second tool",
           parameters: {},
+          catalogId,
           mcpServerId,
         });
 
@@ -490,6 +493,15 @@ describe("McpClient", () => {
       let localCatalogId: string;
 
       beforeEach(async () => {
+        // Create test user for local MCP servers
+        const testUserId = "test-user-id";
+        await db.insert(schema.usersTable).values({
+          id: testUserId,
+          name: "Test User",
+          email: "test@example.com",
+          emailVerified: true,
+        });
+
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({
           name: "local-streamable-http-server",
@@ -511,6 +523,8 @@ describe("McpClient", () => {
         const localMcpServer = await McpServerModel.create({
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
+          serverType: "local",
+          userId: testUserId,
         });
         localMcpServerId = localMcpServer.id;
 
@@ -524,10 +538,10 @@ describe("McpClient", () => {
       test("executes tools using HTTP transport for streamable-http servers", async () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "local-streamable-http-server__test_tool",
           description: "Test tool",
           parameters: {},
+          catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
         });
 
@@ -575,10 +589,10 @@ describe("McpClient", () => {
       test("returns error when HTTP endpoint URL is missing", async () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "local-streamable-http-server__test_tool",
           description: "Test tool",
           parameters: {},
+          catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
         });
 
@@ -611,10 +625,10 @@ describe("McpClient", () => {
       test("applies response modifier template with streamable-http", async () => {
         // Create tool with response modifier template
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "local-streamable-http-server__formatted_tool",
           description: "Tool with template",
           parameters: {},
+          catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
         });
 
@@ -655,10 +669,10 @@ describe("McpClient", () => {
       test("uses stdio transport when streamable-http is false", async () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
-          agentId,
           name: "local-streamable-http-server__stdio_tool",
           description: "Tool using stdio",
           parameters: {},
+          catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
         });
 

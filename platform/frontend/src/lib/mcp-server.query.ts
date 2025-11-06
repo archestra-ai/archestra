@@ -55,8 +55,7 @@ export function useInstallMcpServer() {
         });
       }
     },
-    onError: (error, variables) => {
-      console.error("Install error:", error);
+    onError: (_error, variables) => {
       toast.error(`Failed to install ${variables.name}`);
     },
   });
@@ -236,15 +235,22 @@ export function useMcpServerInstallationStatus(
         });
         toast.success(`Successfully installed server`);
       }
+      if (result === "error") {
+        toast.error("Failed to install server");
+      }
       return result;
     },
+    throwOnError: false,
     refetchInterval: (query) => {
       const status = query.state.data;
-      return status === "pending" ||
+      return (
+        !query.state.error &&
+        (status === "pending" ||
         status === "discovering-tools" ||
         status === null
-        ? 2000
-        : false;
+          ? 2000
+          : false)
+      );
     },
     enabled: !!installingMcpServerId,
   });

@@ -9,6 +9,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
+import ToolModel from "./tool";
 
 // Get the API base URL from config
 const API_BASE_URL =
@@ -18,10 +19,20 @@ class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
     const { teams, userId, ...serverData } = server;
 
+    // For local servers, add a unique identifier to the name to avoid conflicts
+    let mcpServerName = serverData.name;
+    if (serverData.serverType === "local") {
+      if (serverData.authType === "personal" && userId) {
+        mcpServerName = `${serverData.name}-${userId}`;
+      } else if (serverData.authType === "team") {
+        mcpServerName = `${serverData.name}-team-${serverData.ownerId}`;
+      }
+    }
+
     // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values(serverData)
+      .values({ ...serverData, name: mcpServerName })
       .returning();
 
     // Assign teams to the MCP server if provided
@@ -225,28 +236,22 @@ class McpServerModel {
       return false;
     }
 
-    // Check if this is a local server with a running K8s pod
-    if (mcpServer.catalogId) {
-      const catalogItem = await InternalMcpCatalogModel.findById(
-        mcpServer.catalogId,
-      );
-
-      // For local servers, stop and remove the K8s pod
-      if (catalogItem?.serverType === "local") {
-        try {
-          await McpServerRuntimeManager.removeMcpServer(id);
-          logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
-        } catch (error) {
-          logger.error(
-            { err: error },
-            `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
-          );
-          // Continue with deletion even if pod cleanup fails
-        }
+    // For local servers, stop and remove the K8s pod
+    if (mcpServer.serverType === "local") {
+      try {
+        await McpServerRuntimeManager.removeMcpServer(id);
+        logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+        );
+        // Continue with deletion even if pod cleanup fails
       }
     }
 
     // Delete the MCP server from database
+    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
@@ -256,6 +261,33 @@ class McpServerModel {
     // If the MCP server was deleted and it had an associated secret, delete the secret
     if (deleted && mcpServer.secretId) {
       await SecretModel.delete(mcpServer.secretId);
+    }
+
+    // If the MCP server was deleted and had a catalogId, check if this was the last installation
+    // If so, clean up all tools for this catalog
+    if (deleted && mcpServer.catalogId) {
+      try {
+        // Check if any other servers exist for this catalog
+        const remainingServers = await McpServerModel.findByCatalogId(
+          mcpServer.catalogId,
+        );
+
+        if (remainingServers.length === 0) {
+          // No more servers for this catalog, delete all tools
+          const deletedToolsCount = await ToolModel.deleteByCatalogId(
+            mcpServer.catalogId,
+          );
+          logger.info(
+            `Deleted ${deletedToolsCount} tools for catalog ${mcpServer.catalogId} (last installation removed)`,
+          );
+        }
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up tools for catalog ${mcpServer.catalogId}:`,
+        );
+        // Don't fail the deletion if tool cleanup fails
+      }
     }
 
     return deleted;

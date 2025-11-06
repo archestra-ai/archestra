@@ -14,6 +14,7 @@ class AgentToolModel {
         | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
+        | "executionSourceMcpServerId"
       >
     >,
   ) {
@@ -81,6 +82,7 @@ class AgentToolModel {
     agentId: string,
     toolId: string,
     credentialSourceMcpServerId?: string | null,
+    executionSourceMcpServerId?: string | null,
   ) {
     const exists = await AgentToolModel.exists(agentId, toolId);
     if (!exists) {
@@ -91,12 +93,18 @@ class AgentToolModel {
           | "toolResultTreatment"
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
         >
       > = {};
 
       // Only include credentialSourceMcpServerId if it has a real value
       if (credentialSourceMcpServerId) {
         options.credentialSourceMcpServerId = credentialSourceMcpServerId;
+      }
+
+      // Only include executionSourceMcpServerId if it has a real value
+      if (executionSourceMcpServerId) {
+        options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
       return await AgentToolModel.create(agentId, toolId, options);
@@ -113,6 +121,7 @@ class AgentToolModel {
         | "toolResultTreatment"
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
+        | "executionSourceMcpServerId"
       >
     >,
   ) {
@@ -146,6 +155,7 @@ class AgentToolModel {
           parameters: schema.toolsTable.parameters,
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
+          catalogId: schema.toolsTable.catalogId,
           mcpServerId: schema.toolsTable.mcpServerId,
           mcpServerName: schema.mcpServersTable.name,
           mcpServerCatalogId: schema.mcpServersTable.catalogId,

@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Info } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
+import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -71,7 +72,7 @@ export function McpCatalogForm({
           localConfig: {
             command: "",
             arguments: "",
-            environment: "",
+            environment: [],
             dockerImage: "",
             transportType: "stdio",
             httpPort: "",
@@ -82,6 +83,12 @@ export function McpCatalogForm({
 
   const authMethod = form.watch("authMethod");
   const currentServerType = form.watch("serverType");
+
+  // Use field array for environment variables
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "localConfig.environment",
+  });
 
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
@@ -223,27 +230,13 @@ export function McpCatalogForm({
                 )}
               />
 
-              <FormField
+              <EnvironmentVariablesFormField
                 control={form.control}
-                name="localConfig.environment"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Environment Variables (KEY=value format)
-                    </FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder={`API_KEY=your-key\nPORT=3000`}
-                        className="font-mono min-h-20"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Environment variables in KEY=value format, one per line
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                fields={fields}
+                append={append}
+                remove={remove}
+                fieldNamePrefix="localConfig.environment"
+                form={form}
               />
 
               <FormField

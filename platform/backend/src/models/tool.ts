@@ -44,6 +44,44 @@ class ToolModel {
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
+    // For proxy-sniffed tools (agentId is set, catalogId is null), check if tool already exists
+    // This prevents duplicate proxy-sniffed tools for the same agent
+    if (tool.agentId && !tool.catalogId) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.agentId, tool.agentId),
+            eq(schema.toolsTable.name, tool.name),
+            isNull(schema.toolsTable.catalogId),
+          ),
+        );
+
+      if (existingTool) {
+        return existingTool;
+      }
+    }
+
+    // For MCP tools (agentId is null, catalogId is set), check if tool with same catalog and name already exists
+    // This allows multiple installations of the same catalog to share tool definitions
+    if (!tool.agentId && tool.catalogId) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            isNull(schema.toolsTable.agentId),
+            eq(schema.toolsTable.catalogId, tool.catalogId),
+            eq(schema.toolsTable.name, tool.name),
+          ),
+        );
+
+      if (existingTool) {
+        return existingTool;
+      }
+    }
+
     const [createdTool] = await db
       .insert(schema.toolsTable)
       .values(tool)
@@ -61,10 +99,16 @@ class ToolModel {
                 eq(schema.toolsTable.agentId, tool.agentId),
                 eq(schema.toolsTable.name, tool.name),
               )
-            : and(
-                isNull(schema.toolsTable.agentId),
-                eq(schema.toolsTable.name, tool.name),
-              ),
+            : tool.catalogId
+              ? and(
+                  isNull(schema.toolsTable.agentId),
+                  eq(schema.toolsTable.catalogId, tool.catalogId),
+                  eq(schema.toolsTable.name, tool.name),
+                )
+              : and(
+                  isNull(schema.toolsTable.agentId),
+                  eq(schema.toolsTable.name, tool.name),
+                ),
         );
       return existingTool;
     }
@@ -110,6 +154,7 @@ class ToolModel {
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
@@ -235,6 +280,7 @@ class ToolModel {
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
@@ -311,10 +357,13 @@ class ToolModel {
       toolName: string;
       responseModifierTemplate: string | null;
       mcpServerSecretId: string | null;
-      mcpServerName: string;
-      mcpServerCatalogId: string;
-      mcpServerId: string;
+      mcpServerName: string | null;
+      mcpServerCatalogId: string | null;
+      mcpServerId: string | null;
       credentialSourceMcpServerId: string | null;
+      executionSourceMcpServerId: string | null;
+      catalogId: string | null;
+      catalogName: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -331,22 +380,30 @@ class ToolModel {
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
         credentialSourceMcpServerId:
           schema.agentToolsTable.credentialSourceMcpServerId,
+        executionSourceMcpServerId:
+          schema.agentToolsTable.executionSourceMcpServerId,
         mcpServerId: schema.mcpServersTable.id,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
       })
       .from(schema.toolsTable)
       .innerJoin(
         schema.agentToolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .innerJoin(
+      .leftJoin(
         schema.mcpServersTable,
         eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           inArray(schema.toolsTable.name, toolNames),
-          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+          isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
         ),
       );
 
@@ -407,6 +464,76 @@ class ToolModel {
     );
 
     return toolsWithAgents;
+  }
+
+  /**
+   * Get all tools for a specific catalog item with their assignment counts and assigned agents
+   * Used to show tools across all installations of the same catalog item
+   */
+  static async findByCatalogId(catalogId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      createdAt: Date;
+      assignedAgentCount: number;
+      assignedAgents: Array<{ id: string; name: string }>;
+    }>
+  > {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId))
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    // For each tool, get assigned agents
+    const toolsWithAgents = await Promise.all(
+      tools.map(async (tool) => {
+        const assignments = await db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            agentName: schema.agentsTable.name,
+          })
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentToolsTable.toolId, tool.id));
+
+        return {
+          ...tool,
+          parameters: tool.parameters ?? {},
+          assignedAgentCount: assignments.length,
+          assignedAgents: assignments.map((a) => ({
+            id: a.agentId,
+            name: a.agentName,
+          })),
+        };
+      }),
+    );
+
+    return toolsWithAgents;
+  }
+
+  /**
+   * Delete all tools for a specific catalog item
+   * Used when the last MCP server installation for a catalog is removed
+   * Returns the number of tools deleted
+   */
+  static async deleteByCatalogId(catalogId: string): Promise<number> {
+    const result = await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, catalogId));
+
+    return result.rowCount || 0;
   }
 }
 

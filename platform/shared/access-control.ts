@@ -82,6 +82,7 @@ export const memberRole = ac.newRole({
   internalMcpCatalog: ["read"],
   mcpServer: ["create", "read", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update"],
+  organization: ["read"],
   team: ["read"],
   mcpToolCall: ["read"],
   conversation: ["create", "read", "update", "delete"],

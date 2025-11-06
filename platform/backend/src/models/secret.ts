@@ -71,6 +71,29 @@ class SecretModel {
 
     return result.rowCount !== null && result.rowCount > 0;
   }
+
+  /**
+   * Create a secret for MCP server environment variables
+   */
+  static async createMcpServerSecret(
+    envVars: Record<string, string>,
+  ): Promise<Secret> {
+    return await SecretModel.create({ secret: envVars });
+  }
+
+  /**
+   * Get MCP server environment variable secrets
+   */
+  static async getMcpServerSecret(secretId: string): Promise<Secret | null> {
+    return await SecretModel.findById(secretId);
+  }
+
+  /**
+   * Delete MCP server environment variable secrets
+   */
+  static async deleteMcpServerSecret(secretId: string): Promise<boolean> {
+    return await SecretModel.delete(secretId);
+  }
 }
 
 export default SecretModel;

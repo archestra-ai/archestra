@@ -38,6 +38,7 @@ import {
   useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
+import { ManageLocalInstallationsDialog } from "./manage-local-installations-dialog";
 import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
@@ -91,12 +92,14 @@ export type McpServerCardProps = {
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallLocalServer: () => void;
+  onInstallLocalServerTeam: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
   isAdmin: boolean;
-  localServerInstallationCount?: number; // For local servers: count of all installations
+  localServerInstallationCount?: number; // For local servers: count of all personal installations
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
+  currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
 };
 
 export type McpServerCardVariant = "remote" | "local";
@@ -114,12 +117,14 @@ export function McpServerCard({
   onInstall,
   onInstallTeam,
   onInstallLocalServer,
+  onInstallLocalServerTeam,
   onReinstall,
   onEdit,
   onDelete,
   isAdmin,
   localServerInstallationCount = 0,
   currentUserInstalledLocalServer = false,
+  currentUserHasLocalTeamInstallation = false,
 }: McpServerCardBaseProps) {
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
     installedServer?.id ?? null,
@@ -132,6 +137,10 @@ export function McpServerCard({
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
+  const [
+    isManageLocalInstallationsDialogOpen,
+    setIsManageLocalInstallationsDialogOpen,
+  ] = useState(false);
   const [isManageTeamsDialogOpen, setIsManageTeamsDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [selectedToolForAssignment, setSelectedToolForAssignment] =
@@ -250,23 +259,35 @@ export function McpServerCard({
   );
 
   const localServersInstalled = (
-    <div className="flex items-center gap-2">
-      <User className="h-4 w-4 text-muted-foreground" />
-      <span className="text-muted-foreground">
-        Users authenticated:{" "}
-        <span className="font-medium text-foreground">
-          {localServerInstallationCount}
+    <>
+      <div className="flex items-center gap-2">
+        <User className="h-4 w-4 text-muted-foreground" />
+        <span className="text-muted-foreground">
+          Users authenticated:{" "}
+          <span className="font-medium text-foreground">
+            {localServerInstallationCount}
+          </span>
+          {currentUserInstalledLocalServer && (
+            <Badge
+              variant="secondary"
+              className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
+            >
+              You
+            </Badge>
+          )}
         </span>
-        {currentUserInstalledLocalServer && (
-          <Badge
-            variant="secondary"
-            className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-          >
-            You
-          </Badge>
-        )}
-      </span>
-    </div>
+      </div>
+      {localServerInstallationCount > 0 && (
+        <Button
+          onClick={() => setIsManageLocalInstallationsDialogOpen(true)}
+          size="sm"
+          variant="link"
+          className="h-7 text-xs"
+        >
+          Manage
+        </Button>
+      )}
+    </>
   );
   const usersAuthenticated = (
     <>
@@ -474,10 +495,28 @@ export function McpServerCard({
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
         </Button>
       )}
-      <WithRole requiredExactRole="admin">
-        <div className="h-[32px]" />
-      </WithRole>
-      {isCurrentUserAuthenticated && !isInstalling ? (
+      {!isCurrentUserAuthenticated && !isInstalling && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onInstallLocalServer}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <User className="mr-2 h-4 w-4" />
+                {isInstalling ? localInstalllingLabel : "Install for myself"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Install this server for my personal usage</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      {isCurrentUserAuthenticated && !isInstalling && (
         <Button
           onClick={() =>
             installedServer &&
@@ -492,17 +531,42 @@ export function McpServerCard({
         >
           Uninstall
         </Button>
-      ) : (
-        <Button
-          onClick={onInstallLocalServer}
-          disabled={isInstalling}
-          size="sm"
-          variant="outline"
-          className="w-full"
-        >
-          {isInstalling ? localInstalllingLabel : "Install"}
-        </Button>
       )}
+      <WithRole requiredExactRole="admin">
+        {currentUserHasLocalTeamInstallation && (
+          <Button
+            onClick={handleRevokeTeamAccess}
+            size="sm"
+            variant="outline"
+            className="w-full bg-accent text-accent-foreground hover:bg-accent"
+          >
+            Revoke teams installation
+          </Button>
+        )}
+      </WithRole>
+      <WithRole requiredExactRole="admin">
+        {!currentUserHasLocalTeamInstallation && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onInstallLocalServerTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? localInstalllingLabel : "Install for teams"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Install and allow teams to use this server</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </WithRole>
     </>
   );
 
@@ -588,6 +652,13 @@ export function McpServerCard({
       <ManageUsersDialog
         isOpen={isManageUsersDialogOpen}
         onClose={() => setIsManageUsersDialogOpen(false)}
+        server={installedServer}
+        label={item.label || item.name}
+      />
+
+      <ManageLocalInstallationsDialog
+        isOpen={isManageLocalInstallationsDialogOpen}
+        onClose={() => setIsManageLocalInstallationsDialogOpen(false)}
         server={installedServer}
         label={item.label || item.name}
       />

@@ -125,7 +125,15 @@ export function InternalMCPCatalog({
     await handleInstall(catalogItem, true);
   };
 
+  const handleInstallLocalServerTeam = async (catalogItem: CatalogItem) => {
+    setIsTeamMode(true);
+    setLocalServerCatalogItem(catalogItem);
+    setIsLocalServerDialogOpen(true);
+  };
+
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+    setIsTeamMode(false);
+
     // Check if we need to show configuration dialog
     const hasUserConfig =
       catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
@@ -179,6 +187,7 @@ export function InternalMCPCatalog({
   const handleLocalServerInstall = async (
     userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
+    teams?: string[],
   ) => {
     if (!localServerCatalogItem) return;
 
@@ -186,7 +195,7 @@ export function InternalMCPCatalog({
     const installedServer = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
-      teams: [],
+      teams: teams || [],
       userConfigValues,
       environmentValues,
       dontShowToast: true,
@@ -481,8 +490,13 @@ export function InternalMCPCatalog({
               const currentUserInstalledLocalServer = Boolean(
                 currentUserId &&
                   localServers.some(
-                    (server) => server.ownerId === currentUserId,
+                    (server) =>
+                      server.ownerId === currentUserId &&
+                      server.authType === "personal",
                   ),
+              );
+              const currentUserHasLocalTeamInstallation = Boolean(
+                localServers.some((server) => server.authType === "team"),
               );
 
               return (
@@ -500,6 +514,9 @@ export function InternalMCPCatalog({
                   onInstall={() => handleInstall(item, false)}
                   onInstallTeam={() => handleInstallTeam(item)}
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
+                  onInstallLocalServerTeam={() =>
+                    handleInstallLocalServerTeam(item)
+                  }
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
@@ -507,6 +524,9 @@ export function InternalMCPCatalog({
                   localServerInstallationCount={localServers.length}
                   currentUserInstalledLocalServer={
                     currentUserInstalledLocalServer
+                  }
+                  currentUserHasLocalTeamInstallation={
+                    currentUserHasLocalTeamInstallation
                   }
                 />
               );
@@ -617,6 +637,7 @@ export function InternalMCPCatalog({
         onInstall={handleLocalServerInstall}
         catalogItem={localServerCatalogItem}
         isInstalling={installMutation.isPending}
+        authType={isTeamMode ? "team" : "personal"}
       />
     </div>
   );

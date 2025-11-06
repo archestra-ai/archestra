@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useAgentAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 interface InstallationSelectProps {
@@ -19,14 +19,18 @@ interface InstallationSelectProps {
   className?: string;
   /** Catalog ID to filter installations - only shows local installations for the same catalog item */
   catalogId: string;
+  /** Agent IDs to filter installations - only shows installations that can be used with the specified agents */
+  agentIds: string[];
 }
 
 /**
  * Self-contained component for selecting execution source (pod) for local MCP tool execution.
- * Shows all local MCP server installations for a given catalog item with owner emails.
+ * Shows local MCP server installations for a given catalog item with team-based filtering.
  *
- * Unlike TokenSelect, this has no team restrictions - any installation of the same catalog
- * item can handle execution.
+ * Filtering logic:
+ * - Personal installations: shown if user is owner AND shares team with agent
+ * - Team installations: shown if any installation team matches agent teams
+ * - Admins: see all installations
  */
 export function InstallationSelect({
   value,
@@ -34,12 +38,16 @@ export function InstallationSelect({
   disabled,
   className,
   catalogId,
+  agentIds,
 }: InstallationSelectProps) {
-  const { data: allServers, isLoading } = useMcpServers();
+  const { data: mcpServers, isLoading } = useAgentAvailableTokens({
+    agentIds: agentIds ?? null,
+    catalogId: catalogId ?? null,
+  });
 
-  // Filter to local servers with matching catalogId
-  const installations = allServers?.filter(
-    (server) => server.catalogId === catalogId && server.serverType === "local",
+  // Filter to local servers only (check serverType exists since hook returns different types)
+  const installations = mcpServers?.filter(
+    (server) => "serverType" in server && server.serverType === "local",
   );
 
   return (

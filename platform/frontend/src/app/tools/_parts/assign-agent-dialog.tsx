@@ -226,6 +226,7 @@ export function AssignAgentDialog({
                   onValueChange={setExecutionSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
+                  agentIds={selectedAgentIds}
                 />
               </>
             ) : (

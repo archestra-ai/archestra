@@ -285,6 +285,7 @@ export function AssignToolsDialog({
                                 </span>
                                 <InstallationSelect
                                   catalogId={catalogId}
+                                  agentIds={[agent.id]}
                                   onValueChange={(executionSourceId) =>
                                     handleExecutionSourceChange(
                                       tool.id,

@@ -236,6 +236,7 @@ export function BulkAssignAgentDialog({
                   onValueChange={setExecutionSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
+                  agentIds={selectedAgentIds}
                 />
               </>
             ) : (

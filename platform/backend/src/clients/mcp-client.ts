@@ -19,6 +19,7 @@ import type {
   CommonToolResult,
   McpServerConfig,
 } from "@/types";
+import { getInternalJwt } from "@/utils/internal-jwt";
 
 // Get the API base URL from config
 const API_BASE_URL =
@@ -336,7 +337,7 @@ class McpClient {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${config.auth.secret}`,
+                Authorization: `Bearer ${getInternalJwt()}`,
               },
               body: JSON.stringify({
                 jsonrpc: "2.0",
@@ -807,8 +808,12 @@ class McpClient {
     // Build headers from secrets
     const headers: Record<string, string> = {};
 
+    // For internal /mcp_proxy endpoints, add JWT auth
+    if (url.includes("/mcp_proxy/")) {
+      headers.Authorization = `Bearer ${getInternalJwt()}`;
+    }
     // All tokens (OAuth and PAT) are stored as access_token
-    if (secrets.access_token) {
+    else if (secrets.access_token) {
       headers.Authorization = `Bearer ${secrets.access_token}`;
     }
 

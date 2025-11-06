@@ -4,11 +4,12 @@ import { auth } from "@/auth";
 import config from "@/config";
 import { RouteId } from "@/types";
 import { prepareErrorResponse } from "@/utils";
+import { verifyInternalJwt } from "@/utils/internal-jwt";
 
 class AuthMiddleware {
   public handle = async (request: FastifyRequest, reply: FastifyReply) => {
     // custom logic to skip auth check
-    if (this.shouldSkipAuthCheck(request)) return;
+    if (await this.shouldSkipAuthCheck(request)) return;
 
     // return 401 if unauthenticated
     if (await this.isUnauthenticated(request)) {
@@ -35,19 +36,24 @@ class AuthMiddleware {
     );
   };
 
-  private shouldSkipAuthCheck = ({ url, method, headers }: FastifyRequest) => {
+  private shouldSkipAuthCheck = async ({
+    url,
+    method,
+    headers,
+  }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
     }
 
-    // For /mcp_proxy endpoints, check if Bearer token matches ARCHESTRA_AUTH_SECRET
+    // For /mcp_proxy endpoints, verify internal JWT token
     if (url.startsWith("/mcp_proxy/")) {
       const authHeader = headers.authorization;
-      if (authHeader && config.auth.secret) {
-        const expectedAuth = `Bearer ${config.auth.secret}`;
-        if (authHeader === expectedAuth) {
-          return true;
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.slice(7);
+        const payload = await verifyInternalJwt(token);
+        if (payload) {
+          return true; // Valid internal JWT, skip normal auth
         }
       }
     }

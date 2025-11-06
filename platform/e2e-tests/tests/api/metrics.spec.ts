@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const METRICS_BASE_URL = "http://localhost:9050";
+import { API_BASE_URL, METRICS_BASE_URL } from "../../consts";
 
 test.describe("Metrics API", () => {
   test("should return health check from metrics server", async ({ request }) => {
@@ -12,6 +11,11 @@ test.describe("Metrics API", () => {
   });
 
   test("returns metrics when authentication is provided", async ({ request }) => {
+    // First, make some API calls to generate metrics data
+    await request.get(`${API_BASE_URL}/health`);
+    await request.get(`${API_BASE_URL}/openapi.json`);
+    await request.get(`${API_BASE_URL}/nonexistent-endpoint`); // 404 to test error routes
+
     const response = await request.get(`${METRICS_BASE_URL}/metrics`, {
       headers: {
         Authorization: `Bearer foo-bar`,
@@ -23,6 +27,13 @@ test.describe("Metrics API", () => {
     const metricsText = await response.text();
     expect(metricsText).toContain("# HELP");
     expect(metricsText).toContain("http_request_duration_seconds");
+
+    // Check that we have route labels from our API calls
+    expect(metricsText).toContain('route="/health"');
+    expect(metricsText).toContain('route="/openapi.json"');
+
+    // Ensure /metrics route is NOT present (since it's not exposed on main port)
+    expect(metricsText).not.toContain('route="/metrics"');
   });
 
   test("rejects access with invalid bearer token", async ({ request }) => {
@@ -37,5 +48,11 @@ test.describe("Metrics API", () => {
     const errorData = await response.json();
     expect(errorData).toHaveProperty("error");
     expect(errorData.error).toContain("Invalid token");
+  });
+
+  test("should not expose /metrics endpoint on main API port", async ({ request }) => {
+    const response = await request.get(`${API_BASE_URL}/metrics`);
+
+    expect(response.status()).toBe(404);
   });
 });

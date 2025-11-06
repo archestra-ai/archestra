@@ -41,14 +41,6 @@ const {
   observability,
 } = config;
 
-const fastify = Fastify({
-  loggerInstance: logger,
-}).withTypeProvider<ZodTypeProvider>();
-
-// Set up Zod validation and serialization
-fastify.setValidatorCompiler(validatorCompiler);
-fastify.setSerializerCompiler(serializerCompiler);
-
 // Register schemas in global registry for OpenAPI generation
 z.globalRegistry.add(SupportedProvidersSchema, {
   id: "SupportedProviders",
@@ -75,6 +67,34 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
   id: "AnthropicMessagesResponse",
 });
 
+const createFastifyInstance = () =>
+  Fastify({
+    loggerInstance: logger,
+  }).withTypeProvider<ZodTypeProvider>();
+
+/**
+ * This is a helper function to register the metrics plugin on a fastify instance.
+ *
+ * Basically if we are collecting metrics for a given fastify instance, we will not
+ * expose the metrics endpoint for that instance.
+ */
+const registerMetricsPlugin = async (
+  fastify: ReturnType<typeof createFastifyInstance>,
+  endpointEnabled: boolean,
+): Promise<void> => {
+  const metricsEnabled = !endpointEnabled;
+
+  await fastify.register(metricsPlugin, {
+    endpoint: endpointEnabled ? observability.metrics.endpoint : null,
+    defaultMetrics: { enabled: metricsEnabled },
+    routeMetrics: {
+      enabled: metricsEnabled,
+      methodBlacklist: ["OPTIONS", "HEAD"],
+      routeBlacklist: ["/health"],
+    },
+  });
+};
+
 /**
  * Create separate Fastify instance for metrics on a separate port
  *
@@ -83,9 +103,7 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 const startMetricsServer = async () => {
   const { secret: metricsSecret } = observability.metrics;
 
-  const metricsServer = Fastify({
-    loggerInstance: logger,
-  });
+  const metricsServer = createFastifyInstance();
 
   // Add authentication hook for metrics endpoint if secret is configured
   if (metricsSecret) {
@@ -111,9 +129,7 @@ const startMetricsServer = async () => {
 
   metricsServer.get("/health", () => ({ status: "ok" }));
 
-  await metricsServer.register(metricsPlugin, {
-    endpoint: observability.metrics.endpoint,
-  });
+  await registerMetricsPlugin(metricsServer, true);
 
   // Start metrics server on dedicated port
   await metricsServer.listen({
@@ -128,6 +144,12 @@ const startMetricsServer = async () => {
 };
 
 const start = async () => {
+  const fastify = createFastifyInstance();
+
+  // Set up Zod validation and serialization
+  fastify.setValidatorCompiler(validatorCompiler);
+  fastify.setSerializerCompiler(serializerCompiler);
+
   try {
     await seedRequiredStartingData();
 
@@ -168,14 +190,12 @@ const start = async () => {
       // Continue server startup even if MCP runtime fails
     }
 
-    // Register metrics plugin on main server to track all HTTP requests
-    // We set endpoint to null to prevent exposing /metrics on the main API port
-    // The metrics endpoint is exposed separately on port 9050 by the metrics server
-    // We disable default metrics here since they're already collected by the metrics server
-    await fastify.register(metricsPlugin, {
-      endpoint: null,
-      defaultMetrics: { enabled: false },
-    });
+    /**
+     * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
+     * inside of this server instance. Metrics are actually exposed on a different port
+     * (9050; see above in startMetricsServer)
+     */
+    await registerMetricsPlugin(fastify, false);
 
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {

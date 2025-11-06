@@ -176,13 +176,7 @@ const PartDataSchema = z
 const PartMetadataSchema = z
   .union([VideoMetadataSchema])
   .optional()
-  .describe(`https://ai.google.dev/api/caching#Part`);
-
-// Support both the full API shape where part data is nested under `data`
-// and the shorthand shape allowed by the Gemini API where the part's
-// payload (e.g. { text: '...' }) may appear at the top-level of the part.
-// We model this by accepting either the full object or a set of top-level
-// variant objects mirroring the PartData union.
+  .describe(`https://ai.google.dev/api/caching#PartMetadata`);
 
 const BasePartFields = {
   thought: z
@@ -278,15 +272,8 @@ const ShorthandPartSchema = z.union([
   CodeExecutionResultPartTopLevel,
 ]);
 
-const FullPartSchema = z.object({
-  thought: z.boolean().optional(),
-  thoughtSignature: z.string().optional(),
-  data: PartDataSchema,
-  metadata: PartMetadataSchema,
-});
-
 export const PartSchema = z
-  .union([FullPartSchema, ShorthandPartSchema])
+  .union([ShorthandPartSchema])
   .describe(`https://ai.google.dev/api/caching#Part`);
 
 export const ContentSchema = z

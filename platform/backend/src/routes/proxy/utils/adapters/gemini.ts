@@ -483,7 +483,7 @@ export function sdkUsageToRestUsageMetadata(
 }
 
 /**
- * Convert common tool results to Anthropic user message with tool_result blocks
+ * Convert common tool results to Gemini user message with tool_result blocks
  */
 export function toolResultsToMessages(
   results: CommonToolResult[],

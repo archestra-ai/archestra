@@ -6,11 +6,19 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { auth } from "@/auth";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import db, { schema } from "@/database";
 import logger from "@/logging";
+import {
+  executeArchestraTool,
+  getArchestraMcpTools,
+  type ArchestraUserContext,
+} from "@/mcp-servers/archestra";
 import { ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
@@ -59,6 +67,9 @@ function cleanupExpiredSessions(): void {
  */
 async function createAgentServer(
   agentId: string,
+  userId: string,
+  userEmail: string,
+  organizationId: string,
   logger: { info: (obj: unknown, msg: string) => void },
 ): Promise<Server> {
   const server = new Server(
@@ -74,22 +85,63 @@ async function createAgentServer(
   );
 
   const tools = await ToolModel.getToolsByAgent(agentId);
+  const archestraTools = getArchestraMcpTools();
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map(({ name, description, parameters }) => ({
-      name,
-      title: name,
-      description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    })),
+    tools: [
+      ...tools.map(({ name, description, parameters }) => ({
+        name,
+        title: name,
+        description,
+        inputSchema: parameters,
+        annotations: {},
+        _meta: {},
+      })),
+      ...archestraTools,
+    ],
   }));
 
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
+        // Check if this is an Archestra tool
+        if (name.startsWith("archestra__")) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+              userId,
+              userEmail,
+            },
+            "Archestra MCP tool call received",
+          );
+
+          // Handle Archestra tools directly
+          const userContext: ArchestraUserContext = {
+            userId,
+            email: userEmail,
+            organizationId,
+          };
+
+          const archestraResponse = await executeArchestraTool(
+            name,
+            args,
+            userContext,
+          );
+
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+              userId,
+            },
+            "Archestra MCP tool call completed",
+          );
+
+          return archestraResponse;
+        }
+
         logger.info(
           {
             agentId,
@@ -332,6 +384,54 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       try {
+        // Get user information from session
+        const headers = new Headers(request.headers as HeadersInit);
+        const session = await auth.api.getSession({
+          headers,
+          query: { disableCookieCache: true },
+        });
+
+        if (!session?.user?.id) {
+          reply.status(401);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Unauthorized: No valid session found",
+            },
+            id: null,
+          };
+        }
+
+        const userId = session.user.id;
+        const userEmail = session.user.email;
+
+        // Get organization ID from session or member table
+        let organizationId = session.session?.activeOrganizationId;
+        if (!organizationId) {
+          const userMembership = await db
+            .select()
+            .from(schema.member)
+            .where(eq(schema.member.userId, userId))
+            .limit(1);
+
+          if (userMembership[0]) {
+            organizationId = userMembership[0].organizationId;
+          }
+        }
+
+        if (!organizationId) {
+          reply.status(401);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Unauthorized: User not associated with any organization",
+            },
+            id: null,
+          };
+        }
+
         let server: Server;
         let transport: StreamableHTTPServerTransport;
 
@@ -376,7 +476,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Initialize request - creating NEW session",
           );
-          server = await createAgentServer(agentId, fastify.log);
+          server = await createAgentServer(
+            agentId,
+            userId,
+            userEmail,
+            organizationId,
+            fastify.log,
+          );
           transport = createTransport(agentId, sessionId, fastify.log);
 
           // Connect server to transport (this also starts the transport)

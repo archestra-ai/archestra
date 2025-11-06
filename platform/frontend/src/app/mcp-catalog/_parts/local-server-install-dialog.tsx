@@ -119,7 +119,6 @@ export function LocalServerInstallDialog({
     }
 
     if (missingUserConfigFields.length > 0 || missingEnvVars.length > 0) {
-      // TODO: Show error message
       return;
     }
 

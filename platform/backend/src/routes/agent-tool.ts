@@ -351,7 +351,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Check if tool is from local server and executionSourceMcpServerId is being set to null
         if (
           executionSourceMcpServerId === null &&
           agentToolForValidation &&
@@ -360,7 +359,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const catalogItem = await InternalMcpCatalogModel.findById(
             agentToolForValidation.tool.catalogId,
           );
-          if (catalogItem?.serverType === "local") {
+          // Check if tool is from local server and executionSourceMcpServerId is being set to null
+          if (
+            catalogItem?.serverType === "local" &&
+            !executionSourceMcpServerId
+          ) {
             return reply.status(400).send({
               error: {
                 message:
@@ -369,18 +372,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             });
           }
-        }
-
-        // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
-        if (
-          credentialSourceMcpServerId === null &&
-          agentToolForValidation &&
-          agentToolForValidation.tool.catalogId
-        ) {
-          const catalogItem = await InternalMcpCatalogModel.findById(
-            agentToolForValidation.tool.catalogId,
-          );
-          if (catalogItem?.serverType === "remote") {
+          // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+          if (
+            catalogItem?.serverType === "remote" &&
+            !credentialSourceMcpServerId
+          ) {
             return reply.status(400).send({
               error: {
                 message:

@@ -137,11 +137,11 @@ export function InternalMCPCatalog({
     // Check if we need to show configuration dialog
     const hasUserConfig =
       catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
-    const hasSecretEnvVars = catalogItem.localConfig?.environment?.some(
-      (env) => env.type === "secret",
+    const hasPromptedEnvVars = catalogItem.localConfig?.environment?.some(
+      (env) => env.promptOnInstallation === true,
     );
 
-    if (hasUserConfig || hasSecretEnvVars) {
+    if (hasUserConfig || hasPromptedEnvVars) {
       // Show configuration dialog
       setLocalServerCatalogItem(catalogItem);
       setIsLocalServerDialogOpen(true);

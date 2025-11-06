@@ -128,6 +128,7 @@ describe("formSchema", () => {
               key: "NODE_ENV",
               type: "plain_text" as const,
               value: "production",
+              promptOnInstallation: false,
             },
           ],
           dockerImage: "registry.example.com/my-mcp-server:latest",

@@ -1,5 +1,4 @@
 import pino from "pino";
-import config from "@/config";
 
 const logger = pino({
   transport: {
@@ -11,7 +10,7 @@ const logger = pino({
       singleLine: true,
     },
   },
-  level: config.logging.level,
+  level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
 });
 
 export default logger;

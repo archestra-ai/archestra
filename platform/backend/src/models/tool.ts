@@ -1,3 +1,4 @@
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import {
   and,
   desc,
@@ -13,8 +14,6 @@ import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
-
-const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
 
 class ToolModel {
   /**

@@ -2,13 +2,14 @@ import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { admin, apiKey, organization } from "better-auth/plugins";
+import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
+const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
   baseURL,
@@ -16,7 +17,19 @@ const {
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
 
+const isHttps = () => {
+  // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
+  // to determine if we're using HTTPS
+  if (!baseURL) {
+    return production;
+  }
+  // otherwise, use baseURL to determine if we're using HTTPS
+  // this is useful for envs where NODE_ENV=production but using HTTP localhost
+  return baseURL.startsWith("https://");
+};
+
 export const auth = betterAuth({
+  appName: APP_NAME,
   baseURL,
   secret,
 
@@ -58,6 +71,9 @@ export const auth = betterAuth({
         defaultPermissions: allAvailableActions,
       },
     }),
+    twoFactor({
+      issuer: APP_NAME,
+    }),
   ],
 
   user: {
@@ -80,6 +96,8 @@ export const auth = betterAuth({
       account: schema.account,
       team: schema.team,
       teamMember: schema.teamMember,
+      twoFactor: schema.twoFactor,
+      verification: schema.verification,
     },
   }),
 
@@ -91,8 +109,8 @@ export const auth = betterAuth({
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
-      secure: production, // Only use secure cookies in production (HTTPS required)
-      sameSite: production ? "none" : "lax", // "none" required for cross-domain in production with HTTPS
+      secure: isHttps(), // Use secure cookies when we're using HTTPS
+      sameSite: isHttps() ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
     },
   },
 

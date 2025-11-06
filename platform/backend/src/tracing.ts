@@ -1,3 +1,4 @@
+import { FastifyOtelInstrumentation } from "@fastify/otel";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import {
@@ -14,13 +15,13 @@ import logger from "@/logging";
 
 const {
   api: { name, version },
+  observability: {
+    otel: { traceExporter: traceExporterConfig },
+  },
 } = config;
 
 // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
-const traceExporter = new OTLPTraceExporter({
-  url: config.observability.otel.otelExporterOtlpEndpoint,
-  headers: {},
-});
+const traceExporter = new OTLPTraceExporter(traceExporterConfig);
 
 // Create a resource with service information
 const resource = defaultResource().merge(
@@ -35,6 +36,12 @@ const sdk = new NodeSDK({
   resource,
   traceExporter,
   instrumentations: [
+    new FastifyOtelInstrumentation({
+      registerOnInitialization: true,
+      ignorePaths: (opts) => {
+        return opts.url.startsWith(config.observability.metrics.endpoint);
+      },
+    }),
     getNodeAutoInstrumentations({
       // Disable instrumentation for specific packages if needed
       "@opentelemetry/instrumentation-fs": {

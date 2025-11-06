@@ -8,6 +8,7 @@ export {
   invitation,
   member,
   session,
+  twoFactor,
   verification,
 } from "./auth";
 export { default as conversationsTable } from "./conversation";

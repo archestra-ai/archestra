@@ -11,6 +11,33 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   env: {}
 
+  # Environment variables from Kubernetes Secrets
+  # This allows you to inject sensitive data from secrets into the container
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-container-environment-variables-using-secret-data
+  # Example:
+  #   envFromSecrets:
+  #     - name: API_KEY
+  #       secretName: my-api-credentials
+  #       secretKey: api-key
+  #     - name: DATABASE_PASSWORD
+  #       secretName: db-credentials
+  #       secretKey: password
+  envFromSecrets: []
+
+  # Import all key-value pairs from Secrets or ConfigMaps as environment variables
+  # This is useful when you want to inject all keys from a Secret/ConfigMap without specifying each one individually
+  # See: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables
+  # Example:
+  #   envFrom:
+  #     - secretRef:
+  #         name: my-secret
+  #     - configMapRef:
+  #         name: my-configmap
+  #     - secretRef:
+  #         name: another-secret
+  #         optional: true
+  envFrom: []
+
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers

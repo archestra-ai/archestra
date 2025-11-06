@@ -1,4 +1,5 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -7,6 +8,20 @@ import {
   McpServerInstallationRequestModel,
 } from "@/models";
 import type { InsertMcpServerInstallationRequest } from "@/types";
+
+/**
+ * Constants for Archestra MCP server
+ */
+const MCP_SERVER_NAME = "archestra";
+const TOOL_WHOAMI_NAME = "whoami";
+const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
+const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
+  "create_mcp_server_installation_request";
+
+// Construct fully-qualified tool names
+const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
+const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
+const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
 
 /**
  * User context for the Archestra MCP server
@@ -27,7 +42,7 @@ export async function executeArchestraTool(
 ): Promise<CallToolResult> {
   const { userId, email, organizationId } = userContext;
 
-  if (toolName === "archestra__whoami") {
+  if (toolName === TOOL_WHOAMI_FULL_NAME) {
     logger.info({ userId, email }, "whoami tool called");
 
     return {
@@ -41,7 +56,7 @@ export async function executeArchestraTool(
     };
   }
 
-  if (toolName === "archestra__search_private_mcp_registry") {
+  if (toolName === TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME) {
     logger.info(
       { userId, searchArgs: args },
       "search_private_mcp_registry tool called",
@@ -119,7 +134,7 @@ export async function executeArchestraTool(
     }
   }
 
-  if (toolName === "archestra__create_mcp_server_installation_request") {
+  if (toolName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
     logger.info(
       { userId, requestArgs: args },
       "create_mcp_server_installation_request tool called",
@@ -213,7 +228,7 @@ export async function executeArchestraTool(
 export function getArchestraMcpTools(): Tool[] {
   return [
     {
-      name: "archestra__whoami",
+      name: TOOL_WHOAMI_FULL_NAME,
       title: "Who Am I",
       description:
         "Returns the email address and user information of the currently authenticated user",
@@ -226,7 +241,7 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
     {
-      name: "archestra__search_private_mcp_registry",
+      name: TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME,
       title: "Search Private MCP Registry",
       description:
         "Search the private MCP registry for available MCP servers. Optionally provide a search query to filter results by name or description.",
@@ -245,7 +260,7 @@ export function getArchestraMcpTools(): Tool[] {
       _meta: {},
     },
     {
-      name: "archestra__create_mcp_server_installation_request",
+      name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
       title: "Create MCP Server Installation Request",
       description:
         "Create a request to install an MCP server. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",

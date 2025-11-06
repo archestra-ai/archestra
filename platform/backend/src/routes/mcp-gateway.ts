@@ -18,7 +18,7 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
   type ArchestraUserContext,
-} from "@/mcp-servers/archestra";
+} from "@/archestra-mcp-server";
 import { ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 

@@ -777,13 +777,19 @@ const cliChatWithAnthropic = async (options: {
       let assistantMessage: Anthropic.Message;
 
       if (stream) {
+        if (debug && stepCount > 1) {
+          console.log(
+            `[DEBUG] Sending request with messages: ${JSON.stringify(messages, null, 2)}`,
+          );
+        }
         const streamResponse = await anthropic.messages.create({
           model,
           messages,
-          max_tokens: 4096,
+          max_tokens: 16384,
           system: SYSTEM_PROMPT,
           tools,
           stream: true,
+          thinking: { type: "enabled", budget_tokens: 12000 },
         });
 
         // Accumulate streaming response
@@ -795,10 +801,29 @@ const cliChatWithAnthropic = async (options: {
         }
 
         for await (const chunk of streamResponse) {
+          if (debug) {
+            console.log(`[DEBUG] Received chunk type: ${chunk.type}`);
+          }
+
           if (chunk.type === "content_block_start") {
             if (chunk.content_block.type === "text") {
               // Start of text block
               currentToolUse = null;
+            } else if (chunk.content_block.type === "thinking") {
+              // Start of thinking block
+              currentToolUse = null;
+              if (debug) {
+                process.stdout.write("\n[THINKING] ");
+              }
+              // Initialize the thinking block with signature (if present)
+              const thinkingBlock: any = {
+                type: "thinking",
+                thinking: "",
+              };
+              if (chunk.content_block.signature) {
+                thinkingBlock.signature = chunk.content_block.signature;
+              }
+              accumulatedContent.push(thinkingBlock);
             } else if (chunk.content_block.type === "tool_use") {
               // Start of tool use block
               currentToolUse = {
@@ -820,6 +845,17 @@ const cliChatWithAnthropic = async (options: {
                   type: "text",
                   text: chunk.delta.text,
                 });
+              }
+            } else if (chunk.delta.type === "thinking_delta") {
+              // Thinking content
+              if (debug) {
+                process.stdout.write(chunk.delta.thinking);
+              }
+              // Append to the last thinking block
+              const lastBlock =
+                accumulatedContent[accumulatedContent.length - 1];
+              if (lastBlock && lastBlock.type === "thinking") {
+                lastBlock.thinking += chunk.delta.thinking;
               }
             } else if (chunk.delta.type === "input_json_delta") {
               // Tool input JSON delta
@@ -857,6 +893,9 @@ const cliChatWithAnthropic = async (options: {
               currentToolUse = null;
             }
           } else if (chunk.type === "message_stop") {
+            if (debug) {
+              console.log("[DEBUG] Received message_stop, creating assistantMessage");
+            }
             // Message complete
             assistantMessage = {
               id: `msg_${Date.now()}`,
@@ -870,14 +909,29 @@ const cliChatWithAnthropic = async (options: {
             };
           }
         }
+
+        if (debug) {
+          console.log(
+            `[DEBUG] Stream ended. assistantMessage is ${assistantMessage ? "defined" : "undefined"}`,
+          );
+          if (!assistantMessage) {
+            console.log(
+              `[DEBUG] accumulatedContent has ${accumulatedContent.length} blocks`,
+            );
+            console.log(
+              `[DEBUG] accumulatedContent: ${JSON.stringify(accumulatedContent, null, 2)}`,
+            );
+          }
+        }
       } else {
         const response = await anthropic.messages.create({
           model,
           messages,
-          max_tokens: 4096,
+          max_tokens: 16384,
           system: SYSTEM_PROMPT,
           tools,
           stream: false,
+          thinking: { type: "enabled", budget_tokens: 12000 },
         });
 
         assistantMessage = response;

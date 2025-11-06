@@ -7,6 +7,7 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
+import { initializeInternalJwt } from "@/utils/internal-jwt";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
@@ -501,6 +502,9 @@ describe("McpClient", () => {
           email: "test@example.com",
           emailVerified: true,
         });
+
+        // Initialize internal JWT for stdio transport tests
+        await initializeInternalJwt();
 
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({

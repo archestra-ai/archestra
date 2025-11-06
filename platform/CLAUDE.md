@@ -22,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Tools Inspector**: <http://localhost:3000/tools>
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
 - **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
+- **Roles Settings**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
@@ -163,6 +164,16 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
 - Admin-only team CRUD operations via `/api/teams/*` routes
 - Members can read teams and access team-assigned agents/MCP servers
+
+**Custom RBAC Roles**:
+
+- Extends predefined roles (admin, member) with custom roles
+- Up to 50 custom roles per organization
+- Granular permissions: CRUD operations on resources
+- Permission validation: users can only grant permissions they have
+- Role protection: predefined roles cannot be modified/deleted
+- API endpoints: `/api/roles/*` (requires organization:update permission)
+- UI: Settings > Roles tab (admin-only)
 
 **Agent Labels**:
 

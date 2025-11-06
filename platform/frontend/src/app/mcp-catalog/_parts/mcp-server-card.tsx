@@ -636,6 +636,7 @@ export function McpServerCard({
                   updatedAt: selectedToolForAssignment.createdAt,
                   mcpServerId: selectedToolForAssignment.mcpServerId,
                   mcpServerName: selectedToolForAssignment.mcpServerName,
+                  catalogId: item.id,
                 },
                 agent: null,
                 createdAt: selectedToolForAssignment.createdAt,

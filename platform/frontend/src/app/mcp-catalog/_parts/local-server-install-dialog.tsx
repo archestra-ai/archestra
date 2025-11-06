@@ -167,7 +167,7 @@ export function LocalServerInstallDialog({
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {authType === "team" ? "Install for Teams" : "Install for Myself"} -{" "}
+            {authType === "team" ? "Install for teams" : "Install for myself"} -{" "}
             {catalogItem?.name}
           </DialogTitle>
           <DialogDescription>

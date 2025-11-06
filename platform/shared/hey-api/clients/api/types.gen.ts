@@ -951,7 +951,6 @@ export type AnthropicMessagesRequestInput = {
         citations?: Array<unknown> | unknown;
     }>;
     temperature?: number;
-    thinking?: unknown;
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -1009,13 +1008,6 @@ export type AnthropicMessagesResponseInput = {
         citations: Array<unknown> | unknown;
         text: string;
         type: 'text';
-    } | {
-        signature: string;
-        thinking: string;
-        type: 'thinking';
-    } | {
-        data: string;
-        type: 'redacted_thinking';
     } | {
         id: string;
         input: unknown;
@@ -1980,7 +1972,6 @@ export type AnthropicMessagesRequest = {
         citations?: Array<unknown> | unknown;
     }>;
     temperature?: number;
-    thinking?: unknown;
     tool_choice?: {
         type: 'auto';
         disable_parallel_tool_use?: boolean;
@@ -2038,13 +2029,6 @@ export type AnthropicMessagesResponse = {
         citations: Array<unknown> | unknown;
         text: string;
         type: 'text';
-    } | {
-        signature: string;
-        thinking: string;
-        type: 'thinking';
-    } | {
-        data: string;
-        type: 'redacted_thinking';
     } | {
         id: string;
         input: unknown;
@@ -3090,6 +3074,7 @@ export type GetAgentAvailableTokensResponses = {
         id: string;
         name: string;
         authType: 'personal' | 'team';
+        serverType: 'local' | 'remote';
         catalogId: string | null;
         ownerId: string | null;
         ownerEmail: string | null;

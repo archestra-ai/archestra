@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
@@ -39,7 +39,7 @@ export function AssignAgentDialog({
 }: AssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
-  const mcpServers = useMcpServers();
+  const { data: mcpCatalog } = useInternalMcpCatalog();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
@@ -49,11 +49,13 @@ export function AssignAgentDialog({
   >(null);
 
   // Determine if tool is from local server
-  const mcpServer = mcpServers.data?.find(
-    (server) => server.id === tool?.tool.mcpServerId,
-  );
-  const catalogId = mcpServer?.catalogId ?? "";
-  const isLocalServer = mcpServer?.serverType === "local";
+  const mcpCatalogItem = useMemo(() => {
+    if (!tool?.tool.catalogId) return null;
+    return mcpCatalog?.find((item) => item.id === tool.tool.catalogId);
+  }, [tool?.tool.catalogId, mcpCatalog]);
+
+  const catalogId = tool?.tool.catalogId ?? "";
+  const isLocalServer = mcpCatalogItem?.serverType === "local";
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;

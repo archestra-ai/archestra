@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -50,6 +51,14 @@ export function InstallationSelect({
     (server) => "serverType" in server && server.serverType === "local",
   );
 
+  // Separate team and personal installations
+  const teamInstallations = installations?.filter(
+    (server) => server.authType === "team",
+  );
+  const personalInstallations = installations?.filter(
+    (server) => server.authType === "personal",
+  );
+
   return (
     <Select
       value={value || undefined}
@@ -66,10 +75,43 @@ export function InstallationSelect({
         <SelectValue placeholder="Select installation..." />
       </SelectTrigger>
       <SelectContent>
-        {installations && installations.length > 0 ? (
+        {teamInstallations && teamInstallations.length > 0 && (
           <SelectGroup>
-            <SelectLabel>Available installations</SelectLabel>
-            {installations.map((server) => (
+            <SelectLabel>Team installations</SelectLabel>
+            {teamInstallations.map((server) => (
+              <SelectItem
+                key={server.id}
+                value={server.id}
+                className="cursor-pointer"
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">
+                      {server.ownerEmail || "Unknown owner"}
+                    </span>
+                  </div>
+                  {server.teamDetails && server.teamDetails.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {server.teamDetails.map((team) => (
+                        <Badge
+                          key={team.teamId}
+                          variant="secondary"
+                          className="text-[10px] px-1 py-0"
+                        >
+                          {team.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {personalInstallations && personalInstallations.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Personal installations</SelectLabel>
+            {personalInstallations.map((server) => (
               <SelectItem
                 key={server.id}
                 value={server.id}
@@ -81,7 +123,8 @@ export function InstallationSelect({
               </SelectItem>
             ))}
           </SelectGroup>
-        ) : (
+        )}
+        {(!installations || installations.length === 0) && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
             No installations available
           </div>

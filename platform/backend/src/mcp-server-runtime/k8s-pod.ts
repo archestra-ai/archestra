@@ -719,6 +719,7 @@ export default class K8sPod {
    */
   async removePod(): Promise<void> {
     await this.stopPod();
+    await this.deleteK8sSecret();
   }
 
   /**

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertInternalMcpCatalog,
@@ -21,6 +21,18 @@ class InternalMcpCatalogModel {
 
   static async findAll(): Promise<InternalMcpCatalog[]> {
     return await db.select().from(schema.internalMcpCatalogTable);
+  }
+
+  static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
+    return await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        or(
+          ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
+          ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
+        ),
+      );
   }
 
   static async findById(id: string): Promise<InternalMcpCatalog | null> {

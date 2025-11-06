@@ -6,12 +6,18 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  executeArchestraTool,
+  getArchestraMcpTools,
+  MCP_SERVER_NAME,
+} from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { AgentModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -73,23 +79,60 @@ async function createAgentServer(
     },
   );
 
+  // Get agent information
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
+    throw new Error(`Agent not found: ${agentId}`);
+  }
+
   const tools = await ToolModel.getToolsByAgent(agentId);
+  const archestraTools = getArchestraMcpTools();
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map(({ name, description, parameters }) => ({
-      name,
-      title: name,
-      description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    })),
+    tools: [
+      ...tools.map(({ name, description, parameters }) => ({
+        name,
+        title: name,
+        description,
+        inputSchema: parameters,
+        annotations: {},
+        _meta: {},
+      })),
+      ...archestraTools,
+    ],
   }));
 
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
+        // Check if this is an Archestra tool
+        const archestraToolPrefix = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+        if (name.startsWith(archestraToolPrefix)) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+            },
+            "Archestra MCP tool call received",
+          );
+
+          // Handle Archestra tools directly
+          const archestraResponse = await executeArchestraTool(name, args, {
+            agent,
+          });
+
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+            },
+            "Archestra MCP tool call completed",
+          );
+
+          return archestraResponse;
+        }
+
         logger.info(
           {
             agentId,

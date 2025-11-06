@@ -19,6 +19,12 @@ export const PASSWORD_PLACEHOLDER = "password";
 export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";
 
 /**
+ * Separator used to construct fully-qualified MCP tool names
+ * Format: {mcpServerName}__{toolName}
+ */
+export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
+
+/**
  * NOTE: THIS IS ABSOLUTELY TEMPORARY.. remove this once we have full/generic support for MCP servers.
  */
 export const GITHUB_MCP_SERVER_NAME = "githubcopilot__remote-mcp";

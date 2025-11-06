@@ -112,7 +112,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
 
 **Workspaces**:
 
@@ -219,5 +219,15 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Real-time theme and font preview in settings
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logoType, logo
+
+**Archestra MCP Server**:
+- Built-in tools automatically injected into all agents
+- Tools prefixed with "archestra__" to avoid conflicts
+- Available tools:
+  - `archestra__whoami`: Returns agent name and ID
+  - `archestra__search_private_mcp_registry`: Search internal MCP catalog
+- Planned tool (temporarily disabled):
+  - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
+- Implementation: `backend/src/archestra-mcp-server.ts`
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking

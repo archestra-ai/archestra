@@ -210,9 +210,9 @@ export function McpLogsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5" />
-            Logs: {serverName}
+          <DialogTitle className="flex items-center gap-2 overflow-hidden">
+            <Terminal className="h-5 w-5 flex-shrink-0" />
+            <span className="truncate">Logs: {serverName}</span>
           </DialogTitle>
           <DialogDescription>
             View the recent logs from the MCP server container

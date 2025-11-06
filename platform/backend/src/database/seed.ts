@@ -1,3 +1,4 @@
+import type { Role } from "@shared";
 import { eq } from "drizzle-orm";
 import logger from "@/logging";
 import {
@@ -12,8 +13,15 @@ import db, { schema } from ".";
 /**
  * Seeds admin user
  */
-async function seedAdminUserAndDefaultOrg(): Promise<void> {
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+export async function seedDefaultUserAndOrg(
+  config: {
+    email?: string;
+    password?: string;
+    role?: Role;
+    name?: string;
+  } = {},
+) {
+  const user = await UserModel.createOrGetExistingDefaultAdminUser(config);
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");
@@ -28,12 +36,12 @@ async function seedAdminUserAndDefaultOrg(): Promise<void> {
       id: crypto.randomUUID(),
       organizationId: org.id,
       userId: user.id,
-      role: "admin",
+      role: config.role || "admin",
       createdAt: new Date(),
     });
   }
-
   logger.info("✓ Seeded admin user and default organization");
+  return user;
 }
 
 /**
@@ -119,7 +127,7 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
 }
 
 export async function seedRequiredStartingData(): Promise<void> {
-  await seedAdminUserAndDefaultOrg();
+  await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   await AgentModel.getAgentOrCreateDefault();
 }

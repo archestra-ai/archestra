@@ -416,8 +416,6 @@ class AgentModel {
 
     // No default agent exists, create one
     return AgentModel.create({
-      // hardcoded id for default agent to avoid setting it in n8n/mcpo-inspector after each restart
-      id: "4f2e8e30-2c40-4472-95ad-989b4ce214fa",
       name: name || DEFAULT_AGENT_NAME,
       isDefault: true,
       teams: [],

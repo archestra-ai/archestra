@@ -79,7 +79,7 @@ const createFastifyInstance = () =>
     .setSerializerCompiler(serializerCompiler);
 
 /**
- * This is a helper function to register the metrics plugin on a fastify instance.
+ * Helper function to register the metrics plugin on a fastify instance.
  *
  * Basically we need to ensure that we are only registering "default" and "route" metrics ONCE
  * If we instantiate a fastify instance and start duplicating the collection of metrics, we will
@@ -92,25 +92,17 @@ const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
-  if (endpointEnabled) {
-    // Metrics server: expose endpoint, enable default metrics, disable route metrics
-    await fastify.register(metricsPlugin, {
-      endpoint: observability.metrics.endpoint,
-      defaultMetrics: { enabled: true },
-      routeMetrics: { enabled: false },
-    });
-  } else {
-    // Main server: no endpoint, disable default metrics, enable route metrics
-    await fastify.register(metricsPlugin, {
-      endpoint: null,
-      defaultMetrics: { enabled: false },
-      routeMetrics: {
-        enabled: true,
-        methodBlacklist: ["OPTIONS", "HEAD"],
-        routeBlacklist: ["/health"],
-      },
-    });
-  }
+  const metricsEnabled = !endpointEnabled;
+
+  await fastify.register(metricsPlugin, {
+    endpoint: endpointEnabled ? observability.metrics.endpoint : null,
+    defaultMetrics: { enabled: metricsEnabled },
+    routeMetrics: {
+      enabled: metricsEnabled,
+      methodBlacklist: ["OPTIONS", "HEAD"],
+      routeBlacklist: ["/health"],
+    },
+  });
 };
 
 /**

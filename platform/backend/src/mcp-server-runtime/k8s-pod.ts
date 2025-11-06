@@ -313,20 +313,29 @@ export default class K8sPod {
     const envMap = new Map<string, string>();
     const secretEnvVars = new Set<string>();
 
-    // Build a set of env var keys that are marked as "secret" type
+    // Process all environment variables from catalog
     if (this.catalogItem?.localConfig?.environment) {
       for (const envDef of this.catalogItem.localConfig.environment) {
+        // Track secret-type env vars
         if (envDef.type === "secret") {
           secretEnvVars.add(envDef.key);
         }
-      }
-    }
 
-    // Merge environment values from the payload (secrets and overrides)
-    if (this.environmentValues) {
-      Object.entries(this.environmentValues).forEach(([key, value]) => {
-        envMap.set(key, value);
-      });
+        // Add env var value to envMap based on prompting behavior
+        let value: string | undefined;
+        if (envDef.promptOnInstallation) {
+          // Prompted during installation - get from environmentValues
+          value = this.environmentValues?.[envDef.key];
+        } else {
+          // Static value from catalog - get from envDef.value
+          value = envDef.value;
+        }
+        // Add to envMap if value exists
+        // (Only non-secret plain_text vars will be used directly in pod env)
+        if (value) {
+          envMap.set(envDef.key, value);
+        }
+      }
     }
 
     // Add user config values as environment variables

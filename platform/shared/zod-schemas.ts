@@ -28,7 +28,8 @@ export const OAuthConfigSchema = z.object({
 export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),
   type: z.enum(["plain_text", "secret"]),
-  value: z.string().optional(), // Only present for plain_text type
+  value: z.string().optional(), // Optional static value (when not prompted)
+  promptOnInstallation: z.boolean(), // Whether to prompt user during installation
 });
 
 export const LocalConfigSchema = z

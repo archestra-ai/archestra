@@ -701,9 +701,19 @@ describe("K8sPod.generatePodSpec", () => {
       command: "node",
       arguments: ["app.js"],
       environment: [
-        { key: "API_KEY", type: "secret" },
-        { key: "PORT", type: "plain_text", value: "3000" },
-        { key: "DEBUG", type: "plain_text", value: "true" },
+        { key: "API_KEY", type: "secret", promptOnInstallation: true },
+        {
+          key: "PORT",
+          type: "plain_text",
+          value: "3000",
+          promptOnInstallation: false,
+        },
+        {
+          key: "DEBUG",
+          type: "plain_text",
+          value: "true",
+          promptOnInstallation: false,
+        },
       ],
     };
 
@@ -889,10 +899,20 @@ describe("K8sPod.generatePodSpec", () => {
       command: "python",
       arguments: ["-m", "uvicorn", "main:app"],
       environment: [
-        { key: "API_KEY", type: "secret" },
-        { key: "DATABASE_URL", type: "secret" },
-        { key: "WORKERS", type: "plain_text", value: "4" },
-        { key: "DEBUG", type: "plain_text", value: "false" },
+        { key: "API_KEY", type: "secret", promptOnInstallation: true },
+        { key: "DATABASE_URL", type: "secret", promptOnInstallation: true },
+        {
+          key: "WORKERS",
+          type: "plain_text",
+          value: "4",
+          promptOnInstallation: false,
+        },
+        {
+          key: "DEBUG",
+          type: "plain_text",
+          value: "false",
+          promptOnInstallation: false,
+        },
       ],
       transportType: "streamable-http",
       httpPort: 8000,

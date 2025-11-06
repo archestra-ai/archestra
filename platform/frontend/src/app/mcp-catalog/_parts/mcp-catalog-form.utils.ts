@@ -137,6 +137,7 @@ export function transformCatalogItemToFormValues(
           key: string;
           type: "plain_text" | "secret";
           value?: string;
+          promptOnInstallation: boolean;
         }>;
         dockerImage?: string;
         transportType?: "stdio" | "streamable-http";
@@ -153,7 +154,12 @@ export function transformCatalogItemToFormValues(
     localConfig = {
       command: item.localConfig.command || "",
       arguments: argumentsString,
-      environment: item.localConfig.environment || [],
+      environment:
+        item.localConfig.environment?.map((env) => ({
+          ...env,
+          // Add promptOnInstallation with default value if missing
+          promptOnInstallation: env.promptOnInstallation ?? false,
+        })) || [],
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,
       httpPort: config.httpPort?.toString() || undefined,

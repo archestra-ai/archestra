@@ -102,6 +102,7 @@ export function ArchestraCatalogTab({
       key: string;
       type: "plain_text" | "secret";
       value?: string;
+      promptOnInstallation: boolean;
     }>,
   ) => {
     if (server.name === GITHUB_MCP_SERVER_NAME) {
@@ -141,6 +142,7 @@ export function ArchestraCatalogTab({
                     key,
                     type: "plain_text" as const,
                     value,
+                    promptOnInstallation: false,
                   }))
                 : undefined),
           }
@@ -374,6 +376,7 @@ export function ArchestraCatalogTab({
                   key,
                   type: "plain_text" as const,
                   value,
+                  promptOnInstallation: false,
                 }),
               )
             : []

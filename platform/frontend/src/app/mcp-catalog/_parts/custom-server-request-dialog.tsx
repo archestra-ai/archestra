@@ -48,6 +48,7 @@ export function CustomServerRequestDialog({
       key: string;
       type: "plain_text" | "secret";
       value?: string;
+      promptOnInstallation: boolean;
     }>;
     requestReason: string;
   }>({
@@ -70,7 +71,13 @@ export function CustomServerRequestDialog({
       ...formData,
       environment: [
         ...formData.environment,
-        { id: `env-${Date.now()}`, key: "", type: "plain_text", value: "" },
+        {
+          id: `env-${Date.now()}`,
+          key: "",
+          type: "plain_text",
+          value: "",
+          promptOnInstallation: false,
+        },
       ],
     });
   };

@@ -17,6 +17,7 @@ interface EnvironmentVariable {
   key: string;
   type: "plain_text" | "secret";
   value?: string;
+  promptOnInstallation: boolean;
 }
 
 interface ConfigureEnvironmentDialogProps {
@@ -66,8 +67,9 @@ export function ConfigureEnvironmentDialog({
           <DialogTitle>Configure Environment Variables</DialogTitle>
           <DialogDescription>
             Optionally configure environment variables for{" "}
-            <strong>{serverName}</strong>. You can add plain text values now or
-            mark them as secrets to be prompted during installation.
+            <strong>{serverName}</strong>. Choose type (plain text or secret)
+            for storage, and optionally enable prompting during installation for
+            values that should be provided by each installer.
           </DialogDescription>
         </DialogHeader>
 

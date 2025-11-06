@@ -73,10 +73,10 @@ export function LocalServerInstallDialog({
       }))
     : [];
 
-  // Extract secret environment variables
-  const secretEnvVars =
+  // Extract environment variables that need prompting during installation
+  const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(
-      (env) => env.type === "secret",
+      (env) => env.promptOnInstallation === true,
     ) || [];
 
   const handleUserConfigChange = (key: string, value: string | boolean) => {
@@ -109,7 +109,7 @@ export function LocalServerInstallDialog({
     const missingUserConfigFields = userConfigFields.filter(
       (field) => field.required && !userConfigValues[field.key]?.trim(),
     );
-    const missingEnvVars = secretEnvVars.filter(
+    const missingEnvVars = promptedEnvVars.filter(
       (env) => !environmentValues[env.key]?.trim(),
     );
 
@@ -147,7 +147,7 @@ export function LocalServerInstallDialog({
   // Check if there are any fields to show
   const hasFields =
     userConfigFields.length > 0 ||
-    secretEnvVars.length > 0 ||
+    promptedEnvVars.length > 0 ||
     authType === "team";
 
   if (!hasFields && authType === "personal") {
@@ -159,7 +159,7 @@ export function LocalServerInstallDialog({
     userConfigFields.every(
       (field) => !field.required || userConfigValues[field.key]?.trim(),
     ) &&
-    secretEnvVars.every((env) => environmentValues[env.key]?.trim()) &&
+    promptedEnvVars.every((env) => environmentValues[env.key]?.trim()) &&
     (authType === "personal" || selectedTeamIds.length > 0);
 
   return (
@@ -337,11 +337,11 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-          {/* Secret Environment Variables */}
-          {secretEnvVars.length > 0 && (
+          {/* Environment Variables that need prompting */}
+          {promptedEnvVars.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Environment Variables</h3>
-              {secretEnvVars.map((env) => (
+              {promptedEnvVars.map((env) => (
                 <div key={env.key} className="space-y-2">
                   <Label htmlFor={`env-${env.key}`}>
                     {env.key}
@@ -349,7 +349,7 @@ export function LocalServerInstallDialog({
                   </Label>
                   <Input
                     id={`env-${env.key}`}
-                    type="password"
+                    type={env.type === "secret" ? "password" : "text"}
                     value={environmentValues[env.key] || ""}
                     onChange={(e) =>
                       handleEnvVarChange(env.key, e.target.value)

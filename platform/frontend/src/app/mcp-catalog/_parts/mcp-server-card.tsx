@@ -507,7 +507,7 @@ export function McpServerCard({
                 className="w-full"
               >
                 <User className="mr-2 h-4 w-4" />
-                {isInstalling ? localInstalllingLabel : "Install for myself"}
+                Install for myself
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -530,6 +530,11 @@ export function McpServerCard({
           className="w-full"
         >
           Uninstall
+        </Button>
+      )}
+      {isInstalling && (
+        <Button size="sm" variant="outline" className="w-full" disabled>
+          {localInstalllingLabel}
         </Button>
       )}
       <WithRole requiredExactRole="admin">

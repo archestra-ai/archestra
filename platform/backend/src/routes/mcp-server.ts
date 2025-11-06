@@ -270,15 +270,26 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For local servers, filter out secret-type env vars and store in database
           if (
             catalogItem.serverType === "local" &&
-            environmentValues &&
             catalogItem.localConfig?.environment
           ) {
             const secretEnvVars: Record<string, string> = {};
 
-            // Filter secret-type env vars
+            // Collect all secret-type env vars (both static and prompted)
             for (const envDef of catalogItem.localConfig.environment) {
-              if (envDef.type === "secret" && environmentValues[envDef.key]) {
-                secretEnvVars[envDef.key] = environmentValues[envDef.key];
+              if (envDef.type === "secret") {
+                let value: string | undefined;
+                // Get value based on whether it's prompted or static
+                if (envDef.promptOnInstallation) {
+                  // Prompted during installation - get from environmentValues
+                  value = environmentValues?.[envDef.key];
+                } else {
+                  // Static value from catalog - get from envDef.value
+                  value = envDef.value;
+                }
+                // Add to secret if value exists
+                if (value) {
+                  secretEnvVars[envDef.key] = value;
+                }
               }
             }
 

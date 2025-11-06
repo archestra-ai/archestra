@@ -81,24 +81,36 @@ const createFastifyInstance = () =>
 /**
  * This is a helper function to register the metrics plugin on a fastify instance.
  *
- * Basically if we are collecting metrics for a given fastify instance, we will not
- * expose the metrics endpoint for that instance.
+ * Basically we need to ensure that we are only registering "default" and "route" metrics ONCE
+ * If we instantiate a fastify instance and start duplicating the collection of metrics, we will
+ * get a fatal error as such:
+ *
+ * Error: A metric with the name http_request_duration_seconds has already been registered.
+ * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
  */
 const registerMetricsPlugin = async (
   fastify: ReturnType<typeof createFastifyInstance>,
   endpointEnabled: boolean,
 ): Promise<void> => {
-  const metricsEnabled = !endpointEnabled;
-
-  await fastify.register(metricsPlugin, {
-    endpoint: endpointEnabled ? observability.metrics.endpoint : null,
-    defaultMetrics: { enabled: metricsEnabled },
-    routeMetrics: {
-      enabled: metricsEnabled,
-      methodBlacklist: ["OPTIONS", "HEAD"],
-      routeBlacklist: ["/health"],
-    },
-  });
+  if (endpointEnabled) {
+    // Metrics server: expose endpoint, enable default metrics, disable route metrics
+    await fastify.register(metricsPlugin, {
+      endpoint: observability.metrics.endpoint,
+      defaultMetrics: { enabled: true },
+      routeMetrics: { enabled: false },
+    });
+  } else {
+    // Main server: no endpoint, disable default metrics, enable route metrics
+    await fastify.register(metricsPlugin, {
+      endpoint: null,
+      defaultMetrics: { enabled: false },
+      routeMetrics: {
+        enabled: true,
+        methodBlacklist: ["OPTIONS", "HEAD"],
+        routeBlacklist: ["/health"],
+      },
+    });
+  }
 };
 
 /**

@@ -1,9 +1,9 @@
 "use client";
 
-import type { Role } from "@shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME, type Role } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -37,7 +37,7 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("member");
+  const [role, setRole] = useState<Role>(MEMBER_ROLE_NAME);
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
@@ -47,7 +47,7 @@ function InviteByLinkCardContent({
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const handleGenerateLink = async () => {
+  const handleGenerateLink = useCallback(async () => {
     const data = await createMutation.mutateAsync({ email, role });
 
     if (data) {
@@ -55,9 +55,9 @@ function InviteByLinkCardContent({
       setInvitationLink(link);
       onInvitationCreated?.();
     }
-  };
+  }, [email, role, createMutation, onInvitationCreated]);
 
-  const handleCopyLink = async () => {
+  const handleCopyLink = useCallback(async () => {
     if (!invitationLink) return;
 
     await navigator.clipboard.writeText(invitationLink);
@@ -67,14 +67,14 @@ function InviteByLinkCardContent({
     });
 
     setTimeout(() => setIsCopied(false), 2000);
-  };
+  }, [invitationLink]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setEmail("");
-    setRole("member");
+    setRole(MEMBER_ROLE_NAME);
     setInvitationLink("");
     setIsCopied(false);
-  };
+  }, []);
 
   return (
     <Card className="w-full">
@@ -117,8 +117,8 @@ function InviteByLinkCardContent({
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                  <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
                   {roles
                     ?.filter((r) => r.isCustom)
                     .map((r) => (

@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import db, { schema } from "@/database";
 
 /**
@@ -12,7 +13,7 @@ export async function createTestUser(email?: string): Promise<string> {
     name: `Test User ${userId.substring(0, 8)}`,
     email: email || `${userId}@test.com`,
     emailVerified: true,
-    role: "member",
+    role: MEMBER_ROLE_NAME,
   });
   return userId;
 }
@@ -28,7 +29,7 @@ export async function createTestAdmin(email?: string): Promise<string> {
     name: `Admin User ${userId.substring(0, 8)}`,
     email: email || `${userId}@test.com`,
     emailVerified: true,
-    role: "admin",
+    role: ADMIN_ROLE_NAME,
   });
   return userId;
 }

@@ -1,14 +1,14 @@
+import {
+  ActionSchema,
+  getPredefinedRolePermissions,
+  isCustomRole,
+  ResourceSchema,
+  RoleSchema,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isCustomRole, getPredefinedRolePermissions } from "@shared";
-import {
-  CreateRoleBodySchema,
-  ErrorResponseSchema,
-  RoleListItemSchema,
-  RoleResponseSchema,
-  RouteId,
-  UpdateRoleBodySchema,
-} from "@/types";
+import { auth } from "@/auth";
+import { ErrorResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 import {
   canDeleteRole,
@@ -18,7 +18,24 @@ import {
   listRolesByOrganization,
   validateRolePermissions,
 } from "@/utils/role-validation";
-import { auth } from "@/auth";
+
+const CreateUpdateRoleNameSchema = z
+  .string()
+  .min(1, "Role name is required")
+  .max(50, "Role name must be less than 50 characters")
+  .regex(
+    /^[a-zA-Z0-9_-]+$/,
+    "Role name can only contain letters, numbers, hyphens, and underscores",
+  );
+
+const PermissionsSchema = z.record(ResourceSchema, z.array(ActionSchema));
+
+const RoleResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  permissions: PermissionsSchema,
+  isCustom: z.boolean(),
+});
 
 const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -32,7 +49,14 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all roles in the organization",
         tags: ["Roles"],
         response: {
-          200: z.array(RoleListItemSchema),
+          200: z.array(
+            z.object({
+              id: RoleSchema,
+              name: z.string(),
+              isCustom: z.boolean(),
+              memberCount: z.number().default(0),
+            }),
+          ),
           401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -67,9 +91,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: role.name,
               isCustom: isCustomRole(role.name),
               memberCount,
-              organizationId: role.organizationId,
-              createdAt: new Date().toISOString(), // Better-auth should provide this
-              updatedAt: new Date().toISOString(), // Better-auth should provide this
             };
           }),
         );
@@ -98,7 +119,10 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateRole,
         description: "Create a new custom role",
         tags: ["Roles"],
-        body: CreateRoleBodySchema,
+        body: z.object({
+          name: CreateUpdateRoleNameSchema,
+          permissions: PermissionsSchema,
+        }),
         response: {
           200: RoleResponseSchema,
           400: ErrorResponseSchema,
@@ -179,9 +203,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: result.data.name,
           permissions: result.data.permissions,
           isCustom: true,
-          organizationId: user.organizationId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       } catch (error) {
         fastify.log.error(error);
@@ -207,7 +228,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a specific role by ID",
         tags: ["Roles"],
         params: z.object({
-          roleId: z.string(),
+          roleId: RoleSchema,
         }),
         response: {
           200: RoleResponseSchema,
@@ -233,19 +254,14 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { roleId } = request.params;
 
         // Check if it's a predefined role
-        if (roleId === "admin" || roleId === "member") {
-          const permissions = getPredefinedRolePermissions(
-            roleId as "admin" | "member",
-          );
+        if (!isCustomRole(roleId)) {
+          const permissions = getPredefinedRolePermissions(roleId);
 
           return reply.send({
             id: roleId,
             name: roleId,
             permissions,
             isCustom: false,
-            organizationId: user.organizationId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
           });
         }
 
@@ -271,9 +287,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: result.data.name,
           permissions: result.data.permissions,
           isCustom: true,
-          organizationId: user.organizationId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       } catch (error) {
         fastify.log.error(error);
@@ -299,9 +312,12 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: z.string(),
+          roleId: RoleSchema,
         }),
-        body: UpdateRoleBodySchema,
+        body: z.object({
+          name: CreateUpdateRoleNameSchema.optional(),
+          permissions: PermissionsSchema.optional(),
+        }),
         response: {
           200: RoleResponseSchema,
           400: ErrorResponseSchema,
@@ -328,7 +344,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { roleId } = request.params;
 
         // Cannot update predefined roles
-        if (roleId === "admin" || roleId === "member") {
+        if (!isCustomRole(roleId)) {
           return reply.status(403).send({
             error: {
               message: "Cannot update predefined roles",
@@ -418,9 +434,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: result.data.name,
           permissions: result.data.permissions,
           isCustom: true,
-          organizationId: user.organizationId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       } catch (error) {
         fastify.log.error(error);
@@ -446,7 +459,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: z.string(),
+          roleId: RoleSchema,
         }),
         response: {
           200: z.object({ success: z.boolean() }),

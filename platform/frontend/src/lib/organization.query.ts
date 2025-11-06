@@ -120,10 +120,10 @@ export function useInvitationsList(organizationId: string | undefined) {
           return {
             id: inv.id,
             email: inv.email,
-            role: inv.role || "member",
+            role: inv.role,
             expiresAt,
             isExpired,
-            status: inv.status || "pending",
+            status: inv.status,
           };
         })
         .sort((a, b) => {

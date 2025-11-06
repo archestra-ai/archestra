@@ -1,8 +1,13 @@
-import type { Action, Permission, Resource } from "@shared";
-import { isCustomRole, getPredefinedRolePermissions } from "@shared";
-import { eq, and } from "drizzle-orm";
-import db, { schema } from "@/database";
+import type { Action, Permission, Resource, Role } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  getPredefinedRolePermissions,
+  isCustomRole,
+  MEMBER_ROLE_NAME,
+} from "@shared";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
+import db, { schema } from "@/database";
 
 /**
  * Validate that permissions being granted are a subset of user's permissions
@@ -116,7 +121,7 @@ export async function isRoleNameUnique(
     );
 
     return !duplicate;
-  } catch (error) {
+  } catch (_error) {
     // If we can't fetch roles, assume it's not unique to be safe
     return false;
   }
@@ -146,7 +151,7 @@ export async function getRoleById(
     }
 
     return null;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }
@@ -157,6 +162,11 @@ export async function getRoleById(
 export async function listRolesByOrganization(
   organizationId: string,
 ): Promise<Array<{ id: string; name: string; organizationId: string }>> {
+  const predefinedRoles = [
+    { id: ADMIN_ROLE_NAME, name: ADMIN_ROLE_NAME, organizationId },
+    { id: MEMBER_ROLE_NAME, name: MEMBER_ROLE_NAME, organizationId },
+  ];
+
   try {
     const result = await auth.api.listRoles({
       query: {
@@ -173,16 +183,10 @@ export async function listRolesByOrganization(
     }
 
     // If no custom roles, return predefined ones
-    return [
-      { id: "admin", name: "admin", organizationId },
-      { id: "member", name: "member", organizationId },
-    ];
-  } catch (error) {
+    return predefinedRoles;
+  } catch (_error) {
     // Return predefined roles as fallback
-    return [
-      { id: "admin", name: "admin", organizationId },
-      { id: "member", name: "member", organizationId },
-    ];
+    return predefinedRoles;
   }
 }
 
@@ -233,7 +237,7 @@ export async function getUserPermissions(
 
   // If it's a predefined role, return the static permissions
   if (!isCustomRole(userRole)) {
-    return getPredefinedRolePermissions(userRole as "admin" | "member");
+    return getPredefinedRolePermissions(userRole as Role);
   }
 
   // For custom roles, fetch from better-auth

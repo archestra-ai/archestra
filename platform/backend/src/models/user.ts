@@ -1,4 +1,4 @@
-import type { Role } from "@shared";
+import { ADMIN_ROLE_NAME, type Role } from "@shared";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import config from "@/config";
@@ -9,7 +9,7 @@ class User {
   static async createOrGetExistingDefaultAdminUser({
     email = config.auth.adminDefaultEmail,
     password = config.auth.adminDefaultPassword,
-    role = "admin",
+    role = ADMIN_ROLE_NAME,
     name = "Admin",
   }: {
     email?: string;

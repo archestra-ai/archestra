@@ -505,6 +505,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (server.authType === "personal" && server.ownerId) {
               const ownerId = server.ownerId;
               const owner = await UserModel.getUserById(ownerId);
+
+              // TODO: what to do here... we need to check permissions instead of checking role name
               if (owner?.role === "admin") {
                 return { server, valid: true };
               }
@@ -629,6 +631,7 @@ async function validateCredentialSource(
   } else if (mcpServer.authType === "personal") {
     // For personal tokens: check if owner is admin OR if owner belongs to a team that the agent is assigned to
     // Admins can use their tokens with any agent
+    // TODO: what to do here... we need to check permissions instead of checking role name
     if (owner.role === "admin") {
       return null;
     }

@@ -1,32 +1,34 @@
 import { createAccessControl } from "better-auth/plugins/access";
+import { z } from "zod";
+
+export const ActionSchema = z.enum(["create", "read", "update", "delete"]);
+
+export const ResourceSchema = z.enum([
+  "agent",
+  "tool",
+  "policy",
+  "interaction",
+  "dualLlmConfig",
+  "dualLlmResult",
+  "settings",
+  "organization",
+  "member",
+  "invitation",
+  "internalMcpCatalog",
+  "mcpServer",
+  "mcpServerInstallationRequest",
+  "mcpToolCall",
+  "team",
+  "conversation",
+  "limit",
+  "tokenPrice",
+]);
 
 /**
- * Available resources
+ * Available resources and actions
  */
-export type Resource =
-  | "agent"
-  | "tool"
-  | "policy"
-  | "interaction"
-  | "dualLlmConfig"
-  | "dualLlmResult"
-  | "settings"
-  | "organization"
-  | "member"
-  | "invitation"
-  | "internalMcpCatalog"
-  | "mcpServer"
-  | "mcpServerInstallationRequest"
-  | "mcpToolCall"
-  | "team"
-  | "conversation"
-  | "limit"
-  | "tokenPrice"
-
-/**
- * Available actions
- */
-export type Action = "create" | "read" | "update" | "delete";
+export type Resource = z.infer<typeof ResourceSchema>;
+export type Action = z.infer<typeof ActionSchema>;
 
 /**
  * Permission string format: "resource:action"
@@ -34,25 +36,40 @@ export type Action = "create" | "read" | "update" | "delete";
  */
 export type Permission = `${Resource}:${Action}`;
 
-export type Role = "admin" | "member" | string; // Allow custom role names
+/**
+ * TODO: it's not very clear how owner role is assigned/inferred, it is mentioned in the
+ * better-auth docs https://www.better-auth.com/docs/plugins/organization#deleting-a-role
+ * but still not clear how it works/is-assigned
+ */
+export const OWNER_ROLE_NAME = "owner";
+export const ADMIN_ROLE_NAME = "admin";
+export const MEMBER_ROLE_NAME = "member";
+export const ALL_PREDEFINED_ROLES = [OWNER_ROLE_NAME, ADMIN_ROLE_NAME, MEMBER_ROLE_NAME];
+export const RoleSchema = z.union([
+  z.literal(OWNER_ROLE_NAME),
+  z.literal(ADMIN_ROLE_NAME),
+  z.literal(MEMBER_ROLE_NAME),
+  z.string(),
+]);
+export type Role = z.infer<typeof RoleSchema>;
 
 /**
  * Check if a role is a custom role (not predefined)
  */
-export function isCustomRole(role: string): boolean {
-  return !["admin", "member"].includes(role);
+export function isCustomRole(role: Role): boolean {
+  return !ALL_PREDEFINED_ROLES.includes(role);
 }
 
 /**
  * Get permissions for a predefined role
  */
 export function getPredefinedRolePermissions(
-  role: "admin" | "member",
+  role: Role,
 ): Record<Resource, Action[]> {
-  if (role === "admin") {
+  if (role === ADMIN_ROLE_NAME) {
     return allAvailableActions;
   }
-  return memberRole.permissions as Record<Resource, Action[]>;
+  return memberRole.statements as Record<Resource, Action[]>;
 }
 
 export const allAvailableActions: Record<Resource, Action[]> = {

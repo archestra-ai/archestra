@@ -1,4 +1,4 @@
-import type { Role } from "@shared";
+import { ADMIN_ROLE_NAME, type Role } from "@shared";
 import { eq } from "drizzle-orm";
 import logger from "@/logging";
 import {
@@ -36,7 +36,7 @@ export async function seedDefaultUserAndOrg(
       id: crypto.randomUUID(),
       organizationId: org.id,
       userId: user.id,
-      role: config.role || "admin",
+      role: config.role || ADMIN_ROLE_NAME,
       createdAt: new Date(),
     });
   }

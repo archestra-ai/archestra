@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import db, { schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
@@ -28,19 +29,19 @@ async function seedMockData() {
   const admin2User = await seedDefaultUserAndOrg({
     email: "admin-2@example.com",
     password: "password",
-    role: "admin",
+    role: ADMIN_ROLE_NAME,
     name: "Admin-2",
   });
   const member1User = await seedDefaultUserAndOrg({
     email: "member-1@example.com",
     password: "password",
-    role: "member",
+    role: MEMBER_ROLE_NAME,
     name: "Member-1",
   });
   const member2User = await seedDefaultUserAndOrg({
     email: "member-2@example.com",
     password: "password",
-    role: "member",
+    role: MEMBER_ROLE_NAME,
     name: "Member-2",
   });
 
@@ -59,11 +60,15 @@ async function seedMockData() {
     organizationId: org.id,
     createdBy: admin2User.id,
   });
-  await TeamModel.addMember(managementTeam.id, defaultAdmin.id, "admin");
-  await TeamModel.addMember(managementTeam.id, admin2User.id, "admin");
-  await TeamModel.addMember(marketingTeam.id, defaultAdmin.id, "admin");
-  await TeamModel.addMember(marketingTeam.id, member1User.id, "member");
-  await TeamModel.addMember(marketingTeam.id, member2User.id, "member");
+  await TeamModel.addMember(
+    managementTeam.id,
+    defaultAdmin.id,
+    ADMIN_ROLE_NAME,
+  );
+  await TeamModel.addMember(managementTeam.id, admin2User.id, ADMIN_ROLE_NAME);
+  await TeamModel.addMember(marketingTeam.id, defaultAdmin.id, ADMIN_ROLE_NAME);
+  await TeamModel.addMember(marketingTeam.id, member1User.id, MEMBER_ROLE_NAME);
+  await TeamModel.addMember(marketingTeam.id, member2User.id, MEMBER_ROLE_NAME);
 
   // Step 2: Create agents
   logger.info("\nCreating agents...");

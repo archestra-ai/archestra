@@ -1,3 +1,4 @@
+import { MEMBER_ROLE_NAME } from "@shared";
 import {
   boolean,
   integer,
@@ -65,7 +66,7 @@ export const member = pgTable("member", {
   userId: text("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  role: text("role").default("member").notNull(),
+  role: text("role").default(MEMBER_ROLE_NAME).notNull(),
   createdAt: timestamp("created_at").notNull(),
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { OrganizationMembersCard } from "@daveyplate/better-auth-ui";
+import { ADMIN_ROLE_NAME, OWNER_ROLE_NAME } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -33,35 +34,38 @@ function MembersSettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const isAdminOrOwner =
+    activeMemberRole === ADMIN_ROLE_NAME ||
+    activeMemberRole === OWNER_ROLE_NAME;
+
   const members = activeOrg ? (
     <div className="space-y-6">
-      {activeMemberRole &&
-        (activeMemberRole === "admin" || activeMemberRole === "owner") && (
-          <Dialog
-            open={inviteDialogOpen}
-            onOpenChange={(open) => {
-              setInviteDialogOpen(open);
-              if (!open) {
-                queryClient.invalidateQueries({
-                  queryKey: organizationKeys.invitations(),
-                });
-              }
-            }}
-          >
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Invite Member</DialogTitle>
-              </DialogHeader>
-              <InviteByLinkCard
-                organizationId={activeOrg.id}
-                onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
+      {activeMemberRole && isAdminOrOwner && (
+        <Dialog
+          open={inviteDialogOpen}
+          onOpenChange={(open) => {
+            setInviteDialogOpen(open);
+            if (!open) {
+              queryClient.invalidateQueries({
+                queryKey: organizationKeys.invitations(),
+              });
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Invite Member</DialogTitle>
+            </DialogHeader>
+            <InviteByLinkCard
+              organizationId={activeOrg.id}
+              onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
       <OrganizationMembersCard
         action={() => {
-          if (activeMemberRole === "admin" || activeMemberRole === "owner") {
+          if (isAdminOrOwner) {
             setInviteDialogOpen(true);
           }
         }}

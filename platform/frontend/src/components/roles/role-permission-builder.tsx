@@ -1,6 +1,6 @@
 "use client";
 
-import { allAvailableActions, type Action, type Resource } from "@shared";
+import { type Action, ActionSchema, type Resource } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,7 @@ interface RolePermissionBuilderProps {
 
 // Group resources by category for better organization
 const resourceCategories: Record<string, Resource[]> = {
-  "Core Resources": [
-    "agent",
-    "tool",
-    "policy",
-    "interaction",
-    "conversation",
-  ],
+  "Core Resources": ["agent", "tool", "policy", "interaction", "conversation"],
   "MCP & Integrations": [
     "mcpServer",
     "mcpServerInstallationRequest",
@@ -31,7 +25,7 @@ const resourceCategories: Record<string, Resource[]> = {
     "internalMcpCatalog",
   ],
   "Dual LLM": ["dualLlmConfig", "dualLlmResult"],
-  "Organization": [
+  Organization: [
     "organization",
     "member",
     "invitation",
@@ -147,7 +141,6 @@ export function RolePermissionBuilder({
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
       <Card className="p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -170,7 +163,6 @@ export function RolePermissionBuilder({
         </div>
       </Card>
 
-      {/* Permission Selection */}
       <div className="space-y-3">
         {Object.entries(resourceCategories).map(([category, resources]) => (
           <Card key={category} className="p-3">
@@ -243,14 +235,7 @@ export function RolePermissionBuilder({
                         <Separator className="my-2" />
 
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {(
-                            [
-                              "create",
-                              "read",
-                              "update",
-                              "delete",
-                            ] as Action[]
-                          ).map((action) => {
+                          {ActionSchema.options.map((action) => {
                             const isAvailable =
                               availableActions.includes(action);
                             const isSelected = selectedActions.includes(action);
@@ -277,7 +262,9 @@ export function RolePermissionBuilder({
                                 <Label
                                   htmlFor={`${resource}-${action}`}
                                   className={`text-sm ${
-                                    !isAvailable ? "cursor-not-allowed" : "cursor-pointer"
+                                    !isAvailable
+                                      ? "cursor-not-allowed"
+                                      : "cursor-pointer"
                                   }`}
                                 >
                                   {actionLabels[action]}

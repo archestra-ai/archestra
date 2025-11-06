@@ -6,53 +6,36 @@ import {
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "./archestra-mcp-server";
+import { AgentModel, InternalMcpCatalogModel } from "@/models";
+import type { Agent } from "@/types";
 
-// Mock the database
-vi.mock("./database", () => ({
-  __esModule: true,
-  default: {
-    select: vi.fn(),
-  },
-  schema: {
-    internalMcpCatalogTable: {
-      name: "name",
-      description: "description",
-    },
-    member: {},
-  },
-}));
+async function createTestAgent(name?: string): Promise<Agent> {
+  return await AgentModel.create({
+    name: name || `Test Agent ${crypto.randomUUID().substring(0, 8)}`,
+    teams: [],
+    labels: [],
+  });
+}
 
-// Mock the logger
-vi.mock("./logging", () => ({
-  __esModule: true,
-  default: {
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-// Mock the models
-vi.mock("./models", () => ({
-  InternalMcpCatalogModel: {
-    findAll: vi.fn(),
-  },
-  McpServerInstallationRequestModel: {
-    findPendingByExternalCatalogId: vi.fn(),
-    create: vi.fn(),
-  },
-}));
-
-import db from "@/database";
-import {
-  InternalMcpCatalogModel,
-  McpServerInstallationRequestModel,
-} from "@/models";
+async function createTestInternalMcpCatalogItem(data: {
+  name: string;
+  description?: string;
+  version?: string;
+  serverType: string;
+  serverUrl?: string;
+  repository?: string;
+}) {
+  return await InternalMcpCatalogModel.create({
+    ...data,
+    createdAt: new Date(),
+  });
+}
 
 describe("getArchestraMcpTools", () => {
-  it("should return an array of 3 tools", () => {
+  it("should return an array of 2 tools", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(3);
+    expect(tools).toHaveLength(2);
     expect(tools[0]).toHaveProperty("name");
     expect(tools[0]).toHaveProperty("title");
     expect(tools[0]).toHaveProperty("description");
@@ -64,7 +47,6 @@ describe("getArchestraMcpTools", () => {
 
     expect(tools[0].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
     expect(tools[1].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
-    expect(tools[2].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
   });
 
   it("should have whoami tool", () => {
@@ -85,27 +67,25 @@ describe("getArchestraMcpTools", () => {
     expect(searchTool?.title).toBe("Search Private MCP Registry");
   });
 
-  it("should have create_mcp_server_installation_request tool", () => {
+  it("should not have create_mcp_server_installation_request tool (disabled)", () => {
     const tools = getArchestraMcpTools();
     const createTool = tools.find((t) =>
       t.name.endsWith("create_mcp_server_installation_request"),
     );
 
-    expect(createTool).toBeDefined();
-    expect(createTool?.title).toBe("Create MCP Server Installation Request");
+    expect(createTool).toBeUndefined();
   });
 });
 
 describe("executeArchestraTool", () => {
-  const mockContext: ArchestraContext = {
-    agentId: "agent-123",
-    agentName: "Test Agent",
-    userId: "user-123",
-    organizationId: "org-456",
-  };
+  let testAgent: Agent;
+  let mockContext: ArchestraContext;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    testAgent = await createTestAgent("Test Agent");
+    mockContext = {
+      agent: testAgent,
+    };
   });
 
   describe("whoami tool", () => {
@@ -120,28 +100,20 @@ describe("executeArchestraTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toHaveProperty("type", "text");
       expect((result.content[0] as any).text).toContain("Test Agent");
-      expect((result.content[0] as any).text).toContain("agent-123");
-      expect((result.content[0] as any).text).not.toContain("user-123");
+      expect((result.content[0] as any).text).toContain(testAgent.id);
     });
   });
 
   describe("search_private_mcp_registry tool", () => {
     it("should return all catalog items when no query provided", async () => {
-      const mockCatalogItems = [
-        {
-          id: "1",
-          name: "Test Server",
-          version: "1.0.0",
-          description: "A test server",
-          serverType: "remote",
-          serverUrl: "https://example.com",
-          repository: "https://github.com/example/repo",
-        },
-      ];
-
-      vi.mocked(InternalMcpCatalogModel.findAll).mockResolvedValue(
-        mockCatalogItems as any,
-      );
+      const testServer = await createTestInternalMcpCatalogItem({
+        name: "Test Server",
+        version: "1.0.0",
+        description: "A test server",
+        serverType: "remote",
+        serverUrl: "https://example.com",
+        repository: "https://github.com/example/repo",
+      });
 
       const result = await executeArchestraTool(
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
@@ -158,8 +130,7 @@ describe("executeArchestraTool", () => {
     });
 
     it("should return empty message when no items found", async () => {
-      vi.mocked(InternalMcpCatalogModel.findAll).mockResolvedValue([]);
-
+      // No items created, so search should return empty
       const result = await executeArchestraTool(
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
@@ -171,40 +142,36 @@ describe("executeArchestraTool", () => {
     });
 
     it("should handle search with query parameter", async () => {
-      const mockWhere = vi.fn().mockResolvedValue([
-        {
-          id: "2",
-          name: "Filtered Server",
-          serverType: "remote",
-        },
-      ]);
-      const mockFrom = vi.fn().mockReturnValue({
-        where: mockWhere,
+      await createTestInternalMcpCatalogItem({
+        name: "Test Server",
+        description: "A server for testing",
+        serverType: "remote",
       });
-      const mockSelect = vi.fn().mockReturnValue({
-        from: mockFrom,
+      
+      await createTestInternalMcpCatalogItem({
+        name: "Other Server",
+        description: "A different server",
+        serverType: "remote",
       });
-
-      vi.mocked(db).select = mockSelect;
 
       const result = await executeArchestraTool(
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
-        { query: "test" },
+        { query: "Test" },
         mockContext,
       );
 
-      expect(mockSelect).toHaveBeenCalled();
-      expect(mockFrom).toHaveBeenCalled();
-      expect(mockWhere).toHaveBeenCalled();
       expect(result.isError).toBe(false);
       expect((result.content[0] as any).text).toContain(
         "Found 1 MCP server(s)",
       );
-      expect((result.content[0] as any).text).toContain("Filtered Server");
+      expect((result.content[0] as any).text).toContain("Test Server");
+      expect((result.content[0] as any).text).not.toContain("Other Server");
     });
 
     it("should handle errors gracefully", async () => {
-      vi.mocked(InternalMcpCatalogModel.findAll).mockRejectedValue(
+      // Mock the InternalMcpCatalogModel.findAll method to throw an error
+      const originalFindAll = InternalMcpCatalogModel.findAll;
+      InternalMcpCatalogModel.findAll = vi.fn().mockRejectedValue(
         new Error("Database error"),
       );
 
@@ -218,93 +185,28 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain(
         "Error searching private MCP registry",
       );
+
+      // Restore the original method
+      InternalMcpCatalogModel.findAll = originalFindAll;
     });
   });
 
-  describe("create_mcp_server_installation_request tool", () => {
-    it("should create installation request with external catalog ID", async () => {
-      vi.mocked(
-        McpServerInstallationRequestModel.findPendingByExternalCatalogId,
-      ).mockResolvedValue(null);
-      vi.mocked(McpServerInstallationRequestModel.create).mockResolvedValue({
-        id: "request-123",
-        status: "pending",
-      } as any);
-
-      const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-        {
-          external_catalog_id: "catalog-123",
-          request_reason: "Need this server for testing",
-        },
-        mockContext,
-      );
-
-      expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain("Successfully created");
-      expect((result.content[0] as any).text).toContain("request-123");
-      expect(McpServerInstallationRequestModel.create).toHaveBeenCalledWith({
-        externalCatalogId: "catalog-123",
-        requestedBy: "user-123",
-        requestReason: "Need this server for testing",
-        customServerConfig: null,
-        status: "pending",
+  // MCP server installation request tool is temporarily disabled
+  describe("create_mcp_server_installation_request tool (disabled)", () => {
+    it("should throw error for disabled tool", async () => {
+      await expect(
+        executeArchestraTool(
+          `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+          {
+            external_catalog_id: "catalog-123",
+            request_reason: "Need this server for testing",
+          },
+          mockContext,
+        ),
+      ).rejects.toMatchObject({
+        code: -32601,
+        message: `Tool '${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request' not found`,
       });
-    });
-
-    it("should return error when neither external_catalog_id nor custom_server_config provided", async () => {
-      const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-        {},
-        mockContext,
-      );
-
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Either external_catalog_id or custom_server_config must be provided",
-      );
-    });
-
-    it("should return message when pending request already exists", async () => {
-      vi.mocked(
-        McpServerInstallationRequestModel.findPendingByExternalCatalogId,
-      ).mockResolvedValue({
-        id: "existing-request-123",
-        status: "pending",
-      } as any);
-
-      const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-        { external_catalog_id: "catalog-123" },
-        mockContext,
-      );
-
-      expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain(
-        "pending installation request already exists",
-      );
-      expect((result.content[0] as any).text).toContain("existing-request-123");
-      expect(McpServerInstallationRequestModel.create).not.toHaveBeenCalled();
-    });
-
-    it("should handle errors gracefully", async () => {
-      vi.mocked(
-        McpServerInstallationRequestModel.findPendingByExternalCatalogId,
-      ).mockResolvedValue(null);
-      vi.mocked(McpServerInstallationRequestModel.create).mockRejectedValue(
-        new Error("Database error"),
-      );
-
-      const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-        { external_catalog_id: "catalog-123" },
-        mockContext,
-      );
-
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as any).text).toContain(
-        "Error creating installation request",
-      );
     });
   });
 

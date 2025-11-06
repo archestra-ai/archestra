@@ -7,7 +7,6 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -15,10 +14,8 @@ import {
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "@/archestra-mcp-server";
-import { auth } from "@/auth";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import db, { schema } from "@/database";
 import logger from "@/logging";
 import { AgentModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
@@ -378,55 +375,6 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       try {
-        // Get user information from session
-        const headers = new Headers(request.headers as HeadersInit);
-        const session = await auth.api.getSession({
-          headers,
-          query: { disableCookieCache: true },
-        });
-
-        if (!session?.user?.id) {
-          reply.status(401);
-          return {
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message: "Unauthorized: No valid session found",
-            },
-            id: null,
-          };
-        }
-
-        const userId = session.user.id;
-        const userEmail = session.user.email;
-
-        // Get organization ID from session or member table
-        let organizationId = session.session?.activeOrganizationId;
-        if (!organizationId) {
-          const userMembership = await db
-            .select()
-            .from(schema.member)
-            .where(eq(schema.member.userId, userId))
-            .limit(1);
-
-          if (userMembership[0]) {
-            organizationId = userMembership[0].organizationId;
-          }
-        }
-
-        if (!organizationId) {
-          reply.status(401);
-          return {
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message:
-                "Unauthorized: User not associated with any organization",
-            },
-            id: null,
-          };
-        }
-
         let server: Server;
         let transport: StreamableHTTPServerTransport;
 

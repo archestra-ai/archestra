@@ -2,6 +2,7 @@ import type { Action, Resource } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth";
 import config from "@/config";
+import { UserModel } from "@/models";
 import { type ErrorResponse, RouteId } from "@/types";
 
 const prepareErrorResponse = (
@@ -22,6 +23,9 @@ class AuthMiddleware {
         }),
       );
     }
+
+    // Populate request.user and request.organizationId after successful authentication
+    await this.populateUserInfo(request);
 
     // check if authorized
     const { success, error } = await this.requiredPermissionsStatus(request);
@@ -151,6 +155,43 @@ class AuthMiddleware {
         }
       }
       return { success: false, error: new Error("No API key provided") };
+    }
+  };
+
+  private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
+    try {
+      const session = await auth.api.getSession({
+        headers: new Headers(request.headers as HeadersInit),
+        query: { disableCookieCache: true },
+      });
+
+      if (!session?.user?.id) {
+        return; // Should not happen since we already checked authentication
+      }
+
+      // Get the full user object from database
+      const user = await UserModel.getUserById(session.user.id);
+      if (!user) {
+        return; // Should not happen for valid sessions
+      }
+
+      // Get organization ID
+      let organizationId = session.session?.activeOrganizationId;
+      if (!organizationId) {
+        // For API key requests, get from member table
+        organizationId = await UserModel.getOrganizationId(session.user.id);
+      }
+
+      if (!organizationId) {
+        return; // Should not happen for valid sessions
+      }
+
+      // Populate the request decorators
+      request.user = user;
+      request.organizationId = organizationId;
+    } catch (_error) {
+      // If population fails, leave decorators unpopulated
+      // The route handlers should handle missing user info gracefully
     }
   };
 }

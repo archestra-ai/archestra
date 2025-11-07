@@ -17,7 +17,6 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -32,18 +31,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const agentTools = await AgentToolModel.findAll(user.id);
+        const agentTools = await AgentToolModel.findAll(request.user.id);
         return reply.send(agentTools);
       } catch (error) {
         fastify.log.error(error);
@@ -432,17 +420,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const { agentIds, catalogId } = request.query;
 
         // Validate that at least one agent ID is provided
@@ -465,7 +442,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get all MCP servers accessible to the user
-        const allServers = await McpServerModel.findAll(user.id);
+        const allServers = await McpServerModel.findAll(request.user.id);
 
         // Filter by catalogId if provided
         const filteredServers = catalogId

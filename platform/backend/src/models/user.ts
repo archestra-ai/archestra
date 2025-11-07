@@ -59,6 +59,16 @@ class User {
       .limit(1);
     return user;
   }
+
+  static async getOrganizationId(userId: string): Promise<string | null> {
+    const [userMembership] = await db
+      .select()
+      .from(schema.member)
+      .where(eq(schema.member.userId, userId))
+      .limit(1);
+
+    return userMembership?.organizationId ?? null;
+  }
 }
 
 export default User;

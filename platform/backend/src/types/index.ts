@@ -19,3 +19,4 @@ export * from "./team";
 export * from "./token-price";
 export * from "./tool";
 export * from "./tool-execution";
+export * from "./user";

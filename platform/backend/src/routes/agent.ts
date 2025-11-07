@@ -14,7 +14,6 @@ import {
   UpdateAgentSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -42,31 +41,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
+    async (
+      { query: { name, limit, offset, sortBy, sortDirection }, user },
+      reply,
+    ) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { name, limit, offset, sortBy, sortDirection } = request.query;
-        const pagination = { limit, offset };
-        const sorting = { sortBy, sortDirection };
-        const filters = { name };
-
-        const result = await AgentModel.findAllPaginated(
-          pagination,
-          sorting,
-          filters,
-          user.id,
+        return reply.send(
+          await AgentModel.findAllPaginated(
+            { limit, offset },
+            { sortBy, sortDirection },
+            { name },
+            user.id,
+          ),
         );
-        return reply.send(result);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -92,18 +79,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        return reply.send(await AgentModel.findAll(user.id));
+        return reply.send(await AgentModel.findAll(request.user.id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -127,19 +103,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const agent = await AgentModel.getAgentOrCreateDefault();
         return reply.send(agent);
       } catch (error) {
@@ -172,16 +137,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
         const agent = await AgentModel.create(request.body);
         const labelKeys = await AgentLabelModel.getAllKeys();
         // We need to re-init metrics with the new label keys in case label keys changed.
@@ -217,18 +172,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const agent = await AgentModel.findById(request.params.id, user.id);
+        const agent = await AgentModel.findById(
+          request.params.id,
+          request.user.id,
+        );
 
         if (!agent) {
           return reply.status(404).send({
@@ -353,19 +300,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const keys = await AgentLabelModel.getAllKeys();
         return reply.send(keys);
       } catch (error) {
@@ -394,24 +330,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async (request, reply) => {
+    async ({ query: { key } }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { key } = request.query;
-        const values = key
-          ? await AgentLabelModel.getValuesByKey(key)
-          : await AgentLabelModel.getAllValues();
-        return reply.send(values);
+        return reply.send(
+          key
+            ? await AgentLabelModel.getValuesByKey(key)
+            : await AgentLabelModel.getAllValues(),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

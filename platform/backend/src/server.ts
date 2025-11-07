@@ -156,6 +156,10 @@ const startMetricsServer = async () => {
 const start = async () => {
   const fastify = createFastifyInstance();
 
+  // Register the user and organizationId decorators - will be populated by auth middleware
+  fastify.decorateRequest("user", undefined);
+  fastify.decorateRequest("organizationId", "");
+
   try {
     await seedRequiredStartingData();
 

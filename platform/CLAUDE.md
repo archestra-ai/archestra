@@ -134,6 +134,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - **Custom Roles**: Up to 50 custom RBAC roles per organization
 - **Middleware**: Auth handled by Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts` `requiredEndpointPermissionsMap`
+- **IMPORTANT**: API key requests populate `request.user` and `request.organizationId` decorators for route handlers
 
 ## Observability
 

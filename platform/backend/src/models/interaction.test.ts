@@ -270,7 +270,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(adminId);
+      const interactions = await InteractionModel.findAll(adminId, true);
       expect(interactions).toHaveLength(2);
     });
 
@@ -331,7 +331,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user1Id);
+      const interactions = await InteractionModel.findAll(user1Id, false);
       expect(interactions).toHaveLength(1);
       expect(interactions[0].agentId).toBe(agent1.id);
     });
@@ -355,7 +355,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user2Id);
+      const interactions = await InteractionModel.findAll(user2Id, false);
       expect(interactions).toHaveLength(0);
     });
 
@@ -378,7 +378,11 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const found = await InteractionModel.findById(interaction.id, adminId);
+      const found = await InteractionModel.findById(
+        interaction.id,
+        adminId,
+        true,
+      );
       expect(found).not.toBeNull();
       expect(found?.id).toBe(interaction.id);
     });
@@ -414,7 +418,11 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const found = await InteractionModel.findById(interaction.id, user1Id);
+      const found = await InteractionModel.findById(
+        interaction.id,
+        user1Id,
+        false,
+      );
       expect(found).not.toBeNull();
       expect(found?.id).toBe(interaction.id);
     });
@@ -438,7 +446,11 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const found = await InteractionModel.findById(interaction.id, user2Id);
+      const found = await InteractionModel.findById(
+        interaction.id,
+        user2Id,
+        false,
+      );
       expect(found).toBeNull();
     });
   });

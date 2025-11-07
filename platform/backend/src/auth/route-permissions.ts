@@ -1,4 +1,4 @@
-import type { Action, Resource } from "@shared";
+import type { Permissions } from "@shared";
 import { RouteId } from "@/types";
 
 /**
@@ -8,9 +8,7 @@ import { RouteId } from "@/types";
  * That would mean that the route (routeId) requires all the permissions to pass the check:
  * `resource1:action1` AND `resource1:action2` AND `resource2:action1`
  */
-const routePermissionsConfig: Partial<
-  Record<RouteId, Partial<Record<Resource, Action[]>>>
-> = {
+const routePermissionsConfig: Partial<Record<RouteId, Permissions>> = {
   [RouteId.GetAgents]: {
     agent: ["read"],
   },

@@ -40,7 +40,7 @@ describe("AgentModel", () => {
       await AgentModel.create({ name: "Agent 2", teams: [] });
       await AgentModel.create({ name: "Agent 3", teams: [] });
 
-      const agents = await AgentModel.findAll(adminId);
+      const agents = await AgentModel.findAll(adminId, true);
       expect(agents).toHaveLength(3);
     });
 
@@ -81,7 +81,7 @@ describe("AgentModel", () => {
       });
 
       // user1 only has access to agent1 (via team1)
-      const agents = await AgentModel.findAll(user1Id);
+      const agents = await AgentModel.findAll(user1Id, false);
       expect(agents).toHaveLength(1);
       expect(agents[0].id).toBe(agent1.id);
     });
@@ -105,7 +105,7 @@ describe("AgentModel", () => {
       });
 
       // user2 is not in any team
-      const agents = await AgentModel.findAll(user2Id);
+      const agents = await AgentModel.findAll(user2Id, false);
       expect(agents).toHaveLength(0);
     });
 
@@ -117,7 +117,7 @@ describe("AgentModel", () => {
         teams: [],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, adminId);
+      const foundAgent = await AgentModel.findById(agent.id, adminId, true);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
@@ -139,7 +139,7 @@ describe("AgentModel", () => {
         teams: [team.id],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, user1Id);
+      const foundAgent = await AgentModel.findById(agent.id, user1Id, false);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
@@ -162,7 +162,7 @@ describe("AgentModel", () => {
         teams: [team.id],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, user2Id);
+      const foundAgent = await AgentModel.findById(agent.id, user2Id, false);
       expect(foundAgent).toBeNull();
     });
 

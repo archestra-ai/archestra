@@ -10,7 +10,14 @@ import { schema } from "@/database";
 export const SelectOrganizationRoleSchema = createSelectSchema(
   schema.organizationRolesTable,
   {
+    /**
+     * The fact that we are setting id here explicitly (when it is coming from the database is a bit of a hack)
+     * because for example in GET /api/roles, we are not only returning custom roles, but also predefined ones
+     * (which don't have a UUID id, see generatePredefinedRole in organization-role.ts)
+     */
+    id: z.string(),
     permission: PermissionsSchema,
+    organizationId: z.string().optional(),
   },
 ).extend({
   /**

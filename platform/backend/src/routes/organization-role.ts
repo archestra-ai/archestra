@@ -37,6 +37,10 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
+      fastify.log.info(
+        `Getting all roles for organization ${organizationId} YOOOO`,
+      );
+
       try {
         // Get all roles including predefined ones
         return reply.send(await OrganizationRoleModel.getAll(organizationId));

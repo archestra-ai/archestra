@@ -56,67 +56,6 @@ describe("InteractionModel", () => {
     });
   });
 
-  describe("findAll", () => {
-    test("returns all interactions", async () => {
-      await InteractionModel.create({
-        agentId,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Message 1" }],
-        },
-        response: {
-          id: "response-1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Response 1",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        agentId,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Message 2" }],
-        },
-        response: {
-          id: "response-2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Response 2",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const interactions = await InteractionModel.findAll();
-      expect(interactions).toHaveLength(2);
-    });
-  });
-
   describe("findById", () => {
     test("returns interaction by id", async () => {
       const created = await InteractionModel.create({
@@ -270,8 +209,13 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(adminId, true);
-      expect(interactions).toHaveLength(2);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        adminId,
+        true,
+      );
+      expect(interactions.data).toHaveLength(2);
     });
 
     test("member only sees interactions for accessible agents", async () => {
@@ -331,9 +275,14 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user1Id, false);
-      expect(interactions).toHaveLength(1);
-      expect(interactions[0].agentId).toBe(agent1.id);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user1Id,
+        false,
+      );
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].agentId).toBe(agent1.id);
     });
 
     test("member with no access sees no interactions", async () => {
@@ -355,8 +304,13 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user2Id, false);
-      expect(interactions).toHaveLength(0);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user2Id,
+        false,
+      );
+      expect(interactions.data).toHaveLength(0);
     });
 
     test("findById returns interaction for admin", async () => {

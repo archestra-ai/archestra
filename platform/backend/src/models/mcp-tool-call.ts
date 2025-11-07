@@ -22,36 +22,6 @@ class McpToolCallModel {
     return mcpToolCall;
   }
 
-  static async findAll(
-    userId?: string,
-    isMcpServerAdmin?: boolean,
-  ): Promise<McpToolCall[]> {
-    let query = db
-      .select()
-      .from(schema.mcpToolCallsTable)
-      .orderBy(desc(schema.mcpToolCallsTable.createdAt))
-      .$dynamic();
-
-    // Apply access control filtering for non-MCP server admins
-    if (userId && !isMcpServerAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    const rows = await query;
-    return rows as McpToolCall[];
-  }
-
   /**
    * Find all MCP tool calls with pagination and sorting support
    */

@@ -31,36 +31,6 @@ class InteractionModel {
     return interaction;
   }
 
-  static async findAll(
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<Interaction[]> {
-    let query = db
-      .select()
-      .from(schema.interactionsTable)
-      .orderBy(desc(schema.interactionsTable.createdAt))
-      .$dynamic();
-
-    // Apply access control filtering for non-agent admins
-    if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.interactionsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    const rows = await query;
-    return rows as Interaction[];
-  }
-
   /**
    * Find all interactions with pagination and sorting support
    */

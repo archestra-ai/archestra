@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentModel } from "@/models";
 import AgentLabelModel from "@/models/agent-label";
@@ -42,16 +43,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { name, limit, offset, sortBy, sortDirection }, user },
+      { query: { name, limit, offset, sortBy, sortDirection }, user, headers },
       reply,
     ) => {
       try {
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
+        );
         return reply.send(
           await AgentModel.findAllPaginated(
             { limit, offset },
             { sortBy, sortDirection },
             { name },
             user.id,
+            isAgentAdmin,
           ),
         );
       } catch (error) {
@@ -79,7 +85,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        return reply.send(await AgentModel.findAll(request.user.id));
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+        return reply.send(
+          await AgentModel.findAll(request.user.id, isAgentAdmin),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

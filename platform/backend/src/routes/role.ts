@@ -8,7 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 import {
   canDeleteRole,
@@ -48,8 +48,8 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetRoles,
         description: "Get all roles in the organization",
         tags: ["Roles"],
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               id: RoleSchema,
               name: z.string(),
@@ -57,10 +57,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
               memberCount: z.number().default(0),
             }),
           ),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -124,13 +121,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: CreateUpdateRoleNameSchema,
           permissions: PermissionsSchema,
         }),
-        response: {
-          200: RoleResponseSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async (request, reply) => {
@@ -231,12 +222,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           roleId: RoleSchema,
         }),
-        response: {
-          200: RoleResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async (request, reply) => {
@@ -319,14 +305,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: CreateUpdateRoleNameSchema.optional(),
           permissions: PermissionsSchema.optional(),
         }),
-        response: {
-          200: RoleResponseSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(RoleResponseSchema),
       },
     },
     async (request, reply) => {
@@ -462,14 +441,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           roleId: RoleSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

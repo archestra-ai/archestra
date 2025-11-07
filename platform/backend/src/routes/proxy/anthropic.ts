@@ -10,7 +10,7 @@ import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
   Anthropic,
-  ErrorResponseSchema,
+  constructResponseSchema,
   RouteId,
   UuidIdSchema,
 } from "@/types";
@@ -885,13 +885,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: {
-          200: Anthropic.API.MessagesResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
     async ({ body, headers }, reply) => {
@@ -918,13 +912,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: {
-          200: Anthropic.API.MessagesResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
     async ({ body, headers, params }, reply) => {

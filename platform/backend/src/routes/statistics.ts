@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import StatisticsModel from "@/models/statistics";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
 const TimeFrameSchema = z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]);
@@ -9,48 +9,6 @@ const TimeFrameSchema = z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]);
 const TimeSeriesPointSchema = z.object({
   timestamp: z.string(),
   value: z.number(),
-});
-
-const TeamStatisticsSchema = z.object({
-  teamId: z.string(),
-  teamName: z.string(),
-  members: z.number(),
-  agents: z.number(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const AgentStatisticsSchema = z.object({
-  agentId: z.string(),
-  agentName: z.string(),
-  teamName: z.string(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const ModelStatisticsSchema = z.object({
-  model: z.string(),
-  requests: z.number(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  cost: z.number(),
-  percentage: z.number(),
-  timeSeries: z.array(TimeSeriesPointSchema),
-});
-
-const OverviewStatisticsSchema = z.object({
-  totalRequests: z.number(),
-  totalTokens: z.number(),
-  totalCost: z.number(),
-  topTeam: z.string(),
-  topAgent: z.string(),
-  topModel: z.string(),
 });
 
 const StatisticsQuerySchema = z.object({
@@ -66,10 +24,21 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get team statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(TeamStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              teamId: z.string(),
+              teamName: z.string(),
+              members: z.number(),
+              agents: z.number(),
+              requests: z.number(),
+              inputTokens: z.number(),
+              outputTokens: z.number(),
+              cost: z.number(),
+              timeSeries: z.array(TimeSeriesPointSchema),
+            }),
+          ),
+        ),
       },
     },
     async (request, reply) => {
@@ -102,10 +71,20 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get agent statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(AgentStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              agentId: z.string(),
+              agentName: z.string(),
+              teamName: z.string(),
+              requests: z.number(),
+              inputTokens: z.number(),
+              outputTokens: z.number(),
+              cost: z.number(),
+              timeSeries: z.array(TimeSeriesPointSchema),
+            }),
+          ),
+        ),
       },
     },
     async (request, reply) => {
@@ -138,10 +117,19 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get model statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: z.array(ModelStatisticsSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              model: z.string(),
+              requests: z.number(),
+              inputTokens: z.number(),
+              outputTokens: z.number(),
+              cost: z.number(),
+              percentage: z.number(),
+              timeSeries: z.array(TimeSeriesPointSchema),
+            }),
+          ),
+        ),
       },
     },
     async (request, reply) => {
@@ -174,10 +162,16 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get overview statistics",
         tags: ["Statistics"],
         querystring: StatisticsQuerySchema,
-        response: {
-          200: OverviewStatisticsSchema,
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.object({
+            totalRequests: z.number(),
+            totalTokens: z.number(),
+            totalCost: z.number(),
+            topTeam: z.string(),
+            topAgent: z.string(),
+            topModel: z.string(),
+          }),
+        ),
       },
     },
     async (request, reply) => {

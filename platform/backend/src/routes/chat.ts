@@ -6,7 +6,8 @@ import { getChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import { ConversationModel, MessageModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
+  ErrorResponsesSchema,
   InsertConversationSchema,
   RouteId,
   SelectConversationSchema,
@@ -399,11 +400,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           messages: z.array(z.any()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
-        response: {
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
     async (request, reply) => {
@@ -576,10 +574,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatConversations,
         description: "List all conversations for current user",
         tags: ["Chat"],
-        response: {
-          200: z.array(SelectConversationSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
@@ -610,11 +605,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get conversation with messages",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: SelectConversationWithMessagesSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationWithMessagesSchema),
       },
     },
     async (request, reply) => {
@@ -659,10 +650,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           selectedModel: true,
         }).partial(),
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
@@ -697,11 +685,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
@@ -744,10 +728,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a conversation",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
@@ -781,16 +762,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatMcpTools,
         description: "List available MCP tools for chat",
         tags: ["Chat"],
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               name: z.string(),
               description: z.string().optional(),
               inputSchema: z.any(),
             }),
           ),
-          401: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {

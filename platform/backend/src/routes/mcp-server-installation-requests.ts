@@ -4,7 +4,7 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   InsertMcpServerInstallationRequestSchema,
   type McpServerInstallationRequest,
   McpServerInstallationRequestStatusSchema,
@@ -31,11 +31,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
               "Filter by status",
             ),
         }),
-        response: {
-          200: z.array(SelectMcpServerInstallationRequestSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(SelectMcpServerInstallationRequestSchema),
+        ),
       },
     },
     async (request, reply) => {
@@ -102,12 +100,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           adminResponse: true,
           notes: true,
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -173,13 +168,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -250,13 +241,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           externalCatalogId: true,
           requestedBy: true,
         }).partial(),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -344,13 +331,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           adminResponse: z.string().optional(),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -420,13 +403,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           adminResponse: z.string().optional(),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -496,13 +475,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           content: z.string().min(1),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -588,13 +563,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

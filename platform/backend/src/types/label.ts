@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { UuidIdSchema } from "./api";
 
 export const SelectLabelKeySchema = createSelectSchema(schema.labelKeyTable);
 export const InsertLabelKeySchema = createInsertSchema(schema.labelKeyTable);
@@ -23,8 +24,8 @@ export const InsertAgentLabelSchema = createInsertSchema(
 export const AgentLabelWithDetailsSchema = z.object({
   key: z.string(),
   value: z.string(),
-  keyId: z.string().uuid().optional(),
-  valueId: z.string().uuid().optional(),
+  keyId: UuidIdSchema.optional(),
+  valueId: UuidIdSchema.optional(),
 });
 
 export type LabelKey = z.infer<typeof SelectLabelKeySchema>;

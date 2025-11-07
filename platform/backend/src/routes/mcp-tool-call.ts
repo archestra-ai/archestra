@@ -2,9 +2,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { McpToolCallModel } from "@/models";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   PaginationQuerySchema,
   RouteId,
   SelectMcpToolCallSchema,
@@ -32,10 +32,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "mcpServerName",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectMcpToolCallSchema),
-          401: ErrorResponseSchema,
-        },
+        response: createPaginatedResponseSchema(SelectMcpToolCallSchema),
       },
     },
     async (request, reply) => {
@@ -84,11 +81,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           mcpToolCallId: UuidIdSchema,
         }),
-        response: {
-          200: SelectMcpToolCallSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectMcpToolCallSchema),
       },
     },
     async (request, reply) => {

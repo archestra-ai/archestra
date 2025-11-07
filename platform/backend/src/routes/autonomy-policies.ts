@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
 import {
   AutonomyPolicyOperator,
-  ErrorResponseSchema,
+  constructResponseSchema,
   RouteId,
   ToolInvocation,
   TrustedData,
@@ -18,16 +18,14 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetOperators,
         description: "Get all supported policy operators",
         tags: ["Autonomy Policies"],
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               value: AutonomyPolicyOperator.SupportedOperatorSchema,
               label: z.string(),
             }),
           ),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (_, reply) => {
@@ -57,12 +55,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetToolInvocationPolicies,
         description: "Get all tool invocation policies",
         tags: ["Tool Invocation Policies"],
-        response: {
-          200: z.array(ToolInvocation.SelectToolInvocationPolicySchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(ToolInvocation.SelectToolInvocationPolicySchema),
+        ),
       },
     },
     async (_, reply) => {
@@ -94,12 +89,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: ToolInvocation.SelectToolInvocationPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          ToolInvocation.SelectToolInvocationPolicySchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -129,13 +121,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: ToolInvocation.SelectToolInvocationPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          ToolInvocation.SelectToolInvocationPolicySchema,
+        ),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -180,13 +168,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: ToolInvocation.SelectToolInvocationPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          ToolInvocation.SelectToolInvocationPolicySchema,
+        ),
       },
     },
     async ({ params: { id }, body }, reply) => {
@@ -226,13 +210,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -269,12 +247,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTrustedDataPolicies,
         description: "Get all trusted data policies",
         tags: ["Trusted Data Policies"],
-        response: {
-          200: z.array(TrustedData.SelectTrustedDataPolicySchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(TrustedData.SelectTrustedDataPolicySchema),
+        ),
       },
     },
     async (_, reply) => {
@@ -306,12 +281,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: TrustedData.SelectTrustedDataPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          TrustedData.SelectTrustedDataPolicySchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -341,13 +313,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: TrustedData.SelectTrustedDataPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          TrustedData.SelectTrustedDataPolicySchema,
+        ),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -392,13 +360,9 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: TrustedData.SelectTrustedDataPolicySchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          TrustedData.SelectTrustedDataPolicySchema,
+        ),
       },
     },
     async ({ params: { id }, body }, reply) => {
@@ -438,11 +402,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params: { id } }, reply) => {

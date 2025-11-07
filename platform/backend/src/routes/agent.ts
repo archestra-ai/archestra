@@ -4,9 +4,9 @@ import { initializeMetrics } from "@/llm-metrics";
 import { AgentModel } from "@/models";
 import AgentLabelModel from "@/models/agent-label";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   InsertAgentSchema,
   PaginationQuerySchema,
   RouteId,
@@ -37,12 +37,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "team",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectAgentSchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectAgentSchema),
+        ),
       },
     },
     async (request, reply) => {
@@ -90,12 +87,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgents,
         description: "Get all agents without pagination",
         tags: ["Agents"],
-        response: {
-          200: z.array(SelectAgentSchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (request, reply) => {
@@ -132,12 +124,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetDefaultAgent,
         description: "Get or create default agent",
         tags: ["Agents"],
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (request, reply) => {
@@ -180,12 +167,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (request, reply) => {
@@ -230,13 +212,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (request, reply) => {
@@ -292,13 +268,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
@@ -343,13 +313,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -386,12 +350,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelKeys,
         description: "Get all available label keys",
         tags: ["Agents"],
-        response: {
-          200: z.array(z.string()),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(z.string())),
       },
     },
     async (request, reply) => {
@@ -432,12 +391,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           key: z.string().optional().describe("Filter values by label key"),
         }),
-        response: {
-          200: z.array(z.string()),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(z.string())),
       },
     },
     async (request, reply) => {

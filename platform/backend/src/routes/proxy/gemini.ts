@@ -7,7 +7,13 @@ import { getObservableGenAI } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 
-import { type Agent, ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import {
+  type Agent,
+  constructResponseSchema,
+  ErrorResponsesSchema,
+  Gemini,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
@@ -438,13 +444,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          200: Gemini.API.GenerateContentResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          Gemini.API.GenerateContentResponseSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -474,13 +476,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          // Streaming responses don't have a schema
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
     async (request, reply) => {
@@ -511,13 +508,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          200: Gemini.API.GenerateContentResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          Gemini.API.GenerateContentResponseSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -549,13 +542,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          // Streaming responses don't have a schema
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
     async (request, reply) => {

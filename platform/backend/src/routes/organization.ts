@@ -4,7 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import { OrganizationModel } from "@/models";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema, RouteId } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -20,17 +20,13 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["1h", "12h", "24h", "1w", "1m"])
             .nullable(),
         }),
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             limitCleanupInterval: z
               .enum(["1h", "12h", "24h", "1w", "1m"])
               .nullable(),
           }),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -87,13 +83,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetOrganizationAppearance,
         description: "Get organization appearance settings",
         tags: ["Organization"],
-        response: {
-          200: OrganizationAppearanceSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(OrganizationAppearanceSchema),
       },
     },
     async (request, reply) => {
@@ -149,8 +139,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetOrganization,
         description: "Get organization details",
         tags: ["Organization"],
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             id: z.string(),
             name: z.string(),
             slug: z.string(),
@@ -158,11 +148,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .enum(["1h", "12h", "24h", "1w", "1m"])
               .nullable(),
           }),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -229,13 +215,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update organization appearance settings",
         tags: ["Organization"],
         body: OrganizationAppearanceSchema,
-        response: {
-          200: OrganizationAppearanceSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(OrganizationAppearanceSchema),
       },
     },
     async (request, reply) => {
@@ -308,16 +288,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           logo: z.string(), // Base64 encoded image
         }),
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             success: z.boolean(),
             logo: z.string().nullable(),
           }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          400: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -403,14 +379,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteOrganizationLogo,
         description: "Remove custom organization logo and revert to default",
         tags: ["Organization"],
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             success: z.boolean(),
           }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {

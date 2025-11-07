@@ -10,7 +10,7 @@ import {
   UserModel,
 } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   RouteId,
   SelectAgentToolSchema,
   SelectToolSchema,
@@ -27,12 +27,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgentTools,
         description: "Get all agent-tool relationships with details",
         tags: ["Agent Tools"],
-        response: {
-          200: z.array(SelectAgentToolSchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectAgentToolSchema)),
       },
     },
     async (request, reply) => {
@@ -80,14 +75,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
           })
           .nullish(),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
@@ -205,12 +193,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           toolId: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
@@ -244,13 +227,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        response: {
-          200: z.array(SelectToolSchema),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
     async (request, reply) => {
@@ -301,14 +278,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
         }).partial(),
-        response: {
-          200: UpdateAgentToolSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async (request, reply) => {
@@ -436,8 +406,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .pipe(z.array(UuidIdSchema)),
           catalogId: UuidIdSchema.optional(),
         }),
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               id: z.string(),
               name: z.string(),
@@ -457,12 +427,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 .optional(),
             }),
           ),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {

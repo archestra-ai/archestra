@@ -4,7 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, SecretModel } from "@/models";
-import { ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import { constructResponseSchema, RouteId, UuidIdSchema } from "@/types";
 
 /**
  * Generate PKCE code verifier
@@ -262,15 +262,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogId: UuidIdSchema,
           serverId: UuidIdSchema.optional(), // Optional: if server already exists
         }),
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             authorizationUrl: z.string().url(),
             state: z.string(),
           }),
-          400: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
@@ -515,8 +512,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           code: z.string(),
           state: z.string(),
         }),
-        response: {
-          200: z.object({
+        response: constructResponseSchema(
+          z.object({
             success: z.boolean(),
             catalogId: UuidIdSchema,
             name: z.string(),
@@ -525,9 +522,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             expiresIn: z.number().optional(),
             secretId: UuidIdSchema,
           }),
-          400: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {

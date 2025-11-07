@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { UuidIdSchema } from "./api";
 
 /**
  * Entity types that can have limits applied
@@ -73,7 +74,7 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
 );
 
 export const UpdateLimitSchema = CreateLimitSchema.partial().extend({
-  id: z.string().uuid(),
+  id: UuidIdSchema,
 });
 
 /**

@@ -4,7 +4,7 @@ import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamMemberBodySchema,
   CreateTeamBodySchema,
-  ErrorResponseSchema,
+  constructResponseSchema,
   RouteId,
   SelectTeamMemberSchema,
   SelectTeamSchema,
@@ -13,9 +13,6 @@ import {
 import { getUserFromRequest } from "@/utils";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all teams in the organization
-   */
   fastify.get(
     "/api/teams",
     {
@@ -23,11 +20,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTeams,
         description: "Get all teams in the organization",
         tags: ["Teams"],
-        response: {
-          200: z.array(SelectTeamSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectTeamSchema)),
       },
     },
     async (request, reply) => {
@@ -58,23 +51,15 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Create a new team (Admin only)
-   */
   fastify.post(
     "/api/teams",
     {
       schema: {
         operationId: RouteId.CreateTeam,
-        description: "Create a new team (Admin only)",
+        description: "Create a new team",
         tags: ["Teams"],
         body: CreateTeamBodySchema,
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
     async (request, reply) => {
@@ -111,9 +96,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get a team by ID
-   */
   fastify.get(
     "/api/teams/:id",
     {
@@ -124,12 +106,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
     async (request, reply) => {
@@ -180,27 +157,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update a team (Admin only)
-   */
   fastify.put(
     "/api/teams/:id",
     {
       schema: {
         operationId: RouteId.UpdateTeam,
-        description: "Update a team (Admin only)",
+        description: "Update a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
         body: UpdateTeamBodySchema,
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
     async (request, reply) => {
@@ -255,26 +223,17 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Delete a team (Admin only)
-   */
   fastify.delete(
     "/api/teams/:id",
     {
       schema: {
         operationId: RouteId.DeleteTeam,
-        description: "Delete a team (Admin only)",
+        description: "Delete a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
@@ -329,9 +288,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get team members
-   */
   fastify.get(
     "/api/teams/:id/members",
     {
@@ -342,12 +298,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: z.array(SelectTeamMemberSchema),
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectTeamMemberSchema)),
       },
     },
     async (request, reply) => {
@@ -389,27 +340,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Add a member to a team (Admin only)
-   */
   fastify.post(
     "/api/teams/:id/members",
     {
       schema: {
         operationId: RouteId.AddTeamMember,
-        description: "Add a member to a team (Admin only)",
+        description: "Add a member to a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
         body: AddTeamMemberBodySchema,
-        response: {
-          200: SelectTeamMemberSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamMemberSchema),
       },
     },
     async (request, reply) => {
@@ -456,27 +398,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Remove a member from a team (Admin only)
-   */
   fastify.delete(
     "/api/teams/:id/members/:userId",
     {
       schema: {
         operationId: RouteId.RemoveTeamMember,
-        description: "Remove a member from a team (Admin only)",
+        description: "Remove a member from a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
           userId: z.string(),
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

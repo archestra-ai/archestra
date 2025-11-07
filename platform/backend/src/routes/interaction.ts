@@ -2,9 +2,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InteractionModel } from "@/models";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   PaginationQuerySchema,
   RouteId,
   SelectInteractionSchema,
@@ -32,10 +32,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "model",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectInteractionSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectInteractionSchema),
+        ),
       },
     },
     async (request, reply) => {
@@ -83,11 +82,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           interactionId: UuidIdSchema,
         }),
-        response: {
-          200: SelectInteractionSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInteractionSchema),
       },
     },
     async (request, reply) => {

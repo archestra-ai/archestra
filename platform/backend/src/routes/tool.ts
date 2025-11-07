@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ToolModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   ExtendedSelectToolSchema,
   RouteId,
 } from "@/types";
@@ -16,11 +16,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTools,
         description: "Get all tools",
         tags: ["Tools"],
-        response: {
-          200: z.array(ExtendedSelectToolSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
       },
     },
     async (request, reply) => {
@@ -58,11 +54,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetUnassignedTools,
         description: "Get all tools that have no agent relationships",
         tags: ["Tools"],
-        response: {
-          200: z.array(ExtendedSelectToolSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
       },
     },
     async (request, reply) => {

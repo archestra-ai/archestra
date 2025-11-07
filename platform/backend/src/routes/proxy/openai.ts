@@ -9,7 +9,7 @@ import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
-  ErrorResponseSchema,
+  constructResponseSchema,
   OpenAi,
   RouteId,
   UuidIdSchema,
@@ -891,13 +891,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers }, reply) => {
@@ -921,13 +917,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers, params }, reply) => {

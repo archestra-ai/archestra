@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import TokenPriceModel from "@/models/token-price";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import {
   CreateLimitSchema,
   LimitEntityTypeSchema,
@@ -15,9 +15,6 @@ import { getUserFromRequest } from "@/utils";
 import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all limits with optional filtering
-   */
   fastify.get(
     "/api/limits",
     {
@@ -30,11 +27,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           entityId: z.string().optional(),
           limitType: LimitTypeSchema.optional(),
         }),
-        response: {
-          200: z.array(SelectLimitSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectLimitSchema)),
       },
     },
     async (request, reply) => {
@@ -96,23 +89,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Create a new limit (Admin only)
-   */
   fastify.post(
     "/api/limits",
     {
       schema: {
         operationId: RouteId.CreateLimit,
-        description: "Create a new limit (Admin only)",
+        description: "Create a new limit",
         tags: ["Limits"],
         body: CreateLimitSchema,
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
     async (request, reply) => {
@@ -147,9 +132,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get a limit by ID
-   */
   fastify.get(
     "/api/limits/:id",
     {
@@ -158,14 +140,9 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a limit by ID",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
     async (request, reply) => {
@@ -209,27 +186,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update a limit (Admin only)
-   */
   fastify.put(
     "/api/limits/:id",
     {
       schema: {
         operationId: RouteId.UpdateLimit,
-        description: "Update a limit (Admin only)",
+        description: "Update a limit",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
         body: UpdateLimitSchema.omit({ id: true }),
-        response: {
-          200: SelectLimitSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectLimitSchema),
       },
     },
     async (request, reply) => {
@@ -274,26 +242,17 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Delete a limit (Admin only)
-   */
   fastify.delete(
     "/api/limits/:id",
     {
       schema: {
         operationId: RouteId.DeleteLimit,
-        description: "Delete a limit (Admin only)",
+        description: "Delete a limit",
         tags: ["Limits"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

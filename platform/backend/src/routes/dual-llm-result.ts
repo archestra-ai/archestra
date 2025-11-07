@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   RouteId,
   SelectDualLlmResultSchema,
   UuidIdSchema,
@@ -10,7 +10,6 @@ import {
 import { getUserFromRequest } from "@/utils";
 
 const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Get dual LLM result by tool call ID
   fastify.get(
     "/api/dual-llm-results/by-tool-call-id/:toolCallId",
     {
@@ -21,10 +20,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           toolCallId: z.string(),
         }),
-        response: {
-          200: SelectDualLlmResultSchema.nullable(),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmResultSchema.nullable()),
       },
     },
     async ({ params: { toolCallId } }, reply) => {
@@ -44,7 +40,6 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get all dual LLM results for an interaction
   fastify.get(
     "/api/dual-llm-results/by-interaction/:interactionId",
     {
@@ -55,12 +50,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           interactionId: UuidIdSchema,
         }),
-        response: {
-          200: z.array(SelectDualLlmResultSchema),
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectDualLlmResultSchema)),
       },
     },
     async (request, reply) => {

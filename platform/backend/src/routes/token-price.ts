@@ -1,7 +1,12 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import TokenPriceModel from "@/models/token-price";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import {
+  constructResponseSchema,
+  ErrorResponseSchema,
+  RouteId,
+  UuidIdSchema,
+} from "@/types";
 import {
   CreateTokenPriceSchema,
   SelectTokenPriceSchema,
@@ -10,9 +15,6 @@ import {
 import { getUserFromRequest } from "@/utils";
 
 const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all token prices
-   */
   fastify.get(
     "/api/token-prices",
     {
@@ -20,11 +22,7 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTokenPrices,
         description: "Get all token prices",
         tags: ["Token Prices"],
-        response: {
-          200: z.array(SelectTokenPriceSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectTokenPriceSchema)),
       },
     },
     async (request, reply) => {
@@ -58,23 +56,17 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Create a new token price (Admin only)
-   */
   fastify.post(
     "/api/token-prices",
     {
       schema: {
         operationId: RouteId.CreateTokenPrice,
-        description: "Create a new token price (Admin only)",
+        description: "Create a new token price",
         tags: ["Token Prices"],
         body: CreateTokenPriceSchema,
         response: {
-          200: SelectTokenPriceSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
+          ...constructResponseSchema(SelectTokenPriceSchema),
           409: ErrorResponseSchema,
-          500: ErrorResponseSchema,
         },
       },
     },
@@ -119,9 +111,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get a token price by ID
-   */
   fastify.get(
     "/api/token-prices/:id",
     {
@@ -130,14 +119,9 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a token price by ID",
         tags: ["Token Prices"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: SelectTokenPriceSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTokenPriceSchema),
       },
     },
     async (request, reply) => {
@@ -178,27 +162,18 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update a token price (Admin only)
-   */
   fastify.put(
     "/api/token-prices/:id",
     {
       schema: {
         operationId: RouteId.UpdateTokenPrice,
-        description: "Update a token price (Admin only)",
+        description: "Update a token price",
         tags: ["Token Prices"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
         body: UpdateTokenPriceSchema.omit({ id: true }),
-        response: {
-          200: SelectTokenPriceSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTokenPriceSchema),
       },
     },
     async (request, reply) => {
@@ -242,26 +217,17 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Delete a token price (Admin only)
-   */
   fastify.delete(
     "/api/token-prices/:id",
     {
       schema: {
         operationId: RouteId.DeleteTokenPrice,
-        description: "Delete a token price (Admin only)",
+        description: "Delete a token price",
         tags: ["Token Prices"],
         params: z.object({
-          id: z.string().uuid(),
+          id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

@@ -175,12 +175,13 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 - Extends predefined roles (admin, member) with custom roles
 - Up to 50 custom roles per organization
-- Granular permissions: CRUD operations on 19 resources across 4 categories
+- Granular permissions: CRUD operations on 19 resources (agent, tool, policy, interaction, dualLlmConfig, dualLlmResult, settings, organization, member, invitation, internalMcpCatalog, mcpServer, mcpServerInstallationRequest, mcpToolCall, team, conversation, limit, tokenPrice)
 - Permission validation: users can only grant permissions they have
 - Role protection: predefined roles cannot be modified/deleted
 - API endpoints: `/api/roles/*` (admin-only)
 - UI: Settings > Roles page (admin-only)
 - Database: `organizationRolesTable`
+- Better-auth integration: dynamicAccessControl enabled
 
 **Agent Labels**:
 

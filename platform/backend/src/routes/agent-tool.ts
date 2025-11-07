@@ -32,8 +32,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const agentTools = await AgentToolModel.findAll(request.user.id);
-        return reply.send(agentTools);
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+        return reply.send(
+          await AgentToolModel.findAll(request.user.id, isAgentAdmin),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -442,8 +447,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+
         // Get all MCP servers accessible to the user
-        const allServers = await McpServerModel.findAll(request.user.id);
+        const allServers = await McpServerModel.findAll(
+          request.user.id,
+          isAgentAdmin,
+        );
 
         // Filter by catalogId if provided
         const filteredServers = catalogId

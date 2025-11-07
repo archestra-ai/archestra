@@ -178,9 +178,9 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Granular permissions: CRUD operations on 19 resources across 4 categories
 - Permission validation: users can only grant permissions they have
 - Role protection: predefined roles cannot be modified/deleted
-- API endpoints: `/api/roles/*` (requires organization:update permission)
+- API endpoints: `/api/roles/*` (admin-only)
 - UI: Settings > Roles page (admin-only)
-- Database: `organizationRolesTable` with better-auth integration
+- Database: `organizationRolesTable`
 
 **Agent Labels**:
 

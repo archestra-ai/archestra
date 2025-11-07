@@ -1,6 +1,8 @@
 import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { InternalMcpCatalogServerType } from "@/types/mcp-catalog";
-import type { LocalMcpServerInstallationStatus } from "@/types/mcp-server";
+import type {
+  InternalMcpCatalogServerType,
+  LocalMcpServerInstallationStatus,
+} from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import usersTable from "./user";

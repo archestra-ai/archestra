@@ -10,7 +10,6 @@ import {
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -37,38 +36,26 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
+    async (
+      { query: { agentId, limit, offset, sortBy, sortDirection }, user },
+      reply,
+    ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
       if (agentId) {
-        const result =
+        return reply.send(
           await InteractionModel.getAllInteractionsForAgentPaginated(
             agentId,
             pagination,
             sorting,
-          );
-        return reply.send(result);
+          ),
+        );
       }
 
-      const result = await InteractionModel.findAllPaginated(
-        pagination,
-        sorting,
-        user.id,
+      return reply.send(
+        await InteractionModel.findAllPaginated(pagination, sorting, user.id),
       );
-      return reply.send(result);
     },
   );
 
@@ -85,20 +72,9 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async ({ params: { interactionId }, user }, reply) => {
       const interaction = await InteractionModel.findById(
-        request.params.interactionId,
+        interactionId,
         user.id,
       );
 

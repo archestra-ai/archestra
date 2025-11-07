@@ -5,7 +5,6 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import { OrganizationModel } from "@/models";
 import { constructResponseSchema, RouteId } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch(
@@ -29,34 +28,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
+    async ({ organizationId, body: { limitCleanupInterval } }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.organizationId) {
-          return reply.status(400).send({
-            error: {
-              message: "No organization found",
-              type: "bad_request",
-            },
-          });
-        }
-
         const [organization] = await db
           .update(schema.organizationsTable)
           .set({
-            limitCleanupInterval: request.body.limitCleanupInterval,
+            limitCleanupInterval,
           })
-          .where(eq(schema.organizationsTable.id, user.organizationId))
+          .where(eq(schema.organizationsTable.id, organizationId))
           .returning({
             limitCleanupInterval:
               schema.organizationsTable.limitCleanupInterval,
@@ -86,19 +65,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(OrganizationAppearanceSchema),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();
@@ -151,32 +119,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
+    async ({ organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.organizationId) {
-          return reply.status(400).send({
-            error: {
-              message: "No organization found",
-              type: "bad_request",
-            },
-          });
-        }
-
         const [organization] = await db
           .select()
           .from(schema.organizationsTable)
-          .where(eq(schema.organizationsTable.id, user.organizationId))
+          .where(eq(schema.organizationsTable.id, organizationId))
           .limit(1);
 
         if (!organization) {
@@ -218,28 +166,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(OrganizationAppearanceSchema),
       },
     },
-    async (request, reply) => {
+    async ({ body }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.organizationId) {
-          return reply.status(400).send({
-            error: {
-              message: "No organization found",
-              type: "bad_request",
-            },
-          });
-        }
-
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();
@@ -247,7 +175,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Update appearance settings
         const updatedOrg = await OrganizationModel.updateAppearance(
           organization.id,
-          request.body,
+          body,
         );
 
         if (!updatedOrg) {
@@ -298,17 +226,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const { logo } = request.body;
 
         // Validate logo is base64 encoded PNG
@@ -386,19 +303,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();

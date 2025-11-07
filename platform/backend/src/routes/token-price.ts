@@ -12,7 +12,6 @@ import {
   SelectTokenPriceSchema,
   UpdateTokenPriceSchema,
 } from "@/types/token-price";
-import { getUserFromRequest } from "@/utils";
 
 const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -25,24 +24,12 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectTokenPriceSchema)),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Ensure all models from interactions have pricing
         await TokenPriceModel.ensureAllModelsHavePricing();
 
-        const tokenPrices = await TokenPriceModel.findAll();
-        return reply.send(tokenPrices);
+        return reply.send(await TokenPriceModel.findAll());
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -72,17 +59,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Check if model already exists
         const existingTokenPrice = await TokenPriceModel.findByModel(
           request.body.model,
@@ -96,8 +72,7 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const tokenPrice = await TokenPriceModel.create(request.body);
-        return reply.send(tokenPrice);
+        return reply.send(await TokenPriceModel.create(request.body));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -126,17 +101,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const tokenPrice = await TokenPriceModel.findById(request.params.id);
 
         if (!tokenPrice) {
@@ -176,23 +140,9 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTokenPriceSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const tokenPrice = await TokenPriceModel.update(
-          request.params.id,
-          request.body,
-        );
+        const tokenPrice = await TokenPriceModel.update(id, body);
 
         if (!tokenPrice) {
           return reply.status(404).send({
@@ -232,17 +182,6 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const success = await TokenPriceModel.delete(request.params.id);
 
         if (!success) {

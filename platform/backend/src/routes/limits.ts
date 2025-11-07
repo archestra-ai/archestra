@@ -3,15 +3,16 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import TokenPriceModel from "@/models/token-price";
-import { constructResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import {
   CreateLimitSchema,
+  constructResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
+  RouteId,
   SelectLimitSchema,
   UpdateLimitSchema,
-} from "@/types/limit";
-import { getUserFromRequest } from "@/utils";
+  UuidIdSchema,
+} from "@/types";
 import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -30,22 +31,14 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectLimitSchema)),
       },
     },
-    async (request, reply) => {
+    async (
+      { query: { entityType, entityId, limitType }, organizationId },
+      reply,
+    ) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Cleanup limits if needed before fetching
-        if (user.organizationId) {
-          await cleanupLimitsIfNeeded(user.organizationId);
+        if (organizationId) {
+          await cleanupLimitsIfNeeded(organizationId);
         }
 
         // Ensure all models from interactions have pricing records
@@ -53,22 +46,16 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const conditions = [];
 
-        if (request.query.entityType) {
-          conditions.push(
-            eq(schema.limitsTable.entityType, request.query.entityType),
-          );
+        if (entityType) {
+          conditions.push(eq(schema.limitsTable.entityType, entityType));
         }
 
-        if (request.query.entityId) {
-          conditions.push(
-            eq(schema.limitsTable.entityId, request.query.entityId),
-          );
+        if (entityId) {
+          conditions.push(eq(schema.limitsTable.entityId, entityId));
         }
 
-        if (request.query.limitType) {
-          conditions.push(
-            eq(schema.limitsTable.limitType, request.query.limitType),
-          );
+        if (limitType) {
+          conditions.push(eq(schema.limitsTable.limitType, limitType));
         }
 
         const limits = await db
@@ -102,17 +89,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const [limit] = await db
           .insert(schema.limitsTable)
           .values(request.body)
@@ -147,17 +123,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const [limit] = await db
           .select()
           .from(schema.limitsTable)
@@ -202,17 +167,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const [limit] = await db
           .update(schema.limitsTable)
           .set({ ...request.body, updatedAt: new Date() })
@@ -257,17 +211,6 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const result = await db
           .delete(schema.limitsTable)
           .where(eq(schema.limitsTable.id, request.params.id));

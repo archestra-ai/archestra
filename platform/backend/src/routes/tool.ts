@@ -6,7 +6,6 @@ import {
   ExtendedSelectToolSchema,
   RouteId,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -21,19 +20,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const tools = await ToolModel.findAll(user.id);
-        return reply.send(tools);
+        return reply.send(await ToolModel.findAll(request.user.id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -57,21 +44,9 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const tools = await ToolModel.findUnassigned();
-        return reply.send(tools);
+        return reply.send(await ToolModel.findUnassigned());
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

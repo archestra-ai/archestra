@@ -7,7 +7,6 @@ import {
   SelectDualLlmResultSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -53,22 +52,11 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectDualLlmResultSchema)),
       },
     },
-    async (request, reply) => {
+    async ({ params: { interactionId }, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Get the interaction with access control
         const interaction = await InteractionModel.findById(
-          request.params.interactionId,
+          interactionId,
           user.id,
         );
         if (!interaction) {

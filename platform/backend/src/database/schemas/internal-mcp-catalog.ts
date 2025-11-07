@@ -6,7 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { InternalMcpCatalogServerType } from "@/types/mcp-catalog";
+import type { InternalMcpCatalogServerType } from "@/types";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -2,7 +2,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import StatisticsModel from "@/models/statistics";
 import { constructResponseSchema, RouteId } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const TimeFrameSchema = z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]);
 
@@ -41,25 +40,8 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getTeamStatistics(
-        timeframe,
-        user.id,
-      );
-
-      return reply.send(statistics);
+    async ({ query: { timeframe } }, reply) => {
+      return reply.send(await StatisticsModel.getTeamStatistics(timeframe));
     },
   );
 
@@ -87,25 +69,10 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getAgentStatistics(
-        timeframe,
-        user.id,
+    async ({ query: { timeframe }, user }, reply) => {
+      return reply.send(
+        await StatisticsModel.getAgentStatistics(timeframe, user.id),
       );
-
-      return reply.send(statistics);
     },
   );
 
@@ -132,25 +99,10 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getModelStatistics(
-        timeframe,
-        user.id,
+    async ({ query: { timeframe }, user }, reply) => {
+      return reply.send(
+        await StatisticsModel.getModelStatistics(timeframe, user.id),
       );
-
-      return reply.send(statistics);
     },
   );
 
@@ -174,25 +126,10 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { timeframe } = request.query;
-      const statistics = await StatisticsModel.getOverviewStatistics(
-        timeframe,
-        user.id,
+    async ({ query: { timeframe }, user }, reply) => {
+      return reply.send(
+        await StatisticsModel.getOverviewStatistics(timeframe, user.id),
       );
-
-      return reply.send(statistics);
     },
   );
 };

@@ -13,7 +13,6 @@ import {
   UpdateMcpServerInstallationRequestSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
   fastify,
@@ -36,21 +35,8 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ query: { status }, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { status } = request.query;
-
         const isMcpServerAdmin = "TODO:";
 
         let requests: McpServerInstallationRequest[];
@@ -105,27 +91,16 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Check if there's already a pending request for this external catalog item
-        if (request.body.externalCatalogId) {
+        if (body.externalCatalogId) {
           const existingExternalRequests =
             await McpServerInstallationRequestModel.findAll();
           const duplicateRequest = existingExternalRequests.find(
             (req) =>
               req.status === "pending" &&
-              req.externalCatalogId === request.body.externalCatalogId,
+              req.externalCatalogId === body.externalCatalogId,
           );
 
           if (duplicateRequest) {
@@ -140,7 +115,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const newRequest = await McpServerInstallationRequestModel.create({
-          ...request.body,
+          ...body,
           requestedBy: user.id,
         });
 
@@ -173,21 +148,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -246,21 +210,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -273,10 +226,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
         // MCP server admins can update status, non-MCP server admins can only update their own requests
         if (
-          request.body.status ||
-          request.body.adminResponse ||
-          request.body.reviewedBy ||
-          request.body.reviewedAt
+          body.status ||
+          body.adminResponse ||
+          body.reviewedBy ||
+          body.reviewedAt
         ) {
           const isMcpServerAdmin = "TODO:";
 
@@ -291,8 +244,8 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.update(
-          request.params.id,
-          request.body,
+          id,
+          body,
         );
 
         if (!updatedRequest) {
@@ -336,21 +289,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -362,9 +304,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.approve(
-          request.params.id,
+          id,
           user.id,
-          request.body.adminResponse,
+          body.adminResponse,
         );
 
         if (!updatedRequest) {
@@ -408,21 +350,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -434,9 +365,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.decline(
-          request.params.id,
+          id,
           user.id,
-          request.body.adminResponse,
+          body.adminResponse,
         );
 
         if (!updatedRequest) {
@@ -480,21 +411,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -524,10 +444,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           .where(eq(schema.usersTable.id, user.id));
 
         const updatedRequest = await McpServerInstallationRequestModel.addNote(
-          request.params.id,
+          id,
           user.id,
           userData.name,
-          request.body.content,
+          body.content,
         );
 
         if (!updatedRequest) {
@@ -566,22 +486,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id } }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const success = await McpServerInstallationRequestModel.delete(
-          request.params.id,
-        );
+        const success = await McpServerInstallationRequestModel.delete(id);
 
         if (!success) {
           return reply.status(404).send({

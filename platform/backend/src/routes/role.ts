@@ -9,7 +9,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { constructResponseSchema, RouteId } from "@/types";
-import { getUserFromRequest } from "@/utils";
 import {
   canDeleteRole,
   getMemberCountForRole,
@@ -60,28 +59,17 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
+    async ({ organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Get all roles including predefined ones
-        const roles = await listRolesByOrganization(user.organizationId);
+        const roles = await listRolesByOrganization(organizationId);
 
         // Enrich with member counts and isCustom flag
         const enrichedRoles = await Promise.all(
           roles.map(async (role) => {
             const memberCount = await getMemberCountForRole(
               role.name,
-              user.organizationId,
+              organizationId,
             );
 
             return {
@@ -124,24 +112,10 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(RoleResponseSchema),
       },
     },
-    async (request, reply) => {
+    async ({ body: { name, permissions }, user, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Check role name uniqueness
-        const isUnique = await isRoleNameUnique(
-          request.body.name,
-          user.organizationId,
-        );
+        const isUnique = await isRoleNameUnique(name, organizationId);
 
         if (!isUnique) {
           return reply.status(400).send({
@@ -155,12 +129,12 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Get user's permissions to validate they can grant these permissions
         const userPermissions = await getUserPermissions(
           user.id,
-          user.organizationId,
+          organizationId,
         );
 
         const validation = validateRolePermissions(
           userPermissions,
-          request.body.permissions,
+          permissions,
         );
 
         if (!validation.valid) {
@@ -175,9 +149,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Create role using better-auth
         const result = await auth.api.createRole({
           body: {
-            name: request.body.name,
-            permissions: request.body.permissions,
-            organizationId: user.organizationId,
+            name,
+            permissions,
+            organizationId,
           },
         });
 
@@ -225,21 +199,8 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(RoleResponseSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { roleId }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { roleId } = request.params;
-
         // Check if it's a predefined role
         if (!isCustomRole(roleId)) {
           const permissions = getPredefinedRolePermissions(roleId);
@@ -256,7 +217,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await auth.api.getRole({
           body: {
             roleId,
-            organizationId: user.organizationId,
+            organizationId,
           },
         });
 
@@ -308,21 +269,11 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(RoleResponseSchema),
       },
     },
-    async (request, reply) => {
+    async (
+      { params: { roleId }, body: { name, permissions }, user, organizationId },
+      reply,
+    ) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { roleId } = request.params;
-
         // Cannot update predefined roles
         if (!isCustomRole(roleId)) {
           return reply.status(403).send({
@@ -337,7 +288,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const existingRole = await auth.api.getRole({
           body: {
             roleId,
-            organizationId: user.organizationId,
+            organizationId,
           },
         });
 
@@ -351,12 +302,8 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Check name uniqueness if name is being changed
-        if (request.body.name) {
-          const isUnique = await isRoleNameUnique(
-            request.body.name,
-            user.organizationId,
-            roleId,
-          );
+        if (name) {
+          const isUnique = await isRoleNameUnique(name, organizationId, roleId);
 
           if (!isUnique) {
             return reply.status(400).send({
@@ -369,15 +316,15 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Validate permissions if being changed
-        if (request.body.permissions) {
+        if (permissions) {
           const userPermissions = await getUserPermissions(
             user.id,
-            user.organizationId,
+            organizationId,
           );
 
           const validation = validateRolePermissions(
             userPermissions,
-            request.body.permissions,
+            permissions,
           );
 
           if (!validation.valid) {
@@ -394,9 +341,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await auth.api.updateRole({
           body: {
             roleId,
-            organizationId: user.organizationId,
-            name: request.body.name,
-            permissions: request.body.permissions,
+            organizationId,
+            name,
+            permissions,
           },
         });
 
@@ -444,23 +391,10 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { roleId }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { roleId } = request.params;
-
         // Check if role can be deleted
-        const deleteCheck = await canDeleteRole(roleId, user.organizationId);
+        const deleteCheck = await canDeleteRole(roleId, organizationId);
 
         if (!deleteCheck.canDelete) {
           return reply.status(400).send({
@@ -475,7 +409,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await auth.api.deleteRole({
           body: {
             roleId,
-            organizationId: user.organizationId,
+            organizationId,
           },
         });
 

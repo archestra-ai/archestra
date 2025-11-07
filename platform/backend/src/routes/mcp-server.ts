@@ -125,6 +125,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
+        const { user } = request;
         let {
           agentIds,
           secretId,
@@ -139,17 +140,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...restDataFromRequestBody,
           serverType: "local",
         };
-
-        // Get the current user for personal auth
-        const user = await getUserFromRequest(request);
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
 
         // Set owner_id to current user
         serverData.ownerId = user.id;
@@ -856,19 +846,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
+        const { user } = request;
         const { catalogId } = request.params;
         const { userId: targetUserId } = request.body;
-
-        // Get the current user
-        const user = await getUserFromRequest(request);
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
 
         // Use the specified userId or default to current user
         const ownerIdToUse = targetUserId || user.id;
@@ -1036,18 +1016,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
+        const { user } = request;
         const { catalogId } = request.params;
-
-        // Get the current user
-        const user = await getUserFromRequest(request);
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
 
         // Find all servers with this catalogId
         const serversForCatalog =

@@ -10,7 +10,6 @@ import {
   SelectTeamSchema,
   UpdateTeamBodySchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -25,19 +24,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const teams = await TeamModel.findByOrganization(user.organizationId);
-        return reply.send(teams);
+        return reply.send(
+          await TeamModel.findByOrganization(request.organizationId),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -62,27 +51,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ body: { name, description }, user, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const team = await TeamModel.create({
-          name: request.body.name,
-          description: request.body.description,
-          organizationId: user.organizationId,
-          createdBy: user.id,
-        });
-
-        return reply.send(team);
+        return reply.send(
+          await TeamModel.create({
+            name,
+            description,
+            organizationId,
+            createdBy: user.id,
+          }),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -109,20 +87,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const team = await TeamModel.findById(request.params.id);
+        const team = await TeamModel.findById(id);
 
         if (!team) {
           return reply.status(404).send({
@@ -134,7 +101,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Verify the team belongs to the user's organization
-        if (team.organizationId !== user.organizationId) {
+        if (team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -171,25 +138,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(request.params.id);
-        if (
-          !existingTeam ||
-          existingTeam.organizationId !== user.organizationId
-        ) {
+        const existingTeam = await TeamModel.findById(id);
+        if (!existingTeam || existingTeam.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -198,7 +151,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const team = await TeamModel.update(request.params.id, request.body);
+        const team = await TeamModel.update(id, body);
 
         if (!team) {
           return reply.status(404).send({
@@ -236,25 +189,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(request.params.id);
-        if (
-          !existingTeam ||
-          existingTeam.organizationId !== user.organizationId
-        ) {
+        const existingTeam = await TeamModel.findById(id);
+        if (!existingTeam || existingTeam.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -263,7 +202,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const success = await TeamModel.delete(request.params.id);
+        const success = await TeamModel.delete(id);
 
         if (!success) {
           return reply.status(404).send({
@@ -301,22 +240,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectTeamMemberSchema)),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -325,8 +253,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const members = await TeamModel.getTeamMembers(request.params.id);
-        return reply.send(members);
+        return reply.send(await TeamModel.getTeamMembers(id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -354,22 +281,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamMemberSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -378,11 +294,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const member = await TeamModel.addMember(
-          request.params.id,
-          request.body.userId,
-          request.body.role,
-        );
+        const member = await TeamModel.addMember(id, body.userId, body.role);
 
         return reply.send(member);
       } catch (error) {
@@ -412,22 +324,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id, userId }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -436,10 +337,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const success = await TeamModel.removeMember(
-          request.params.id,
-          request.params.userId,
-        );
+        const success = await TeamModel.removeMember(id, userId);
 
         if (!success) {
           return reply.status(404).send({
@@ -455,13 +353,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         try {
           const cleanedCount =
             await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-              request.params.userId,
-              request.params.id,
+              userId,
+              id,
             );
 
           if (cleanedCount > 0) {
             fastify.log.info(
-              `Cleaned up ${cleanedCount} invalid credential sources for user ${request.params.userId}`,
+              `Cleaned up ${cleanedCount} invalid credential sources for user ${userId}`,
             );
           }
         } catch (cleanupError) {

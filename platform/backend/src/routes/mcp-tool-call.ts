@@ -10,7 +10,6 @@ import {
   SelectMcpToolCallSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -35,39 +34,26 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: createPaginatedResponseSchema(SelectMcpToolCallSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
+    async (
+      { query: { agentId, limit, offset, sortBy, sortDirection }, user },
+      reply,
+    ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
       if (agentId) {
-        const result =
+        return reply.send(
           await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
             agentId,
             pagination,
             sorting,
-          );
-        return reply.send(result);
+          ),
+        );
       }
 
-      const result = await McpToolCallModel.findAllPaginated(
-        pagination,
-        sorting,
-        user.id,
+      return reply.send(
+        await McpToolCallModel.findAllPaginated(pagination, sorting, user.id),
       );
-
-      return reply.send(result);
     },
   );
 
@@ -84,20 +70,9 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpToolCallSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async ({ params: { mcpToolCallId }, user }, reply) => {
       const mcpToolCall = await McpToolCallModel.findById(
-        request.params.mcpToolCallId,
+        mcpToolCallId,
         user.id,
       );
 

@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { InteractionModel } from "@/models";
 import {
   constructResponseSchema,
@@ -37,7 +38,11 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { agentId, limit, offset, sortBy, sortDirection }, user },
+      {
+        query: { agentId, limit, offset, sortBy, sortDirection },
+        user,
+        headers,
+      },
       reply,
     ) => {
       const pagination = { limit, offset };
@@ -53,8 +58,18 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       return reply.send(
-        await InteractionModel.findAllPaginated(pagination, sorting, user.id),
+        await InteractionModel.findAllPaginated(
+          pagination,
+          sorting,
+          user.id,
+          isAgentAdmin,
+        ),
       );
     },
   );
@@ -72,10 +87,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async ({ params: { interactionId }, user }, reply) => {
+    async ({ params: { interactionId }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       const interaction = await InteractionModel.findById(
         interactionId,
         user.id,
+        isAgentAdmin,
       );
 
       if (!interaction) {

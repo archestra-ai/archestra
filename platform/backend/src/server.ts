@@ -26,6 +26,7 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
+import { initializeInternalJwt } from "@/utils/internal-jwt";
 import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 
@@ -173,6 +174,10 @@ const start = async () => {
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
+
+    // Initialize internal JWT for backend-to-backend auth
+    await initializeInternalJwt();
+    logger.info("Internal JWT initialized for /mcp_proxy authentication");
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

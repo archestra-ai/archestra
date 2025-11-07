@@ -57,6 +57,7 @@
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",
     "handlebars": "^4.7.8",
+    "jose": "^6.1.0",
     "lodash-es": "^4.17.21",
     "openai": "^6.6.0",
     "pg": "^8.16.3",

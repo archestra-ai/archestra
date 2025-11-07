@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
 import { type ErrorResponse, RouteId } from "@/types";
+import { verifyInternalJwt } from "@/utils/internal-jwt";
 
 const prepareErrorResponse = (
   error: ErrorResponse["error"],
@@ -12,7 +13,7 @@ const prepareErrorResponse = (
 class AuthMiddleware {
   public handle = async (request: FastifyRequest, reply: FastifyReply) => {
     // custom logic to skip auth check
-    if (this.shouldSkipAuthCheck(request)) return;
+    if (await this.shouldSkipAuthCheck(request)) return;
 
     // return 401 if unauthenticated
     if (await this.isUnauthenticated(request)) {
@@ -42,10 +43,26 @@ class AuthMiddleware {
     );
   };
 
-  private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
+  private shouldSkipAuthCheck = async ({
+    url,
+    method,
+    headers,
+  }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
+    }
+
+    // For /mcp_proxy endpoints, verify internal JWT token
+    if (url.startsWith("/mcp_proxy/")) {
+      const authHeader = headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.slice(7);
+        const payload = await verifyInternalJwt(token);
+        if (payload) {
+          return true; // Valid internal JWT, skip normal auth
+        }
+      }
     }
 
     if (
@@ -57,21 +74,6 @@ class AuthMiddleware {
       url === "/health" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint) ||
-      /**
-       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-       * TODO: this is a quick hack to get around this when testing the local mcp server k8s runtime stuffs:
-       *
-       * Pod mcp-0c98fdde-8a01-4317-8fcb-698c149761a0 is now running
-       * Successfully started MCP server pod 0c98fdde-8a01-4317-8fcb-698c149761a0 (context7-local-mcp-server)
-       * Failed to get tools from local MCP server context7-local-mcp-server: Error: Failed to connect to MCP server context7-local-mcp-server: Error POSTing to endpoint (HTTP 401): {"error":{"message":"Unauthenticated","type":"unauthenticated"}}
-       *     at McpClient.connectAndGetTools (..platform/backend/src/clients/mcp-client.ts:265:13)
-       *     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-       *     at async _McpServerModel.getToolsFromServer (..platform/backend/src/models/mcp-server.ts:244:23)
-       *     at async Object.<anonymous> (..platform/backend/src/routes/mcp-server.ts:236:25)
-       * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
-       * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-       */
-      url.includes("/mcp_proxy") ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/")
     )

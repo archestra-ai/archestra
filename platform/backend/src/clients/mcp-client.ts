@@ -19,6 +19,7 @@ import type {
   CommonToolResult,
   McpServerConfig,
 } from "@/types";
+import { getInternalJwt } from "@/utils/internal-jwt";
 
 export const constructMcpProxyUrl = (mcpServerId: string) =>
   `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;
@@ -328,13 +329,13 @@ class McpClient {
               ? toolCall.name.substring(serverPrefix.length)
               : toolCall.name;
 
-            // For stdio-based local servers, use direct JSON-RPC calls via proxy
             const response = await fetch(
               constructMcpProxyUrl(targetMcpServerId),
               {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
+                  Authorization: `Bearer ${getInternalJwt()}`,
                 },
                 body: JSON.stringify({
                   jsonrpc: "2.0",
@@ -806,8 +807,12 @@ class McpClient {
     // Build headers from secrets
     const headers: Record<string, string> = {};
 
+    // For internal /mcp_proxy endpoints, add JWT auth
+    if (url.includes("/mcp_proxy/")) {
+      headers.Authorization = `Bearer ${getInternalJwt()}`;
+    }
     // All tokens (OAuth and PAT) are stored as access_token
-    if (secrets.access_token) {
+    else if (secrets.access_token) {
       headers.Authorization = `Bearer ${secrets.access_token}`;
     }
 

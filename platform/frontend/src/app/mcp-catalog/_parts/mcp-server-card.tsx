@@ -11,12 +11,12 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { WithPermission } from "@/components/with-permission";
+import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useMcpServerLogs,
@@ -133,6 +133,9 @@ export function McpServerCard({
   const currentUserId = session.data?.user?.id;
   const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
   const revokeAllTeamsMutation = useRevokeAllTeamsMcpServerAccess();
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
 
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
@@ -196,20 +199,20 @@ export function McpServerCard({
     item.oauthConfig
   );
 
-  const handleRevokeMyAccess = async () => {
+  const handleRevokeMyAccess = useCallback(async () => {
     if (!currentUserId || !installedServer?.catalogId) return;
     await revokeUserAccessMutation.mutateAsync({
       catalogId: installedServer.catalogId,
       userId: currentUserId,
     });
-  };
+  }, [currentUserId, installedServer?.catalogId, revokeUserAccessMutation]);
 
-  const handleRevokeTeamAccess = async () => {
+  const handleRevokeTeamAccess = useCallback(async () => {
     if (!installedServer?.catalogId) return;
     await revokeAllTeamsMutation.mutateAsync({
       catalogId: installedServer.catalogId,
     });
-  };
+  }, [installedServer?.catalogId, revokeAllTeamsMutation]);
 
   // JSX parts
   const manageCatalogItemDropdownMenu = (
@@ -364,7 +367,7 @@ export function McpServerCard({
 
   const remoteCardContent = (
     <>
-      <WithRole requiredExactRole="admin">
+      {userIsMcpServerAdmin && (
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: usersAuthenticated },
@@ -379,7 +382,7 @@ export function McpServerCard({
             </div>
           ))}
         </div>
-      </WithRole>
+      )}
       {needsReinstall && (
         <Button
           onClick={onReinstall}
@@ -423,47 +426,43 @@ export function McpServerCard({
           Revoke personal token
         </Button>
       )}
-      <WithRole requiredExactRole="admin">
-        {currentUserHasTeamAuth && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams token
-          </Button>
-        )}
-      </WithRole>
-      <WithRole requiredExactRole="admin">
-        {requiresAuth && !currentUserHasTeamAuth && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={onInstallTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Adding..." : "Auth for teams"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Authenticate and allow teams to use my token</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </WithRole>
+      {userIsMcpServerAdmin && currentUserHasTeamAuth && (
+        <Button
+          onClick={handleRevokeTeamAccess}
+          size="sm"
+          variant="outline"
+          className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        >
+          Revoke teams token
+        </Button>
+      )}
+      {requiresAuth && !currentUserHasTeamAuth && userIsMcpServerAdmin && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onInstallTeam}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? "Adding..." : "Auth for teams"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Authenticate and allow teams to use my token</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 
   const localCardContent = (
     <>
-      <WithRole requiredExactRole="admin">
+      {userIsMcpServerAdmin && (
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: localServersInstalled },
@@ -478,7 +477,7 @@ export function McpServerCard({
             </div>
           ))}
         </div>
-      </WithRole>
+      )}
       {needsReinstall && (
         <Button
           onClick={onReinstall}
@@ -543,41 +542,37 @@ export function McpServerCard({
           {localInstalllingLabel}
         </Button>
       )}
-      <WithRole requiredExactRole="admin">
-        {currentUserHasLocalTeamInstallation && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams installation
-          </Button>
-        )}
-      </WithRole>
-      <WithRole requiredExactRole="admin">
-        {!currentUserHasLocalTeamInstallation && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={onInstallLocalServerTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? localInstalllingLabel : "Install for teams"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Install and allow teams to use this server</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </WithRole>
+      {userIsMcpServerAdmin && currentUserHasLocalTeamInstallation && (
+        <Button
+          onClick={handleRevokeTeamAccess}
+          size="sm"
+          variant="outline"
+          className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        >
+          Revoke teams installation
+        </Button>
+      )}
+      {userIsMcpServerAdmin && !currentUserHasLocalTeamInstallation && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onInstallLocalServerTeam}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? localInstalllingLabel : "Install for teams"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Install and allow teams to use this server</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 
@@ -724,7 +719,7 @@ export function McpServerCard({
               )}
             </div>
           </div>
-          {hasPermissionTODO && manageCatalogItemDropdownMenu}
+          {userIsMcpServerAdmin && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

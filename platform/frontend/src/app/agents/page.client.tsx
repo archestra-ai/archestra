@@ -53,7 +53,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { WithPermission } from "@/components/with-permission";
 import {
   useAgentsPaginated,
   useCreateAgent,
@@ -61,6 +60,7 @@ import {
   useLabelKeys,
   useUpdateAgent,
 } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import { formatDate } from "@/lib/utils";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
@@ -155,6 +155,13 @@ function Agents() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const { data: userCanCreateAgents } = useHasPermissions({
+    agent: ["create"],
+  });
+  const { data: userCanDeleteAgents } = useHasPermissions({
+    agent: ["delete"],
+  });
 
   // Get pagination/filter params from URL
   const pageFromUrl = searchParams.get("page");
@@ -460,7 +467,7 @@ function Agents() {
                 <TooltipContent>Edit</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <WithPermission permissions={["agent:delete"]}>
+            {userCanDeleteAgents && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -480,7 +487,7 @@ function Agents() {
                   <TooltipContent>Delete</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </WithPermission>
+            )}
           </div>
         );
       },
@@ -511,7 +518,7 @@ function Agents() {
                 </a>
               </p>
             </div>
-            <WithPermission permissions={["agent:create"]}>
+            {userCanCreateAgents && (
               <Button
                 onClick={() => setIsCreateDialogOpen(true)}
                 data-testid={E2eTestId.CreateAgentButton}
@@ -519,7 +526,7 @@ function Agents() {
                 <Plus className="mr-2 h-4 w-4" />
                 Create Agent
               </Button>
-            </WithPermission>
+            )}
           </div>
         </div>
       </div>

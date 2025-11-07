@@ -102,7 +102,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     fastify.log.info(
       {
         agentId,
-        model: body.model,
+        originalModel: body.model,
         stream,
         messagesCount: messages.length,
         toolsCount: tools?.length || 0,
@@ -197,6 +197,19 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      const model = selectModel(body.model, tools, messages)
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          requestToolsCount: tools?.length || 0,
+          mergedToolsCount: mergedTools.length,
+          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
+          mergedTools: JSON.stringify(mergedTools),
+        },
+        "MCP tools injected",
+      );
+
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
 
@@ -213,7 +226,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   id: "chatcmpl-sanitizing",
                   object: "chat.completion.chunk" as const,
                   created: Date.now() / 1000,
-                  model: body.model,
+                  model: model,
                   choices: [
                     {
                       index: 0,
@@ -239,7 +252,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   id: "chatcmpl-sanitizing",
                   object: "chat.completion.chunk" as const,
                   created: Date.now() / 1000,
-                  model: body.model,
+                  model: model,
                   choices: [
                     {
                       index: 0,
@@ -277,7 +290,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const streamingResponse = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
           "openai",
-          body.model,
+          model,
           true,
           resolvedAgent,
           async (llmSpan) => {
@@ -430,7 +443,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id: "chatcmpl-blocked",
               object: "chat.completion.chunk" as const,
               created: Date.now() / 1000,
-              model: body.model,
+              model: model,
               choices: [
                 {
                   index: 0,
@@ -450,7 +463,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 id: chunks[0]?.id || "chatcmpl-unknown",
                 object: "chat.completion.chunk" as const,
                 created: chunks[0]?.created || Date.now() / 1000,
-                model: body.model,
+                model: model,
               };
 
               // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
@@ -543,7 +556,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: chunks[0]?.id || "chatcmpl-unknown",
             object: "chat.completion",
             created: chunks[0]?.created || Date.now() / 1000,
-            model: body.model,
+            model: model,
             choices: [
               {
                 index: 0,
@@ -553,7 +566,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ],
           },
-          model: body.model,
+          model: model,
           inputTokens: usageTokens?.input || null,
           outputTokens: usageTokens?.output || null,
         });
@@ -566,7 +579,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
           "openai",
-          body.model,
+          model,
           false,
           resolvedAgent,
           async (llmSpan) => {
@@ -633,7 +646,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           type: "openai:chatCompletions",
           request: body,
           response,
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
         });

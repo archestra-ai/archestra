@@ -134,7 +134,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - **Custom Roles**: Up to 50 custom RBAC roles per organization
 - **Middleware**: Auth handled by Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts` `requiredEndpointPermissionsMap`
-- **IMPORTANT**: API key requests populate `request.user` and `request.organizationId` decorators for route handlers
+- **Request Decorators**: Auth middleware populates `request.user` and `request.organizationId`
 
 ## Observability
 
@@ -176,7 +176,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 - Extends predefined roles (admin, member) with custom roles
 - Up to 50 custom roles per organization
-- Granular permissions: CRUD operations on 19 resources (agent, tool, policy, interaction, dualLlmConfig, dualLlmResult, settings, organization, member, invitation, internalMcpCatalog, mcpServer, mcpServerInstallationRequest, mcpToolCall, team, conversation, limit, tokenPrice)
+- Granular permissions: CRUD operations on 19 resources
 - Permission validation: users can only grant permissions they have
 - Role protection: predefined roles cannot be modified/deleted
 - API endpoints: `/api/roles/*` (admin-only)

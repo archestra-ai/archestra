@@ -99,6 +99,7 @@ export type McpServerCardProps = {
   localServerInstallationCount?: number; // For local servers: count of all personal installations
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
   currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
+  currentUserLocalServerInstallation?: InstalledServer; // For local servers: the current user's specific installation
 };
 
 export type McpServerCardVariant = "remote" | "local";
@@ -123,6 +124,7 @@ export function McpServerCard({
   localServerInstallationCount = 0,
   currentUserInstalledLocalServer = false,
   currentUserHasLocalTeamInstallation = false,
+  currentUserLocalServerInstallation,
 }: McpServerCardBaseProps) {
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
     installedServer?.id ?? null,
@@ -512,18 +514,28 @@ export function McpServerCard({
       )}
       {isCurrentUserAuthenticated && !isInstalling && (
         <Button
-          onClick={() =>
-            installedServer &&
-            setUninstallingServer({
-              id: installedServer.id,
-              name: item.label || item.name,
-            })
-          }
+          onClick={() => {
+            // For local servers, use the current user's specific installation
+            // For remote servers, use the aggregated installedServer
+            const serverToUninstall =
+              variant === "local" && currentUserLocalServerInstallation
+                ? currentUserLocalServerInstallation
+                : installedServer;
+
+            if (serverToUninstall) {
+              setUninstallingServer({
+                id: serverToUninstall.id,
+                name: item.label || item.name,
+              });
+            }
+          }}
           size="sm"
           variant="outline"
           className="w-full"
         >
-          Uninstall
+          {installationStatus === "discovering-tools"
+            ? "Discovering tools..."
+            : "Uninstall"}
         </Button>
       )}
       {isInstalling && (

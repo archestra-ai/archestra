@@ -35,8 +35,22 @@ export default defineConfig({
       testMatch: /.*\.setup\.ts/,
       testDir: './',
     },
+    // API tests only run on chromium (browser doesn't matter for API integration tests)
+    {
+      name: 'api',
+      testDir: './tests/api',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ['setup'],
+    },
+    // UI tests run on all browsers
     {
       name: 'chromium',
+      testDir: './tests/ui',
       use: {
         ...devices['Desktop Chrome'],
         // Use the stored authentication state
@@ -47,6 +61,7 @@ export default defineConfig({
     },
     {
       name: 'firefox',
+      testDir: './tests/ui',
       use: {
         ...devices['Desktop Firefox'],
         // Use the stored authentication state
@@ -57,6 +72,7 @@ export default defineConfig({
     },
     {
       name: 'webkit',
+      testDir: './tests/ui',
       use: {
         ...devices['Desktop Safari'],
         // Use the stored authentication state

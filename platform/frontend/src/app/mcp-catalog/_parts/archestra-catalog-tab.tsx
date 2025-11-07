@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
@@ -66,6 +67,10 @@ export function ArchestraCatalogTab({
 
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
+
+  const { data: userIsMcpServerAdmin = false } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
 
   // Use server-side search and category filtering
   const {
@@ -316,6 +321,7 @@ export function ArchestraCatalogTab({
                     isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
+                    userIsMcpServerAdmin={userIsMcpServerAdmin}
                   />
                 ))}
               </div>
@@ -390,6 +396,7 @@ function ServerCard({
   isAdding,
   onOpenReadme,
   isInCatalog,
+  userIsMcpServerAdmin,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -403,6 +410,7 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
+  userIsMcpServerAdmin: boolean;
 }) {
   return (
     <Card className="flex flex-col">
@@ -491,7 +499,7 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              hasPermissionTODO
+              userIsMcpServerAdmin
                 ? onAddToCatalog(server)
                 : onRequestInstallation(server)
             }
@@ -501,7 +509,7 @@ function ServerCard({
           >
             {isInCatalog
               ? "Added"
-              : hasPermissionTODO
+              : userIsMcpServerAdmin
                 ? "Add to Your Registry"
                 : "Request to add to internal registry"}
           </Button>

@@ -4,7 +4,7 @@ import type { Permissions } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 import { useEffect } from "react";
-import { hasPermissions } from "@/lib/auth.hook";
+import { hasPermission } from "@/lib/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 export function WithAuthCheck({
@@ -49,9 +49,12 @@ export function WithAuthCheck({
   // Redirect to home if page is protected and user is not authorized
   useEffect(() => {
     if (isAuthCheckPending) return;
+    const hasPermissions = hasPermission(
+      PAGE_WITH_REQUIRED_PERMISSION[pathname],
+    );
 
     const requiredPermissions = PAGE_WITH_REQUIRED_PERMISSION[pathname];
-    if (requiredPermissions && !hasPermissions(requiredPermissions)) {
+    if (requiredPermissions && !hasPermissions) {
       router.push("/");
     }
   }, [isAuthCheckPending, pathname, router]);

@@ -47,9 +47,10 @@ class McpServerModel {
     };
   }
 
-  static async findAll(userId?: string): Promise<McpServer[]> {
-    const isMcpServerAdmin = "TODO:";
-
+  static async findAll(
+    userId?: string,
+    isMcpServerAdmin?: boolean,
+  ): Promise<McpServer[]> {
     let query = db
       .select({
         server: schema.mcpServersTable,
@@ -62,11 +63,11 @@ class McpServerModel {
       )
       .$dynamic();
 
-    // Apply access control filtering for users that are not MCP server admins
+    // Apply access control filtering for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
       // Get MCP servers accessible through team membership
       const teamAccessibleMcpServerIds =
-        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId);
+        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
 
       // Get MCP servers with personal access
       const personalMcpServerIds =
@@ -114,14 +115,14 @@ class McpServerModel {
   static async findById(
     id: string,
     userId?: string,
+    isMcpServerAdmin?: boolean,
   ): Promise<McpServer | null> {
-    const isMcpServerAdmin = "TODO:";
-
-    // Check access control for users that are not MCP server admins
+    // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
       const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
         userId,
         id,
+        false,
       );
       const hasPersonalAccess =
         await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);

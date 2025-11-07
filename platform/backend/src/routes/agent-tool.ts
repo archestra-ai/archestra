@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import {
   AgentModel,
   AgentTeamModel,
@@ -456,17 +457,31 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Admin personal tokens can be used with any agent
             if (server.authType === "personal" && server.ownerId) {
               const ownerId = server.ownerId;
-              const owner = await UserModel.getUserById(ownerId);
+              // const owner = await UserModel.getUserById(ownerId);
 
-              // TODO: what to do here... we need to check permissions instead of checking role name
-              if (owner?.role === "admin") {
+              /**
+               * NOTE: I'm doubtful this will work as intended, right now better-auth's
+               * hasPermissions API requires passing in request headers to do the authz check
+               * HOWEVER, in this particular context, we are looking at a user which may
+               * not necessarily be the user identified by the request.headers...
+               */
+              const { success: isAgentAdmin } = await hasPermission(
+                { agent: ["admin"] },
+                request.headers,
+              );
+
+              if (isAgentAdmin) {
                 return { server, valid: true };
               }
 
               // Member personal tokens: check if owner belongs to any of the agents' teams
               const hasAccessResults = await Promise.all(
                 agentIds.map((agentId) =>
-                  AgentTeamModel.userHasAgentAccess(ownerId, agentId),
+                  /**
+                   * NOTE: this is granting too much access here.. we should refactor this,
+                   * see the comment above the hasPermission call above for more context..
+                   */
+                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, true),
                 ),
               );
               const hasAccessToAny = hasAccessResults.some(
@@ -581,10 +596,17 @@ async function validateCredentialSource(
       };
     }
   } else if (mcpServer.authType === "personal") {
-    // For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent is assigned to
+    /**
+     * For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent
+     * is assigned to
+     *
+     * NOTE: this is granting too much access here.. we should refactor this,
+     * see the comment above the hasPermission call above for more context..
+     */
     const hasAccess = await AgentTeamModel.userHasAgentAccess(
       owner.id,
       agentId,
+      true,
     );
 
     if (!hasAccess) {

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamMemberBodySchema,
@@ -324,7 +325,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async ({ params: { id, userId }, organizationId }, reply) => {
+    async ({ params: { id, userId }, organizationId, headers }, reply) => {
       try {
         // Verify the team exists and belongs to the user's organization
         const team = await TeamModel.findById(id);
@@ -348,6 +349,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const { success: userIsAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
+        );
+
         // Clean up invalid credential sources (personal tokens) for this user
         // if they no longer have access to agents through other teams
         try {
@@ -355,6 +361,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
               userId,
               id,
+              userIsAgentAdmin,
             );
 
           if (cleanedCount > 0) {

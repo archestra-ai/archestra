@@ -116,9 +116,11 @@ class ToolModel {
     return createdTool;
   }
 
-  static async findById(id: string, userId?: string): Promise<Tool | null> {
-    const isAgentAdmin = "TODO:";
-
+  static async findById(
+    id: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<Tool | null> {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
@@ -128,11 +130,12 @@ class ToolModel {
       return null;
     }
 
-    // Check access control for non-admins
+    // Check access control for non-agent admins
     if (tool.agentId && userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
+        false,
       );
       if (!hasAccess) {
         return null;
@@ -142,9 +145,10 @@ class ToolModel {
     return tool;
   }
 
-  static async findAll(userId?: string): Promise<ExtendedTool[]> {
-    const isAgentAdmin = "TODO:";
-
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<ExtendedTool[]> {
     // Get all tools
     let query = db
       .select({
@@ -183,8 +187,10 @@ class ToolModel {
      * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
      */
     if (userId && !isAgentAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
@@ -203,9 +209,11 @@ class ToolModel {
     return query;
   }
 
-  static async findByName(name: string, userId?: string): Promise<Tool | null> {
-    const isAgentAdmin = "TODO:";
-
+  static async findByName(
+    name: string,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<Tool | null> {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
@@ -220,6 +228,7 @@ class ToolModel {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
+        false,
       );
       if (!hasAccess) {
         return null;

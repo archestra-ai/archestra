@@ -1,5 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { betterAuth } from "@/auth";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
 import type { ErrorResponse, RouteId } from "@/types";
@@ -28,8 +28,7 @@ export class Authnz {
     // Populate request.user and request.organizationId after successful authentication
     await this.populateUserInfo(request);
 
-    // check if authorized
-    const { success, error } = await this.requiredPermissionsStatus(request);
+    const { success, error } = await this.isAuthorized(request);
     if (success) {
       return;
     }
@@ -113,7 +112,7 @@ export class Authnz {
     return true;
   };
 
-  private requiredPermissionsStatus = async (
+  private isAuthorized = async (
     request: FastifyRequest,
   ): Promise<{ success: boolean; error: Error | null }> => {
     const routeId = request.routeOptions.schema?.operationId as
@@ -125,21 +124,18 @@ export class Authnz {
         error: new Error("Forbidden, routeId not found"),
       };
     }
+    const { headers } = request;
 
     try {
-      return await betterAuth.api.hasPermission({
-        headers: new Headers(request.headers as HeadersInit),
-        body: {
-          permissions: routePermissionsConfig[routeId] ?? {},
-        },
-      });
+      return hasPermission(routePermissionsConfig[routeId] ?? {}, headers);
     } catch (_error) {
       /**
        * Handle API key sessions that don't have organization context
        * API keys have all permissions by default (see auth config)
        */
-      const headers = new Headers(request.headers as HeadersInit);
-      const authHeader = headers.get("authorization");
+      const authHeader = new Headers(headers as HeadersInit).get(
+        "authorization",
+      );
 
       if (authHeader) {
         try {

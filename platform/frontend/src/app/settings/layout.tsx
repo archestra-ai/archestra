@@ -1,17 +1,22 @@
 "use client";
 
 import { PageLayout } from "@/components/page-layout";
+import { useHasPermissions } from "@/lib/auth.query";
 
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { data: userCanReadOrganization } = useHasPermissions({
+    organization: ["read"],
+  });
+
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "Your Account", href: "/settings/account" },
-    ...(hasPermissionTODO
+    ...(userCanReadOrganization
       ? [
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },

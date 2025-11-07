@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -125,7 +126,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const { user } = request;
+        const { user, headers } = request;
         let {
           agentIds,
           secretId,
@@ -149,9 +150,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           serverData.authType = "personal";
           serverData.userId = user.id;
         } else {
-          const isMcpServerAdmin = "TODO:";
+          const { success: isMcpServerAdmin } = await hasPermission(
+            { mcpServer: ["admin"] },
+            headers,
+          );
 
-          // Team installation requires admin role
+          // Team installation requires MCP server admin role
           if (!isMcpServerAdmin) {
             return reply.status(403).send({
               error: {

@@ -1,9 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -37,8 +33,7 @@ export function useRoles(params?: {
 export function useRole(roleId: string) {
   return useQuery({
     queryKey: roleKeys.detail(roleId),
-    queryFn: async () =>
-      (await getRole({ path: { roleId } })).data ?? null,
+    queryFn: async () => (await getRole({ path: { roleId } })).data ?? null,
     enabled: !!roleId,
   });
 }

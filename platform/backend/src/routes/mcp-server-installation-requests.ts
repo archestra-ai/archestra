@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
@@ -35,9 +36,12 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ query: { status }, user }, reply) => {
+    async ({ query: { status }, user, headers }, reply) => {
       try {
-        const isMcpServerAdmin = "TODO:";
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
 
         let requests: McpServerInstallationRequest[];
         if (isMcpServerAdmin) {
@@ -148,7 +152,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ params: { id }, user }, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       try {
         const installationRequest =
           await McpServerInstallationRequestModel.findById(id);
@@ -162,7 +166,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        const isMcpServerAdmin = "TODO:";
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
 
         // MCP server admins can view all requests, non-MCP server admins can only view their own requests
         if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
@@ -210,7 +217,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, headers }, reply) => {
       try {
         const installationRequest =
           await McpServerInstallationRequestModel.findById(id);
@@ -231,7 +238,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           body.reviewedBy ||
           body.reviewedAt
         ) {
-          const isMcpServerAdmin = "TODO:";
+          const { success: isMcpServerAdmin } = await hasPermission(
+            { mcpServer: ["admin"] },
+            headers,
+          );
 
           if (!isMcpServerAdmin) {
             return reply.status(403).send({
@@ -411,7 +421,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ params: { id }, body, user }, reply) => {
+    async ({ params: { id }, body, user, headers }, reply) => {
       try {
         const installationRequest =
           await McpServerInstallationRequestModel.findById(id);
@@ -425,7 +435,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        const isMcpServerAdmin = "TODO:";
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
 
         // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
         if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {

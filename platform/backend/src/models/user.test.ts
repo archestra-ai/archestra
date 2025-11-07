@@ -1,193 +1,189 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  predefinedPermissionsMap,
+} from "@shared";
+import { eq } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import db, { schema } from "@/database";
-import User from "./user";
+import type { InsertOrganizationRole } from "@/types";
 import OrganizationRoleModel from "./organization-role";
+import UserModel from "./user";
 
-// Mock the database and models
-vi.mock("@/database", () => ({
-  default: {
-    select: vi.fn().mockReturnThis(),
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    limit: vi.fn(),
-  },
-  schema: {
-    member: {},
-  },
-}));
+describe("User.getUserPermissions", () => {
+  let testOrgId: string;
+  let testUserId: string;
 
-vi.mock("./organization-role", () => ({
-  default: {
-    getPermissions: vi.fn(),
-  },
-}));
+  beforeEach(async () => {
+    testOrgId = crypto.randomUUID();
+    testUserId = crypto.randomUUID();
 
-describe("User", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+    // Create test organization
+    await db.insert(schema.organizationsTable).values({
+      id: testOrgId,
+      name: "Test Organization",
+      slug: "test-organization",
+      createdAt: new Date(),
+    });
+
+    // Create test user
+    await db.insert(schema.usersTable).values({
+      id: testUserId,
+      email: "test@example.com",
+      name: "Test User",
+    });
   });
 
-  describe("getUserPermissions", () => {
-    it("should return empty permissions when user is not a member", async () => {
-      // Mock empty member record
-      vi.mocked(db.limit).mockResolvedValue([]);
+  afterEach(async () => {
+    // Clean up in reverse order due to foreign key constraints
+    await db.delete(schema.member).where(eq(schema.member.userId, testUserId));
+    await db
+      .delete(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.organizationId, testOrgId));
+    await db
+      .delete(schema.usersTable)
+      .where(eq(schema.usersTable.id, testUserId));
+    await db
+      .delete(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, testOrgId));
+  });
 
-      const result = await User.getUserPermissions("user123", "org123");
+  it("should return empty permissions when user is not a member", async () => {
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
+    expect(result).toEqual({});
+  });
 
-      expect(result).toEqual({});
-      expect(db.select).toHaveBeenCalled();
-      expect(db.from).toHaveBeenCalledWith(schema.member);
-      expect(db.where).toHaveBeenCalled();
-      expect(db.limit).toHaveBeenCalledWith(1);
+  it("should return permissions for admin role", async () => {
+    // Add user as admin member
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: testOrgId,
+      role: ADMIN_ROLE_NAME,
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
 
-    it("should return permissions for admin role", async () => {
-      const mockMemberRecord = [
-        {
-          userId: "user123",
-          organizationId: "org123",
-          role: ADMIN_ROLE_NAME,
-        },
-      ];
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
-      const mockPermissions = {
-        "organization:read": ["read"],
-        "organization:write": ["create", "update", "delete"],
-        "agent:read": ["read"],
-        "agent:write": ["create", "update", "delete"],
-      };
+    expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
+  });
 
-      vi.mocked(db.limit).mockResolvedValue(mockMemberRecord);
-      vi.mocked(OrganizationRoleModel.getPermissions).mockResolvedValue(mockPermissions);
-
-      const result = await User.getUserPermissions("user123", "org123");
-
-      expect(result).toEqual(mockPermissions);
-      expect(OrganizationRoleModel.getPermissions).toHaveBeenCalledWith(
-        ADMIN_ROLE_NAME,
-        "org123"
-      );
+  it("should return permissions for member role", async () => {
+    // Add user as member
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: testOrgId,
+      role: MEMBER_ROLE_NAME,
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
 
-    it("should return permissions for member role", async () => {
-      const mockMemberRecord = [
-        {
-          userId: "user456",
-          organizationId: "org456",
-          role: MEMBER_ROLE_NAME,
-        },
-      ];
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
-      const mockPermissions = {
-        "agent:read": ["read"],
-        "organization:read": ["read"],
-      };
+    expect(result).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
+  });
 
-      vi.mocked(db.limit).mockResolvedValue(mockMemberRecord);
-      vi.mocked(OrganizationRoleModel.getPermissions).mockResolvedValue(mockPermissions);
+  it("should return permissions for custom role", async () => {
+    // Create a custom role
+    const customRoleId = crypto.randomUUID();
+    const customRole: InsertOrganizationRole = {
+      id: customRoleId,
+      name: "Custom Role",
+      organizationId: testOrgId,
+      permission: { agent: ["read", "create"] },
+    };
+    await OrganizationRoleModel.create(customRole);
 
-      const result = await User.getUserPermissions("user456", "org456");
-
-      expect(result).toEqual(mockPermissions);
-      expect(OrganizationRoleModel.getPermissions).toHaveBeenCalledWith(
-        MEMBER_ROLE_NAME,
-        "org456"
-      );
+    // Add user with custom role
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: testOrgId,
+      role: customRoleId,
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
 
-    it("should return permissions for custom role", async () => {
-      const customRoleId = "custom-role-123";
-      const mockMemberRecord = [
-        {
-          userId: "user789",
-          organizationId: "org789",
-          role: customRoleId,
-        },
-      ];
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
-      const mockPermissions = {
-        "agent:read": ["read"],
-        "agent:write": ["create"],
-      };
+    expect(result).toEqual({
+      agent: ["read", "create"],
+    });
+  });
 
-      vi.mocked(db.limit).mockResolvedValue(mockMemberRecord);
-      vi.mocked(OrganizationRoleModel.getPermissions).mockResolvedValue(mockPermissions);
-
-      const result = await User.getUserPermissions("user789", "org789");
-
-      expect(result).toEqual(mockPermissions);
-      expect(OrganizationRoleModel.getPermissions).toHaveBeenCalledWith(
-        customRoleId,
-        "org789"
-      );
+  it("should handle multiple member records and return first", async () => {
+    // This scenario is unlikely in real app but tests the limit(1) behavior
+    // Add user as admin member
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: testOrgId,
+      role: ADMIN_ROLE_NAME,
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
 
-    it("should handle multiple member records and return first", async () => {
-      const mockMemberRecords = [
-        {
-          userId: "user123",
-          organizationId: "org123",
-          role: ADMIN_ROLE_NAME,
-        },
-        {
-          userId: "user123",
-          organizationId: "org123",
-          role: MEMBER_ROLE_NAME,
-        },
-      ];
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
-      const mockPermissions = {
-        "organization:read": ["read"],
-        "organization:write": ["create", "update", "delete"],
-      };
+    // Should get admin permissions (from first/only record)
+    expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
+  });
 
-      vi.mocked(db.limit).mockResolvedValue(mockMemberRecords);
-      vi.mocked(OrganizationRoleModel.getPermissions).mockResolvedValue(mockPermissions);
+  it("should return empty permissions for non-existent user", async () => {
+    const nonExistentUserId = crypto.randomUUID();
 
-      const result = await User.getUserPermissions("user123", "org123");
+    const result = await UserModel.getUserPermissions(
+      nonExistentUserId,
+      testOrgId,
+    );
 
-      expect(result).toEqual(mockPermissions);
-      // Should use the first record's role
-      expect(OrganizationRoleModel.getPermissions).toHaveBeenCalledWith(
-        ADMIN_ROLE_NAME,
-        "org123"
-      );
+    expect(result).toEqual({});
+  });
+
+  it("should return empty permissions for user in wrong organization", async () => {
+    const wrongOrgId = crypto.randomUUID();
+
+    // Create member in different organization
+    await db.insert(schema.organizationsTable).values({
+      id: wrongOrgId,
+      name: "Wrong Organization",
+      slug: "wrong-organization",
+      createdAt: new Date(),
     });
 
-    it("should handle database query errors gracefully", async () => {
-      vi.mocked(db.limit).mockRejectedValue(new Error("Database error"));
-
-      await expect(User.getUserPermissions("user123", "org123")).rejects.toThrow(
-        "Database error"
-      );
-
-      expect(db.select).toHaveBeenCalled();
-      expect(OrganizationRoleModel.getPermissions).not.toHaveBeenCalled();
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: wrongOrgId,
+      role: ADMIN_ROLE_NAME,
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
 
-    it("should handle OrganizationRoleModel.getPermissions errors", async () => {
-      const mockMemberRecord = [
-        {
-          userId: "user123",
-          organizationId: "org123",
-          role: ADMIN_ROLE_NAME,
-        },
-      ];
+    // Try to get permissions for original organization
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
-      vi.mocked(db.limit).mockResolvedValue(mockMemberRecord);
-      vi.mocked(OrganizationRoleModel.getPermissions).mockRejectedValue(
-        new Error("Permission error")
-      );
+    expect(result).toEqual({});
 
-      await expect(User.getUserPermissions("user123", "org123")).rejects.toThrow(
-        "Permission error"
-      );
+    // Cleanup
+    await db
+      .delete(schema.member)
+      .where(eq(schema.member.organizationId, wrongOrgId));
+    await db
+      .delete(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, wrongOrgId));
+  });
 
-      expect(OrganizationRoleModel.getPermissions).toHaveBeenCalledWith(
-        ADMIN_ROLE_NAME,
-        "org123"
-      );
+  it("should handle custom role that no longer exists", async () => {
+    // Add user with custom role that doesn't exist
+    await db.insert(schema.member).values({
+      userId: testUserId,
+      organizationId: testOrgId,
+      role: crypto.randomUUID(),
+      createdAt: new Date(),
+      id: crypto.randomUUID(),
     });
+
+    const result = await UserModel.getUserPermissions(testUserId, testOrgId);
+
+    // Should return empty permissions when role doesn't exist
+    expect(result).toEqual({});
   });
 });

@@ -9,6 +9,7 @@ class AgentTeamModel {
     userId: string,
     isAgentAdmin: boolean,
   ): Promise<string[]> {
+    // Agent admins have access to all agents
     if (isAgentAdmin) {
       const allAgents = await db
         .select({ id: schema.agentsTable.id })
@@ -45,6 +46,7 @@ class AgentTeamModel {
     agentId: string,
     isAgentAdmin: boolean,
   ): Promise<boolean> {
+    // Agent admins have access to all agents
     if (isAgentAdmin) {
       return true;
     }

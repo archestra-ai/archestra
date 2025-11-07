@@ -149,9 +149,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         return reply.send({
-          id: result.data.id,
-          name: result.data.name,
-          permissions: result.data.permissions,
+          id: result.id,
+          name: result.role,
+          permissions: result.permission,
           isCustom: true,
         });
       } catch (error) {
@@ -209,11 +209,16 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        // For predefined roles, get their permissions
+        const permissions = RoleModel.isCustomRole(result.name)
+          ? {} // Custom role permissions would come from better-auth, but we don't have access to them in the getRoleById response
+          : RoleModel.getPredefinedRolePermissions(result.name);
+
         return reply.send({
-          id: result.data.id,
-          name: result.data.name,
-          permissions: result.data.permissions,
-          isCustom: true,
+          id: result.id,
+          name: result.name,
+          permissions,
+          isCustom: RoleModel.isCustomRole(result.name),
         });
       } catch (error) {
         fastify.log.error(error);
@@ -322,7 +327,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           roleId,
           name,
           permissions,
-          organizationId,
+          organizationId!,
         );
 
         if (!result) {
@@ -335,9 +340,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         return reply.send({
-          id: result.data.id,
-          name: result.data.name,
-          permissions: result.data.permissions,
+          id: result.id,
+          name: result.role,
+          permissions: result.permission,
           isCustom: true,
         });
       } catch (error) {

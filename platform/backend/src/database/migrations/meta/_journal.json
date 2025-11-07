@@ -330,6 +330,13 @@
       "when": 1762437910041,
       "tag": "0046_huge_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1762533099004,
+      "tag": "0047_fluffy_whirlwind",
+      "breakpoints": true
     }
   ]
 }

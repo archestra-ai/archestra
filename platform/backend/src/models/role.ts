@@ -179,11 +179,11 @@ class RoleModel {
         },
       });
 
-      if (result?.data) {
+      if (result) {
         return {
-          id: result.data.id,
-          name: result.data.name,
-          organizationId: result.data.organizationId,
+          id: result.id,
+          name: result.role,
+          organizationId: result.organizationId,
         };
       }
 
@@ -211,12 +211,13 @@ class RoleModel {
         },
       });
 
-      if (result?.data && Array.isArray(result.data)) {
-        return result.data.map((role: any) => ({
+      if (result && Array.isArray(result)) {
+        const customRoles = result.map((role: any) => ({
           id: role.id,
-          name: role.name,
+          name: role.role,
           organizationId: role.organizationId,
         }));
+        return [...predefinedRoles, ...customRoles];
       }
 
       // If no custom roles, return predefined ones
@@ -236,11 +237,11 @@ class RoleModel {
       const result = await betterAuth.api.createOrgRole({
         body: {
           role: roleName,
-          permissions,
+          permission: permissions,
           organizationId,
         },
       });
-      return result?.data;
+      return result;
     } catch (_error) {
       return null;
     }
@@ -256,12 +257,14 @@ class RoleModel {
       const result = await betterAuth.api.updateOrgRole({
         body: {
           roleId,
-          role: roleName,
-          permissions,
+          data: {
+            permission: permissions,
+            roleName: roleName,
+          },
           organizationId,
         },
       });
-      return result?.data;
+      return result;
     } catch (_error) {
       return null;
     }
@@ -275,7 +278,7 @@ class RoleModel {
           organizationId,
         },
       });
-      return result?.data?.success;
+      return result?.success;
     } catch (_error) {
       return false;
     }

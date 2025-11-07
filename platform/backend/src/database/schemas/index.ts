@@ -26,6 +26,7 @@ export { default as mcpServerUserTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as messagesTable } from "./message";
 export { default as organizationsTable } from "./organization";
+export { organizationRole as organizationRolesTable } from "./role";
 export { default as secretsTable } from "./secret";
 export { team, teamMember } from "./team";
 export { default as tokenPriceTable } from "./token-price";

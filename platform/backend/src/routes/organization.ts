@@ -1,10 +1,10 @@
-import { OrganizationAppearanceSchema } from "@shared";
+import { OrganizationAppearanceSchema, RouteId } from "@shared";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import { OrganizationModel } from "@/models";
-import { constructResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema } from "@/types";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.patch(

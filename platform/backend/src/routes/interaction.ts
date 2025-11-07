@@ -1,3 +1,4 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InteractionModel } from "@/models";
@@ -6,7 +7,6 @@ import {
   createPaginatedResponseSchema,
   createSortingQuerySchema,
   PaginationQuerySchema,
-  RouteId,
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";

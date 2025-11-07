@@ -1,10 +1,10 @@
+import { type RouteId, requiredEndpointPermissionsMap } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
-import type { ErrorResponse, RouteId } from "@/types";
+import type { ErrorResponse } from "@/types";
 import { verifyInternalJwt } from "../internal-jwt";
-import routePermissionsConfig from "../route-permissions";
 
 const prepareErrorResponse = (
   error: ErrorResponse["error"],
@@ -127,7 +127,10 @@ export class Authnz {
     const { headers } = request;
 
     try {
-      return hasPermission(routePermissionsConfig[routeId] ?? {}, headers);
+      return hasPermission(
+        requiredEndpointPermissionsMap[routeId] ?? {},
+        headers,
+      );
     } catch (_error) {
       /**
        * Handle API key sessions that don't have organization context

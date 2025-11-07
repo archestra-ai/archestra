@@ -1,7 +1,8 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import StatisticsModel from "@/models/statistics";
-import { constructResponseSchema, RouteId } from "@/types";
+import { constructResponseSchema } from "@/types";
 
 const TimeFrameSchema = z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]);
 

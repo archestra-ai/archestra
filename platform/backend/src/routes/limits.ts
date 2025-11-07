@@ -1,3 +1,4 @@
+import { RouteId } from "@shared";
 import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -8,7 +9,6 @@ import {
   constructResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
-  RouteId,
   SelectLimitSchema,
   UpdateLimitSchema,
   UuidIdSchema,

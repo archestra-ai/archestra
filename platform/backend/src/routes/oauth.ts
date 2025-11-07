@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, SecretModel } from "@/models";
-import { constructResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import { constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
  * Generate PKCE code verifier

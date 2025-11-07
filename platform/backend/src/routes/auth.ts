@@ -1,4 +1,4 @@
-import { DEFAULT_ADMIN_EMAIL } from "@shared";
+import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -6,7 +6,6 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { RouteId } from "@/types";
 
 // Register authentication endpoints
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {

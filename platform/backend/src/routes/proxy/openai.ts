@@ -1,4 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
@@ -11,7 +12,6 @@ import {
   type Agent,
   constructResponseSchema,
   OpenAi,
-  RouteId,
   UuidIdSchema,
 } from "@/types";
 import { PROXY_API_PREFIX } from "./common";

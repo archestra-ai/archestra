@@ -1,10 +1,9 @@
-import { PermissionsSchema, PredefinedRoleNameSchema } from "@shared";
+import { PermissionsSchema, PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
   constructResponseSchema,
-  RouteId,
   SelectOrganizationRoleSchema,
   UuidIdSchema,
 } from "@/types";

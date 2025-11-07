@@ -184,9 +184,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+
         const agent = await AgentModel.findById(
           request.params.id,
           request.user.id,
+          isAgentAdmin,
         );
 
         if (!agent) {

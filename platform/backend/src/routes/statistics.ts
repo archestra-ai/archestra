@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import StatisticsModel from "@/models/statistics";
 import { constructResponseSchema } from "@/types";
 
@@ -41,8 +42,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { timeframe } }, reply) => {
-      return reply.send(await StatisticsModel.getTeamStatistics(timeframe));
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+      return reply.send(
+        await StatisticsModel.getTeamStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -70,9 +81,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { timeframe }, user }, reply) => {
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       return reply.send(
-        await StatisticsModel.getAgentStatistics(timeframe, user.id),
+        await StatisticsModel.getAgentStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
       );
     },
   );
@@ -100,9 +120,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { timeframe }, user }, reply) => {
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       return reply.send(
-        await StatisticsModel.getModelStatistics(timeframe, user.id),
+        await StatisticsModel.getModelStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
       );
     },
   );
@@ -127,9 +156,18 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { timeframe }, user }, reply) => {
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       return reply.send(
-        await StatisticsModel.getOverviewStatistics(timeframe, user.id),
+        await StatisticsModel.getOverviewStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
       );
     },
   );

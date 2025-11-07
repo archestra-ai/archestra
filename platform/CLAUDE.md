@@ -27,6 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
 - **MCP Gateway Logs**: <http://localhost:3000/logs/mcp-gateway> (View MCP tool call logs)
+- **Roles Settings**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
@@ -128,6 +129,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - API keys have all permissions by default
 - API keys work as fallback when session auth fails (e.g., "No active organization" errors)
 - Use `pnpm test:e2e` to run API tests with API key authentication
+- **Custom Roles**: Organizations can create up to 50 custom RBAC roles via `/api/roles/*` endpoints
+- **Permission Validation**: Users can only grant permissions they possess
 
 ## Observability
 
@@ -152,7 +155,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Use Drizzle ORM for database operations
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
+- When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/auth/route-permissions.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 

@@ -92,7 +92,7 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data
+VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

@@ -130,7 +130,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 ## Authentication
 
 - **Better-Auth Integration**: Using better-auth for session management and RBAC
-- **API Key Auth**: API keys via `Authorization` header with all permissions
+- **API Key Auth**: API keys via `Authorization` header with all permissions (format: `Authorization: ${apiKey}`, not `Bearer`)
 - **Custom Roles**: Up to 50 custom RBAC roles per organization
 - **Middleware**: Auth handled by Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts` `requiredEndpointPermissionsMap`

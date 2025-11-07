@@ -14,7 +14,7 @@ export { default as McpServerUserModel } from "./mcp-server-user";
 export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MessageModel } from "./message";
 export { default as OrganizationModel } from "./organization";
-export { default as RoleModel } from "./role";
+export { default as OrganizationRoleModel } from "./organization-role";
 export { default as SecretModel } from "./secret";
 export { default as TeamModel } from "./team";
 export { default as ToolModel } from "./tool";

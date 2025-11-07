@@ -1,9 +1,13 @@
-import { ActionSchema, ResourceSchema, RoleSchema } from "@shared";
+import { PredefinedRoleNameSchema, RolePermissionsSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { betterAuth } from "@/auth";
-import { RoleModel, UserModel } from "@/models";
-import { constructResponseSchema, RouteId } from "@/types";
+import { OrganizationRoleModel, UserModel } from "@/models";
+import {
+  constructResponseSchema,
+  RouteId,
+  SelectOrganizationRoleSchema,
+  UuidIdSchema,
+} from "@/types";
 
 const CreateUpdateRoleNameSchema = z
   .string()
@@ -14,19 +18,12 @@ const CreateUpdateRoleNameSchema = z
     "Role name can only contain letters, numbers, hyphens, and underscores",
   );
 
-const PermissionsSchema = z.record(ResourceSchema, z.array(ActionSchema));
+const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
+const PredefinedRoleNameOrCustomRoleIdSchema = z
+  .union([PredefinedRoleNameSchema, CustomRoleIdSchema])
+  .describe("Predefined role name or custom role ID");
 
-const RoleResponseSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  permissions: PermissionsSchema,
-  isCustom: z.boolean(),
-});
-
-const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all roles in the organization
-   */
+const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/roles",
     {
@@ -35,40 +32,14 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all roles in the organization",
         tags: ["Roles"],
         response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: RoleSchema,
-              name: z.string(),
-              isCustom: z.boolean(),
-              memberCount: z.number().default(0),
-            }),
-          ),
+          z.array(SelectOrganizationRoleSchema),
         ),
       },
     },
     async ({ organizationId }, reply) => {
       try {
         // Get all roles including predefined ones
-        const roles = await RoleModel.listRolesByOrganization(organizationId);
-
-        // Enrich with member counts and isCustom flag
-        const enrichedRoles = await Promise.all(
-          roles.map(async (role) => {
-            const memberCount = await RoleModel.getMemberCountForRole(
-              role.name,
-              organizationId,
-            );
-
-            return {
-              id: role.id,
-              name: role.name,
-              isCustom: RoleModel.isCustomRole(role.name),
-              memberCount,
-            };
-          }),
-        );
-
-        return reply.send(enrichedRoles);
+        return reply.send(await OrganizationRoleModel.getAll(organizationId));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -82,9 +53,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Create a new custom role (requires organization:update permission)
-   */
   fastify.post(
     "/api/roles",
     {
@@ -94,15 +62,18 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         body: z.object({
           name: CreateUpdateRoleNameSchema,
-          permissions: PermissionsSchema,
+          permission: RolePermissionsSchema,
         }),
-        response: constructResponseSchema(RoleResponseSchema),
+        response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async ({ body: { name, permissions }, user, organizationId }, reply) => {
+    async ({ body: { name, permission }, user, organizationId }, reply) => {
       try {
         // Check role name uniqueness
-        const isUnique = await RoleModel.isRoleNameUnique(name, organizationId);
+        const isUnique = await OrganizationRoleModel.isNameUnique(
+          name,
+          organizationId,
+        );
 
         if (!isUnique) {
           return reply.status(400).send({
@@ -119,9 +90,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         );
 
-        const validation = RoleModel.validateRolePermissions(
+        const validation = OrganizationRoleModel.validateRolePermissions(
           userPermissions,
-          permissions,
+          permission,
         );
 
         if (!validation.valid) {
@@ -133,27 +104,13 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const result = await RoleModel.create(
-          name,
-          permissions,
-          organizationId,
+        return reply.send(
+          await OrganizationRoleModel.create({
+            name,
+            permission,
+            organizationId,
+          }),
         );
-
-        if (!result) {
-          return reply.status(500).send({
-            error: {
-              message: "Failed to create role",
-              type: "api_error",
-            },
-          });
-        }
-
-        return reply.send({
-          id: result.id,
-          name: result.role,
-          permissions: result.permission,
-          isCustom: true,
-        });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -167,9 +124,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get a specific role by ID
-   */
   fastify.get(
     "/api/roles/:roleId",
     {
@@ -178,27 +132,17 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a specific role by ID",
         tags: ["Roles"],
         params: z.object({
-          roleId: RoleSchema,
+          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
-        response: constructResponseSchema(RoleResponseSchema),
+        response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
       try {
-        // Check if it's a predefined role
-        if (!RoleModel.isCustomRole(roleId)) {
-          const permissions = RoleModel.getPredefinedRolePermissions(roleId);
-
-          return reply.send({
-            id: roleId,
-            name: roleId,
-            permissions,
-            isCustom: false,
-          });
-        }
-
-        // Fetch custom role
-        const result = await RoleModel.getRoleById(roleId, organizationId);
+        const result = await OrganizationRoleModel.getById(
+          roleId,
+          organizationId,
+        );
 
         if (!result) {
           return reply.status(404).send({
@@ -209,17 +153,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // For predefined roles, get their permissions
-        const permissions = RoleModel.isCustomRole(result.name)
-          ? {} // Custom role permissions would come from better-auth, but we don't have access to them in the getRoleById response
-          : RoleModel.getPredefinedRolePermissions(result.name);
-
-        return reply.send({
-          id: result.id,
-          name: result.name,
-          permissions,
-          isCustom: RoleModel.isCustomRole(result.name),
-        });
+        return reply.send(result);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -233,9 +167,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update a custom role (requires organization:update permission)
-   */
   fastify.put(
     "/api/roles/:roleId",
     {
@@ -244,22 +175,22 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: RoleSchema,
+          roleId: CustomRoleIdSchema,
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
-          permissions: PermissionsSchema.optional(),
+          permission: RolePermissionsSchema.optional(),
         }),
-        response: constructResponseSchema(RoleResponseSchema),
+        response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (
-      { params: { roleId }, body: { name, permissions }, user, organizationId },
+      { params: { roleId }, body: { name, permission }, user, organizationId },
       reply,
     ) => {
       try {
         // Cannot update predefined roles
-        if (!RoleModel.isCustomRole(roleId)) {
+        if (OrganizationRoleModel.isPredefinedRole(roleId)) {
           return reply.status(403).send({
             error: {
               message: "Cannot update predefined roles",
@@ -269,7 +200,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Check if role exists
-        const existingRole = await RoleModel.getRoleById(
+        const existingRole = await OrganizationRoleModel.getById(
           roleId,
           organizationId,
         );
@@ -285,7 +216,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Check name uniqueness if name is being changed
         if (name) {
-          const isUnique = await RoleModel.isRoleNameUnique(
+          const isUnique = await OrganizationRoleModel.isNameUnique(
             name,
             organizationId,
             roleId,
@@ -302,15 +233,15 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Validate permissions if being changed
-        if (permissions) {
+        if (permission) {
           const userPermissions = await UserModel.getUserPermissions(
             user.id,
             organizationId,
           );
 
-          const validation = RoleModel.validateRolePermissions(
+          const validation = OrganizationRoleModel.validateRolePermissions(
             userPermissions,
-            permissions,
+            permission,
           );
 
           if (!validation.valid) {
@@ -323,28 +254,12 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        const result = await RoleModel.update(
-          roleId,
-          name,
-          permissions,
-          organizationId!,
+        return reply.send(
+          await OrganizationRoleModel.update(roleId, {
+            name,
+            permission,
+          }),
         );
-
-        if (!result) {
-          return reply.status(500).send({
-            error: {
-              message: "Failed to update role",
-              type: "api_error",
-            },
-          });
-        }
-
-        return reply.send({
-          id: result.id,
-          name: result.role,
-          permissions: result.permission,
-          isCustom: true,
-        });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -358,9 +273,6 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Delete a custom role (requires organization:update permission)
-   */
   fastify.delete(
     "/api/roles/:roleId",
     {
@@ -369,7 +281,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: RoleSchema,
+          roleId: CustomRoleIdSchema,
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
@@ -377,7 +289,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { roleId }, organizationId }, reply) => {
       try {
         // Check if role can be deleted
-        const deleteCheck = await RoleModel.canDeleteRole(
+        const deleteCheck = await OrganizationRoleModel.canDelete(
           roleId,
           organizationId,
         );
@@ -391,18 +303,9 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const result = await RoleModel.delete(roleId, organizationId);
-
-        if (!result) {
-          return reply.status(500).send({
-            error: {
-              message: "Failed to delete role",
-              type: "api_error",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
+        return reply.send({
+          success: await OrganizationRoleModel.delete(roleId),
+        });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -417,4 +320,4 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default roleRoutes;
+export default organizationRoleRoutes;

@@ -1,6 +1,10 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import { z } from "zod";
 
+export const ADMIN_ROLE_NAME = "admin";
+export const MEMBER_ROLE_NAME = "member";
+export const PredefinedRoleNameSchema = z.enum([ADMIN_ROLE_NAME, MEMBER_ROLE_NAME]);
+
 export const ActionSchema = z.enum(["create", "read", "update", "delete", "admin"]);
 
 export const ResourceSchema = z.enum([
@@ -24,40 +28,10 @@ export const ResourceSchema = z.enum([
   "tokenPrice",
 ]);
 
-/**
- * Available resources and actions
- */
-export type Resource = z.infer<typeof ResourceSchema>;
-export type Action = z.infer<typeof ActionSchema>;
-
-/**
- * Permission string format: "resource:action"
- * Examples: "agent:create", "tool:read", "org:delete", "agent:admin", "mcpServer:admin"
- *
- * Note: "admin" action is only valid for certain resources
- */
-export type Permission =
-  | `${Resource}:${"create" | "read" | "update" | "delete"}`
-  | "agent:admin"
-  | "mcpServer:admin"
-  | "mcpServerInstallationRequest:admin";
-
-/**
- * TODO: it's not very clear how owner role is assigned/inferred, it is mentioned in the
- * better-auth docs https://www.better-auth.com/docs/plugins/organization#deleting-a-role
- * but still not clear how it works/is-assigned
- */
-export const OWNER_ROLE_NAME = "owner";
-export const ADMIN_ROLE_NAME = "admin";
-export const MEMBER_ROLE_NAME = "member";
-export const ALL_PREDEFINED_ROLES = [OWNER_ROLE_NAME, ADMIN_ROLE_NAME, MEMBER_ROLE_NAME];
-export const RoleSchema = z.union([
-  z.literal(OWNER_ROLE_NAME),
-  z.literal(ADMIN_ROLE_NAME),
-  z.literal(MEMBER_ROLE_NAME),
-  z.string(),
-]);
-export type Role = z.infer<typeof RoleSchema>;
+export const RolePermissionsSchema = z.partialRecord(
+  ResourceSchema,
+  z.array(ActionSchema),
+);
 
 export const allAvailableActions: Record<Resource, Action[]> = {
   agent: ["create", "read", "update", "delete", "admin"],
@@ -105,3 +79,28 @@ export const memberRole = ac.newRole({
   tokenPrice: ["read"],
 });
 
+export const rolePermissionsMap: Record<PredefinedRoleName, RolePermissions> = {
+  [ADMIN_ROLE_NAME]: adminRole.statements,
+  [MEMBER_ROLE_NAME]: memberRole.statements,
+};
+
+/**
+ * Available resources and actions
+ */
+export type Resource = z.infer<typeof ResourceSchema>;
+export type Action = z.infer<typeof ActionSchema>;
+
+/**
+ * Permission string format: "resource:action"
+ * Examples: "agent:create", "tool:read", "org:delete", "agent:admin", "mcpServer:admin"
+ *
+ * Note: "admin" action is only valid for certain resources
+ */
+export type Permission =
+  | `${Resource}:${"create" | "read" | "update" | "delete"}`
+  | "agent:admin"
+  | "mcpServer:admin"
+  | "mcpServerInstallationRequest:admin";
+
+export type RolePermissions = z.infer<typeof RolePermissionsSchema>;
+export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;

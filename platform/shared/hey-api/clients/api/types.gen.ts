@@ -10094,9 +10094,9 @@ export type GetRolesResponses = {
         id: string;
         organizationId: string;
         name: string;
-        permission: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
@@ -10175,9 +10175,9 @@ export type CreateRoleResponses = {
         id: string;
         organizationId: string;
         name: string;
-        permission: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
@@ -10329,9 +10329,9 @@ export type GetRoleResponses = {
         id: string;
         organizationId: string;
         name: string;
-        permission: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;
@@ -10415,9 +10415,9 @@ export type UpdateRoleResponses = {
         id: string;
         organizationId: string;
         name: string;
-        permission: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
         createdAt: string;
         updatedAt: string | null;
         predefined: boolean;

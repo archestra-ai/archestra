@@ -1,14 +1,17 @@
+import { RolePermissionsSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
-
 import { schema } from "@/database";
 
 export const SelectOrganizationRoleSchema = createSelectSchema(
   schema.organizationRolesTable,
+  {
+    permission: RolePermissionsSchema,
+  },
 ).extend({
   /**
    * Whether or not the role is "predefined" (not a custom one) or not
@@ -18,10 +21,16 @@ export const SelectOrganizationRoleSchema = createSelectSchema(
 });
 export const InsertOrganizationRoleSchema = createInsertSchema(
   schema.organizationRolesTable,
+  {
+    permission: RolePermissionsSchema,
+  },
 );
 
 export const UpdateOrganizationRoleSchema = createUpdateSchema(
   schema.organizationRolesTable,
+  {
+    permission: RolePermissionsSchema,
+  },
 );
 
 export type OrganizationRole = z.infer<typeof SelectOrganizationRoleSchema>;

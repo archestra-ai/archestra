@@ -4,6 +4,7 @@ import { z } from "zod";
 export const ADMIN_ROLE_NAME = "admin";
 export const MEMBER_ROLE_NAME = "member";
 export const PredefinedRoleNameSchema = z.enum([ADMIN_ROLE_NAME, MEMBER_ROLE_NAME]);
+export const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
 
 export const ActionSchema = z.enum(["create", "read", "update", "delete", "admin"]);
 
@@ -104,3 +105,4 @@ export type Permission =
 
 export type RolePermissions = z.infer<typeof RolePermissionsSchema>;
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
+export type AnyRoleName = z.infer<typeof AnyRoleName>;

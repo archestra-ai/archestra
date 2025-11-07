@@ -257,7 +257,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(
           await OrganizationRoleModel.update(roleId, {
             name,
-            permission,
+            permission: permission ?? existingRole.permission,
           }),
         );
       } catch (error) {

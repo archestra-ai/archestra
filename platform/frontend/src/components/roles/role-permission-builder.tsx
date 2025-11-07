@@ -1,8 +1,13 @@
 "use client";
 
-import { type Action, ActionSchema, type Resource } from "@shared";
+import {
+  type Action,
+  ActionSchema,
+  type Resource,
+  type RolePermissions,
+} from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,9 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 interface RolePermissionBuilderProps {
-  permissions: Partial<Record<Resource, Action[]>>;
-  onChange: (permissions: Partial<Record<Resource, Action[]>>) => void;
-  userPermissions: Record<Resource, Action[]>;
+  permission: RolePermissions;
+  onChange: (permission: RolePermissions) => void;
+  userPermissions: RolePermissions;
 }
 
 // Group resources by category for better organization
@@ -64,10 +69,11 @@ const actionLabels: Record<Action, string> = {
   read: "Read",
   update: "Update",
   delete: "Delete",
+  admin: "Admin",
 };
 
 export function RolePermissionBuilder({
-  permissions,
+  permission,
   onChange,
   userPermissions,
 }: RolePermissionBuilderProps) {
@@ -75,69 +81,87 @@ export function RolePermissionBuilder({
     new Set(Object.keys(resourceCategories)),
   );
 
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
-  };
+  const toggleCategory = useCallback(
+    (category: string) => {
+      const newExpanded = new Set(expandedCategories);
+      if (newExpanded.has(category)) {
+        newExpanded.delete(category);
+      } else {
+        newExpanded.add(category);
+      }
+      setExpandedCategories(newExpanded);
+    },
+    [expandedCategories],
+  );
 
-  const toggleAction = (resource: Resource, action: Action) => {
-    const currentActions = permissions[resource] || [];
-    const newActions = currentActions.includes(action)
-      ? currentActions.filter((a) => a !== action)
-      : [...currentActions, action];
+  const toggleAction = useCallback(
+    (resource: Resource, action: Action) => {
+      const currentActions = permission[resource] || [];
+      const newActions = currentActions.includes(action)
+        ? currentActions.filter((a) => a !== action)
+        : [...currentActions, action];
 
-    if (newActions.length === 0) {
-      // Remove resource if no actions selected
-      const newPermissions = { ...permissions };
-      delete newPermissions[resource];
-      onChange(newPermissions);
-    } else {
+      if (newActions.length === 0) {
+        // Remove resource if no actions selected
+        const newPermission = { ...permission };
+        delete newPermission[resource];
+        onChange(newPermission);
+      } else {
+        onChange({
+          ...permission,
+          [resource]: newActions,
+        });
+      }
+    },
+    [permission, onChange],
+  );
+
+  const selectAllForResource = useCallback(
+    (resource: Resource) => {
+      const availableActions = userPermissions[resource] || [];
       onChange({
-        ...permissions,
-        [resource]: newActions,
+        ...permission,
+        [resource]: [...availableActions],
       });
-    }
-  };
+    },
+    [permission, onChange, userPermissions],
+  );
 
-  const selectAllForResource = (resource: Resource) => {
-    const availableActions = userPermissions[resource] || [];
-    onChange({
-      ...permissions,
-      [resource]: [...availableActions],
-    });
-  };
+  const deselectAllForResource = useCallback(
+    (resource: Resource) => {
+      const newPermission = { ...permission };
+      delete newPermission[resource];
+      onChange(newPermission);
+    },
+    [permission, onChange],
+  );
 
-  const deselectAllForResource = (resource: Resource) => {
-    const newPermissions = { ...permissions };
-    delete newPermissions[resource];
-    onChange(newPermissions);
-  };
+  const isResourceFullySelected = useCallback(
+    (resource: Resource): boolean => {
+      const currentActions = permission[resource] || [];
+      const availableActions = userPermissions[resource] || [];
+      return (
+        currentActions.length === availableActions.length &&
+        availableActions.length > 0
+      );
+    },
+    [permission, userPermissions],
+  );
 
-  const isResourceFullySelected = (resource: Resource): boolean => {
-    const currentActions = permissions[resource] || [];
-    const availableActions = userPermissions[resource] || [];
-    return (
-      currentActions.length === availableActions.length &&
-      availableActions.length > 0
-    );
-  };
+  const isResourcePartiallySelected = useCallback(
+    (resource: Resource): boolean => {
+      const currentActions = permission[resource] || [];
+      return currentActions.length > 0 && !isResourceFullySelected(resource);
+    },
+    [permission, isResourceFullySelected],
+  );
 
-  const isResourcePartiallySelected = (resource: Resource): boolean => {
-    const currentActions = permissions[resource] || [];
-    return currentActions.length > 0 && !isResourceFullySelected(resource);
-  };
-
-  const getTotalPermissionCount = (): number => {
-    return Object.values(permissions).reduce(
+  const getTotalPermissionCount = useCallback((): number => {
+    return Object.values(permission).reduce(
       (sum, actions) => sum + actions.length,
       0,
     );
-  };
+  }, [permission]);
 
   return (
     <div className="space-y-4">
@@ -148,8 +172,8 @@ export function RolePermissionBuilder({
             <p className="text-xs text-muted-foreground">
               {getTotalPermissionCount()} permission
               {getTotalPermissionCount() !== 1 ? "s" : ""} across{" "}
-              {Object.keys(permissions).length} resource
-              {Object.keys(permissions).length !== 1 ? "s" : ""}
+              {Object.keys(permission).length} resource
+              {Object.keys(permission).length !== 1 ? "s" : ""}
             </p>
           </div>
           <Button
@@ -187,7 +211,7 @@ export function RolePermissionBuilder({
                   .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
                   .map((resource) => {
                     const availableActions = userPermissions[resource] || [];
-                    const selectedActions = permissions[resource] || [];
+                    const selectedActions = permission[resource] || [];
                     const isFullySelected = isResourceFullySelected(resource);
                     const isPartiallySelected =
                       isResourcePartiallySelected(resource);

@@ -1,8 +1,12 @@
 "use client";
 
-import { type Action, allAvailableActions, type Resource } from "@shared";
-import { Plus, Shield, Trash2, Users } from "lucide-react";
-import { useState } from "react";
+import {
+  allAvailableActions,
+  type archestraApiTypes,
+  type RolePermissions,
+} from "@shared";
+import { Plus, Shield, Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +34,8 @@ import {
 } from "@/lib/role.query";
 import { RolePermissionBuilder } from "./role-permission-builder";
 
+type Role = archestraApiTypes.GetRoleResponses["200"];
+
 export function RolesList() {
   const { data: roles, isLoading } = useRoles();
   const createMutation = useCreateRole();
@@ -40,22 +46,20 @@ export function RolesList() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const [selectedRole, setSelectedRole] = useState<any | null>(null);
-  const [roleToDelete, setRoleToDelete] = useState<any | null>(null);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   // Form state
   const [roleName, setRoleName] = useState("");
-  const [permissions, setPermissions] = useState<
-    Partial<Record<Resource, Action[]>>
-  >({});
+  const [permission, setPermission] = useState<RolePermissions>({});
 
-  const handleCreateRole = () => {
+  const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {
       toast.error("Role name is required");
       return;
     }
 
-    if (Object.keys(permissions).length === 0) {
+    if (Object.keys(permission).length === 0) {
       toast.error("At least one permission must be granted");
       return;
     }
@@ -63,13 +67,13 @@ export function RolesList() {
     createMutation.mutate(
       {
         name: roleName,
-        permissions: permissions as Record<string, Action[]>,
+        permission,
       },
       {
         onSuccess: () => {
           setCreateDialogOpen(false);
           setRoleName("");
-          setPermissions({});
+          setPermission({});
           toast.success("Role created successfully");
         },
         onError: (error: Error) => {
@@ -77,9 +81,9 @@ export function RolesList() {
         },
       },
     );
-  };
+  }, [roleName, permission, createMutation]);
 
-  const handleEditRole = () => {
+  const handleEditRole = useCallback(() => {
     if (!selectedRole) return;
 
     if (!roleName.trim()) {
@@ -87,7 +91,7 @@ export function RolesList() {
       return;
     }
 
-    if (Object.keys(permissions).length === 0) {
+    if (Object.keys(permission).length === 0) {
       toast.error("At least one permission must be granted");
       return;
     }
@@ -97,7 +101,7 @@ export function RolesList() {
         roleId: selectedRole.id,
         data: {
           name: roleName,
-          permissions: permissions as Record<string, Action[]>,
+          permission,
         },
       },
       {
@@ -105,7 +109,7 @@ export function RolesList() {
           setEditDialogOpen(false);
           setSelectedRole(null);
           setRoleName("");
-          setPermissions({});
+          setPermission({});
           toast.success("Role updated successfully");
         },
         onError: (error: Error) => {
@@ -113,9 +117,9 @@ export function RolesList() {
         },
       },
     );
-  };
+  }, [selectedRole, roleName, permission, updateMutation]);
 
-  const handleDeleteRole = () => {
+  const handleDeleteRole = useCallback(() => {
     if (roleToDelete) {
       deleteMutation.mutate(roleToDelete.id, {
         onSuccess: () => {
@@ -128,14 +132,19 @@ export function RolesList() {
         },
       });
     }
-  };
+  }, [roleToDelete, deleteMutation]);
 
-  const openEditDialog = (role: any) => {
-    setSelectedRole(role);
-    setRoleName(role.name);
-    setPermissions(role.permissions || {});
-    setEditDialogOpen(true);
-  };
+  const openEditDialog = useCallback(
+    (role: Role) => {
+      if (!selectedRole) return;
+
+      setSelectedRole(role);
+      setRoleName(role.name);
+      setPermission(role.permission);
+      setEditDialogOpen(true);
+    },
+    [selectedRole],
+  );
 
   if (isLoading) {
     return (
@@ -149,8 +158,8 @@ export function RolesList() {
   }
 
   // Separate predefined and custom roles
-  const predefinedRoles = roles?.filter((role) => !role.isCustom) || [];
-  const customRoles = roles?.filter((role) => role.isCustom) || [];
+  const predefinedRoles = roles?.filter((role) => role.predefined) || [];
+  const customRoles = roles?.filter((role) => !role.predefined) || [];
 
   return (
     <>
@@ -171,7 +180,6 @@ export function RolesList() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Predefined Roles */}
           {predefinedRoles.length > 0 && (
             <div>
               <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
@@ -194,13 +202,13 @@ export function RolesList() {
                             System
                           </span>
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                           <Users className="h-3 w-3" />
                           <span>
                             {role.memberCount} member
                             {role.memberCount !== 1 ? "s" : ""}
                           </span>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
@@ -236,13 +244,13 @@ export function RolesList() {
                       <Shield className="h-5 w-5" />
                       <div>
                         <h4 className="font-semibold">{role.name}</h4>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                           <Users className="h-3 w-3" />
                           <span>
                             {role.memberCount} member
                             {role.memberCount !== 1 ? "s" : ""}
                           </span>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -260,7 +268,7 @@ export function RolesList() {
                           setRoleToDelete(role);
                           setDeleteDialogOpen(true);
                         }}
-                        disabled={role.memberCount > 0}
+                        // disabled={role.memberCount > 0}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -273,7 +281,6 @@ export function RolesList() {
         </CardContent>
       </Card>
 
-      {/* Create Role Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -297,8 +304,8 @@ export function RolesList() {
             <div className="space-y-2">
               <Label>Permissions *</Label>
               <RolePermissionBuilder
-                permissions={permissions}
-                onChange={setPermissions}
+                permission={permission}
+                onChange={setPermission}
                 userPermissions={allAvailableActions}
               />
             </div>
@@ -309,7 +316,7 @@ export function RolesList() {
               onClick={() => {
                 setCreateDialogOpen(false);
                 setRoleName("");
-                setPermissions({});
+                setPermission({});
               }}
             >
               Cancel
@@ -324,7 +331,6 @@ export function RolesList() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Role Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -347,8 +353,8 @@ export function RolesList() {
             <div className="space-y-2">
               <Label>Permissions *</Label>
               <RolePermissionBuilder
-                permissions={permissions}
-                onChange={setPermissions}
+                permission={permission}
+                onChange={setPermission}
                 userPermissions={allAvailableActions}
               />
             </div>
@@ -360,7 +366,7 @@ export function RolesList() {
                 setEditDialogOpen(false);
                 setSelectedRole(null);
                 setRoleName("");
-                setPermissions({});
+                setPermission({});
               }}
             >
               Cancel
@@ -375,7 +381,6 @@ export function RolesList() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>

@@ -180,7 +180,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Role protection: predefined roles cannot be modified/deleted
 - API endpoints: `/api/roles/*` (requires organization:update permission)
 - UI: Settings > Roles page (admin-only)
-- Database: uses better-auth organization plugin with custom permissions
+- Database: `organizationRolesTable` with better-auth integration
 
 **Agent Labels**:
 

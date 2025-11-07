@@ -115,7 +115,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.member.organizationId, organizationId),
-          eq(schema.member.role, role.name),
+          eq(schema.member.role, roleId),
         ),
       )
       .limit(1);
@@ -285,9 +285,10 @@ class OrganizationRoleModel {
   static async delete(roleId: string) {
     const result = await db
       .delete(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.id, roleId));
+      .where(eq(schema.organizationRolesTable.id, roleId))
+      .returning();
 
-    return result.rows.length > 0;
+    return result.length > 0;
   }
 }
 

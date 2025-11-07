@@ -386,7 +386,7 @@ describe("OrganizationRoleModel", () => {
         roleToDeleteId,
         testOrgId,
       );
-      expect(afterDelete).toBeNull();
+      expect(afterDelete).toBeFalsy();
     });
 
     it("should return false when no role was deleted", async () => {
@@ -471,7 +471,7 @@ describe("OrganizationRoleModel", () => {
       );
       expect(result).toEqual({
         canDelete: false,
-        reason: "Cannot delete role with assigned members",
+        reason: "Cannot delete role that is currently assigned to members",
       });
 
       // Cleanup

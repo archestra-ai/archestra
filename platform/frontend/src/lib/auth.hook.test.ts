@@ -10,6 +10,8 @@ vi.mock("./clients/auth/auth-client", () => ({
   },
 }));
 
+type Session = Awaited<ReturnType<typeof authClient.useSession>>;
+
 describe("useIsAuthenticated", () => {
   it("should return true when user is authenticated", () => {
     // Mock session with user
@@ -18,7 +20,7 @@ describe("useIsAuthenticated", () => {
         user: { id: "user123", email: "test@example.com" },
         session: { id: "session123" },
       },
-    } as any);
+    } as Session);
 
     const { result } = renderHook(() => useIsAuthenticated());
 
@@ -29,7 +31,7 @@ describe("useIsAuthenticated", () => {
     // Mock session without user
     vi.mocked(authClient.useSession).mockReturnValue({
       data: null,
-    } as any);
+    } as Session);
 
     const { result } = renderHook(() => useIsAuthenticated());
 
@@ -43,7 +45,7 @@ describe("useIsAuthenticated", () => {
         user: null,
         session: { id: "session123" },
       },
-    } as any);
+    } as unknown as Session);
 
     const { result } = renderHook(() => useIsAuthenticated());
 
@@ -54,7 +56,7 @@ describe("useIsAuthenticated", () => {
     // Mock undefined session
     vi.mocked(authClient.useSession).mockReturnValue({
       data: undefined,
-    } as any);
+    } as unknown as Session);
 
     const { result } = renderHook(() => useIsAuthenticated());
 

@@ -18,7 +18,8 @@
     "jsx": "react-jsx",
     "incremental": true,
     "types": [
-      "vitest/globals"
+      "vitest/globals",
+      "@testing-library/jest-dom/vitest"
     ],
     "plugins": [
       {

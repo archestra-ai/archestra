@@ -7,9 +7,9 @@ vi.mock("@/auth", () => ({
     api: {
       getSession: vi.fn(),
       verifyApiKey: vi.fn(),
-      hasPermission: vi.fn(),
     },
   },
+  hasPermission: vi.fn(),
 }));
 
 vi.mock("@/models", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/auth/internal-jwt", () => ({
   verifyInternalJwt: vi.fn(),
 }));
 
-import { betterAuth } from "@/auth";
+import { betterAuth, hasPermission } from "@/auth";
 import { verifyInternalJwt } from "@/auth/internal-jwt";
 import { UserModel } from "@/models";
 
@@ -32,9 +32,10 @@ const mockBetterAuth = betterAuth as unknown as {
   api: {
     getSession: MockedFunction<typeof betterAuth.api.getSession>;
     verifyApiKey: MockedFunction<typeof betterAuth.api.verifyApiKey>;
-    hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
   };
 };
+
+const mockHasPermission = hasPermission as MockedFunction<typeof hasPermission>;
 
 const mockUserModel = UserModel as unknown as {
   getUserById: MockedFunction<typeof UserModel.getUserById>;
@@ -64,7 +65,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -185,7 +186,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: false,
         error: null,
       });
@@ -250,9 +251,10 @@ describe("authPlugin integration", () => {
       mockBetterAuth.api.getSession.mockRejectedValue(
         new Error("No organization"),
       );
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No organization context"),
-      );
+      // Mock hasPermission to simulate organization context error
+      mockHasPermission.mockImplementation(() => {
+        throw new Error("No organization context");
+      });
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
@@ -286,7 +288,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -307,12 +309,10 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: {
-          permissions: { agent: ["create"] },
-        },
-      });
+      expect(mockHasPermission).toHaveBeenCalledWith(
+        { agent: ["create"] },
+        expect.objectContaining({}),
+      );
     });
   });
 
@@ -323,7 +323,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -355,7 +355,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: {}, // No activeOrganizationId
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -464,7 +464,7 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
+      mockHasPermission.mockResolvedValue({
         success: true,
         error: null,
       });

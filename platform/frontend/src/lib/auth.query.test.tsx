@@ -56,7 +56,7 @@ describe("useSession", () => {
 
     vi.mocked(authClient.getSession).mockResolvedValue({
       data: mockSession,
-    } as any);
+    } as ReturnType<typeof authClient.getSession>);
 
     const { result } = renderHook(() => useSession(), {
       wrapper: createWrapper(),
@@ -80,7 +80,7 @@ describe("useCurrentOrgMembers", () => {
 
     vi.mocked(authClient.organization.listMembers).mockResolvedValue({
       data: { members: mockMembers },
-    } as any);
+    } as ReturnType<typeof authClient.organization.listMembers>);
 
     const { result } = renderHook(() => useCurrentOrgMembers(), {
       wrapper: createWrapper(),
@@ -117,7 +117,9 @@ describe("useDefaultCredentialsEnabled", () => {
   it("should return default credentials status", async () => {
     vi.mocked(archestraApiSdk.getDefaultCredentialsStatus).mockResolvedValue({
       data: { enabled: true },
-    } as any);
+    } as Awaited<
+      ReturnType<typeof archestraApiSdk.getDefaultCredentialsStatus>
+    >);
 
     const { result } = renderHook(() => useDefaultCredentialsEnabled(), {
       wrapper: createWrapper(),

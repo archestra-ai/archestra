@@ -12,13 +12,17 @@ vi.mock("./clients/auth/auth-client", () => ({
   },
 }));
 
+type HasPermissionResponse = Awaited<
+  ReturnType<typeof authClient.organization.hasPermission>
+>;
+
 describe("hasPermission", () => {
   it("should return true when user has permission", async () => {
     const mockPermissions: Permissions = { organization: ["read"] };
 
     vi.mocked(authClient.organization.hasPermission).mockResolvedValue({
       data: { success: true },
-    } as any);
+    } as HasPermissionResponse);
 
     const result = await hasPermission(mockPermissions);
 
@@ -33,7 +37,7 @@ describe("hasPermission", () => {
 
     vi.mocked(authClient.organization.hasPermission).mockResolvedValue({
       data: { success: false },
-    } as any);
+    } as HasPermissionResponse);
 
     const result = await hasPermission(mockPermissions);
 
@@ -60,7 +64,7 @@ describe("hasPermission", () => {
 
     vi.mocked(authClient.organization.hasPermission).mockResolvedValue({
       data: null,
-    } as any);
+    } as HasPermissionResponse);
 
     const result = await hasPermission(mockPermissions);
 
@@ -72,7 +76,7 @@ describe("hasPermission", () => {
 
     vi.mocked(authClient.organization.hasPermission).mockResolvedValue({
       data: {},
-    } as any);
+    } as HasPermissionResponse);
 
     const result = await hasPermission(mockPermissions);
 

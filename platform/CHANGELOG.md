@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.1.0](https://github.com/archestra-ai/archestra/compare/platform-v0.0.30...platform-v0.1.0) (2025-11-07)
+
+
+### Features
+
+* add `archestra.envFromSecrets` + `archestra.envFrom` to Helm values ([#979](https://github.com/archestra-ai/archestra/issues/979)) ([6050461](https://github.com/archestra-ai/archestra/commit/6050461c763569756a58f57ab871269414353d31))
+* add Archestra MCP server ([#990](https://github.com/archestra-ai/archestra/issues/990)) ([563a9ee](https://github.com/archestra-ai/archestra/commit/563a9eef75bbf2601aae735eb6562fa14c53da89))
+* add TOTP 2FA support using better-auth ([#987](https://github.com/archestra-ai/archestra/issues/987)) ([ceb602b](https://github.com/archestra-ai/archestra/commit/ceb602bc57332a995e24dce3c81e8b6d5d1f5492))
+* agent labels in tracing and metrics ([#961](https://github.com/archestra-ai/archestra/issues/961)) ([2ef9137](https://github.com/archestra-ai/archestra/commit/2ef913761e8c4c7e83f4f1844c34bf465fe69840))
+* autogenerate auth secret in Helm chart & Dockerfile ([#995](https://github.com/archestra-ai/archestra/issues/995)) ([1e3c38d](https://github.com/archestra-ai/archestra/commit/1e3c38d6f9abf2daf5324754f9a574ee3b5b6e5a))
+* chat via proxy ([#968](https://github.com/archestra-ai/archestra/issues/968)) ([1f8d71f](https://github.com/archestra-ai/archestra/commit/1f8d71f06546a614396bec47405c0a87979ba291))
+* expose otlp auth environment variable ([#975](https://github.com/archestra-ai/archestra/issues/975)) ([f1e70fd](https://github.com/archestra-ai/archestra/commit/f1e70fdfc65101acd1749a831639a4d16a7cae53))
+* HTTP request and DB observability ([#974](https://github.com/archestra-ai/archestra/issues/974)) ([524feb3](https://github.com/archestra-ai/archestra/commit/524feb348a0b4e98ea32555eeb16bc3bcbb281de))
+* local servers - support catalog, credentials management, unify ui/ux ([#963](https://github.com/archestra-ai/archestra/issues/963)) ([0df7e81](https://github.com/archestra-ai/archestra/commit/0df7e815a3bc0dcb223e74adcd5dc92b594fd1ed))
+* skip "internal" postgres startup when using external database ([#960](https://github.com/archestra-ai/archestra/issues/960)) ([08be5a3](https://github.com/archestra-ai/archestra/commit/08be5a31a62a7733cf9c91bc5f9c4ee16c413a9c))
+
+
+### Bug Fixes
+
+* add consistent spacing between sections on settings/account page ([#952](https://github.com/archestra-ai/archestra/issues/952)) ([05b08f0](https://github.com/archestra-ai/archestra/commit/05b08f0ee0327e33638f3aa51ec1bd94b888d512))
+* always pass `args` to mcp pod, even if using custom docker image ([#964](https://github.com/archestra-ai/archestra/issues/964)) ([711906b](https://github.com/archestra-ai/archestra/commit/711906b71ce23e71caed8efc9a2e8797e96a48c8))
+* create/edit agents dialog label key handling ([#962](https://github.com/archestra-ai/archestra/issues/962)) ([6734114](https://github.com/archestra-ai/archestra/commit/6734114c4b6355e131d97a6734ad1489fc4282ae))
+* expose all HTTP routes for metrics exposed by `/metrics` ([#986](https://github.com/archestra-ai/archestra/issues/986)) ([24fa0a2](https://github.com/archestra-ai/archestra/commit/24fa0a2327f34180d45e9ea38a691da5952bc898))
+* fix auth on webkit ([#972](https://github.com/archestra-ai/archestra/issues/972)) ([abac193](https://github.com/archestra-ai/archestra/commit/abac19332207d628fdd8ca4859df611131719035))
+* issue when assigning non RFC1123 compliant `metadata.labels` to K8s pod ([#954](https://github.com/archestra-ai/archestra/issues/954)) ([0f7969b](https://github.com/archestra-ai/archestra/commit/0f7969be5e69faec49dcc7202aeb04a0f357043e))
+* remove auth bypass for /mcp_proxy ([#992](https://github.com/archestra-ai/archestra/issues/992)) ([a5a4efa](https://github.com/archestra-ai/archestra/commit/a5a4efa990efcd744a58b1029cf26c94c7a59a09))
+* setting `ARCHESTRA_API_BASE_URL` in Docker image's `supervisord` config for the `backend` process ([#956](https://github.com/archestra-ai/archestra/issues/956)) ([6b8eaf4](https://github.com/archestra-ai/archestra/commit/6b8eaf47f151443c73391fbb8cf3cd8a2b80a871))
+* typo in `supervisord` config ([#957](https://github.com/archestra-ai/archestra/issues/957)) ([305e17d](https://github.com/archestra-ai/archestra/commit/305e17d8a2334d26ecba6f6cacb67c0e374cb939))
+* typo in `supervisord` environment variable config in Dockerfile ([#958](https://github.com/archestra-ai/archestra/issues/958)) ([c34e626](https://github.com/archestra-ai/archestra/commit/c34e626cb60543f44a23708e572adc049a5e199a))
+* update grafana dashboard -- add variables to select metrics/traces datasources ([#984](https://github.com/archestra-ai/archestra/issues/984)) ([9760478](https://github.com/archestra-ai/archestra/commit/976047817c63453066ad47d4f58ac220ef0b6cfc))
+
 ## [0.0.30](https://github.com/archestra-ai/archestra/compare/platform-v0.0.29...platform-v0.0.30) (2025-11-04)
 
 

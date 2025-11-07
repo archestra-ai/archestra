@@ -159,6 +159,11 @@ tests:
           value:
             - name: ARCHESTRA_DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            - name: ARCHESTRA_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: auth-secret
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER

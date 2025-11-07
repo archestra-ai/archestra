@@ -1,3 +1,4 @@
+import { initializeInternalJwt } from "@/auth/internal-jwt";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -7,7 +8,6 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
-import { initializeInternalJwt } from "@/utils/internal-jwt";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK

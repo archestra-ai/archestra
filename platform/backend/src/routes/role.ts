@@ -7,7 +7,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { betterAuth } from "@/auth";
 import { constructResponseSchema, RouteId } from "@/types";
 import {
   canDeleteRole,
@@ -147,7 +147,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Create role using better-auth
-        const result = await auth.api.createRole({
+        const result = await betterAuth.api.createRole({
           body: {
             name,
             permissions,
@@ -214,7 +214,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Fetch custom role
-        const result = await auth.api.getRole({
+        const result = await betterAuth.api.getRole({
           body: {
             roleId,
             organizationId,
@@ -285,7 +285,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Check if role exists
-        const existingRole = await auth.api.getRole({
+        const existingRole = await betterAuth.api.getRole({
           body: {
             roleId,
             organizationId,
@@ -338,7 +338,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Update role
-        const result = await auth.api.updateRole({
+        const result = await betterAuth.api.updateRole({
           body: {
             roleId,
             organizationId,
@@ -406,7 +406,7 @@ const roleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Delete role using better-auth
-        const result = await auth.api.deleteRole({
+        const result = await betterAuth.api.deleteRole({
           body: {
             roleId,
             organizationId,

@@ -1,4 +1,4 @@
-import type { Action, Permission, Resource, Role } from "@shared";
+import type { Action, Resource, Role } from "@shared";
 import {
   ADMIN_ROLE_NAME,
   getPredefinedRolePermissions,
@@ -6,7 +6,7 @@ import {
   MEMBER_ROLE_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
-import { auth } from "@/auth";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 
 /**
@@ -135,7 +135,7 @@ export async function getRoleById(
   organizationId: string,
 ): Promise<{ id: string; name: string; organizationId: string } | null> {
   try {
-    const result = await auth.api.getRole({
+    const result = await betterAuth.api.getRole({
       body: {
         roleId,
         organizationId,
@@ -168,7 +168,7 @@ export async function listRolesByOrganization(
   ];
 
   try {
-    const result = await auth.api.listRoles({
+    const result = await betterAuth.api.listRoles({
       query: {
         organizationId,
       },
@@ -249,7 +249,7 @@ export async function getUserPermissions(
       return {} as Record<Resource, Action[]>;
     }
 
-    const roleDetails = await auth.api.getRole({
+    const roleDetails = await betterAuth.api.getRole({
       body: {
         roleId: role.id,
         organizationId,

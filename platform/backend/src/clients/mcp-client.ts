@@ -1,10 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { getInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
-
 import {
   InternalMcpCatalogModel,
   McpServerModel,
@@ -19,7 +19,6 @@ import type {
   CommonToolResult,
   McpServerConfig,
 } from "@/types";
-import { getInternalJwt } from "@/utils/internal-jwt";
 
 export const constructMcpProxyUrl = (mcpServerId: string) =>
   `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;

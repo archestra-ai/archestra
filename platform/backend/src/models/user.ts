@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME, type Role } from "@shared";
 import { eq } from "drizzle-orm";
-import { auth } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -27,7 +27,7 @@ class User {
         return existing[0];
       }
 
-      const result = await auth.api.signUpEmail({
+      const result = await betterAuth.api.signUpEmail({
         body: {
           email,
           password,

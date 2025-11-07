@@ -3,7 +3,7 @@ import { verifyPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { RouteId } from "@/types";
@@ -97,7 +97,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers,
           body: request.body ? JSON.stringify(request.body) : undefined,
         });
-        const response = await auth.handler(req);
+        const response = await betterAuth.handler(req);
         reply.status(response.status);
         response.headers.forEach((value, key) => {
           reply.header(key, value);

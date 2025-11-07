@@ -13,12 +13,13 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { authPlugin } from "@/auth/fastify-plugin";
+import { initializeInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
-import { authMiddleware } from "@/middleware/auth";
 import {
   Anthropic,
   Gemini,
@@ -26,7 +27,6 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { initializeInternalJwt } from "@/utils/internal-jwt";
 import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 
@@ -157,9 +157,14 @@ const startMetricsServer = async () => {
 const start = async () => {
   const fastify = createFastifyInstance();
 
-  // Register the user and organizationId decorators - will be populated by auth middleware
-  fastify.decorateRequest("user", undefined);
-  fastify.decorateRequest("organizationId", "");
+  /**
+   * The auth plugin is responsible for authentication and authorization checks
+   *
+   * In addition, it decorates the request object with the user and organizationId
+   * such that they can easily be handled inside route handlers
+   * by simply using the request.user and request.organizationId decorators
+   */
+  fastify.register(authPlugin);
 
   try {
     await seedRequiredStartingData();
@@ -280,8 +285,6 @@ const start = async () => {
         version,
       }),
     );
-
-    fastify.addHook("preHandler", authMiddleware.handle);
 
     for (const route of Object.values(routes)) {
       fastify.register(route);

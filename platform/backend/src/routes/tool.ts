@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import { constructResponseSchema, ExtendedSelectToolSchema } from "@/types";
 
@@ -15,9 +16,14 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
       },
     },
-    async (request, reply) => {
+    async ({ user, headers }, reply) => {
       try {
-        return reply.send(await ToolModel.findAll(request.user.id));
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
+        );
+
+        return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

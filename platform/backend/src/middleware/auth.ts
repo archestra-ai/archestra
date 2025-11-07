@@ -2,8 +2,11 @@ import type { Action, Resource } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth";
 import config from "@/config";
-import { RouteId } from "@/types";
-import { prepareErrorResponse } from "@/utils";
+import { type ErrorResponse, RouteId } from "@/types";
+
+const prepareErrorResponse = (
+  error: ErrorResponse["error"],
+): ErrorResponse => ({ error });
 
 class AuthMiddleware {
   public handle = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -46,7 +49,6 @@ class AuthMiddleware {
       url.startsWith("/v1/openai") ||
       url.startsWith("/v1/anthropic") ||
       url.startsWith("/v1/gemini") ||
-      url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||

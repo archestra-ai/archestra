@@ -11,6 +11,7 @@ export const ErrorResponseSchema = z.object({
     }),
   ]),
 });
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 export const ErrorResponsesSchema: Record<
   400 | 401 | 403 | 404 | 500,

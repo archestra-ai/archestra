@@ -78,7 +78,6 @@ describe("AuthMiddleware", () => {
         "/v1/openai/completions",
         "/v1/anthropic/messages",
         "/v1/gemini/generate",
-        "/json",
         "/openapi.json",
         "/health",
         "/api/features",

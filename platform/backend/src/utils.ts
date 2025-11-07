@@ -2,13 +2,6 @@ import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { auth } from "@/auth";
 import db, { schema } from "@/database";
-import type { ErrorResponse } from "@/types";
-
-export function prepareErrorResponse(
-  error: ErrorResponse["error"],
-): ErrorResponse {
-  return { error };
-}
 
 /**
  * Extracts the user from the current request session or API key

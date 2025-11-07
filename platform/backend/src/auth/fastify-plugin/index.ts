@@ -1,0 +1,1 @@
+export { authPlugin } from "./plugin";

@@ -3,8 +3,8 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
 import type { ErrorResponse, RouteId } from "@/types";
-import { verifyInternalJwt } from "./internal-jwt";
-import routePermissionsConfig from "./route-permissions";
+import { verifyInternalJwt } from "../internal-jwt";
+import routePermissionsConfig from "../route-permissions";
 
 const prepareErrorResponse = (
   error: ErrorResponse["error"],
@@ -197,11 +197,3 @@ export class Authnz {
     }
   };
 }
-
-export const authPlugin = (app: FastifyInstance) => {
-  const authnz = new Authnz();
-
-  app.decorateRequest("user");
-  app.decorateRequest("organizationId");
-  app.addHook("preHandler", authnz.handle);
-};

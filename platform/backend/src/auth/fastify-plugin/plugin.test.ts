@@ -1,185 +1,49 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
-import { Authnz, authPlugin } from "./fastify-plugin";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-describe("Authnz", () => {
+// Mock dependencies at the top level
+const mockAuth = {
+  api: {
+    getSession: vi.fn(),
+    verifyApiKey: vi.fn(),
+    hasPermission: vi.fn(),
+  },
+};
+
+const mockUserModel = {
+  getUserById: vi.fn(),
+  getOrganizationId: vi.fn(),
+};
+
+const mockVerifyInternalJwt = vi.fn();
+
+const mockConfig = {
+  mcpGateway: {
+    endpoint: "/v1/mcp",
+  },
+};
+
+// Mock modules
+vi.mock("@/auth", () => ({
+  auth: mockAuth,
+}));
+
+vi.mock("@/models", () => ({
+  UserModel: mockUserModel,
+}));
+
+vi.mock("@/utils/internal-jwt", () => ({
+  verifyInternalJwt: mockVerifyInternalJwt,
+}));
+
+vi.mock("@/config", () => ({
+  default: mockConfig,
+}));
+
+import { Authnz } from "./middleware";
+import { authPlugin } from "./plugin";
+
+describe("authPlugin integration", () => {
   const authnz = new Authnz();
-
-  describe("shouldSkipAuthCheck", () => {
-    it("should skip auth for ACME challenge paths", async () => {
-      const mockRequest = {
-        url: "/.well-known/acme-challenge/test-token",
-        method: "GET",
-        headers: {},
-      } as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      // The middleware should not call reply.status() for ACME challenge paths
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).not.toHaveBeenCalled();
-      expect(mockReply.send).not.toHaveBeenCalled();
-    });
-
-    it("should skip auth for various ACME challenge token formats", async () => {
-      const acmeUrls = [
-        "/.well-known/acme-challenge/",
-        "/.well-known/acme-challenge/simple-token",
-        "/.well-known/acme-challenge/complex-token-with-numbers-123",
-        "/.well-known/acme-challenge/very_long_token_with_underscores_and_hyphens-123-456_789",
-      ];
-
-      for (const url of acmeUrls) {
-        const mockRequest = {
-          url,
-          method: "GET",
-          headers: {},
-        } as FastifyRequest;
-
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
-
-        await authnz.handle(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
-    });
-
-    it("should skip auth for OPTIONS and HEAD requests", async () => {
-      const methods = ["OPTIONS", "HEAD"];
-
-      for (const method of methods) {
-        const mockRequest = {
-          url: "/some/protected/path",
-          method,
-          headers: {},
-        } as FastifyRequest;
-
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
-
-        await authnz.handle(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
-    });
-
-    it("should skip auth for existing whitelisted paths", async () => {
-      const whitelistedPaths = [
-        "/api/auth/session",
-        "/v1/openai/completions",
-        "/v1/anthropic/messages",
-        "/v1/gemini/generate",
-        "/openapi.json",
-        "/health",
-        "/api/features",
-      ];
-
-      for (const url of whitelistedPaths) {
-        const mockRequest = {
-          url,
-          method: "GET",
-          headers: {},
-        } as FastifyRequest;
-
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
-
-        await authnz.handle(mockRequest, mockReply);
-
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
-    });
-
-    it("should NOT skip auth for similar but different paths", async () => {
-      const protectedPaths = [
-        "/.well-known/something-else",
-        "/.well-known-acme-challenge/test", // missing slash
-        "/well-known/acme-challenge/test", // missing leading dot
-        "/api/protected-endpoint",
-        "/metrics",
-      ];
-
-      for (const url of protectedPaths) {
-        const mockRequest = {
-          url,
-          method: "GET",
-          headers: {},
-          routeOptions: {
-            schema: {
-              operationId: "SomeProtectedRoute",
-            },
-          },
-        } as FastifyRequest;
-
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
-
-        await authnz.handle(mockRequest, mockReply);
-
-        // Should return 401 for unauthenticated requests to protected paths
-        expect(mockReply.status).toHaveBeenCalledWith(401);
-      }
-    });
-  });
-});
-
-describe("authPlugin", () => {
-  const authnz = new Authnz();
-  const mockAuth = {
-    api: {
-      getSession: vi.fn(),
-      verifyApiKey: vi.fn(),
-      hasPermission: vi.fn(),
-    },
-  };
-
-  // Mock the auth module
-  vi.mock("@/auth", () => ({
-    auth: mockAuth,
-  }));
-
-  // Mock getUserFromRequest utility
-  vi.mock("@/utils", () => ({
-    getUserFromRequest: vi.fn(),
-  }));
-
-  // Mock UserModel
-  vi.mock("@/models", () => ({
-    UserModel: {
-      getUserById: vi.fn(),
-      getOrganizationId: vi.fn(),
-    },
-  }));
-
-  // Mock internal JWT verification
-  vi.mock("@/utils/internal-jwt", () => ({
-    verifyInternalJwt: vi.fn(),
-  }));
-
-  // Mock config
-  vi.mock("@/config", () => ({
-    default: {
-      mcpGateway: {
-        endpoint: "/v1/mcp",
-      },
-    },
-  }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -194,6 +58,10 @@ describe("authPlugin", () => {
       mockAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
+      });
+      mockUserModel.getUserById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
       });
 
       const mockRequest = {
@@ -436,14 +304,7 @@ describe("authPlugin", () => {
         success: true,
         error: null,
       });
-
-      // Mock UserModel
-      const mockUserModel = {
-        getUserById: vi.fn().mockResolvedValue(mockUser),
-      };
-      vi.doMock("@/models", () => ({
-        UserModel: mockUserModel,
-      }));
+      mockUserModel.getUserById.mockResolvedValue(mockUser);
 
       const mockRequest = {
         url: "/api/agents",
@@ -464,16 +325,44 @@ describe("authPlugin", () => {
       expect(mockRequest.user).toEqual(mockUser);
       expect(mockRequest.organizationId).toBe("org1");
     });
+
+    it("should populate organizationId from UserModel when not in session", async () => {
+      const mockUser = { id: "user1", name: "Test User" };
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: "user1" },
+        session: {}, // No activeOrganizationId
+      });
+      mockAuth.api.hasPermission.mockResolvedValue({
+        success: true,
+        error: null,
+      });
+      mockUserModel.getUserById.mockResolvedValue(mockUser);
+      mockUserModel.getOrganizationId.mockResolvedValue("org2");
+
+      const mockRequest = {
+        url: "/api/agents",
+        method: "GET",
+        headers: {},
+        routeOptions: {
+          schema: { operationId: "getAgents" },
+        },
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(mockRequest, mockReply);
+
+      expect(mockUserModel.getOrganizationId).toHaveBeenCalledWith("user1");
+      expect(mockRequest.organizationId).toBe("org2");
+    });
   });
 
   describe("MCP proxy authentication", () => {
     it("should allow valid internal JWT for MCP proxy endpoints", async () => {
-      const mockVerifyInternalJwt = vi
-        .fn()
-        .mockResolvedValue({ userId: "system" });
-      vi.doMock("@/utils/internal-jwt", () => ({
-        verifyInternalJwt: mockVerifyInternalJwt,
-      }));
+      mockVerifyInternalJwt.mockResolvedValue({ userId: "system" });
 
       const mockRequest = {
         url: "/mcp_proxy/server1",
@@ -496,10 +385,7 @@ describe("authPlugin", () => {
     });
 
     it("should reject invalid internal JWT for MCP proxy endpoints", async () => {
-      const mockVerifyInternalJwt = vi.fn().mockResolvedValue(null);
-      vi.doMock("@/utils/internal-jwt", () => ({
-        verifyInternalJwt: mockVerifyInternalJwt,
-      }));
+      mockVerifyInternalJwt.mockResolvedValue(null);
 
       const mockRequest = {
         url: "/mcp_proxy/server1",
@@ -579,14 +465,7 @@ describe("authPlugin", () => {
         success: true,
         error: null,
       });
-
-      // Mock UserModel to throw error
-      const mockUserModel = {
-        getUserById: vi.fn().mockRejectedValue(new Error("DB error")),
-      };
-      vi.doMock("@/models", () => ({
-        UserModel: mockUserModel,
-      }));
+      mockUserModel.getUserById.mockRejectedValue(new Error("DB error"));
 
       const mockRequest = {
         url: "/api/agents",

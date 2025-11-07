@@ -13,7 +13,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { authPlugin } from "@/auth/fastify-plugin";
+import { fastifyAuthPlugin } from "@/auth";
 import { initializeInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -164,7 +164,7 @@ const start = async () => {
    * such that they can easily be handled inside route handlers
    * by simply using the request.user and request.organizationId decorators
    */
-  fastify.register(authPlugin);
+  fastify.register(fastifyAuthPlugin);
 
   try {
     await seedRequiredStartingData();

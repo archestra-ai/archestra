@@ -92,7 +92,7 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data
+VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -178,6 +178,26 @@ EOF
 RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
+
+# Generate and persist ARCHESTRA_AUTH_SECRET if not set
+if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
+    SECRET_FILE="/app/data/.auth_secret"
+
+    if [ -f "$SECRET_FILE" ]; then
+        # Load existing secret
+        export ARCHESTRA_AUTH_SECRET=$(cat "$SECRET_FILE")
+        echo "Loaded existing ARCHESTRA_AUTH_SECRET from $SECRET_FILE"
+    else
+        # Generate new random secret (64 characters)
+        export ARCHESTRA_AUTH_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+
+        # Persist it
+        mkdir -p /app/data
+        echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
+        chmod 600 "$SECRET_FILE"
+        echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
+    fi
+fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)
 USE_EXTERNAL_DB=false

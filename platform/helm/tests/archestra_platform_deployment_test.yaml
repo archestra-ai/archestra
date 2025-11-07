@@ -159,6 +159,11 @@ tests:
           value:
             - name: ARCHESTRA_DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            - name: ARCHESTRA_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: auth-secret
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
@@ -786,3 +791,27 @@ tests:
             - prefix: SECRET_
               secretRef:
                 name: my-secret
+
+  - it: should set ARCHESTRA_AUTH_SECRET from auto-generated secret by default
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-auth
+                key: auth-secret
+
+  - it: should allow overriding ARCHESTRA_AUTH_SECRET with explicit env value
+    documentIndex: 1
+    set:
+      archestra.env:
+        ARCHESTRA_AUTH_SECRET: "my-custom-secret-value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_AUTH_SECRET
+            value: "my-custom-secret-value"

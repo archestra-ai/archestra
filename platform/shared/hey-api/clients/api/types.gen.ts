@@ -2086,7 +2086,34 @@ export type GetAgentsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2185,7 +2212,34 @@ export type CreateAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2263,7 +2317,34 @@ export type GetAllAgentsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2341,7 +2422,34 @@ export type GetDefaultAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2421,6 +2529,33 @@ export type DeleteAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -2464,7 +2599,25 @@ export type GetAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -2564,6 +2717,33 @@ export type UpdateAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -2642,7 +2822,34 @@ export type GetLabelKeysErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2686,7 +2893,34 @@ export type GetLabelValuesErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2725,7 +2959,34 @@ export type GetAllAgentToolsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -2806,6 +3067,42 @@ export type UnassignToolFromAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -2845,6 +3142,24 @@ export type AssignToolToAgentErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -2893,6 +3208,33 @@ export type GetAgentToolsData = {
 };
 
 export type GetAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -2976,6 +3318,24 @@ export type UpdateAgentToolErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3039,6 +3399,15 @@ export type GetAgentAvailableTokensErrors = {
      * Default Response
      */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -3116,6 +3485,15 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     403: {
         error: string | {
             message: string;
@@ -3175,6 +3553,15 @@ export type AnthropicMessagesWithAgentErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -3288,6 +3675,56 @@ export type GetOperatorsData = {
     url: '/api/autonomy-policies/operators';
 };
 
+export type GetOperatorsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOperatorsError = GetOperatorsErrors[keyof GetOperatorsErrors];
+
 export type GetOperatorsResponses = {
     /**
      * Default Response
@@ -3308,6 +3745,42 @@ export type GetToolInvocationPoliciesData = {
 };
 
 export type GetToolInvocationPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3358,6 +3831,42 @@ export type CreateToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3397,6 +3906,33 @@ export type DeleteToolInvocationPolicyData = {
 };
 
 export type DeleteToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3440,6 +3976,33 @@ export type GetToolInvocationPolicyData = {
 };
 
 export type GetToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3501,6 +4064,33 @@ export type UpdateToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3547,6 +4137,42 @@ export type GetTrustedDataPoliciesData = {
 };
 
 export type GetTrustedDataPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3597,6 +4223,42 @@ export type CreateTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3636,6 +4298,33 @@ export type DeleteTrustedDataPolicyData = {
 };
 
 export type DeleteTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3679,6 +4368,33 @@ export type GetTrustedDataPolicyData = {
 };
 
 export type GetTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3740,6 +4456,33 @@ export type UpdateTrustedDataPolicyErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3780,7 +4523,7 @@ export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[k
 
 export type StreamChatData = {
     body: {
-        id?: string;
+        id: string;
         messages: Array<unknown>;
         trigger?: 'submit-message' | 'regenerate-message';
     };
@@ -3811,7 +4554,25 @@ export type StreamChatErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -3832,7 +4593,43 @@ export type GetChatConversationsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -3873,7 +4670,43 @@ export type CreateChatConversationErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -3913,7 +4746,43 @@ export type DeleteChatConversationErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -3947,6 +4816,15 @@ export type GetChatConversationErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -3956,7 +4834,25 @@ export type GetChatConversationErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -4000,6 +4896,15 @@ export type UpdateChatConversationErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -4009,7 +4914,25 @@ export type UpdateChatConversationErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -4047,7 +4970,43 @@ export type GetChatMcpToolsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -4078,6 +5037,42 @@ export type GetDefaultDualLlmConfigData = {
 };
 
 export type GetDefaultDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -4117,6 +5112,42 @@ export type GetDualLlmConfigsData = {
 };
 
 export type GetDualLlmConfigsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -4165,6 +5196,42 @@ export type CreateDualLlmConfigErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -4203,6 +5270,33 @@ export type DeleteDualLlmConfigData = {
 };
 
 export type DeleteDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -4246,6 +5340,33 @@ export type GetDualLlmConfigData = {
 };
 
 export type GetDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -4305,6 +5426,33 @@ export type UpdateDualLlmConfigErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -4355,6 +5503,42 @@ export type GetDualLlmResultByToolCallIdErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -4396,7 +5580,25 @@ export type GetDualLlmResultsByInteractionErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -4495,6 +5697,15 @@ export type PostV1GeminiModelsByModelGenerateContentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     403: {
         error: string | {
             message: string;
@@ -4567,6 +5778,15 @@ export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     403: {
         error: string | {
             message: string;
@@ -4623,6 +5843,15 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -4704,6 +5933,15 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     403: {
         error: string | {
             message: string;
@@ -4752,7 +5990,43 @@ export type GetInteractionsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -4824,6 +6098,15 @@ export type GetInteractionErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -4833,7 +6116,25 @@ export type GetInteractionErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -4890,6 +6191,42 @@ export type GetInternalMcpCatalogData = {
 };
 
 export type GetInternalMcpCatalogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -5060,6 +6397,42 @@ export type CreateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -5162,6 +6535,33 @@ export type DeleteInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -5202,6 +6602,33 @@ export type GetInternalMcpCatalogItemData = {
 };
 
 export type GetInternalMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -5383,6 +6810,33 @@ export type UpdateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -5496,7 +6950,34 @@ export type GetLimitsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -5558,6 +7039,15 @@ export type CreateLimitErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -5568,6 +7058,15 @@ export type CreateLimitErrors = {
      * Default Response
      */
     403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -5619,6 +7118,15 @@ export type DeleteLimitData = {
 };
 
 export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -5683,7 +7191,25 @@ export type GetLimitErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -5753,6 +7279,15 @@ export type UpdateLimitData = {
 };
 
 export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -5884,7 +7419,34 @@ export type GetMcpServerInstallationRequestsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -6070,6 +7632,24 @@ export type CreateMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -6174,6 +7754,15 @@ export type DeleteMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -6232,6 +7821,15 @@ export type GetMcpServerInstallationRequestData = {
 };
 
 export type GetMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -6433,6 +8031,15 @@ export type UpdateMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -6563,6 +8170,15 @@ export type ApproveMcpServerInstallationRequestData = {
 };
 
 export type ApproveMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -6699,6 +8315,15 @@ export type DeclineMcpServerInstallationRequestErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -6829,6 +8454,15 @@ export type AddMcpServerInstallationRequestNoteData = {
 };
 
 export type AddMcpServerInstallationRequestNoteErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -6963,7 +8597,34 @@ export type GetMcpServersErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -7074,6 +8735,15 @@ export type InstallMcpServerErrors = {
     /**
      * Default Response
      */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -7132,6 +8802,33 @@ export type DeleteMcpServerErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7175,7 +8872,25 @@ export type GetMcpServerErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -7251,6 +8966,33 @@ export type GetMcpServerInstallationStatusErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7292,6 +9034,33 @@ export type GetMcpServerToolsData = {
 };
 
 export type GetMcpServerToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -7352,6 +9121,33 @@ export type GetMcpServerLogsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7395,6 +9191,33 @@ export type RestartMcpServerData = {
 };
 
 export type RestartMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -7443,6 +9266,33 @@ export type RevokeUserMcpServerAccessErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7486,7 +9336,25 @@ export type RevokeAllTeamsMcpServerAccessErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -7559,6 +9427,15 @@ export type GrantTeamMcpServerAccessErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -7600,6 +9477,24 @@ export type RevokeTeamMcpServerAccessData = {
 };
 
 export type RevokeTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -7662,7 +9557,43 @@ export type GetMcpToolCallsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -7722,6 +9653,15 @@ export type GetMcpToolCallErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -7731,7 +9671,25 @@ export type GetMcpToolCallErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -7783,6 +9741,24 @@ export type InitiateOAuthErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -7845,6 +9821,33 @@ export type HandleOAuthCallbackErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -7894,6 +9897,15 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -7971,6 +9983,15 @@ export type OpenAiChatCompletionsWithAgentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     403: {
         error: string | {
             message: string;
@@ -8007,6 +10028,403 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetRolesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type GetRolesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
+
+export type GetRolesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        permission: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    }>;
+};
+
+export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
+
+export type CreateRoleData = {
+    body: {
+        name: string;
+        permission: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        permission: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Custom role ID
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
+export type GetRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Predefined role name or custom role ID
+         */
+        roleId: 'admin' | 'member' | string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type GetRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
+
+export type GetRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        permission: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
+
+export type UpdateRoleData = {
+    body?: {
+        name?: string;
+        permission?: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
+    };
+    path: {
+        /**
+         * Custom role ID
+         */
+        roleId: string;
+    };
+    query?: never;
+    url: '/api/roles/{roleId}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        permission: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        createdAt: string;
+        updatedAt: string | null;
+        predefined: boolean;
+    };
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
 
 export type UpdateOrganizationCleanupIntervalData = {
     body: {
@@ -8048,6 +10466,15 @@ export type UpdateOrganizationCleanupIntervalErrors = {
     /**
      * Default Response
      */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -8077,6 +10504,15 @@ export type GetOrganizationAppearanceData = {
 };
 
 export type GetOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -8174,6 +10610,15 @@ export type UpdateOrganizationAppearanceErrors = {
     /**
      * Default Response
      */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -8227,6 +10672,15 @@ export type GetOrganizationErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -8271,6 +10725,15 @@ export type DeleteOrganizationLogoErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -8281,6 +10744,15 @@ export type DeleteOrganizationLogoErrors = {
      * Default Response
      */
     403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -8350,6 +10822,15 @@ export type UploadOrganizationLogoErrors = {
     /**
      * Default Response
      */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -8372,338 +10853,6 @@ export type UploadOrganizationLogoResponses = {
 
 export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
 
-export type GetRolesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type GetRolesErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetRolesError = GetRolesErrors[keyof GetRolesErrors];
-
-export type GetRolesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        isCustom: boolean;
-        memberCount: number;
-        organizationId: string;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
-
-export type CreateRoleData = {
-    body: {
-        name: string;
-        permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete'>;
-        };
-    };
-    path?: never;
-    query?: never;
-    url: '/api/roles';
-};
-
-export type CreateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
-
-export type CreateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete'>;
-        };
-        isCustom: boolean;
-        organizationId: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
-
-export type DeleteRoleData = {
-    body?: never;
-    path: {
-        roleId: string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type DeleteRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
-
-export type DeleteRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
-
-export type GetRoleData = {
-    body?: never;
-    path: {
-        roleId: string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type GetRoleErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetRoleError = GetRoleErrors[keyof GetRoleErrors];
-
-export type GetRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete'>;
-        };
-        isCustom: boolean;
-        organizationId: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
-
-export type UpdateRoleData = {
-    body?: {
-        name?: string;
-        permissions?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete'>;
-        };
-    };
-    path: {
-        roleId: string;
-    };
-    query?: never;
-    url: '/api/roles/{roleId}';
-};
-
-export type UpdateRoleErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
-
-export type UpdateRoleResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete'>;
-        };
-        isCustom: boolean;
-        organizationId: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
-
 export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
@@ -8717,7 +10866,43 @@ export type GetTeamStatisticsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -8762,7 +10947,43 @@ export type GetAgentStatisticsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -8806,7 +11027,43 @@ export type GetModelStatisticsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -8849,7 +11106,43 @@ export type GetOverviewStatisticsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
@@ -8886,7 +11179,34 @@ export type GetTeamsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -8943,6 +11263,15 @@ export type CreateTeamErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -8953,6 +11282,15 @@ export type CreateTeamErrors = {
      * Default Response
      */
     403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -9005,6 +11343,15 @@ export type DeleteTeamData = {
 };
 
 export type DeleteTeamErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9069,7 +11416,25 @@ export type GetTeamErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -9134,6 +11499,15 @@ export type UpdateTeamData = {
 };
 
 export type UpdateTeamErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9211,7 +11585,25 @@ export type GetTeamMembersErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -9267,6 +11659,15 @@ export type AddTeamMemberData = {
 };
 
 export type AddTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9336,6 +11737,15 @@ export type RemoveTeamMemberErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -9395,7 +11805,34 @@ export type GetTokenPricesErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -9445,6 +11882,15 @@ export type CreateTokenPriceErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
         error: string | {
             message: string;
@@ -9455,6 +11901,15 @@ export type CreateTokenPriceErrors = {
      * Default Response
      */
     403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -9508,6 +11963,15 @@ export type DeleteTokenPriceData = {
 };
 
 export type DeleteTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9572,7 +12036,25 @@ export type GetTokenPriceErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -9630,6 +12112,15 @@ export type UpdateTokenPriceData = {
 };
 
 export type UpdateTokenPriceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9697,7 +12188,34 @@ export type GetToolsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;
@@ -9766,7 +12284,34 @@ export type GetUnassignedToolsErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
         error: string | {
             message: string;
             type: string;

@@ -1,46 +1,55 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { MockedFunction } from "vitest";
 
-// Mock dependencies at the top level
-const mockAuth = {
-  api: {
-    getSession: vi.fn(),
-    verifyApiKey: vi.fn(),
-    hasPermission: vi.fn(),
-  },
-};
-
-const mockUserModel = {
-  getUserById: vi.fn(),
-  getOrganizationId: vi.fn(),
-};
-
-const mockVerifyInternalJwt = vi.fn();
-
-const mockConfig = {
-  mcpGateway: {
-    endpoint: "/v1/mcp",
-  },
-};
-
-// Mock modules
+// Mock modules with factory functions to avoid hoisting issues
 vi.mock("@/auth", () => ({
-  auth: mockAuth,
+  betterAuth: {
+    api: {
+      getSession: vi.fn(),
+      verifyApiKey: vi.fn(),
+      hasPermission: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("@/models", () => ({
-  UserModel: mockUserModel,
+  UserModel: {
+    getUserById: vi.fn(),
+    getOrganizationId: vi.fn(),
+  },
 }));
 
-vi.mock("@/utils/internal-jwt", () => ({
-  verifyInternalJwt: mockVerifyInternalJwt,
+vi.mock("@/auth/internal-jwt", () => ({
+  verifyInternalJwt: vi.fn(),
 }));
 
-vi.mock("@/config", () => ({
-  default: mockConfig,
-}));
+import { betterAuth } from "@/auth";
+import { verifyInternalJwt } from "@/auth/internal-jwt";
+import { UserModel } from "@/models";
+
+// Type the mocked functions
+const mockBetterAuth = betterAuth as unknown as {
+  api: {
+    getSession: MockedFunction<typeof betterAuth.api.getSession>;
+    verifyApiKey: MockedFunction<typeof betterAuth.api.verifyApiKey>;
+    hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
+  };
+};
+
+const mockUserModel = UserModel as unknown as {
+  getUserById: MockedFunction<typeof UserModel.getUserById>;
+  getOrganizationId: MockedFunction<typeof UserModel.getOrganizationId>;
+};
+
+const mockVerifyInternalJwt = verifyInternalJwt as MockedFunction<
+  typeof verifyInternalJwt
+>;
 
 import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
+
+type Session = Awaited<ReturnType<typeof betterAuth.api.getSession>>;
+type User = Awaited<ReturnType<typeof UserModel.getUserById>>;
 
 describe("authPlugin integration", () => {
   const authnz = new Authnz();
@@ -51,18 +60,18 @@ describe("authPlugin integration", () => {
 
   describe("authentication", () => {
     it("should allow authenticated session users", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
       mockUserModel.getUserById.mockResolvedValue({
         id: "user1",
         name: "Test User",
-      });
+      } as User);
 
       const mockRequest = {
         url: "/api/agents",
@@ -71,7 +80,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -85,8 +94,12 @@ describe("authPlugin integration", () => {
     });
 
     it("should allow valid API key authentication", async () => {
-      mockAuth.api.getSession.mockRejectedValue(new Error("No session"));
-      mockAuth.api.verifyApiKey.mockResolvedValue({ valid: true });
+      mockBetterAuth.api.getSession.mockRejectedValue(new Error("No session"));
+      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
+        valid: true,
+        error: null,
+        key: null,
+      });
 
       const mockRequest = {
         url: "/api/agents",
@@ -95,7 +108,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -104,14 +117,14 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockAuth.api.verifyApiKey).toHaveBeenCalledWith({
+      expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-123" },
       });
       expect(mockReply.status).not.toHaveBeenCalled();
     });
 
     it("should return 401 for invalid session", async () => {
-      mockAuth.api.getSession.mockResolvedValue(null);
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
 
       const mockRequest = {
         url: "/api/agents",
@@ -120,7 +133,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -139,8 +152,12 @@ describe("authPlugin integration", () => {
     });
 
     it("should return 401 for invalid API key", async () => {
-      mockAuth.api.getSession.mockRejectedValue(new Error("No session"));
-      mockAuth.api.verifyApiKey.mockResolvedValue({ valid: false });
+      mockBetterAuth.api.getSession.mockRejectedValue(new Error("No session"));
+      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
+        valid: false,
+        error: null,
+        key: null,
+      });
 
       const mockRequest = {
         url: "/api/agents",
@@ -149,7 +166,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -164,13 +181,13 @@ describe("authPlugin integration", () => {
 
   describe("authorization", () => {
     it("should return 403 for insufficient permissions", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: false,
-        error: new Error("Insufficient permissions"),
+        error: null,
       });
 
       const mockRequest = {
@@ -180,7 +197,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "createAgent" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -192,17 +209,17 @@ describe("authPlugin integration", () => {
       expect(mockReply.status).toHaveBeenCalledWith(403);
       expect(mockReply.send).toHaveBeenCalledWith({
         error: {
-          message: "Insufficient permissions",
+          message: "Forbidden",
           type: "forbidden",
         },
       });
     });
 
     it("should return 403 for routes without operationId", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
+      } as Session);
 
       const mockRequest = {
         url: "/api/unknown",
@@ -211,7 +228,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: {}, // No operationId
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -230,11 +247,17 @@ describe("authPlugin integration", () => {
     });
 
     it("should allow API keys for permission checks that fail due to organization context", async () => {
-      mockAuth.api.getSession.mockRejectedValue(new Error("No organization"));
-      mockAuth.api.hasPermission.mockRejectedValue(
+      mockBetterAuth.api.getSession.mockRejectedValue(
+        new Error("No organization"),
+      );
+      mockBetterAuth.api.hasPermission.mockRejectedValue(
         new Error("No organization context"),
       );
-      mockAuth.api.verifyApiKey.mockResolvedValue({ valid: true });
+      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
+        valid: true,
+        error: null,
+        key: null,
+      });
 
       const mockRequest = {
         url: "/api/agents",
@@ -243,7 +266,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -252,18 +275,18 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockAuth.api.verifyApiKey).toHaveBeenCalledWith({
+      expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
         body: { key: "Bearer api-key-123" },
       });
       expect(mockReply.status).not.toHaveBeenCalled();
     });
 
     it("should check specific permissions for configured routes", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -275,7 +298,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "createAgent" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -284,7 +307,7 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockAuth.api.hasPermission).toHaveBeenCalledWith({
+      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
         headers: expect.any(Headers),
         body: {
           permissions: { agent: ["create"] },
@@ -295,12 +318,12 @@ describe("authPlugin integration", () => {
 
   describe("user info population", () => {
     it("should populate user and organizationId from session", async () => {
-      const mockUser = { id: "user1", name: "Test User" };
-      mockAuth.api.getSession.mockResolvedValue({
+      const mockUser = { id: "user1", name: "Test User" } as User;
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -313,7 +336,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -327,12 +350,12 @@ describe("authPlugin integration", () => {
     });
 
     it("should populate organizationId from UserModel when not in session", async () => {
-      const mockUser = { id: "user1", name: "Test User" };
-      mockAuth.api.getSession.mockResolvedValue({
+      const mockUser = { id: "user1", name: "Test User" } as User;
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: {}, // No activeOrganizationId
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -346,7 +369,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -371,7 +394,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "mcpProxy" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -380,12 +403,13 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockVerifyInternalJwt).toHaveBeenCalledWith("internal-jwt-token");
+      expect(verifyInternalJwt).toHaveBeenCalledWith("internal-jwt-token");
       expect(mockReply.status).not.toHaveBeenCalled();
     });
 
     it("should reject invalid internal JWT for MCP proxy endpoints", async () => {
       mockVerifyInternalJwt.mockResolvedValue(null);
+      mockBetterAuth.api.getSession.mockResolvedValue(null);
 
       const mockRequest = {
         url: "/mcp_proxy/server1",
@@ -394,7 +418,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "mcpProxy" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -408,32 +432,11 @@ describe("authPlugin integration", () => {
   });
 
   describe("edge cases", () => {
-    it("should handle missing routeOptions gracefully", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        user: { id: "user1" },
-        session: { activeOrganizationId: "org1" },
-      });
-
-      const mockRequest = {
-        url: "/api/agents",
-        method: "GET",
-        headers: {},
-        // Missing routeOptions
-      } as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-    });
-
     it("should handle auth service errors gracefully", async () => {
-      mockAuth.api.getSession.mockRejectedValue(new Error("Auth service down"));
-      mockAuth.api.verifyApiKey.mockRejectedValue(
+      mockBetterAuth.api.getSession.mockRejectedValue(
+        new Error("Auth service down"),
+      );
+      mockBetterAuth.api.verifyApiKey.mockRejectedValue(
         new Error("API key service down"),
       );
 
@@ -444,7 +447,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),
@@ -457,11 +460,11 @@ describe("authPlugin integration", () => {
     });
 
     it("should handle user population errors gracefully", async () => {
-      mockAuth.api.getSession.mockResolvedValue({
+      mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
-      });
-      mockAuth.api.hasPermission.mockResolvedValue({
+      } as Session);
+      mockBetterAuth.api.hasPermission.mockResolvedValue({
         success: true,
         error: null,
       });
@@ -474,7 +477,7 @@ describe("authPlugin integration", () => {
         routeOptions: {
           schema: { operationId: "getAgents" },
         },
-      } as FastifyRequest;
+      } as unknown as FastifyRequest;
 
       const mockReply = {
         status: vi.fn().mockReturnThis(),

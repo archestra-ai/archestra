@@ -1,5 +1,5 @@
-import { archestraApiSdk } from "@shared";
-import { QueryClient, type QueryClientProvider } from "@tanstack/react-query";
+import { archestraApiSdk, type Permissions } from "@shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -96,7 +96,7 @@ describe("useCurrentOrgMembers", () => {
 
 describe("useHasPermissions", () => {
   it("should return permission check result", async () => {
-    const mockPermissions = { "organization:read": ["read"] };
+    const mockPermissions: Permissions = { organization: ["read"] };
 
     vi.mocked(hasPermission).mockResolvedValue(true);
 

@@ -129,12 +129,11 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Authentication
 
-- **API Key Auth**: API keys can be used via `Authorization` header
-- API keys have all permissions by default
-- API keys work as fallback when session auth fails (e.g., "No active organization" errors)
-- Use `pnpm test:e2e` to run API tests with API key authentication
-- **Custom Roles**: Organizations can create up to 50 custom RBAC roles via `/api/roles/*` endpoints
-- **Permission Validation**: Users can only grant permissions they possess
+- **Better-Auth Integration**: Using better-auth for session management and RBAC
+- **API Key Auth**: API keys via `Authorization` header with all permissions
+- **Custom Roles**: Up to 50 custom RBAC roles per organization
+- **Middleware**: Auth handled by Fastify plugin at `backend/src/auth/fastify-plugin/`
+- **Route Permissions**: Configure in `shared/access-control.ts` `requiredEndpointPermissionsMap`
 
 ## Observability
 
@@ -159,7 +158,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Use Drizzle ORM for database operations
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/auth/route-permissions.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
+- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 

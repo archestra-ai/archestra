@@ -1,7 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
+  type Permissions,
   type PredefinedRoleName,
-  type RolePermissions,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
 import { betterAuth } from "@/auth";
@@ -81,7 +81,7 @@ class User {
   static async getUserPermissions(
     userId: string,
     organizationId: string,
-  ): Promise<RolePermissions> {
+  ): Promise<Permissions> {
     // Get user's member record to find their role
     const memberRecord = await db
       .select()

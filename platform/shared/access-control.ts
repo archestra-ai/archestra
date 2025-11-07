@@ -29,7 +29,7 @@ export const ResourceSchema = z.enum([
   "tokenPrice",
 ]);
 
-export const RolePermissionsSchema = z.partialRecord(
+export const PermissionsSchema = z.partialRecord(
   ResourceSchema,
   z.array(ActionSchema),
 );
@@ -80,7 +80,7 @@ export const memberRole = ac.newRole({
   tokenPrice: ["read"],
 });
 
-export const rolePermissionsMap: Record<PredefinedRoleName, RolePermissions> = {
+export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> = {
   [ADMIN_ROLE_NAME]: adminRole.statements,
   [MEMBER_ROLE_NAME]: memberRole.statements,
 };
@@ -103,6 +103,6 @@ export type Permission =
   | "mcpServer:admin"
   | "mcpServerInstallationRequest:admin";
 
-export type RolePermissions = z.infer<typeof RolePermissionsSchema>;
+export type Permissions = z.infer<typeof PermissionsSchema>;
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 export type AnyRoleName = z.infer<typeof AnyRoleName>;

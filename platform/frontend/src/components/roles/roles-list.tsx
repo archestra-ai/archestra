@@ -3,7 +3,7 @@
 import {
   allAvailableActions,
   type archestraApiTypes,
-  type RolePermissions,
+  type Permissions,
 } from "@shared";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -51,7 +51,7 @@ export function RolesList() {
 
   // Form state
   const [roleName, setRoleName] = useState("");
-  const [permission, setPermission] = useState<RolePermissions>({});
+  const [permission, setPermission] = useState<Permissions>({});
 
   const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {

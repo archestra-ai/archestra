@@ -1,4 +1,4 @@
-import { RolePermissionsSchema } from "@shared";
+import { PermissionsSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -10,7 +10,7 @@ import { schema } from "@/database";
 export const SelectOrganizationRoleSchema = createSelectSchema(
   schema.organizationRolesTable,
   {
-    permission: RolePermissionsSchema,
+    permission: PermissionsSchema,
   },
 ).extend({
   /**
@@ -22,14 +22,14 @@ export const SelectOrganizationRoleSchema = createSelectSchema(
 export const InsertOrganizationRoleSchema = createInsertSchema(
   schema.organizationRolesTable,
   {
-    permission: RolePermissionsSchema,
+    permission: PermissionsSchema,
   },
 );
 
 export const UpdateOrganizationRoleSchema = createUpdateSchema(
   schema.organizationRolesTable,
   {
-    permission: RolePermissionsSchema,
+    permission: PermissionsSchema,
   },
 );
 

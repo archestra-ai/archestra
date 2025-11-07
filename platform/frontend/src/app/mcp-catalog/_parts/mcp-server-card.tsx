@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { WithRole } from "@/components/with-permission";
+import { WithPermission } from "@/components/with-permission";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useMcpServerLogs,

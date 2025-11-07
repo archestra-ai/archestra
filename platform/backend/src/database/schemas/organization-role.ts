@@ -1,4 +1,4 @@
-import type { RolePermissions } from "@shared";
+import type { Permissions } from "@shared";
 import {
   jsonb,
   pgTable,
@@ -17,7 +17,7 @@ export const organizationRole = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    permission: jsonb("permission").$type<RolePermissions>().notNull(),
+    permission: jsonb("permission").$type<Permissions>().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").$onUpdate(
       () => /* @__PURE__ */ new Date(),

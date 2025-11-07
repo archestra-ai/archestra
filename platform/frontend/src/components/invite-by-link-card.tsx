@@ -1,6 +1,6 @@
 "use client";
 
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME, type Role } from "@shared";
+import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
@@ -37,7 +37,7 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>(MEMBER_ROLE_NAME);
+  const [role, setRole] = useState<AnyRoleName>(MEMBER_ROLE_NAME);
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
@@ -110,7 +110,7 @@ function InviteByLinkCardContent({
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(value: Role) => setRole(value)}
+                onValueChange={(value: AnyRoleName) => setRole(value)}
                 disabled={createMutation.isPending}
               >
                 <SelectTrigger id="role">
@@ -120,7 +120,7 @@ function InviteByLinkCardContent({
                   <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
                   <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
                   {roles
-                    ?.filter((r) => r.isCustom)
+                    ?.filter((r) => !r.predefined)
                     .map((r) => (
                       <SelectItem key={r.id} value={r.name}>
                         {r.name}

@@ -38,7 +38,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(adminId, true);
+      const tools = await ToolModel.findAll(adminId);
       expect(tools).toHaveLength(2);
     });
 
@@ -87,7 +87,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(user1Id, false);
+      const tools = await ToolModel.findAll(user1Id);
       expect(tools).toHaveLength(1);
       expect(tools[0].id).toBe(tool1.id);
     });
@@ -107,7 +107,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(user2Id, false);
+      const tools = await ToolModel.findAll(user2Id);
       expect(tools).toHaveLength(0);
     });
 
@@ -127,7 +127,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, adminId, true);
+      const found = await ToolModel.findById(tool.id, adminId);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
@@ -157,7 +157,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, user1Id, false);
+      const found = await ToolModel.findById(tool.id, user1Id);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
@@ -178,7 +178,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, user2Id, false);
+      const found = await ToolModel.findById(tool.id, user2Id);
       expect(found).toBeNull();
     });
 
@@ -198,7 +198,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("unique-tool", adminId, true);
+      const found = await ToolModel.findByName("unique-tool", adminId);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("unique-tool");
     });
@@ -228,7 +228,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("user-tool", user1Id, false);
+      const found = await ToolModel.findByName("user-tool", user1Id);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("user-tool");
     });
@@ -248,11 +248,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName(
-        "restricted-tool",
-        userId,
-        false,
-      );
+      const found = await ToolModel.findByName("restricted-tool", userId);
       expect(found).toBeNull();
     });
   });

@@ -1,10 +1,11 @@
 "use client";
 
+import type { Permissions } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 import { useEffect } from "react";
+import { hasPermissions } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import type { Role } from "../../../../shared";
 
 export function WithAuthCheck({
   children,
@@ -16,12 +17,11 @@ export function WithAuthCheck({
   const { data: session, isPending: isAuthCheckPending } =
     authClient.useSession();
 
-  const role = session?.user?.role;
-
   const isAuthPage =
     pathname?.startsWith("/auth/sign-in") ||
     pathname?.startsWith("/auth/sign-up") ||
     pathname?.startsWith("/auth/two-factor");
+
   const isPublicPage = pathname === "/test-agent"; // "How it works" page is public
   const isAuthPageAndUserLoggedIn = isAuthPage && session?.user;
   const isNotAuthPageAndUserNotLoggedIn =
@@ -50,11 +50,11 @@ export function WithAuthCheck({
   useEffect(() => {
     if (isAuthCheckPending) return;
 
-    const requiredRole = PAGE_WITH_REQUIRED_ROLE[pathname];
-    if (requiredRole && role !== requiredRole) {
+    const requiredPermissions = PAGE_WITH_REQUIRED_PERMISSION[pathname];
+    if (requiredPermissions && !hasPermissions(requiredPermissions)) {
       router.push("/");
     }
-  }, [isAuthCheckPending, pathname, router, role]);
+  }, [isAuthCheckPending, pathname, router]);
 
   if (isAuthCheckPending) {
     return null;
@@ -68,6 +68,8 @@ export function WithAuthCheck({
   return <>{children}</>;
 }
 
-const PAGE_WITH_REQUIRED_ROLE: Record<string, Role> = {
-  "/gateways": "admin",
+const PAGE_WITH_REQUIRED_PERMISSION: Record<string, Permissions> = {
+  "/gateways": {
+    mcpServer: ["read"],
+  },
 };

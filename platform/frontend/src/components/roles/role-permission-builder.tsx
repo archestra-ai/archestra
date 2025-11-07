@@ -3,8 +3,8 @@
 import {
   type Action,
   ActionSchema,
+  type Permissions,
   type Resource,
-  type RolePermissions,
 } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -15,9 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 interface RolePermissionBuilderProps {
-  permission: RolePermissions;
-  onChange: (permission: RolePermissions) => void;
-  userPermissions: RolePermissions;
+  permission: Permissions;
+  onChange: (permission: Permissions) => void;
+  userPermissions: Permissions;
 }
 
 // Group resources by category for better organization

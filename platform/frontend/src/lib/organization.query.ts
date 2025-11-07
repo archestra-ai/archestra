@@ -182,7 +182,14 @@ export function useCreateInvitation(organizationId: string | undefined) {
     }) => {
       const response = await authClient.organization.inviteMember({
         email,
-        role,
+        /**
+         * TODO: it looks like better-auth authClient has strict typing here..
+         * and apparently, according to their docs, it can only be "owner", "admin", or "member".
+         * https://www.better-auth.com/docs/plugins/organization#send-invitation
+         */
+        role: role as NonNullable<
+          Parameters<typeof authClient.organization.inviteMember>[0]
+        >["role"],
         organizationId,
       });
 

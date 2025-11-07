@@ -1,11 +1,11 @@
 import {
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  type Permissions,
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
+  predefinedPermissionsMap,
   type Resource,
-  type RolePermissions,
-  rolePermissionsMap,
 } from "@shared";
 import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -42,8 +42,8 @@ class OrganizationRoleModel {
    */
   static getPredefinedRolePermissions(
     roleName: PredefinedRoleName,
-  ): RolePermissions {
-    return rolePermissionsMap[roleName];
+  ): Permissions {
+    return predefinedPermissionsMap[roleName];
   }
 
   // TODO: add later...
@@ -71,8 +71,8 @@ class OrganizationRoleModel {
    * Validate that permissions being granted are a subset of user's permissions
    */
   static validateRolePermissions(
-    userPermissions: RolePermissions,
-    rolePermissions: RolePermissions,
+    userPermissions: Permissions,
+    rolePermissions: Permissions,
   ): { valid: boolean; missingPermissions: string[] } {
     const missingPermissions: string[] = [];
 
@@ -214,7 +214,7 @@ class OrganizationRoleModel {
   static async getPermissions(
     roleId: string,
     organizationId: string,
-  ): Promise<RolePermissions> {
+  ): Promise<Permissions> {
     if (OrganizationRoleModel.isPredefinedRole(roleId)) {
       return OrganizationRoleModel.getPredefinedRolePermissions(roleId);
     }

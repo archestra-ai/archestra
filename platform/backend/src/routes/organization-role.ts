@@ -1,4 +1,4 @@
-import { PredefinedRoleNameSchema, RolePermissionsSchema } from "@shared";
+import { PermissionsSchema, PredefinedRoleNameSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OrganizationRoleModel, UserModel } from "@/models";
@@ -62,7 +62,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Roles"],
         body: z.object({
           name: CreateUpdateRoleNameSchema,
-          permission: RolePermissionsSchema,
+          permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
@@ -179,7 +179,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
-          permission: RolePermissionsSchema.optional(),
+          permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },

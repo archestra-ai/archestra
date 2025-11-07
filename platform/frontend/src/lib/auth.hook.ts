@@ -1,4 +1,4 @@
-import type { Action, Permission, Resource } from "@shared";
+import type { Permissions } from "@shared";
 import { authClient } from "./clients/auth/auth-client";
 
 export function useIsAuthenticated() {
@@ -6,9 +6,8 @@ export function useIsAuthenticated() {
   return session.data?.user != null;
 }
 
-export function useHasPermission(permission: Permission) {
-  const [resource, action] = permission.split(":") as [Resource, Action];
+export function hasPermissions(permissions: Permissions) {
   return authClient.organization.hasPermission({
-    permissions: { [resource]: [action] },
+    permissions,
   });
 }

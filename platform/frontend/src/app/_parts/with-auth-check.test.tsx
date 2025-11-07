@@ -1,4 +1,3 @@
-import { requiredPagePermissionsMap } from "@shared";
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +41,7 @@ describe("WithAuthCheck", () => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
-    } as any);
+    } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(hasPermission).mockResolvedValue(true);
   });
 
@@ -51,7 +50,7 @@ describe("WithAuthCheck", () => {
       vi.mocked(authClient.useSession).mockReturnValue({
         data: null,
         isPending: false,
-      } as any);
+      } as ReturnType<typeof authClient.useSession>);
     });
 
     it("should redirect to sign-in when accessing protected page", () => {
@@ -101,7 +100,7 @@ describe("WithAuthCheck", () => {
           session: { id: "session123" },
         },
         isPending: false,
-      } as any);
+      } as ReturnType<typeof authClient.useSession>);
     });
 
     it("should redirect to home when accessing auth pages", () => {
@@ -135,7 +134,7 @@ describe("WithAuthCheck", () => {
       vi.mocked(authClient.useSession).mockReturnValue({
         data: null,
         isPending: true,
-      } as any);
+      } as ReturnType<typeof authClient.useSession>);
     });
 
     it("should render nothing while checking auth", () => {

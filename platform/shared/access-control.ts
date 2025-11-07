@@ -59,25 +59,6 @@ export const RoleSchema = z.union([
 ]);
 export type Role = z.infer<typeof RoleSchema>;
 
-/**
- * Check if a role is a custom role (not predefined)
- */
-export function isCustomRole(role: Role): boolean {
-  return !ALL_PREDEFINED_ROLES.includes(role);
-}
-
-/**
- * Get permissions for a predefined role
- */
-export function getPredefinedRolePermissions(
-  role: Role,
-): Record<Resource, Action[]> {
-  if (role === ADMIN_ROLE_NAME) {
-    return allAvailableActions;
-  }
-  return memberRole.statements as Record<Resource, Action[]>;
-}
-
 export const allAvailableActions: Record<Resource, Action[]> = {
   agent: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],

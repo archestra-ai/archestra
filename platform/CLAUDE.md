@@ -135,7 +135,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
-- **Schema Files**: Auth schemas split into: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
+- **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
 
 ## Observability
 

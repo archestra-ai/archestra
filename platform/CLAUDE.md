@@ -245,7 +245,6 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **White-labeling**:
 
-- Admin-only via `/api/organization/appearance` endpoints
 - Custom logos: PNG only, max 2MB, stored as base64
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
@@ -255,7 +254,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **Archestra MCP Server**:
 
 - Built-in tools automatically injected into all agents
-- Tools prefixed with "archestra\_\_" to avoid conflicts
+- Tools prefixed with `archestra__` to avoid conflicts
 - Available tools:
   - `archestra__whoami`: Returns agent name and ID
   - `archestra__search_private_mcp_registry`: Search internal MCP catalog

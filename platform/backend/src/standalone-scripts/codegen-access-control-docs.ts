@@ -63,9 +63,11 @@ function generatePredefinedRolesTable(): string {
     const permissions = predefinedPermissionsMap[role];
     const permissionsList = Object.entries(permissions)
       .map(([resource, actions]) =>
-        actions.map((action) => `\`${resource}:${action}\``).join(", "),
+        actions
+          .map((action) => `\`${resource}:${action}\``)
+          .join("<br /><br />"),
       )
-      .join(", ");
+      .join("<br /><br />");
 
     table += `| **${role}** | ${getRoleDescription(role)} | ${permissionsList} |\n`;
   }
@@ -110,14 +112,13 @@ function getActionDescription(action: Action): string {
 function generateMarkdownContent(): string {
   return `---
 title: "Platform Access Control"
+category: Archestra Platform
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
+order: 4
+lastUpdated: 2025-11-07
 ---
 
-# Platform Access Control
-
 Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
-
-## How Permissions Work
 
 Permissions in Archestra are defined using a \`resource:action\` format, where:
 
@@ -125,14 +126,6 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
 For example, the permission \`agent:create\` allows creating new agents, while \`organization:read\` allows viewing organization information.
-
-### Available Actions
-
-- **create**: Create new instances of a resource
-- **read**: View and list existing resources
-- **update**: Modify existing resources
-- **delete**: Remove existing resources
-- **admin**: Administrative control over resources (available for select resources)
 
 ## Predefined Roles
 
@@ -162,10 +155,26 @@ ${generateCustomRolesPermissionsTable()}
 Grant users only the minimum permissions necessary for their role. Start with the member role and add specific permissions as needed.
 
 ### Team-Based Organization
-Combine roles with team-based access control:
-1. Create teams for different groups (e.g., "Data Scientists", "Developers")
-2. Assign agents and MCP servers to specific teams
-3. Add members to teams based on their role and responsibilities
+Combine roles with team-based access control for fine-grained resource access:
+
+1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
+2. **Assign agents and MCP servers** to specific teams
+3. **Add members to teams** based on their role and responsibilities
+
+#### Team Access Control Rules
+
+**For Agents:**
+- Team members can only see agents assigned to teams they belong to
+- Exception: Users with \`agent:admin\` permission can see all agents
+- Exception: Agents with no team assignment are visible to all organization members
+
+**For MCP Servers:**
+- Team members can only access MCP servers assigned to teams they belong to
+- Exception: Users with \`mcpServer:admin\` permission can access all MCP servers
+- Exception: MCP servers with no team assignment are accessible to all organization members
+
+**Associated Artifacts:**
+Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for agents and MCP servers they have access to.
 
 ### Regular Review
 Periodically review custom roles and member assignments to ensure they align with current organizational needs and security requirements.

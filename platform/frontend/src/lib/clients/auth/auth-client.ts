@@ -14,6 +14,9 @@ export const authClient = createAuthClient({
   plugins: [
     organizationClient({
       ac,
+      dynamicAccessControl: {
+        enabled: true,
+      },
       roles: {
         admin: adminRole,
         member: memberRole,

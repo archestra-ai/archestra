@@ -49,6 +49,7 @@ import { authPlugin } from "./plugin";
 
 type Session = Awaited<ReturnType<typeof betterAuth.api.getSession>>;
 type User = Awaited<ReturnType<typeof UserModel.getById>>;
+type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
 
 describe("authPlugin integration", () => {
   const authnz = new Authnz();
@@ -70,6 +71,7 @@ describe("authPlugin integration", () => {
       mockUserModel.getById.mockResolvedValue({
         id: "user1",
         name: "Test User",
+        organizationId: "org1",
       } as User);
 
       const mockRequest = {
@@ -97,8 +99,19 @@ describe("authPlugin integration", () => {
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
         error: null,
-        key: null,
+        key: {
+          userId: "user1",
+          enabled: true,
+          id: "api-key-123",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as ApiKey,
       });
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/agents",
@@ -245,42 +258,6 @@ describe("authPlugin integration", () => {
       });
     });
 
-    it("should allow API keys for permission checks that fail due to organization context", async () => {
-      mockBetterAuth.api.getSession.mockRejectedValue(
-        new Error("No organization"),
-      );
-      // Mock hasPermission to simulate organization context error
-      mockHasPermission.mockImplementation(() => {
-        throw new Error("No organization context");
-      });
-      mockBetterAuth.api.verifyApiKey.mockResolvedValue({
-        valid: true,
-        error: null,
-        key: null,
-      });
-
-      const mockRequest = {
-        url: "/api/agents",
-        method: "GET",
-        headers: { authorization: "Bearer api-key-123" },
-        routeOptions: {
-          schema: { operationId: "getAgents" },
-        },
-      } as unknown as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockBetterAuth.api.verifyApiKey).toHaveBeenCalledWith({
-        body: { key: "Bearer api-key-123" },
-      });
-      expect(mockReply.status).not.toHaveBeenCalled();
-    });
-
     it("should check specific permissions for configured routes", async () => {
       mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
@@ -316,7 +293,6 @@ describe("authPlugin integration", () => {
 
   describe("user info population", () => {
     it("should populate user and organizationId from session", async () => {
-      const mockUser = { id: "user1", name: "Test User" } as User;
       mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
@@ -325,7 +301,11 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
-      mockUserModel.getById.mockResolvedValue(mockUser);
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/agents",
@@ -343,12 +323,16 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockRequest.user).toEqual(mockUser);
+      expect(mockRequest.user).toEqual({ id: "user1", name: "Test User" });
       expect(mockRequest.organizationId).toBe("org1");
     });
 
     it("should populate organizationId from UserModel when not in session", async () => {
-      const mockUser = { id: "user1", name: "Test User" } as User;
+      const mockUser = {
+        id: "user1",
+        name: "Test User",
+        organizationId: "org2",
+      } as User;
       mockBetterAuth.api.getSession.mockResolvedValue({
         user: { id: "user1" },
         session: {}, // No activeOrganizationId
@@ -376,6 +360,7 @@ describe("authPlugin integration", () => {
       await authnz.handle(mockRequest, mockReply);
 
       expect(mockUserModel.getById).toHaveBeenCalledWith("user1");
+      expect(mockRequest.user).toEqual({ id: "user1", name: "Test User" });
       expect(mockRequest.organizationId).toBe("org2");
     });
   });

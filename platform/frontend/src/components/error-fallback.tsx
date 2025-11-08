@@ -37,7 +37,7 @@ export function ClientErrorFallback({
             <div className="h-[300px] rounded-md border bg-muted overflow-y-auto">
               <div className="p-4">
                 <div className="text-sm text-destructive font-mono break-words whitespace-pre-wrap">
-                  {error.message}
+                  {JSON.stringify(error, null, 2)}
                   {error.request && (
                     <>
                       {"\n\nRequest:\n"}

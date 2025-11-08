@@ -16,7 +16,7 @@ export class Authnz {
     if (await this.shouldSkipAuthCheck(request)) return;
 
     // return 401 if unauthenticated
-    if (await this.isUnauthenticated(request)) {
+    if (!(await this.isAuthenticated(request))) {
       return reply.status(401).send(
         prepareErrorResponse({
           message: "Unauthenticated",
@@ -80,7 +80,7 @@ export class Authnz {
     return false;
   };
 
-  private isUnauthenticated = async (request: FastifyRequest) => {
+  private isAuthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
@@ -89,7 +89,7 @@ export class Authnz {
         query: { disableCookieCache: true },
       });
 
-      if (session) return false;
+      if (session) return true;
     } catch (_error) {
       /**
        * If getSession fails (e.g., "No active organization"), try API key verification
@@ -101,15 +101,15 @@ export class Authnz {
             body: { key: authHeader },
           });
 
-          return !valid;
+          return valid;
         } catch (_apiKeyError) {
           // API key verification failed, return unauthenticated
-          return true;
+          return false;
         }
       }
     }
 
-    return true;
+    return false;
   };
 
   private isAuthorized = async (
@@ -118,45 +118,18 @@ export class Authnz {
     const routeId = request.routeOptions.schema?.operationId as
       | RouteId
       | undefined;
+
     if (!routeId) {
       return {
         success: false,
         error: new Error("Forbidden, routeId not found"),
       };
     }
-    const { headers } = request;
 
-    try {
-      return hasPermission(
-        requiredEndpointPermissionsMap[routeId] ?? {},
-        headers,
-      );
-    } catch (_error) {
-      /**
-       * Handle API key sessions that don't have organization context
-       * API keys have all permissions by default (see auth config)
-       */
-      const authHeader = new Headers(headers as HeadersInit).get(
-        "authorization",
-      );
-
-      if (authHeader) {
-        try {
-          // Verify if this is a valid API key
-          const apiKeyResult = await betterAuth.api.verifyApiKey({
-            body: { key: authHeader },
-          });
-          if (apiKeyResult?.valid) {
-            // API keys have all permissions, so allow the request
-            return { success: true, error: null };
-          }
-        } catch (_apiKeyError) {
-          // Not a valid API key, return original error
-          return { success: false, error: new Error("Invalid API key") };
-        }
-      }
-      return { success: false, error: new Error("No API key provided") };
-    }
+    return await hasPermission(
+      requiredEndpointPermissionsMap[routeId] ?? {},
+      request.headers,
+    );
   };
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
@@ -193,15 +166,10 @@ export class Authnz {
             body: { key: authHeader },
           });
 
-          if (apiKeyResult?.valid && apiKeyResult.key?.id) {
-            const apiKey = await betterAuth.api.getApiKey({
-              query: {
-                id: apiKeyResult.key.id,
-              },
-            });
-
+          if (apiKeyResult?.valid && apiKeyResult.key?.userId) {
+            // Get the full user object from database using the userId from the API key
             const { organizationId, ...user } = await UserModel.getById(
-              apiKey.userId,
+              apiKeyResult.key.userId,
             );
 
             // Populate the request decorators

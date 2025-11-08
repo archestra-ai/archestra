@@ -26,7 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
 - **MCP Gateway Logs**: <http://localhost:3000/logs/mcp-gateway> (View MCP tool call logs)
-- **Roles Settings**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
+- **Roles**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
@@ -129,12 +129,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Authentication
 
-- **Better-Auth Integration**: Using better-auth for session management and RBAC
-- **API Key Auth**: API keys via `Authorization` header with all permissions (format: `Authorization: ${apiKey}`, not `Bearer`)
-- **Custom Roles**: Up to 50 custom RBAC roles per organization
-- **Middleware**: Auth handled by Fastify plugin at `backend/src/auth/fastify-plugin/`
-- **Route Permissions**: Configure in `shared/access-control.ts` `requiredEndpointPermissionsMap`
-- **Request Decorators**: Auth middleware populates `request.user` and `request.organizationId`
+- **Better-Auth**: Session management with dynamic RBAC
+- **API Key Auth**: `Authorization: ${apiKey}` header (not Bearer)
+- **Custom Roles**: Up to 50 custom roles per organization
+- **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
+- **Route Permissions**: Configure in `shared/access-control.ts`
+- **Request Context**: `request.user` and `request.organizationId`
 
 ## Observability
 
@@ -165,24 +165,22 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Team-based Access Control**:
 
-- Agents and MCP servers use team-based authorization (not user-based)
+- Agents and MCP servers use team-based authorization
 - Teams managed via better-auth organization plugin
 - Junction tables: `agent_team` and `mcp_server_team`
-- Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
-- Admin-only team CRUD operations via `/api/teams/*` routes
-- Members can read teams and access team-assigned agents/MCP servers
+- Breaking change: `usersWithAccess[]` replaced with `teams[]`
+- Admin-only team CRUD via `/api/teams/*`
+- Members can read teams and access assigned resources
 
 **Custom RBAC Roles**:
 
-- Extends predefined roles (admin, member) with custom roles
+- Extends predefined roles (admin, member)
 - Up to 50 custom roles per organization
-- Granular permissions: CRUD operations on 19 resources
-- Permission validation: users can only grant permissions they have
-- Role protection: predefined roles cannot be modified/deleted
-- API endpoints: `/api/roles/*` (admin-only)
-- UI: Settings > Roles page (admin-only)
+- 19 resources with CRUD permissions
+- Permission validation: can only grant what you have
+- Predefined roles are immutable
+- API: `/api/roles/*` (GET, POST, PUT, DELETE)
 - Database: `organizationRolesTable`
-- Better-auth integration: dynamicAccessControl enabled
 
 **Agent Labels**:
 

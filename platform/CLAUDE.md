@@ -146,6 +146,13 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Coding Conventions
 
+**Database Architecture Guidelines**:
+
+- **Model-Only Database Access**: All database queries MUST go through `backend/src/models/` - never directly in routes or services
+- **Model Creation**: Create model files for any new database entities you need to interact with
+- **CRUD Centralization**: Models should handle all CRUD operations and complex queries
+- **No Business Logic**: Keep models focused on data access, business logic goes in services
+
 **Frontend**:
 
 - Use TanStack Query for data fetching
@@ -153,15 +160,17 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Small focused components with extracted business logic
 - Flat file structure, avoid barrel files
 - Only export what's needed externally
+- **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
 
 **Backend**:
 
-- Use Drizzle ORM for database operations
+- Use Drizzle ORM for database operations through models only
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
+- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test-setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
 
 **Team-based Access Control**:
 
@@ -175,7 +184,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **Custom RBAC Roles**:
 
 - Extends predefined roles (admin, member)
-- Up to 50 custom roles per organization  
+- Up to 50 custom roles per organization
 - 30 resources across 4 categories with CRUD permissions
 - Permission validation: can only grant what you have
 - Predefined roles are immutable
@@ -215,6 +224,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Configuring Transport Type**:
+
 - Set `transportType: "streamable-http"` in `localConfig` for HTTP transport
 - Optionally specify `httpPort` (defaults to 8080) and `httpPath` (defaults to /mcp)
 - Stdio transport serializes requests (one at a time), HTTP allows concurrent connections
@@ -232,7 +242,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Bulk env var import via `archestra.envFrom` for importing all keys from Secrets/ConfigMaps at once
 
 **White-labeling**:
-- Admin-only via `/api/organization/appearance` endpoints  
+
+- Admin-only via `/api/organization/appearance` endpoints
 - Custom logos: PNG only, max 2MB, stored as base64
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
@@ -240,8 +251,9 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Database columns: theme, customFont, logoType, logo
 
 **Archestra MCP Server**:
+
 - Built-in tools automatically injected into all agents
-- Tools prefixed with "archestra__" to avoid conflicts
+- Tools prefixed with "archestra\_\_" to avoid conflicts
 - Available tools:
   - `archestra__whoami`: Returns agent name and ID
   - `archestra__search_private_mcp_registry`: Search internal MCP catalog
@@ -249,4 +261,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
   - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
 - Implementation: `backend/src/archestra-mcp-server.ts`
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
+**Testing**:
+
+- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Frontend**: Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
+- **Test Data**: Use model methods for creating/manipulating test data, following the pattern in `backend/src/test-setup.ts`

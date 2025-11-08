@@ -14,8 +14,7 @@ vi.mock("@/auth", () => ({
 
 vi.mock("@/models", () => ({
   UserModel: {
-    getUserById: vi.fn(),
-    getOrganizationId: vi.fn(),
+    getById: vi.fn(),
   },
 }));
 
@@ -38,8 +37,7 @@ const mockBetterAuth = betterAuth as unknown as {
 const mockHasPermission = hasPermission as MockedFunction<typeof hasPermission>;
 
 const mockUserModel = UserModel as unknown as {
-  getUserById: MockedFunction<typeof UserModel.getUserById>;
-  getOrganizationId: MockedFunction<typeof UserModel.getOrganizationId>;
+  getById: MockedFunction<typeof UserModel.getById>;
 };
 
 const mockVerifyInternalJwt = verifyInternalJwt as MockedFunction<
@@ -50,7 +48,7 @@ import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
 
 type Session = Awaited<ReturnType<typeof betterAuth.api.getSession>>;
-type User = Awaited<ReturnType<typeof UserModel.getUserById>>;
+type User = Awaited<ReturnType<typeof UserModel.getById>>;
 
 describe("authPlugin integration", () => {
   const authnz = new Authnz();
@@ -69,7 +67,7 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
-      mockUserModel.getUserById.mockResolvedValue({
+      mockUserModel.getById.mockResolvedValue({
         id: "user1",
         name: "Test User",
       } as User);
@@ -327,7 +325,7 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
-      mockUserModel.getUserById.mockResolvedValue(mockUser);
+      mockUserModel.getById.mockResolvedValue(mockUser);
 
       const mockRequest = {
         url: "/api/agents",
@@ -359,8 +357,7 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
-      mockUserModel.getUserById.mockResolvedValue(mockUser);
-      mockUserModel.getOrganizationId.mockResolvedValue("org2");
+      mockUserModel.getById.mockResolvedValue(mockUser);
 
       const mockRequest = {
         url: "/api/agents",
@@ -378,7 +375,7 @@ describe("authPlugin integration", () => {
 
       await authnz.handle(mockRequest, mockReply);
 
-      expect(mockUserModel.getOrganizationId).toHaveBeenCalledWith("user1");
+      expect(mockUserModel.getById).toHaveBeenCalledWith("user1");
       expect(mockRequest.organizationId).toBe("org2");
     });
   });
@@ -468,7 +465,7 @@ describe("authPlugin integration", () => {
         success: true,
         error: null,
       });
-      mockUserModel.getUserById.mockRejectedValue(new Error("DB error"));
+      mockUserModel.getById.mockRejectedValue(new Error("DB error"));
 
       const mockRequest = {
         url: "/api/agents",

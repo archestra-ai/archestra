@@ -161,35 +161,58 @@ export class Authnz {
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
     try {
-      const session = await betterAuth.api.getSession({
-        headers: new Headers(request.headers as HeadersInit),
-        query: { disableCookieCache: true },
-      });
+      const headers = new Headers(request.headers as HeadersInit);
 
-      if (!session?.user?.id) {
-        return; // Should not happen since we already checked authentication
+      // Try session-based authentication first
+      try {
+        const session = await betterAuth.api.getSession({
+          headers,
+          query: { disableCookieCache: true },
+        });
+
+        if (session?.user?.id) {
+          // Get the full user object from database
+          const { organizationId, ...user } = await UserModel.getById(
+            session.user.id,
+          );
+
+          // Populate the request decorators
+          request.user = user;
+          request.organizationId = organizationId;
+          return;
+        }
+      } catch (_sessionError) {
+        // Fall through to API key authentication
       }
 
-      // Get the full user object from database
-      const user = await UserModel.getUserById(session.user.id);
-      if (!user) {
-        return; // Should not happen for valid sessions
-      }
+      // Try API key authentication
+      const authHeader = headers.get("authorization");
+      if (authHeader) {
+        try {
+          const apiKeyResult = await betterAuth.api.verifyApiKey({
+            body: { key: authHeader },
+          });
 
-      // Get organization ID
-      let organizationId = session.session?.activeOrganizationId;
-      if (!organizationId) {
-        // For API key requests, get from member table
-        organizationId = await UserModel.getOrganizationId(session.user.id);
-      }
+          if (apiKeyResult?.valid && apiKeyResult.key?.id) {
+            const apiKey = await betterAuth.api.getApiKey({
+              query: {
+                id: apiKeyResult.key.id,
+              },
+            });
 
-      if (!organizationId) {
-        return; // Should not happen for valid sessions
-      }
+            const { organizationId, ...user } = await UserModel.getById(
+              apiKey.userId,
+            );
 
-      // Populate the request decorators
-      request.user = user;
-      request.organizationId = organizationId;
+            // Populate the request decorators
+            request.user = user;
+            request.organizationId = organizationId;
+            return;
+          }
+        } catch (_apiKeyError) {
+          // API key verification failed
+        }
+      }
     } catch (_error) {
       // If population fails, leave decorators unpopulated
       // The route handlers should handle missing user info gracefully

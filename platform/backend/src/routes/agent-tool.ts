@@ -470,7 +470,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Admin personal tokens can be used with any agent
             if (server.authType === "personal" && server.ownerId) {
               const ownerId = server.ownerId;
-              // const owner = await UserModel.getUserById(ownerId);
+              // const owner = await UserModel.getById(ownerId);
 
               /**
                * NOTE: I'm doubtful this will work as intended, right now better-auth's
@@ -579,7 +579,7 @@ async function validateCredentialSource(
 
   // Get the token owner's details
   const owner = mcpServer.ownerId
-    ? await UserModel.getUserById(mcpServer.ownerId)
+    ? await UserModel.getById(mcpServer.ownerId)
     : null;
   if (!owner) {
     return {

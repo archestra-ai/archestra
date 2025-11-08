@@ -3,14 +3,14 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import OrganizationRoleModel from "./organization-role";
 
-class User {
+class UserModel {
   static async createOrGetExistingDefaultAdminUser({
     email = config.auth.adminDefaultEmail,
     password = config.auth.adminDefaultPassword,
@@ -56,23 +56,17 @@ class User {
     }
   }
 
-  static async getUserById(id: string) {
+  static async getById(id: string) {
     const [user] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.usersTable),
+        organizationId: schema.member.organizationId,
+      })
       .from(schema.usersTable)
+      .innerJoin(schema.member, eq(schema.usersTable.id, schema.member.userId))
       .where(eq(schema.usersTable.id, id))
       .limit(1);
     return user;
-  }
-
-  static async getOrganizationId(userId: string): Promise<string | null> {
-    const [userMembership] = await db
-      .select()
-      .from(schema.member)
-      .where(eq(schema.member.userId, userId))
-      .limit(1);
-
-    return userMembership?.organizationId ?? null;
   }
 
   /**
@@ -105,4 +99,4 @@ class User {
   }
 }
 
-export default User;
+export default UserModel;

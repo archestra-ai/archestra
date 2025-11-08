@@ -135,6 +135,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
+- **Schema Files**: Auth schemas split into: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
 
 ## Observability
 
@@ -164,7 +165,8 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Backend**:
 
-- Use Drizzle ORM for database operations through models only
+- Use Drizzle ORM for database operations through MODELS ONLY!
+- Table exports: Use plural names with "Table" suffix (e.g., `agentLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
@@ -248,7 +250,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
 - Custom logos display with "Powered by Archestra" attribution
-- Database columns: theme, customFont, logoType, logo
+- Database columns: theme, customFont, logo
 
 **Archestra MCP Server**:
 

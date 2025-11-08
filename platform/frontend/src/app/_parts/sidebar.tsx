@@ -117,36 +117,35 @@ export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
-  const { logo, logoType, isLoadingAppearance } = useOrgTheme() ?? {};
+  const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
 
-  const logoToShow =
-    logoType === "custom" && logo ? (
-      <div className="relative flex justify-center">
-        <div className="flex flex-col items-center gap-1">
-          <Image
-            src={logo || "/logo.png"}
-            alt="Organization logo"
-            width={200}
-            height={60}
-            className="object-contain h-12 w-full max-w-[calc(100vw-6rem)]"
-          />
-          <p className="text-[10px] text-muted-foreground">
-            Powered by Archestra
-          </p>
-        </div>
-        <div className="absolute right-0 top-0">
-          <ColorModeToggle />
-        </div>
+  const logoToShow = logo ? (
+    <div className="relative flex justify-center">
+      <div className="flex flex-col items-center gap-1">
+        <Image
+          src={logo || "/logo.png"}
+          alt="Organization logo"
+          width={200}
+          height={60}
+          className="object-contain h-12 w-full max-w-[calc(100vw-6rem)]"
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Powered by Archestra
+        </p>
       </div>
-    ) : (
-      <div className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-2">
-          <Image src="/logo.png" alt="Logo" width={28} height={28} />
-          <span className="text-base font-semibold">Archestra.AI</span>
-        </div>
+      <div className="absolute right-0 top-0">
         <ColorModeToggle />
       </div>
-    );
+    </div>
+  ) : (
+    <div className="flex items-center justify-between px-2">
+      <div className="flex items-center gap-2">
+        <Image src="/logo.png" alt="Logo" width={28} height={28} />
+        <span className="text-base font-semibold">Archestra.AI</span>
+      </div>
+      <ColorModeToggle />
+    </div>
+  );
 
   return (
     <Sidebar>

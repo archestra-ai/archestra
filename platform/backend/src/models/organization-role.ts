@@ -111,11 +111,11 @@ class OrganizationRoleModel {
     // Check if role is currently assigned to any members
     const membersWithRole = await db
       .select()
-      .from(schema.member)
+      .from(schema.membersTable)
       .where(
         and(
-          eq(schema.member.organizationId, organizationId),
-          eq(schema.member.role, roleId),
+          eq(schema.membersTable.organizationId, organizationId),
+          eq(schema.membersTable.role, roleId),
         ),
       )
       .limit(1);
@@ -130,12 +130,12 @@ class OrganizationRoleModel {
     // Check if role is used in any pending invitations
     const invitationsWithRole = await db
       .select()
-      .from(schema.invitation)
+      .from(schema.invitationsTable)
       .where(
         and(
-          eq(schema.invitation.organizationId, organizationId),
-          eq(schema.invitation.role, role.name),
-          eq(schema.invitation.status, "pending"),
+          eq(schema.invitationsTable.organizationId, organizationId),
+          eq(schema.invitationsTable.role, role.name),
+          eq(schema.invitationsTable.status, "pending"),
         ),
       )
       .limit(1);

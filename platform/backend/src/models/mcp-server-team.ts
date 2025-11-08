@@ -19,9 +19,9 @@ class McpServerTeamModel {
 
     // Get all team IDs the user is a member of
     const userTeams = await db
-      .select({ teamId: schema.teamMember.teamId })
-      .from(schema.teamMember)
-      .where(eq(schema.teamMember.userId, userId));
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
 
     const teamIds = userTeams.map((t) => t.teamId);
 
@@ -31,9 +31,9 @@ class McpServerTeamModel {
 
     // Get all MCP servers assigned to these teams
     const mcpServerTeams = await db
-      .select({ mcpServerId: schema.mcpServerTeamTable.mcpServerId })
-      .from(schema.mcpServerTeamTable)
-      .where(inArray(schema.mcpServerTeamTable.teamId, teamIds));
+      .select({ mcpServerId: schema.mcpServerTeamsTable.mcpServerId })
+      .from(schema.mcpServerTeamsTable)
+      .where(inArray(schema.mcpServerTeamsTable.teamId, teamIds));
 
     return mcpServerTeams.map((st) => st.mcpServerId);
   }
@@ -53,9 +53,9 @@ class McpServerTeamModel {
 
     // Get all team IDs the user is a member of
     const userTeams = await db
-      .select({ teamId: schema.teamMember.teamId })
-      .from(schema.teamMember)
-      .where(eq(schema.teamMember.userId, userId));
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
 
     const teamIds = userTeams.map((t) => t.teamId);
 
@@ -66,11 +66,11 @@ class McpServerTeamModel {
     // Check if the MCP server is assigned to any of the user's teams
     const mcpServerTeam = await db
       .select()
-      .from(schema.mcpServerTeamTable)
+      .from(schema.mcpServerTeamsTable)
       .where(
         and(
-          eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId),
-          inArray(schema.mcpServerTeamTable.teamId, teamIds),
+          eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId),
+          inArray(schema.mcpServerTeamsTable.teamId, teamIds),
         ),
       )
       .limit(1);
@@ -83,9 +83,9 @@ class McpServerTeamModel {
    */
   static async getTeamsForMcpServer(mcpServerId: string): Promise<string[]> {
     const mcpServerTeams = await db
-      .select({ teamId: schema.mcpServerTeamTable.teamId })
-      .from(schema.mcpServerTeamTable)
-      .where(eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId));
+      .select({ teamId: schema.mcpServerTeamsTable.teamId })
+      .from(schema.mcpServerTeamsTable)
+      .where(eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId));
 
     return mcpServerTeams.map((st) => st.teamId);
   }
@@ -102,16 +102,16 @@ class McpServerTeamModel {
   > {
     const result = await db
       .select({
-        teamId: schema.mcpServerTeamTable.teamId,
-        name: schema.team.name,
-        createdAt: schema.mcpServerTeamTable.createdAt,
+        teamId: schema.mcpServerTeamsTable.teamId,
+        name: schema.teamsTable.name,
+        createdAt: schema.mcpServerTeamsTable.createdAt,
       })
-      .from(schema.mcpServerTeamTable)
+      .from(schema.mcpServerTeamsTable)
       .innerJoin(
-        schema.team,
-        eq(schema.mcpServerTeamTable.teamId, schema.team.id),
+        schema.teamsTable,
+        eq(schema.mcpServerTeamsTable.teamId, schema.teamsTable.id),
       )
-      .where(eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId));
+      .where(eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId));
 
     return result;
   }
@@ -126,12 +126,12 @@ class McpServerTeamModel {
     await db.transaction(async (tx) => {
       // Delete all existing team assignments
       await tx
-        .delete(schema.mcpServerTeamTable)
-        .where(eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId));
+        .delete(schema.mcpServerTeamsTable)
+        .where(eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId));
 
       // Insert new team assignments (if any teams provided)
       if (teamIds.length > 0) {
-        await tx.insert(schema.mcpServerTeamTable).values(
+        await tx.insert(schema.mcpServerTeamsTable).values(
           teamIds.map((teamId) => ({
             mcpServerId,
             teamId,
@@ -153,7 +153,7 @@ class McpServerTeamModel {
     if (teamIds.length === 0) return;
 
     await db
-      .insert(schema.mcpServerTeamTable)
+      .insert(schema.mcpServerTeamsTable)
       .values(
         teamIds.map((teamId) => ({
           mcpServerId,
@@ -171,11 +171,11 @@ class McpServerTeamModel {
     teamId: string,
   ): Promise<boolean> {
     const result = await db
-      .delete(schema.mcpServerTeamTable)
+      .delete(schema.mcpServerTeamsTable)
       .where(
         and(
-          eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId),
-          eq(schema.mcpServerTeamTable.teamId, teamId),
+          eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId),
+          eq(schema.mcpServerTeamsTable.teamId, teamId),
         ),
       );
 

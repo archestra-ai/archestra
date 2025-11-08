@@ -1,11 +1,8 @@
-import type { AnyRoleName, OrganizationAppearance } from "@shared";
-import { archestraApiSdk } from "@shared";
 import {
-  deleteOrganizationLogo,
-  getOrganizationAppearance,
-  updateOrganizationAppearance,
-  uploadOrganizationLogo,
-} from "@shared/hey-api/clients/api/sdk.gen";
+  type AnyRoleName,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
 import {
   useMutation,
   useQuery,
@@ -28,7 +25,6 @@ export const organizationKeys = {
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
   details: () => [...organizationKeys.all, "details"] as const,
-  appearance: () => [...organizationKeys.all, "appearance"] as const,
 };
 
 /**
@@ -215,29 +211,16 @@ export function useCreateInvitation(organizationId: string | undefined) {
 }
 
 /**
- * Get organization details including cleanup interval
+ * Get organization
  */
-export function useOrganizationDetails() {
-  return useQuery({
-    queryKey: organizationKeys.details(),
-    queryFn: async () => {
-      const response = await archestraApiSdk.getOrganization();
-      return response.data;
-    },
-  });
-}
-
-/**
- * Fetch organization appearance settings
- */
-export function useOrganizationAppearance(enabled = true) {
+export function useOrganization(enabled = true) {
   const session = authClient.useSession();
 
   return useQuery({
-    queryKey: organizationKeys.appearance(),
+    queryKey: organizationKeys.details(),
     queryFn: async () => {
-      const response = await getOrganizationAppearance();
-      return response.data;
+      const { data } = await archestraApiSdk.getOrganization();
+      return data;
     },
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
@@ -246,106 +229,32 @@ export function useOrganizationAppearance(enabled = true) {
 }
 
 /**
- * Update organization cleanup interval mutation
+ * Update organization
  */
-export function useUpdateOrganizationCleanupInterval() {
+export function useUpdateOrganization(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      limitCleanupInterval: "1h" | "12h" | "24h" | "1w" | "1m" | null,
+      data: archestraApiTypes.UpdateOrganizationData["body"],
     ) => {
-      // Use fetch directly to handle null values properly
-      const response = await fetch("/api/organization/cleanup-interval", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limitCleanupInterval }),
-      });
+      const { data: updatedOrganization } =
+        await archestraApiSdk.updateOrganization({ body: data });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(
-          error.error?.message || "Failed to update cleanup interval",
-        );
+      if (!updatedOrganization) {
+        throw new Error(onErrorMessage);
       }
 
-      return await response.json();
+      return updatedOrganization;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
-      toast.success("Cleanup interval updated successfully");
+      toast.success(onSuccessMessage);
     },
-    onError: (error) => {
-      toast.error("Failed to update cleanup interval", {
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Update organization appearance settings
- */
-export function useUpdateOrganizationAppearance() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: Partial<OrganizationAppearance>) => {
-      const response = await updateOrganizationAppearance({
-        body: data,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: organizationKeys.appearance(),
-      });
-      toast.success("Appearance settings updated");
-    },
-    onError: (error) => {
-      toast.error("Failed to update appearance settings", {
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Upload organization logo
- */
-export function useUploadOrganizationLogo() {
-  return useMutation({
-    mutationFn: async (logo: string) => {
-      const response = await uploadOrganizationLogo({
-        body: { logo },
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      toast.success("Logo uploaded successfully");
-    },
-    onError: (error) => {
-      toast.error("Failed to upload logo", {
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Delete organization logo
- */
-export function useDeleteOrganizationLogo() {
-  return useMutation({
-    mutationFn: async () => {
-      const response = await deleteOrganizationLogo();
-      return response.data;
-    },
-    onSuccess: () => {
-      toast.success("Logo removed");
-    },
-    onError: (error) => {
-      toast.error("Failed to remove logo", {
-        description: error.message,
-      });
+    onError: (_error) => {
+      toast.error(onErrorMessage);
     },
   });
 }

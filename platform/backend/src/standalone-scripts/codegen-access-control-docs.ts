@@ -24,7 +24,6 @@ function getResourceDescription(resource: Resource): string {
     interaction: "Conversation history and agent interactions",
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
-    settings: "Organization-wide configuration settings",
     organization: "Organization profile and administrative settings",
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",

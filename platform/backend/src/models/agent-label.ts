@@ -11,22 +11,22 @@ class AgentLabelModel {
   ): Promise<AgentLabelWithDetails[]> {
     const rows = await db
       .select({
-        keyId: schema.agentLabelTable.keyId,
-        valueId: schema.agentLabelTable.valueId,
-        key: schema.labelKeyTable.key,
-        value: schema.labelValueTable.value,
+        keyId: schema.agentLabelsTable.keyId,
+        valueId: schema.agentLabelsTable.valueId,
+        key: schema.labelKeysTable.key,
+        value: schema.labelValuesTable.value,
       })
-      .from(schema.agentLabelTable)
+      .from(schema.agentLabelsTable)
       .leftJoin(
-        schema.labelKeyTable,
-        eq(schema.agentLabelTable.keyId, schema.labelKeyTable.id),
+        schema.labelKeysTable,
+        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
       )
       .leftJoin(
-        schema.labelValueTable,
-        eq(schema.agentLabelTable.valueId, schema.labelValueTable.id),
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(eq(schema.agentLabelTable.agentId, agentId))
-      .orderBy(asc(schema.labelKeyTable.key));
+      .where(eq(schema.agentLabelsTable.agentId, agentId))
+      .orderBy(asc(schema.labelKeysTable.key));
 
     return rows.map((row) => ({
       keyId: row.keyId,
@@ -43,8 +43,8 @@ class AgentLabelModel {
     // Try to find existing key
     const [existing] = await db
       .select()
-      .from(schema.labelKeyTable)
-      .where(eq(schema.labelKeyTable.key, key))
+      .from(schema.labelKeysTable)
+      .where(eq(schema.labelKeysTable.key, key))
       .limit(1);
 
     if (existing) {
@@ -53,7 +53,7 @@ class AgentLabelModel {
 
     // Create new key
     const [created] = await db
-      .insert(schema.labelKeyTable)
+      .insert(schema.labelKeysTable)
       .values({ key })
       .returning();
 
@@ -67,8 +67,8 @@ class AgentLabelModel {
     // Try to find existing value
     const [existing] = await db
       .select()
-      .from(schema.labelValueTable)
-      .where(eq(schema.labelValueTable.value, value))
+      .from(schema.labelValuesTable)
+      .where(eq(schema.labelValuesTable.value, value))
       .limit(1);
 
     if (existing) {
@@ -77,7 +77,7 @@ class AgentLabelModel {
 
     // Create new value
     const [created] = await db
-      .insert(schema.labelValueTable)
+      .insert(schema.labelValuesTable)
       .values({ value })
       .returning();
 
@@ -107,12 +107,12 @@ class AgentLabelModel {
     await db.transaction(async (tx) => {
       // Delete all existing labels for this agent
       await tx
-        .delete(schema.agentLabelTable)
-        .where(eq(schema.agentLabelTable.agentId, agentId));
+        .delete(schema.agentLabelsTable)
+        .where(eq(schema.agentLabelsTable.agentId, agentId));
 
       // Insert new labels (if any provided)
       if (labelInserts.length > 0) {
-        await tx.insert(schema.agentLabelTable).values(labelInserts);
+        await tx.insert(schema.agentLabelsTable).values(labelInserts);
       }
     });
 
@@ -130,23 +130,23 @@ class AgentLabelModel {
     return await db.transaction(async (tx) => {
       // Find orphaned keys (not referenced in agent_labels)
       const orphanedKeys = await tx
-        .select({ id: schema.labelKeyTable.id })
-        .from(schema.labelKeyTable)
+        .select({ id: schema.labelKeysTable.id })
+        .from(schema.labelKeysTable)
         .leftJoin(
-          schema.agentLabelTable,
-          eq(schema.labelKeyTable.id, schema.agentLabelTable.keyId),
+          schema.agentLabelsTable,
+          eq(schema.labelKeysTable.id, schema.agentLabelsTable.keyId),
         )
-        .where(isNull(schema.agentLabelTable.keyId));
+        .where(isNull(schema.agentLabelsTable.keyId));
 
       // Find orphaned values (not referenced in agent_labels)
       const orphanedValues = await tx
-        .select({ id: schema.labelValueTable.id })
-        .from(schema.labelValueTable)
+        .select({ id: schema.labelValuesTable.id })
+        .from(schema.labelValuesTable)
         .leftJoin(
-          schema.agentLabelTable,
-          eq(schema.labelValueTable.id, schema.agentLabelTable.valueId),
+          schema.agentLabelsTable,
+          eq(schema.labelValuesTable.id, schema.agentLabelsTable.valueId),
         )
-        .where(isNull(schema.agentLabelTable.valueId));
+        .where(isNull(schema.agentLabelsTable.valueId));
 
       let deletedKeys = 0;
       let deletedValues = 0;
@@ -155,8 +155,8 @@ class AgentLabelModel {
       if (orphanedKeys.length > 0) {
         const keyIds = orphanedKeys.map((k) => k.id);
         const result = await tx
-          .delete(schema.labelKeyTable)
-          .where(inArray(schema.labelKeyTable.id, keyIds));
+          .delete(schema.labelKeysTable)
+          .where(inArray(schema.labelKeysTable.id, keyIds));
         deletedKeys = result.rowCount || 0;
       }
 
@@ -164,8 +164,8 @@ class AgentLabelModel {
       if (orphanedValues.length > 0) {
         const valueIds = orphanedValues.map((v) => v.id);
         const result = await tx
-          .delete(schema.labelValueTable)
-          .where(inArray(schema.labelValueTable.id, valueIds));
+          .delete(schema.labelValuesTable)
+          .where(inArray(schema.labelValuesTable.id, valueIds));
         deletedValues = result.rowCount || 0;
       }
 
@@ -177,7 +177,7 @@ class AgentLabelModel {
    * Get all available label keys
    */
   static async getAllKeys(): Promise<string[]> {
-    const keys = await db.select().from(schema.labelKeyTable);
+    const keys = await db.select().from(schema.labelKeysTable);
     return keys.map((k) => k.key);
   }
 
@@ -185,7 +185,7 @@ class AgentLabelModel {
    * Get all available label values
    */
   static async getAllValues(): Promise<string[]> {
-    const values = await db.select().from(schema.labelValueTable);
+    const values = await db.select().from(schema.labelValuesTable);
     return values.map((v) => v.value);
   }
 
@@ -196,8 +196,8 @@ class AgentLabelModel {
     // Find the key ID
     const [keyRecord] = await db
       .select()
-      .from(schema.labelKeyTable)
-      .where(eq(schema.labelKeyTable.key, key))
+      .from(schema.labelKeysTable)
+      .where(eq(schema.labelKeysTable.key, key))
       .limit(1);
 
     if (!keyRecord) {
@@ -207,16 +207,16 @@ class AgentLabelModel {
     // Get all values associated with this key
     const values = await db
       .select({
-        value: schema.labelValueTable.value,
+        value: schema.labelValuesTable.value,
       })
-      .from(schema.agentLabelTable)
+      .from(schema.agentLabelsTable)
       .innerJoin(
-        schema.labelValueTable,
-        eq(schema.agentLabelTable.valueId, schema.labelValueTable.id),
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(eq(schema.agentLabelTable.keyId, keyRecord.id))
-      .groupBy(schema.labelValueTable.value)
-      .orderBy(asc(schema.labelValueTable.value));
+      .where(eq(schema.agentLabelsTable.keyId, keyRecord.id))
+      .groupBy(schema.labelValuesTable.value)
+      .orderBy(asc(schema.labelValuesTable.value));
 
     return values.map((v) => v.value);
   }

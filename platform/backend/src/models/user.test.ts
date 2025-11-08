@@ -36,7 +36,9 @@ describe("User.getUserPermissions", () => {
 
   afterEach(async () => {
     // Clean up in reverse order due to foreign key constraints
-    await db.delete(schema.member).where(eq(schema.member.userId, testUserId));
+    await db
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.userId, testUserId));
     await db
       .delete(schema.organizationRolesTable)
       .where(eq(schema.organizationRolesTable.organizationId, testOrgId));
@@ -55,7 +57,7 @@ describe("User.getUserPermissions", () => {
 
   it("should return permissions for admin role", async () => {
     // Add user as admin member
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
       role: ADMIN_ROLE_NAME,
@@ -70,7 +72,7 @@ describe("User.getUserPermissions", () => {
 
   it("should return permissions for member role", async () => {
     // Add user as member
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
       role: MEMBER_ROLE_NAME,
@@ -95,7 +97,7 @@ describe("User.getUserPermissions", () => {
     await OrganizationRoleModel.create(customRole);
 
     // Add user with custom role
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
       role: customRoleId,
@@ -113,7 +115,7 @@ describe("User.getUserPermissions", () => {
   it("should handle multiple member records and return first", async () => {
     // This scenario is unlikely in real app but tests the limit(1) behavior
     // Add user as admin member
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
       role: ADMIN_ROLE_NAME,
@@ -149,7 +151,7 @@ describe("User.getUserPermissions", () => {
       createdAt: new Date(),
     });
 
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: wrongOrgId,
       role: ADMIN_ROLE_NAME,
@@ -164,8 +166,8 @@ describe("User.getUserPermissions", () => {
 
     // Cleanup
     await db
-      .delete(schema.member)
-      .where(eq(schema.member.organizationId, wrongOrgId));
+      .delete(schema.membersTable)
+      .where(eq(schema.membersTable.organizationId, wrongOrgId));
     await db
       .delete(schema.organizationsTable)
       .where(eq(schema.organizationsTable.id, wrongOrgId));
@@ -173,7 +175,7 @@ describe("User.getUserPermissions", () => {
 
   it("should handle custom role that no longer exists", async () => {
     // Add user with custom role that doesn't exist
-    await db.insert(schema.member).values({
+    await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
       role: crypto.randomUUID(),

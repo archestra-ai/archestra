@@ -95,6 +95,7 @@ ChartJS.register(
   Filler,
 );
 
+import type { archestraApiTypes } from "@shared";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
   AlertDialog,
@@ -153,8 +154,8 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import {
-  useOrganizationDetails,
-  useUpdateOrganizationCleanupInterval,
+  useOrganization,
+  useUpdateOrganization,
 } from "@/lib/organization.query";
 import {
   type TimeFrame,
@@ -807,7 +808,7 @@ export default function CostPage() {
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
   const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
-  const { data: organizationDetails } = useOrganizationDetails();
+  const { data: organizationDetails } = useOrganization();
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
 
@@ -824,7 +825,10 @@ export default function CostPage() {
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe: currentTimeframe,
   });
-  const updateCleanupInterval = useUpdateOrganizationCleanupInterval();
+  const updateCleanupInterval = useUpdateOrganization(
+    "Cleanup interval updated successfully",
+    "Failed to update cleanup interval",
+  );
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
@@ -1706,9 +1710,11 @@ export default function CostPage() {
                   <Select
                     value={organizationDetails?.limitCleanupInterval || "1h"}
                     onValueChange={(value) => {
-                      updateCleanupInterval.mutate(
-                        value as "1h" | "12h" | "24h" | "1w" | "1m",
-                      );
+                      updateCleanupInterval.mutate({
+                        limitCleanupInterval: value as NonNullable<
+                          archestraApiTypes.UpdateOrganizationData["body"]
+                        >["limitCleanupInterval"],
+                      });
                     }}
                     disabled={updateCleanupInterval.isPending}
                   >

@@ -4,12 +4,9 @@ import {
   type OrganizationTheme,
 } from "@shared";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
-import {
-  useOrganizationAppearance,
-  useUpdateOrganizationAppearance,
-} from "./organization.query";
+import { useOrganization, useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const FONT_STORAGE_KEY = "archestra-font";
@@ -22,16 +19,16 @@ export function useOrgTheme() {
   // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
   const isAuthPage = pathname?.startsWith("/auth/");
 
-  const { data, isLoading: isLoadingAppearance } = useOrganizationAppearance(
-    !isAuthPage,
-  );
+  const { data, isLoading: isLoadingAppearance } = useOrganization(!isAuthPage);
   const {
     theme: themeFromBackend,
     customFont: fontFromBackend,
     logo,
-    logoType,
   } = data ?? {};
-  const updateMutation = useUpdateOrganizationAppearance();
+  const updateThemeMutation = useUpdateOrganization(
+    "Appearance settings updated",
+    "Failed to update appearance settings",
+  );
 
   const themeFromLocalStorage =
     typeof window !== "undefined"
@@ -53,37 +50,41 @@ export function useOrgTheme() {
     fontFromLocalStorage || fontFromBackend || DEFAULT_FONT,
   );
 
-  const applyThemeOnBackend = (themeId: OrganizationTheme) => {
-    updateMutation.mutate({
-      theme: themeId,
-    });
-  };
+  const applyThemeOnBackend = useCallback(
+    (themeId: OrganizationTheme) => {
+      updateThemeMutation.mutate({
+        theme: themeId,
+      });
+    },
+    [updateThemeMutation],
+  );
 
-  const applyFontOnBackend = (fontId: OrganizationCustomFont) => {
-    updateMutation.mutate({
-      customFont: fontId,
-    });
-  };
+  const applyFontOnBackend = useCallback(
+    (fontId: OrganizationCustomFont) => {
+      updateThemeMutation.mutate({
+        customFont: fontId,
+      });
+    },
+    [updateThemeMutation],
+  );
 
-  const setPreviewTheme = (themeId: OrganizationTheme) => {
-    setCurrentUITheme(themeId);
-  };
+  const saveTheme = useCallback(
+    (themeId: OrganizationTheme) => {
+      setCurrentUITheme(themeId);
+      applyThemeOnBackend(themeId);
+      applyThemeInLocalStorage(themeId);
+    },
+    [applyThemeOnBackend],
+  );
 
-  const setPreviewFont = (fontId: OrganizationCustomFont) => {
-    setCurrentUIFont(fontId);
-  };
-
-  const saveTheme = (themeId: OrganizationTheme) => {
-    setPreviewTheme(themeId);
-    applyThemeOnBackend(themeId);
-    applyThemeInLocalStorage(themeId);
-  };
-
-  const saveFont = (fontId: OrganizationCustomFont) => {
-    setPreviewFont(fontId);
-    applyFontOnBackend(fontId);
-    applyFontInLocalStorage(fontId);
-  };
+  const saveFont = useCallback(
+    (fontId: OrganizationCustomFont) => {
+      setCurrentUIFont(fontId);
+      applyFontOnBackend(fontId);
+      applyFontInLocalStorage(fontId);
+    },
+    [applyFontOnBackend],
+  );
 
   // whenever currentUITheme changes, apply the theme on the UI
   useEffect(() => {
@@ -119,12 +120,11 @@ export function useOrgTheme() {
     currentUIFont: currentUIFont || DEFAULT_FONT,
     themeFromBackend,
     fontFromBackend,
-    setPreviewTheme,
-    setPreviewFont,
+    setPreviewTheme: setCurrentUITheme,
+    setPreviewFont: setCurrentUIFont,
     saveTheme,
     saveFont,
     logo,
-    logoType,
     DEFAULT_THEME,
     DEFAULT_FONT,
     isLoadingAppearance,

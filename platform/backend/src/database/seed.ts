@@ -1,14 +1,13 @@
 import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
-import { eq } from "drizzle-orm";
 import logger from "@/logging";
 import {
   AgentModel,
   DualLlmConfigModel,
+  MemberModel,
   OrganizationModel,
   UserModel,
 } from "@/models";
 import type { InsertDualLlmConfig } from "@/types";
-import db, { schema } from ".";
 
 /**
  * Seeds admin user
@@ -26,19 +25,11 @@ export async function seedDefaultUserAndOrg(
   if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");
   }
-  const existingMember = await db
-    .select()
-    .from(schema.member)
-    .where(eq(schema.member.userId, user.id))
-    .limit(1);
-  if (!existingMember[0]) {
-    await db.insert(schema.member).values({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      userId: user.id,
-      role: config.role || ADMIN_ROLE_NAME,
-      createdAt: new Date(),
-    });
+
+  const existingMember = await MemberModel.getByUserId(user.id);
+
+  if (!existingMember) {
+    await MemberModel.create(user.id, org.id, config.role || ADMIN_ROLE_NAME);
   }
   logger.info("✓ Seeded admin user and default organization");
   return user;

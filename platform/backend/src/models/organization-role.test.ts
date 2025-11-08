@@ -457,7 +457,7 @@ describe("OrganizationRoleModel", () => {
         name: "Test User",
       });
 
-      await db.insert(schema.member).values({
+      await db.insert(schema.membersTable).values({
         userId,
         organizationId: testOrgId,
         role: customRoleId,
@@ -475,7 +475,9 @@ describe("OrganizationRoleModel", () => {
       });
 
       // Cleanup
-      await db.delete(schema.member).where(eq(schema.member.userId, userId));
+      await db
+        .delete(schema.membersTable)
+        .where(eq(schema.membersTable.userId, userId));
       await db
         .delete(schema.usersTable)
         .where(eq(schema.usersTable.id, userId));

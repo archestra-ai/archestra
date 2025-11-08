@@ -15,7 +15,6 @@ export const ResourceSchema = z.enum([
   "interaction",
   "dualLlmConfig",
   "dualLlmResult",
-  "settings",
   "organization",
   "member",
   "invitation",
@@ -41,8 +40,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   dualLlmConfig: ["create", "read", "update", "delete"],
   dualLlmResult: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
-  settings: ["read", "update"],
-  organization: ["create", "read", "update", "delete"],
+  organization: ["read", "update"],
   member: ["create", "update", "delete"],
   invitation: ["create"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
@@ -240,6 +238,7 @@ export const RouteId = {
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
   GetChatMcpTools: "getChatMcpTools",
+
   // Limits Routes
   GetLimits: "getLimits",
   CreateLimit: "createLimit",
@@ -249,7 +248,7 @@ export const RouteId = {
 
   // Organization Routes
   GetOrganization: "getOrganization",
-  UpdateOrganizationCleanupInterval: "updateOrganizationCleanupInterval",
+  UpdateOrganization: "updateOrganization",
 
   // Token Price Routes
   GetTokenPrices: "getTokenPrices",
@@ -263,11 +262,6 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
-  // Organization Routes
-  GetOrganizationAppearance: "getOrganizationAppearance",
-  UpdateOrganizationAppearance: "updateOrganizationAppearance",
-  UploadOrganizationLogo: "uploadOrganizationLogo",
-  DeleteOrganizationLogo: "deleteOrganizationLogo",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -560,7 +554,7 @@ export const requiredEndpointPermissionsMap: Partial<Record<RouteId, Permissions
   [RouteId.GetOrganization]: {
     organization: ["read"],
   },
-  [RouteId.UpdateOrganizationCleanupInterval]: {
+  [RouteId.UpdateOrganization]: {
     organization: ["update"],
   },
   [RouteId.GetTokenPrices]: {
@@ -589,18 +583,6 @@ export const requiredEndpointPermissionsMap: Partial<Record<RouteId, Permissions
   },
   [RouteId.GetOverviewStatistics]: {
     interaction: ["read"],
-  },
-  [RouteId.GetOrganizationAppearance]: {
-    organization: ["read"],
-  },
-  [RouteId.UpdateOrganizationAppearance]: {
-    organization: ["update"],
-  },
-  [RouteId.UploadOrganizationLogo]: {
-    organization: ["update"],
-  },
-  [RouteId.DeleteOrganizationLogo]: {
-    organization: ["update"],
   },
 };
 

@@ -1,12 +1,12 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
-  useUpdateOrganizationAppearance,
+  useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { FontSelector } from "./_components/font-selector";
@@ -14,7 +14,10 @@ import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function AppearanceSettingsPage() {
-  const updateMutation = useUpdateOrganizationAppearance();
+  const updateAppearanceSettingsMutation = useUpdateOrganization(
+    "Appearance settings updated",
+    "Failed to update appearance settings",
+  );
   const [hasChanges, setHasChanges] = useState(false);
   const queryClient = useQueryClient();
 
@@ -31,7 +34,6 @@ export default function AppearanceSettingsPage() {
     saveTheme,
     saveFont,
     logo,
-    logoType,
     DEFAULT_THEME,
     DEFAULT_FONT,
     isLoadingAppearance,
@@ -53,10 +55,10 @@ export default function AppearanceSettingsPage() {
     }
   });
 
-  const handleLogoChange = () => {
-    // Invalidate appearance query to refresh the logo
-    queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
-  };
+  const handleLogoChange = useCallback(() => {
+    // Invalidate organization details query to refresh the logo
+    queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+  }, [queryClient]);
 
   if (isLoadingAppearance) {
     return (
@@ -71,11 +73,7 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
-        <LogoUpload
-          currentLogo={logo}
-          logoType={logoType}
-          onLogoChange={handleLogoChange}
-        />
+        <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
         <ThemeSelector
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {
@@ -102,7 +100,7 @@ export default function AppearanceSettingsPage() {
                 saveFont?.(currentUIFont || DEFAULT_FONT);
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Save
             </Button>
@@ -113,7 +111,7 @@ export default function AppearanceSettingsPage() {
                 setPreviewFont?.(fontFromBackend || DEFAULT_FONT);
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Cancel
             </Button>

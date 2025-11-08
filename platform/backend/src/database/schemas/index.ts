@@ -1,36 +1,34 @@
+export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
-export { default as agentLabelTable } from "./agent-label";
-export { default as agentTeamTable } from "./agent-team";
+export { default as agentLabelsTable } from "./agent-label";
+export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
-export {
-  account,
-  apikey,
-  invitation,
-  member,
-  session,
-  twoFactor,
-  verification,
-} from "./auth";
+export { default as apikeysTable } from "./api-key";
 export { default as conversationsTable } from "./conversation";
-export { default as dualLlmConfigTable } from "./dual-llm-config";
+export { default as dualLlmConfigsTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
-export { default as labelKeyTable } from "./label-key";
-export { default as labelValueTable } from "./label-value";
+export { default as invitationsTable } from "./invitation";
+export { default as labelKeysTable } from "./label-key";
+export { default as labelValuesTable } from "./label-value";
 export { default as limitsTable } from "./limit";
 export { default as mcpServersTable } from "./mcp-server";
-export { default as mcpServerInstallationRequestTable } from "./mcp-server-installation-request";
-export { default as mcpServerTeamTable } from "./mcp-server-team";
-export { default as mcpServerUserTable } from "./mcp-server-user";
+export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
+export { default as mcpServerTeamsTable } from "./mcp-server-team";
+export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
+export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as secretsTable } from "./secret";
-export { team, teamMember } from "./team";
-export { default as tokenPriceTable } from "./token-price";
+export { default as sessionsTable } from "./session";
+export { team as teamsTable, teamMember as teamMembersTable } from "./team";
+export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
+export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as verificationsTable } from "./verification";

@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  DEFAULT_ADMIN_EMAIL,
   type Permissions,
   type PredefinedRoleName,
 } from "@shared";
@@ -8,6 +9,7 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import type { UpdateUser } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 
 class UserModel {
@@ -60,10 +62,13 @@ class UserModel {
     const [user] = await db
       .select({
         ...getTableColumns(schema.usersTable),
-        organizationId: schema.member.organizationId,
+        organizationId: schema.membersTable.organizationId,
       })
       .from(schema.usersTable)
-      .innerJoin(schema.member, eq(schema.usersTable.id, schema.member.userId))
+      .innerJoin(
+        schema.membersTable,
+        eq(schema.usersTable.id, schema.membersTable.userId),
+      )
       .where(eq(schema.usersTable.id, id))
       .limit(1);
     return user;
@@ -79,11 +84,11 @@ class UserModel {
     // Get user's member record to find their role
     const memberRecord = await db
       .select()
-      .from(schema.member)
+      .from(schema.membersTable)
       .where(
         and(
-          eq(schema.member.userId, userId),
-          eq(schema.member.organizationId, organizationId),
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
         ),
       )
       .limit(1);
@@ -96,6 +101,22 @@ class UserModel {
       memberRecord[0].role,
       organizationId,
     );
+  }
+
+  static async getUserWithByDefaultEmail() {
+    const [adminUser] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.email, DEFAULT_ADMIN_EMAIL))
+      .limit(1);
+    return adminUser;
+  }
+
+  static async patch(userId: string, data: Partial<UpdateUser>) {
+    return await db
+      .update(schema.usersTable)
+      .set(data)
+      .where(eq(schema.usersTable.id, userId));
   }
 }
 

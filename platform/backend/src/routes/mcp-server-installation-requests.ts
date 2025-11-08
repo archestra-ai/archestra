@@ -1,9 +1,7 @@
 import { RouteId } from "@shared";
-import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import db, { schema } from "@/database";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
   constructResponseSchema,
@@ -450,16 +448,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Get user name from database
-        const [userData] = await db
-          .select()
-          .from(schema.usersTable)
-          .where(eq(schema.usersTable.id, user.id));
-
         const updatedRequest = await McpServerInstallationRequestModel.addNote(
           id,
           user.id,
-          userData.name,
+          user.name,
           body.content,
         );
 

@@ -236,9 +236,9 @@ class AgentToolModel {
   ): Promise<number> {
     // Get all agents assigned to this team
     const agentsInTeam = await db
-      .select({ agentId: schema.agentTeamTable.agentId })
-      .from(schema.agentTeamTable)
-      .where(eq(schema.agentTeamTable.teamId, teamId));
+      .select({ agentId: schema.agentTeamsTable.agentId })
+      .from(schema.agentTeamsTable)
+      .where(eq(schema.agentTeamsTable.teamId, teamId));
 
     if (agentsInTeam.length === 0) {
       return 0;

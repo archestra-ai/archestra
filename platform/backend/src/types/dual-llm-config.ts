@@ -3,10 +3,10 @@ import type { z } from "zod";
 import { schema } from "@/database";
 
 export const SelectDualLlmConfigSchema = createSelectSchema(
-  schema.dualLlmConfigTable,
+  schema.dualLlmConfigsTable,
 );
 export const InsertDualLlmConfigSchema = createInsertSchema(
-  schema.dualLlmConfigTable,
+  schema.dualLlmConfigsTable,
 );
 
 export type DualLlmConfig = z.infer<typeof SelectDualLlmConfigSchema>;

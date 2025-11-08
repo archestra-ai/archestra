@@ -12,7 +12,7 @@ class DualLlmConfigModel {
    */
   static async create(config: InsertDualLlmConfig): Promise<DualLlmConfig> {
     const [createdConfig] = await db
-      .insert(schema.dualLlmConfigTable)
+      .insert(schema.dualLlmConfigsTable)
       .values(config)
       .returning();
     return createdConfig;
@@ -22,7 +22,7 @@ class DualLlmConfigModel {
    * Get all configurations
    */
   static async findAll(): Promise<DualLlmConfig[]> {
-    return db.select().from(schema.dualLlmConfigTable);
+    return db.select().from(schema.dualLlmConfigsTable);
   }
 
   /**
@@ -31,8 +31,8 @@ class DualLlmConfigModel {
   static async findById(id: string): Promise<DualLlmConfig | null> {
     const [config] = await db
       .select()
-      .from(schema.dualLlmConfigTable)
-      .where(eq(schema.dualLlmConfigTable.id, id));
+      .from(schema.dualLlmConfigsTable)
+      .where(eq(schema.dualLlmConfigsTable.id, id));
     return config || null;
   }
 
@@ -40,7 +40,10 @@ class DualLlmConfigModel {
    * Get the default configuration (first one, or create default if none exist)
    */
   static async getDefault(): Promise<DualLlmConfig> {
-    const [config] = await db.select().from(schema.dualLlmConfigTable).limit(1);
+    const [config] = await db
+      .select()
+      .from(schema.dualLlmConfigsTable)
+      .limit(1);
 
     if (!config) {
       // Create default configuration with combined prompt
@@ -122,9 +125,9 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
     config: Partial<InsertDualLlmConfig>,
   ): Promise<DualLlmConfig | null> {
     const [updatedConfig] = await db
-      .update(schema.dualLlmConfigTable)
+      .update(schema.dualLlmConfigsTable)
       .set(config)
-      .where(eq(schema.dualLlmConfigTable.id, id))
+      .where(eq(schema.dualLlmConfigsTable.id, id))
       .returning();
     return updatedConfig || null;
   }
@@ -134,8 +137,8 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
    */
   static async delete(id: string): Promise<boolean> {
     const result = await db
-      .delete(schema.dualLlmConfigTable)
-      .where(eq(schema.dualLlmConfigTable.id, id));
+      .delete(schema.dualLlmConfigsTable)
+      .where(eq(schema.dualLlmConfigsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
 }

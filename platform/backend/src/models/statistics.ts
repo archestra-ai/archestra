@@ -251,10 +251,10 @@ class StatisticsModel {
   }> {
     const result = await db
       .select({
-        avgInputPrice: sql<number>`AVG(CAST(${schema.tokenPriceTable.pricePerMillionInput} AS DECIMAL))`,
-        avgOutputPrice: sql<number>`AVG(CAST(${schema.tokenPriceTable.pricePerMillionOutput} AS DECIMAL))`,
+        avgInputPrice: sql<number>`AVG(CAST(${schema.tokenPricesTable.pricePerMillionInput} AS DECIMAL))`,
+        avgOutputPrice: sql<number>`AVG(CAST(${schema.tokenPricesTable.pricePerMillionOutput} AS DECIMAL))`,
       })
-      .from(schema.tokenPriceTable);
+      .from(schema.tokenPricesTable);
 
     return {
       avgInputPrice: result[0]?.avgInputPrice || 0,
@@ -304,8 +304,8 @@ class StatisticsModel {
     // Base query for team statistics
     const query = db
       .select({
-        teamId: schema.team.id,
-        teamName: schema.team.name,
+        teamId: schema.teamsTable.id,
+        teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
@@ -317,10 +317,13 @@ class StatisticsModel {
         eq(schema.interactionsTable.agentId, schema.agentsTable.id),
       )
       .innerJoin(
-        schema.agentTeamTable,
-        eq(schema.agentsTable.id, schema.agentTeamTable.agentId),
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
-      .innerJoin(schema.team, eq(schema.agentTeamTable.teamId, schema.team.id))
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
           gte(
@@ -333,8 +336,8 @@ class StatisticsModel {
         ),
       )
       .groupBy(
-        schema.team.id,
-        schema.team.name,
+        schema.teamsTable.id,
+        schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(
@@ -358,28 +361,31 @@ class StatisticsModel {
     // Get team member counts
     const teamMemberCounts = await db
       .select({
-        teamId: schema.team.id,
-        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.member.userId}) AS INTEGER)`,
+        teamId: schema.teamsTable.id,
+        memberCount: sql<number>`CAST(COUNT(DISTINCT ${schema.membersTable.userId}) AS INTEGER)`,
       })
-      .from(schema.team)
+      .from(schema.teamsTable)
       .leftJoin(
-        schema.member,
-        eq(schema.team.organizationId, schema.member.organizationId),
+        schema.membersTable,
+        eq(
+          schema.teamsTable.organizationId,
+          schema.membersTable.organizationId,
+        ),
       )
-      .groupBy(schema.team.id);
+      .groupBy(schema.teamsTable.id);
 
     // Get agent counts per team
     const teamAgentCounts = await db
       .select({
-        teamId: schema.team.id,
-        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentTeamTable.agentId}) AS INTEGER)`,
+        teamId: schema.teamsTable.id,
+        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentTeamsTable.agentId}) AS INTEGER)`,
       })
-      .from(schema.team)
+      .from(schema.teamsTable)
       .leftJoin(
-        schema.agentTeamTable,
-        eq(schema.team.id, schema.agentTeamTable.teamId),
+        schema.agentTeamsTable,
+        eq(schema.teamsTable.id, schema.agentTeamsTable.teamId),
       )
-      .groupBy(schema.team.id);
+      .groupBy(schema.teamsTable.id);
 
     // Aggregate data by team
     const teamMap = new Map<string, TeamStatistics>();
@@ -456,7 +462,7 @@ class StatisticsModel {
       .select({
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
-        teamName: schema.team.name,
+        teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
@@ -468,10 +474,13 @@ class StatisticsModel {
         eq(schema.interactionsTable.agentId, schema.agentsTable.id),
       )
       .leftJoin(
-        schema.agentTeamTable,
-        eq(schema.agentsTable.id, schema.agentTeamTable.agentId),
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
       )
-      .leftJoin(schema.team, eq(schema.agentTeamTable.teamId, schema.team.id))
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
       .where(
         and(
           gte(
@@ -486,7 +495,7 @@ class StatisticsModel {
       .groupBy(
         schema.agentsTable.id,
         schema.agentsTable.name,
-        schema.team.name,
+        schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
       .orderBy(

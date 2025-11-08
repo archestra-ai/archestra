@@ -3,21 +3,21 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { UuidIdSchema } from "./api";
 
-export const SelectLabelKeySchema = createSelectSchema(schema.labelKeyTable);
-export const InsertLabelKeySchema = createInsertSchema(schema.labelKeyTable);
+export const SelectLabelKeySchema = createSelectSchema(schema.labelKeysTable);
+export const InsertLabelKeySchema = createInsertSchema(schema.labelKeysTable);
 
 export const SelectLabelValueSchema = createSelectSchema(
-  schema.labelValueTable,
+  schema.labelValuesTable,
 );
 export const InsertLabelValueSchema = createInsertSchema(
-  schema.labelValueTable,
+  schema.labelValuesTable,
 );
 
 export const SelectAgentLabelSchema = createSelectSchema(
-  schema.agentLabelTable,
+  schema.agentLabelsTable,
 );
 export const InsertAgentLabelSchema = createInsertSchema(
-  schema.agentLabelTable,
+  schema.agentLabelsTable,
 );
 
 // Combined label schema for easier frontend consumption

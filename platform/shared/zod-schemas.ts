@@ -77,12 +77,12 @@ export const LocalConfigFormSchema = z
     },
   );
 
-// Organization Appearance Schemas
-// All themes from https://github.com/jnsahaj/tweakcn
-// Theme IDs are generated from shared/themes/theme-config.ts
-
+/**
+ * Organization Appearance Schemas
+ * All themes from https://github.com/jnsahaj/tweakcn
+ * Theme IDs are generated from shared/themes/theme-config.ts
+ */
 export const OrganizationThemeSchema = z.enum(THEME_IDS);
-
 export const OrganizationCustomFontSchema = z.enum([
   "lato",
   "inter",
@@ -91,19 +91,5 @@ export const OrganizationCustomFontSchema = z.enum([
   "source-sans-pro",
 ]);
 
-export const OrganizationLogoTypeSchema = z.enum(["default", "custom"]);
-
-export const OrganizationLogoSchema = z.string();
-
-export const OrganizationAppearanceSchema = z.object({
-  theme: OrganizationThemeSchema.optional(),
-  customFont: OrganizationCustomFontSchema.optional(),
-  logoType: OrganizationLogoTypeSchema.optional(),
-  logo: OrganizationLogoSchema.optional().nullable(),
-});
-
 export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
 export type OrganizationCustomFont = z.infer<typeof OrganizationCustomFontSchema>;
-export type OrganizationLogoType = z.infer<typeof OrganizationLogoTypeSchema>;
-export type OrganizationLogo = z.infer<typeof OrganizationLogoSchema>;
-export type OrganizationAppearance = z.infer<typeof OrganizationAppearanceSchema>;

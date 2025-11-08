@@ -10426,223 +10426,6 @@ export type UpdateRoleResponses = {
 
 export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
 
-export type UpdateOrganizationCleanupIntervalData = {
-    body: {
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/cleanup-interval';
-};
-
-export type UpdateOrganizationCleanupIntervalErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
-
-export type UpdateOrganizationCleanupIntervalResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-    };
-};
-
-export type UpdateOrganizationCleanupIntervalResponse = UpdateOrganizationCleanupIntervalResponses[keyof UpdateOrganizationCleanupIntervalResponses];
-
-export type GetOrganizationAppearanceData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/appearance';
-};
-
-export type GetOrganizationAppearanceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetOrganizationAppearanceError = GetOrganizationAppearanceErrors[keyof GetOrganizationAppearanceErrors];
-
-export type GetOrganizationAppearanceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
-    };
-};
-
-export type GetOrganizationAppearanceResponse = GetOrganizationAppearanceResponses[keyof GetOrganizationAppearanceResponses];
-
-export type UpdateOrganizationAppearanceData = {
-    body?: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/appearance';
-};
-
-export type UpdateOrganizationAppearanceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateOrganizationAppearanceError = UpdateOrganizationAppearanceErrors[keyof UpdateOrganizationAppearanceErrors];
-
-export type UpdateOrganizationAppearanceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
-        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
-        logoType?: 'default' | 'custom';
-        logo?: string | null;
-    };
-};
-
-export type UpdateOrganizationAppearanceResponse = UpdateOrganizationAppearanceResponses[keyof UpdateOrganizationAppearanceResponses];
-
 export type GetOrganizationData = {
     body?: never;
     path?: never;
@@ -10708,20 +10491,30 @@ export type GetOrganizationResponses = {
         id: string;
         name: string;
         slug: string;
+        logo: string | null;
+        createdAt: string;
+        metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
     };
 };
 
 export type GetOrganizationResponse = GetOrganizationResponses[keyof GetOrganizationResponses];
 
-export type DeleteOrganizationLogoData = {
-    body?: never;
+export type UpdateOrganizationData = {
+    body?: {
+        theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        logo?: string | null;
+    };
     path?: never;
     query?: never;
-    url: '/api/organization/logo';
+    url: '/api/organization';
 };
 
-export type DeleteOrganizationLogoErrors = {
+export type UpdateOrganizationErrors = {
     /**
      * Default Response
      */
@@ -10769,89 +10562,26 @@ export type DeleteOrganizationLogoErrors = {
     };
 };
 
-export type DeleteOrganizationLogoError = DeleteOrganizationLogoErrors[keyof DeleteOrganizationLogoErrors];
+export type UpdateOrganizationError = UpdateOrganizationErrors[keyof UpdateOrganizationErrors];
 
-export type DeleteOrganizationLogoResponses = {
+export type UpdateOrganizationResponses = {
     /**
      * Default Response
      */
     200: {
-        success: boolean;
-    };
-};
-
-export type DeleteOrganizationLogoResponse = DeleteOrganizationLogoResponses[keyof DeleteOrganizationLogoResponses];
-
-export type UploadOrganizationLogoData = {
-    body: {
-        logo: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/logo';
-};
-
-export type UploadOrganizationLogoErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UploadOrganizationLogoError = UploadOrganizationLogoErrors[keyof UploadOrganizationLogoErrors];
-
-export type UploadOrganizationLogoResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
+        id: string;
+        name: string;
+        slug: string;
         logo: string | null;
+        createdAt: string;
+        metadata: string | null;
+        limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
     };
 };
 
-export type UploadOrganizationLogoResponse = UploadOrganizationLogoResponses[keyof UploadOrganizationLogoResponses];
+export type UpdateOrganizationResponse = UpdateOrganizationResponses[keyof UpdateOrganizationResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

@@ -535,6 +535,13 @@ class ToolModel {
 
     return result.rowCount || 0;
   }
+
+  static async getByIds(ids: string[]): Promise<Tool[]> {
+    return db
+      .select()
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.id, ids));
+  }
 }
 
 export default ToolModel;

@@ -1,19 +1,15 @@
-import {
-  ac,
-  adminRole,
-  allAvailableActions,
-  MEMBER_ROLE_NAME,
-  memberRole,
-} from "@shared";
+import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import InvitationModel from "@/models/invitation";
+import MemberModel from "@/models/member";
+import SessionModel from "@/models/session";
 
 const APP_NAME = "Archestra";
 const {
@@ -97,18 +93,18 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
     schema: {
-      apikey: schema.apikey,
+      apikey: schema.apikeysTable,
       user: schema.usersTable,
-      session: schema.session,
+      session: schema.sessionsTable,
       organization: schema.organizationsTable,
       organizationRole: schema.organizationRolesTable,
-      member: schema.member,
-      invitation: schema.invitation,
-      account: schema.account,
-      team: schema.team,
-      teamMember: schema.teamMember,
-      twoFactor: schema.twoFactor,
-      verification: schema.verification,
+      member: schema.membersTable,
+      invitation: schema.invitationsTable,
+      account: schema.accountsTable,
+      team: schema.teamsTable,
+      teamMember: schema.teamMembersTable,
+      twoFactor: schema.twoFactorsTable,
+      verification: schema.verificationsTable,
     },
   }),
 
@@ -127,11 +123,11 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      const { path, method, body } = ctx;
+
       // Validate email format for invitations
-      if (ctx.path === "/organization/invite-member" && ctx.method === "POST") {
-        const body = ctx.body;
-        const emailValidation = z.email().safeParse(body.email);
-        if (!emailValidation.success) {
+      if (path === "/organization/invite-member" && method === "POST") {
+        if (!z.email().safeParse(body.email).success) {
           throw new APIError("BAD_REQUEST", {
             message: "Invalid email format",
           });
@@ -141,8 +137,7 @@ export const auth = betterAuth({
       }
 
       // Block direct sign-up without invitation (invitation-only registration)
-      if (ctx.path.startsWith("/sign-up/email") && ctx.method === "POST") {
-        const body = ctx.body;
+      if (path.startsWith("/sign-up/email") && method === "POST") {
         const invitationId = body.callbackURL
           ?.split("invitationId=")[1]
           ?.split("&")[0];
@@ -155,33 +150,31 @@ export const auth = betterAuth({
         }
 
         // Validate the invitation exists and is pending
-        const invitation = await db
-          .select()
-          .from(schema.invitation)
-          .where(eq(schema.invitation.id, invitationId))
-          .limit(1);
+        const invitation = await InvitationModel.getById(invitationId);
 
-        if (!invitation[0]) {
+        if (!invitation) {
           throw new APIError("BAD_REQUEST", {
             message: "Invalid invitation ID",
           });
         }
 
-        if (invitation[0].status !== "pending") {
+        const { status, expiresAt } = invitation;
+
+        if (status !== "pending") {
           throw new APIError("BAD_REQUEST", {
-            message: `This invitation has already been ${invitation[0].status}`,
+            message: `This invitation has already been ${status}`,
           });
         }
 
         // Check if invitation is expired
-        if (invitation[0].expiresAt && invitation[0].expiresAt < new Date()) {
+        if (expiresAt && expiresAt < new Date()) {
           throw new APIError("BAD_REQUEST", {
             message: "This invitation has expired",
           });
         }
 
         // Validate email matches invitation
-        if (body.email && invitation[0].email !== body.email) {
+        if (body.email && invitation.email !== body.email) {
           throw new APIError("BAD_REQUEST", {
             message:
               "Email address does not match the invitation. You must use the invited email address.",
@@ -191,20 +184,14 @@ export const auth = betterAuth({
         return ctx;
       }
     }),
-    after: createAuthMiddleware(async (ctx) => {
+    after: createAuthMiddleware(async ({ path, method, body, context }) => {
       // Delete invitation from DB when canceled (instead of marking as canceled)
-      if (
-        ctx.path === "/organization/cancel-invitation" &&
-        ctx.method === "POST"
-      ) {
-        const body = ctx.body;
+      if (path === "/organization/cancel-invitation" && method === "POST") {
         const invitationId = body.invitationId;
 
         if (invitationId) {
           try {
-            await db
-              .delete(schema.invitation)
-              .where(eq(schema.invitation.id, invitationId));
+            await InvitationModel.delete(invitationId);
             logger.info(`✅ Invitation ${invitationId} deleted from database`);
           } catch (error) {
             logger.error({ err: error }, "❌ Failed to delete invitation:");
@@ -213,16 +200,13 @@ export const auth = betterAuth({
       }
 
       // Invalidate all sessions when user is deleted
-      if (ctx.path === "/admin/remove-user" && ctx.method === "POST") {
-        const body = ctx.body;
+      if (path === "/admin/remove-user" && method === "POST") {
         const userId = body.userId;
 
         if (userId) {
           try {
             // Delete all sessions for this user
-            await db
-              .delete(schema.session)
-              .where(eq(schema.session.userId, userId));
+            await SessionModel.deleteAllByUserId(userId);
             logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
             logger.error(
@@ -234,35 +218,20 @@ export const auth = betterAuth({
       }
 
       // Ensure member is actually deleted from DB when removed from organization
-      if (ctx.path === "/organization/remove-member" && ctx.method === "POST") {
-        const body = ctx.body;
-        const memberIdOrUserId = body.memberIdOrUserId;
-        const organizationId = body.organizationId;
+      if (path === "/organization/remove-member" && method === "POST") {
+        const { memberIdOrUserId, organizationId } = body;
 
         if (memberIdOrUserId) {
           try {
-            // Try to delete by member ID first
-            let deleted = await db
-              .delete(schema.member)
-              .where(eq(schema.member.id, memberIdOrUserId))
-              .returning();
+            const deleted = await MemberModel.deleteByMemberOrUserId(
+              memberIdOrUserId,
+              organizationId,
+            );
 
-            // If not found, try by user ID + organization ID
-            if (!deleted[0] && organizationId) {
-              deleted = await db
-                .delete(schema.member)
-                .where(
-                  and(
-                    eq(schema.member.userId, memberIdOrUserId),
-                    eq(schema.member.organizationId, organizationId),
-                  ),
-                )
-                .returning();
-            }
-
-            if (deleted[0]) {
+            if (deleted) {
+              const { id, organizationId } = deleted;
               logger.info(
-                `✅ Member ${deleted[0].id} deleted from organization ${deleted[0].organizationId}`,
+                `✅ Member ${id} deleted from organization ${organizationId}`,
               );
             } else {
               logger.warn(
@@ -275,15 +244,13 @@ export const auth = betterAuth({
         }
       }
 
-      if (ctx.path.startsWith("/sign-up")) {
-        const newSession = ctx.context.newSession;
+      if (path.startsWith("/sign-up")) {
+        const { newSession } = context;
 
-        if (newSession?.user && newSession?.session) {
-          const user = newSession.user;
-          const sessionId = newSession.session.id;
+        if (newSession) {
+          const { user, session } = newSession;
 
           // Check if this is an invitation sign-up
-          const body = ctx.body;
           const invitationId = body.callbackURL
             ?.split("invitationId=")[1]
             ?.split("&")[0];
@@ -293,67 +260,12 @@ export const auth = betterAuth({
             return;
           }
 
-          // Handle invitation sign-up: accept invitation and add user to organization
-          logger.info(
-            `🔗 Processing invitation ${invitationId} for user ${user.email}`,
-          );
-
-          try {
-            // Get the invitation from database
-            const invitation = await db
-              .select()
-              .from(schema.invitation)
-              .where(eq(schema.invitation.id, invitationId))
-              .limit(1);
-
-            if (!invitation[0]) {
-              logger.error(`❌ Invitation ${invitationId} not found`);
-              return;
-            }
-
-            // Create member row linking user to organization
-            await db.insert(schema.member).values({
-              id: crypto.randomUUID(),
-              organizationId: invitation[0].organizationId,
-              userId: user.id,
-              role: invitation[0].role || MEMBER_ROLE_NAME,
-              createdAt: new Date(),
-            });
-
-            // Update user role to match the invitation role
-            await db
-              .update(schema.usersTable)
-              .set({ role: invitation[0].role || MEMBER_ROLE_NAME })
-              .where(eq(schema.usersTable.id, user.id));
-
-            // Mark invitation as accepted
-            await db
-              .update(schema.invitation)
-              .set({ status: "accepted" })
-              .where(eq(schema.invitation.id, invitationId));
-
-            // Set the organization as active in the session
-            await db
-              .update(schema.session)
-              .set({ activeOrganizationId: invitation[0].organizationId })
-              .where(eq(schema.session.id, sessionId));
-
-            logger.info(
-              `✅ Invitation accepted: user ${user.email} added to organization ${invitation[0].organizationId} as ${invitation[0].role || MEMBER_ROLE_NAME}`,
-            );
-          } catch (error) {
-            logger.error(
-              { err: error },
-              `❌ Failed to accept invitation ${invitationId}:`,
-            );
-          }
-
-          return;
+          return await InvitationModel.accept(session, user, invitationId);
         }
       }
 
-      if (ctx.path.startsWith("/sign-in")) {
-        const newSession = ctx.context.newSession;
+      if (path.startsWith("/sign-in")) {
+        const { newSession } = context;
 
         if (newSession?.user && newSession?.session) {
           const sessionId = newSession.session.id;
@@ -361,19 +273,12 @@ export const auth = betterAuth({
 
           try {
             if (!newSession.session.activeOrganizationId) {
-              const userMembership = await db
-                .select()
-                .from(schema.member)
-                .where(eq(schema.member.userId, userId))
-                .limit(1);
+              const userMembership = await MemberModel.getByUserId(userId);
 
-              if (userMembership[0]) {
-                await db
-                  .update(schema.session)
-                  .set({
-                    activeOrganizationId: userMembership[0].organizationId,
-                  })
-                  .where(eq(schema.session.id, sessionId));
+              if (userMembership) {
+                await SessionModel.patch(sessionId, {
+                  activeOrganizationId: userMembership.organizationId,
+                });
 
                 logger.info(
                   `✅ Active organization set for user ${newSession.user.email}`,

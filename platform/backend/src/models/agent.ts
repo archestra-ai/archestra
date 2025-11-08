@@ -203,15 +203,15 @@ class AgentModel {
         // Create a subquery to get the first team name (alphabetically) per agent
         const teamNameSubquery = db
           .select({
-            agentId: schema.agentTeamTable.agentId,
-            teamName: min(schema.team.name).as("teamName"),
+            agentId: schema.agentTeamsTable.agentId,
+            teamName: min(schema.teamsTable.name).as("teamName"),
           })
-          .from(schema.agentTeamTable)
+          .from(schema.agentTeamsTable)
           .leftJoin(
-            schema.team,
-            eq(schema.agentTeamTable.teamId, schema.team.id),
+            schema.teamsTable,
+            eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
           )
-          .groupBy(schema.agentTeamTable.agentId)
+          .groupBy(schema.agentTeamsTable.agentId)
           .as("teamNames");
 
         // Use COALESCE to treat NULL as empty string when sorting

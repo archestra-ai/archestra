@@ -64,8 +64,8 @@ class UsageTrackingService {
         // Get team details to access organizationId
         const teams = await db
           .select()
-          .from(schema.team)
-          .where(inArray(schema.team.id, agentTeamIds));
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, agentTeamIds));
 
         // Update organization-level token cost limits (from first team's organization)
         if (teams.length > 0 && teams[0].organizationId) {

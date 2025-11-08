@@ -19,9 +19,9 @@ class AgentTeamModel {
 
     // Get all team IDs the user is a member of
     const userTeams = await db
-      .select({ teamId: schema.teamMember.teamId })
-      .from(schema.teamMember)
-      .where(eq(schema.teamMember.userId, userId));
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
 
     const teamIds = userTeams.map((t) => t.teamId);
 
@@ -31,9 +31,9 @@ class AgentTeamModel {
 
     // Get all agents assigned to these teams
     const agentTeams = await db
-      .select({ agentId: schema.agentTeamTable.agentId })
-      .from(schema.agentTeamTable)
-      .where(inArray(schema.agentTeamTable.teamId, teamIds));
+      .select({ agentId: schema.agentTeamsTable.agentId })
+      .from(schema.agentTeamsTable)
+      .where(inArray(schema.agentTeamsTable.teamId, teamIds));
 
     return agentTeams.map((at) => at.agentId);
   }
@@ -53,9 +53,9 @@ class AgentTeamModel {
 
     // Get all team IDs the user is a member of
     const userTeams = await db
-      .select({ teamId: schema.teamMember.teamId })
-      .from(schema.teamMember)
-      .where(eq(schema.teamMember.userId, userId));
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(eq(schema.teamMembersTable.userId, userId));
 
     const teamIds = userTeams.map((t) => t.teamId);
 
@@ -66,11 +66,11 @@ class AgentTeamModel {
     // Check if the agent is assigned to any of the user's teams
     const agentTeam = await db
       .select()
-      .from(schema.agentTeamTable)
+      .from(schema.agentTeamsTable)
       .where(
         and(
-          eq(schema.agentTeamTable.agentId, agentId),
-          inArray(schema.agentTeamTable.teamId, teamIds),
+          eq(schema.agentTeamsTable.agentId, agentId),
+          inArray(schema.agentTeamsTable.teamId, teamIds),
         ),
       )
       .limit(1);
@@ -83,9 +83,9 @@ class AgentTeamModel {
    */
   static async getTeamsForAgent(agentId: string): Promise<string[]> {
     const agentTeams = await db
-      .select({ teamId: schema.agentTeamTable.teamId })
-      .from(schema.agentTeamTable)
-      .where(eq(schema.agentTeamTable.agentId, agentId));
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
+      .where(eq(schema.agentTeamsTable.agentId, agentId));
 
     return agentTeams.map((at) => at.teamId);
   }
@@ -100,12 +100,12 @@ class AgentTeamModel {
     await db.transaction(async (tx) => {
       // Delete all existing team assignments
       await tx
-        .delete(schema.agentTeamTable)
-        .where(eq(schema.agentTeamTable.agentId, agentId));
+        .delete(schema.agentTeamsTable)
+        .where(eq(schema.agentTeamsTable.agentId, agentId));
 
       // Insert new team assignments (if any teams provided)
       if (teamIds.length > 0) {
-        await tx.insert(schema.agentTeamTable).values(
+        await tx.insert(schema.agentTeamsTable).values(
           teamIds.map((teamId) => ({
             agentId,
             teamId,
@@ -127,7 +127,7 @@ class AgentTeamModel {
     if (teamIds.length === 0) return;
 
     await db
-      .insert(schema.agentTeamTable)
+      .insert(schema.agentTeamsTable)
       .values(
         teamIds.map((teamId) => ({
           agentId,
@@ -145,11 +145,11 @@ class AgentTeamModel {
     teamId: string,
   ): Promise<boolean> {
     const result = await db
-      .delete(schema.agentTeamTable)
+      .delete(schema.agentTeamsTable)
       .where(
         and(
-          eq(schema.agentTeamTable.agentId, agentId),
-          eq(schema.agentTeamTable.teamId, teamId),
+          eq(schema.agentTeamsTable.agentId, agentId),
+          eq(schema.agentTeamsTable.teamId, teamId),
         ),
       );
 
@@ -165,16 +165,16 @@ class AgentTeamModel {
     mcpServerId: string,
   ): Promise<boolean> {
     const result = await db
-      .select({ teamId: schema.agentTeamTable.teamId })
-      .from(schema.agentTeamTable)
+      .select({ teamId: schema.agentTeamsTable.teamId })
+      .from(schema.agentTeamsTable)
       .innerJoin(
-        schema.mcpServerTeamTable,
-        eq(schema.agentTeamTable.teamId, schema.mcpServerTeamTable.teamId),
+        schema.mcpServerTeamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.mcpServerTeamsTable.teamId),
       )
       .where(
         and(
-          eq(schema.agentTeamTable.agentId, agentId),
-          eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId),
+          eq(schema.agentTeamsTable.agentId, agentId),
+          eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId),
         ),
       )
       .limit(1);

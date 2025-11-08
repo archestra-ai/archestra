@@ -1,11 +1,6 @@
-import type { OrganizationAppearance } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  InsertOrganization,
-  Organization,
-  UpdateOrganization,
-} from "@/types";
+import type { Organization, UpdateOrganization } from "@/types";
 
 class OrganizationModel {
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
@@ -20,40 +15,46 @@ class OrganizationModel {
     }
 
     // Create default organization if none exists
-    const defaultOrgData: InsertOrganization = {
-      id: "default-org",
-      name: "Default Organization",
-      slug: "default",
-      createdAt: new Date(),
-      hasSeededMcpCatalog: false,
-    };
-
     const [createdOrg] = await db
       .insert(schema.organizationsTable)
-      .values(defaultOrgData)
+      .values({
+        id: "default-org",
+        name: "Default Organization",
+        slug: "default",
+        createdAt: new Date(),
+      })
       .returning();
 
     return createdOrg;
   }
 
-  static async update(
+  static async patch(
     id: string,
-    organization: Partial<UpdateOrganization>,
+    data: Partial<UpdateOrganization>,
   ): Promise<Organization | null> {
+    if ("logo" in data && data.logo) {
+      const logo = data.logo;
+
+      if (!logo.startsWith("data:image/png;base64,")) {
+        throw new Error("Logo must be a PNG image in base64 format");
+      }
+
+      // Check size (rough estimate: base64 is ~1.33x original size)
+      // 2MB * 1.33 = ~2.66MB in base64
+      const maxSize = 2.66 * 1024 * 1024;
+      if (logo.length > maxSize) {
+        // ~2.66MB
+        throw new Error("Logo must be less than 2MB");
+      }
+    }
+
     const [updatedOrganization] = await db
       .update(schema.organizationsTable)
-      .set(organization)
+      .set(data)
       .where(eq(schema.organizationsTable.id, id))
       .returning();
 
     return updatedOrganization || null;
-  }
-
-  static async updateSeededMcpCatalogFlag(
-    id: string,
-    hasSeeded: boolean,
-  ): Promise<Organization | null> {
-    return OrganizationModel.update(id, { hasSeededMcpCatalog: hasSeeded });
   }
 
   static async getById(id: string): Promise<Organization | null> {
@@ -64,13 +65,6 @@ class OrganizationModel {
       .limit(1);
 
     return organization || null;
-  }
-
-  static async updateAppearance(
-    id: string,
-    appearance: OrganizationAppearance,
-  ): Promise<Organization | null> {
-    return OrganizationModel.update(id, appearance);
   }
 }
 

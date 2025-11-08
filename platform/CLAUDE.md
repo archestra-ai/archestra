@@ -175,12 +175,13 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **Custom RBAC Roles**:
 
 - Extends predefined roles (admin, member)
-- Up to 50 custom roles per organization
-- 19 resources with CRUD permissions
+- Up to 50 custom roles per organization  
+- 30 resources across 4 categories with CRUD permissions
 - Permission validation: can only grant what you have
 - Predefined roles are immutable
 - API: `/api/roles/*` (GET, POST, PUT, DELETE)
 - Database: `organizationRolesTable`
+- UI: Admin-only roles management at `/settings/roles`
 
 **Agent Labels**:
 

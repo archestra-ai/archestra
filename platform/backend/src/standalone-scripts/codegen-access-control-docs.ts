@@ -24,7 +24,7 @@ function getResourceDescription(resource: Resource): string {
     interaction: "Conversation history and agent interactions",
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
-    organization: "Organization profile and administrative settings",
+    organization: "Organization settings",
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",
     internalMcpCatalog: "Internal MCP server catalog management",
@@ -114,7 +114,7 @@ title: "Platform Access Control"
 category: Archestra Platform
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 4
-lastUpdated: 2025-11-07
+lastUpdated: ${new Date().toISOString().split("T")[0]}
 ---
 
 Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.

@@ -3,7 +3,6 @@ import { expect, test as setup } from "@playwright/test";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
-  E2eTestId,
   UI_BASE_URL,
 } from "./consts";
 
@@ -21,17 +20,12 @@ setup("authenticate", async ({ page }) => {
   // Wait until the page redirects to the authenticated area
   await page.waitForURL(`${UI_BASE_URL}/test-agent`);
 
-  // Skip onboarding dialog if it appears (for fresh environments)
-  const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-  const isOnboardingVisible = await skipButton.isVisible({ timeout: 2000 }).catch(() => false);
-
-  if (isOnboardingVisible) {
-    await skipButton.click();
-    // Wait for the skip button to disappear (dialog closes after mutation completes)
-    await expect(skipButton).not.toBeVisible({ timeout: 10000 });
-  }
+  // Wait a moment for the page to stabilize
+  await page.waitForTimeout(1000);
 
   // Verify we're authenticated by checking for user profile or similar
+  // Note: The Admin button should be visible even if onboarding dialog is present
+  // The dialog is non-blocking for the underlying page elements
   await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({ timeout: 10000 });
 
   // Save the authentication state to a file

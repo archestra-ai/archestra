@@ -1,11 +1,11 @@
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { Readable, Writable } from "node:stream";
+import type { Attach } from "@kubernetes/client-node";
 import {
   ReadBuffer,
   serializeMessage,
 } from "@modelcontextprotocol/sdk/shared/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import type { Attach } from "@kubernetes/client-node";
-import { Readable, Writable } from "node:stream";
 import type WebSocket from "ws";
 import logger from "@/logging";
 
@@ -53,9 +53,10 @@ export class K8sAttachTransport implements Transport {
           this.readBuffer.append(chunk);
 
           // Process all complete messages in the buffer
-          let message: JSONRPCMessage | null;
-          while ((message = this.readBuffer.readMessage()) !== null) {
+          let message = this.readBuffer.readMessage();
+          while (message !== null) {
             this.onmessage?.(message);
+            message = this.readBuffer.readMessage();
           }
 
           callback();
@@ -99,7 +100,7 @@ export class K8sAttachTransport implements Transport {
           });
 
           // Handle WebSocket errors
-          ws.on("error", (error) => {
+          ws.on("error", (error: Error) => {
             logger.error(
               { err: error, podName, containerName },
               "K8sAttachTransport WebSocket error",

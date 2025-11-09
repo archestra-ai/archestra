@@ -351,13 +351,6 @@ class McpServerRuntimeManager {
   }
 
   /**
-   * Get the K8sPod instance for an MCP server
-   */
-  getPod(mcpServerId: string): K8sPod | undefined {
-    return this.mcpServerIdToPodMap.get(mcpServerId);
-  }
-
-  /**
    * Get logs from an MCP server pod
    */
   async getMcpServerLogs(

@@ -17,11 +17,28 @@ import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
+  InternalMcpCatalog,
   McpServerConfig,
 } from "@/types";
 
 export const constructMcpProxyUrl = (mcpServerId: string) =>
   `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;
+
+/**
+ * Type for MCP tool with server metadata returned from database
+ */
+type McpToolWithServerMetadata = {
+  toolName: string;
+  responseModifierTemplate: string | null;
+  mcpServerSecretId: string | null;
+  mcpServerName: string | null;
+  mcpServerCatalogId: string | null;
+  mcpServerId: string | null;
+  credentialSourceMcpServerId: string | null;
+  executionSourceMcpServerId: string | null;
+  catalogId: string | null;
+  catalogName: string | null;
+};
 
 class McpClient {
   private clients = new Map<string, Client>();
@@ -42,7 +59,11 @@ class McpClient {
     const { tool, catalogItem } = validationResult;
 
     // Get execution context (server ID and secrets)
-    const contextResult = await this.getExecutionContext(tool, toolCall, agentId);
+    const contextResult = await this.getExecutionContext(
+      tool,
+      toolCall,
+      agentId,
+    );
     if ("error" in contextResult) {
       return contextResult.error;
     }
@@ -141,7 +162,7 @@ class McpClient {
     toolCall: CommonToolCall,
     agentId: string,
   ): Promise<
-    | { tool: CommonMcpToolDefinition; catalogItem: any }
+    | { tool: McpToolWithServerMetadata; catalogItem: InternalMcpCatalog }
     | { error: CommonToolResult }
   > {
     // Get MCP tool
@@ -193,7 +214,7 @@ class McpClient {
    * Get execution target and secrets
    */
   private async getExecutionContext(
-    tool: CommonMcpToolDefinition,
+    tool: McpToolWithServerMetadata,
     toolCall: CommonToolCall,
     agentId: string,
   ): Promise<
@@ -238,10 +259,12 @@ class McpClient {
    * Get appropriate transport based on server type and configuration
    */
   private async getTransport(
-    catalogItem: any,
+    catalogItem: InternalMcpCatalog,
     targetMcpServerId: string,
     secrets: Record<string, unknown>,
-  ): Promise<import("@modelcontextprotocol/sdk/shared/transport.js").Transport> {
+  ): Promise<
+    import("@modelcontextprotocol/sdk/shared/transport.js").Transport
+  > {
     if (catalogItem.serverType === "local") {
       const usesStreamableHttp =
         await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
@@ -251,7 +274,9 @@ class McpClient {
         const url =
           McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
         if (!url) {
-          throw new Error("No HTTP endpoint URL found for streamable-http server");
+          throw new Error(
+            "No HTTP endpoint URL found for streamable-http server",
+          );
         }
 
         return new StreamableHTTPClientTransport(new URL(url), {
@@ -285,10 +310,9 @@ class McpClient {
         headers.Authorization = `Bearer ${secrets.access_token}`;
       }
 
-      return new StreamableHTTPClientTransport(
-        new URL(catalogItem.serverUrl),
-        { requestInit: { headers: new Headers(headers) } },
-      );
+      return new StreamableHTTPClientTransport(new URL(catalogItem.serverUrl), {
+        requestInit: { headers: new Headers(headers) },
+      });
     }
 
     throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
@@ -358,7 +382,11 @@ class McpClient {
     isError: boolean,
     template: string | null,
   ): Promise<CommonToolResult> {
-    const modifiedContent = this.applyTemplate(content, template, toolCall.name);
+    const modifiedContent = this.applyTemplate(
+      content,
+      template,
+      toolCall.name,
+    );
 
     const toolResult: CommonToolResult = {
       id: toolCall.id,
@@ -388,7 +416,12 @@ class McpClient {
         toolResult,
       });
 
-      const logData: any = {
+      const logData: {
+        id: string;
+        toolName: string;
+        error?: string;
+        resultContent?: string;
+      } = {
         id: savedToolCall.id,
         toolName: toolCall.name,
       };

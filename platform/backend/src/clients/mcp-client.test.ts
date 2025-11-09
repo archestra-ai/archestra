@@ -31,11 +31,12 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } = vi.hoisted(() => ({
-  mockUsesStreamableHttp: vi.fn(),
-  mockGetHttpEndpointUrl: vi.fn(),
-  mockGetPod: vi.fn(),
-}));
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } =
+  vi.hoisted(() => ({
+    mockUsesStreamableHttp: vi.fn(),
+    mockGetHttpEndpointUrl: vi.fn(),
+    mockGetPod: vi.fn(),
+  }));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
@@ -634,7 +635,7 @@ describe("McpClient", () => {
 
         // Mock K8sPod instance
         const mockK8sPod = {
-          k8sAttachClient: {} as any,
+          k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
           k8sNamespace: "default",
           k8sPodName: "mcp-test-pod",
         };

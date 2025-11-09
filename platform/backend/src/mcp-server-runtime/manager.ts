@@ -1,4 +1,3 @@
-import type { IncomingMessage } from "node:http";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
@@ -309,23 +308,6 @@ class McpServerRuntimeManager {
       );
       throw error;
     }
-  }
-
-  /**
-   * Stream data to/from a pod (for stdio-based MCP servers)
-   */
-  async streamToPod(
-    mcpServerId: string,
-    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-    request: any,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
-    if (!k8sPod) {
-      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
-    }
-
-    await k8sPod.streamToPod(request, responseStream);
   }
 
   /**

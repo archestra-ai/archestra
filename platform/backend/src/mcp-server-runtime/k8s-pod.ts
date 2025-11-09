@@ -1,5 +1,4 @@
-import type { IncomingMessage } from "node:http";
-import { PassThrough, Readable, Writable } from "node:stream";
+import { PassThrough } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
@@ -35,9 +34,6 @@ export default class K8sPod {
   assignedHttpPort?: number;
   // Track the HTTP endpoint URL for streamable-http servers
   httpEndpointUrl?: string;
-
-  // Mutex to serialize attach sessions (only one at a time)
-  private attachQueue: Promise<void> = Promise.resolve();
 
   constructor(
     mcpServer: McpServer,
@@ -735,147 +731,6 @@ export default class K8sPod {
   async removePod(): Promise<void> {
     await this.stopPod();
     await this.deleteK8sSecret();
-  }
-
-  /**
-   * Stream data to/from the pod (for stdio-based MCP servers)
-   */
-  async streamToPod(
-    request: unknown,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    // Serialize attach sessions using a queue to prevent concurrent sessions
-    // (kubectl attach doesn't support multiple simultaneous sessions to the same pod)
-    const result = new Promise<void>((resolveOuter, rejectOuter) => {
-      this.attachQueue = this.attachQueue.then(async () => {
-        try {
-          await this.doStreamToPod(request, responseStream);
-          resolveOuter();
-        } catch (error) {
-          rejectOuter(error);
-        }
-      });
-    });
-
-    return result;
-  }
-
-  /**
-   * Internal method to stream data to/from the pod
-   */
-  private async doStreamToPod(
-    request: unknown,
-    responseStream: IncomingMessage,
-  ): Promise<void> {
-    try {
-      // Use attach to connect to the main MCP server process stdin/stdout
-      // This allows us to send JSON-RPC requests and receive responses
-
-      return new Promise((resolve, reject) => {
-        let responseData = "";
-        let isResolved = false;
-
-        // Create a readable stream for stdin
-        const stdinStream = new Readable({
-          read() {
-            // This will be called when data is needed
-          },
-        });
-
-        // Create a writable stream for stdout that collects the response
-        const stdoutStream = new Writable({
-          write(chunk, _encoding, callback) {
-            responseData += chunk.toString();
-
-            // MCP JSON-RPC responses are newline-delimited
-            // Check if we have a complete JSON response
-            if (responseData.includes("\n")) {
-              const lines = responseData.split("\n");
-              for (const line of lines) {
-                if (line.trim()) {
-                  try {
-                    // Try to parse as JSON to verify it's a complete response
-                    JSON.parse(line);
-                    // Write the response to the HTTP response stream
-                    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-                    (responseStream as any).write(line);
-                    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-                    (responseStream as any).end();
-                    if (!isResolved) {
-                      isResolved = true;
-                      resolve();
-                    }
-                    return callback();
-                  } catch (_e) {
-                    // Not valid JSON yet, continue accumulating
-                  }
-                }
-              }
-            }
-            callback();
-          },
-          final(callback) {
-            if (!isResolved) {
-              // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
-              (responseStream as any).end();
-              isResolved = true;
-              resolve();
-            }
-            callback();
-          },
-        });
-
-        // Handle errors
-        stdoutStream.on("error", (error) => {
-          if (!isResolved) {
-            isResolved = true;
-            reject(error);
-          }
-        });
-
-        stdinStream.on("error", (error) => {
-          if (!isResolved) {
-            isResolved = true;
-            reject(error);
-          }
-        });
-
-        // Attach to the pod's main process
-        this.k8sAttach
-          .attach(
-            this.namespace,
-            this.podName,
-            "mcp-server",
-            stdoutStream,
-            null, // stderr - not needed for MCP JSON-RPC
-            stdinStream,
-            false /* tty */,
-          )
-          .then((ws) => {
-            // Send the JSON-RPC request to the MCP server's stdin
-            const requestJson = `${JSON.stringify(request)}\n`;
-            stdinStream.push(requestJson);
-
-            // Set a timeout to close the connection if no response
-            setTimeout(() => {
-              if (!isResolved) {
-                isResolved = true;
-                ws.close();
-                reject(new Error("Timeout waiting for MCP server response"));
-              }
-            }, 30000); // 30 second timeout
-          })
-          .catch((error) => {
-            if (!isResolved) {
-              isResolved = true;
-              reject(error);
-            }
-          });
-      });
-    } catch (error) {
-      logger.error({ err: error }, `Failed to stream to pod ${this.podName}:`);
-      throw error;
-    }
   }
 
   /**

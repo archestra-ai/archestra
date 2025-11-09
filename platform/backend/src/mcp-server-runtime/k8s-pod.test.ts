@@ -2,6 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import type { z } from "zod";
+import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 

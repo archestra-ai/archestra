@@ -6,15 +6,16 @@ import {
 } from "fastify-type-provider-zod";
 import type { z } from "zod";
 import config from "@/config";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import { AgentToolModel, ToolModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import openAiProxyRoutes, { injectTools } from "./openai";
 
 describe("OpenAI injectTools", () => {
   let agentId: string;
 
-  beforeEach(async () => {
-    const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
+  beforeEach(async ({ makeAgent }) => {
+    const agent = await makeAgent();
     agentId = agent.id;
   });
 

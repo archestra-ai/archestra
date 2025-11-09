@@ -8,6 +8,7 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
+import { beforeEach, describe, expect, test, vi } from "@/test";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK

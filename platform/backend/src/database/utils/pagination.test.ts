@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@/test";
 import { calculatePaginationMeta, createPaginatedResult } from "./pagination";
 
 describe("Pagination Utilities", () => {

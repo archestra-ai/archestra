@@ -1,3 +1,4 @@
+import { MEMBER_ROLE_NAME } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -28,7 +29,7 @@ export const UpdateTeamBodySchema = z.object({
 
 export const AddTeamMemberBodySchema = z.object({
   userId: z.string(),
-  role: z.string().default("member"),
+  role: z.string().default(MEMBER_ROLE_NAME),
 });
 
 export type Team = z.infer<typeof SelectTeamSchema>;

@@ -1,9 +1,5 @@
-import {
-  AgentModel,
-  AgentToolModel,
-  ToolModel,
-  TrustedDataPolicyModel,
-} from "@/models";
+import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Tool } from "@/types";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
 import type { CommonMessage } from "./types";
@@ -13,12 +9,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
   let toolId: string;
   let agentToolId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     // Create test agent
-    const agent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    const agent = await makeAgent();
     agentId = agent.id;
 
     // Create test tool

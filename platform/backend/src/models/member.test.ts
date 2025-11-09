@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { and, eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import db, { schema } from "@/database";
+import { afterEach, beforeEach, describe, expect, it } from "@/test";
 import MemberModel from "./member";
 
 describe("MemberModel", () => {

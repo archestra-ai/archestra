@@ -1,4 +1,5 @@
 import db, { schema } from "@/database";
+import { describe, expect, test } from "@/test";
 import AgentLabelModel from "./agent-label";
 
 async function createTestAgent(): Promise<string> {

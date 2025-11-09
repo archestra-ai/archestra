@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import db, { schema } from "@/database";
+import { afterEach, beforeEach, describe, expect, it } from "@/test";
 import AccountModel from "./account";
 
 describe("AccountModel", () => {

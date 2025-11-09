@@ -1,5 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { MockedFunction } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockedFunction,
+  vi,
+} from "@/test";
 
 // Mock modules with factory functions to avoid hoisting issues
 vi.mock("@/auth", () => ({

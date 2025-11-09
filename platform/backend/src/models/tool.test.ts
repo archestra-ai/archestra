@@ -1,8 +1,4 @@
-import {
-  createTestAdmin,
-  createTestOrganization,
-  createTestUser,
-} from "@/test-utils";
+import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -12,8 +8,8 @@ import ToolModel from "./tool";
 
 describe("ToolModel", () => {
   describe("Access Control", () => {
-    test("admin can see all tools", async () => {
-      const adminId = await createTestAdmin();
+    test("admin can see all tools", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
 
       const agent1 = await AgentModel.create({
         name: "Agent1",
@@ -38,30 +34,22 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(adminId, true);
+      const tools = await ToolModel.findAll(admin.id, true);
       expect(tools).toHaveLength(2);
     });
 
-    test("member only sees tools for accessible agents", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("member only sees tools for accessible agents", async ({ makeUser, makeAdmin, makeOrganization, makeTeam }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create teams and add users
-      const team1 = await TeamModel.create({
-        name: "Team 1",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team1.id, user1Id);
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      await TeamModel.addMember(team1.id, user1.id);
 
-      const team2 = await TeamModel.create({
-        name: "Team 2",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team2.id, user2Id);
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
+      await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents with team assignments
       const agent1 = await AgentModel.create({
@@ -87,13 +75,13 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(user1Id, false);
+      const tools = await ToolModel.findAll(user1.id, false);
       expect(tools).toHaveLength(1);
       expect(tools[0].id).toBe(tool1.id);
     });
 
-    test("member with no access sees no tools", async () => {
-      const user2Id = await createTestUser();
+    test("member with no access sees no tools", async ({ makeUser }) => {
+      const user = await makeUser();
 
       const agent1 = await AgentModel.create({
         name: "Agent1",
@@ -107,7 +95,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(user2Id, false);
+      const tools = await ToolModel.findAll(user.id, false);
       expect(tools).toHaveLength(0);
     });
 

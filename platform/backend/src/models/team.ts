@@ -1,42 +1,15 @@
+import { MEMBER_ROLE_NAME } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-
-export interface Team {
-  id: string;
-  name: string;
-  description: string | null;
-  organizationId: string;
-  createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-  members?: TeamMember[];
-}
-
-export interface TeamMember {
-  id: string;
-  teamId: string;
-  userId: string;
-  role: string;
-  createdAt: Date;
-}
-
-export interface CreateTeamInput {
-  name: string;
-  description?: string;
-  organizationId: string;
-  createdBy: string;
-}
-
-export interface UpdateTeamInput {
-  name?: string;
-  description?: string;
-}
+import type { InsertTeam, Team, TeamMember, UpdateTeam } from "@/types";
 
 class TeamModel {
   /**
    * Create a new team
    */
-  static async create(input: CreateTeamInput): Promise<Team> {
+  static async create(
+    input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt">,
+  ): Promise<Team> {
     const teamId = crypto.randomUUID();
     const now = new Date();
 
@@ -101,10 +74,7 @@ class TeamModel {
   /**
    * Update a team
    */
-  static async update(
-    id: string,
-    input: UpdateTeamInput,
-  ): Promise<Team | null> {
+  static async update(id: string, input: UpdateTeam): Promise<Team | null> {
     const [updatedTeam] = await db
       .update(schema.teamsTable)
       .set({
@@ -151,7 +121,7 @@ class TeamModel {
   static async addMember(
     teamId: string,
     userId: string,
-    role: string = "member",
+    role: string = MEMBER_ROLE_NAME,
   ): Promise<TeamMember> {
     const memberId = crypto.randomUUID();
     const now = new Date();
@@ -201,7 +171,7 @@ class TeamModel {
       }),
     );
 
-    return teams.filter((team): team is Team => team !== null);
+    return teams.filter((team) => team !== null);
   }
 
   /**

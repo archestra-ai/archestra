@@ -1,6 +1,13 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@shared";
-import type { MockedFunction } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockedFunction,
+  vi,
+} from "@/test";
 import { hasPermission } from "./utils";
 
 // Mock the better-auth module

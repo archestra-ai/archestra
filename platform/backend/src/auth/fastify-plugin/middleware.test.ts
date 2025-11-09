@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { describe, expect, it, vi } from "@/test";
 import { Authnz } from "./middleware";
 
 describe("Authnz", () => {

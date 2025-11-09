@@ -1,17 +1,15 @@
 import type { z } from "zod";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import { AgentToolModel, ToolModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
 import { injectTools } from "./anthropic";
 
 describe("Anthropic injectTools", () => {
   let agentId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     // Create test agent
-    const agent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    const agent = await makeAgent();
     agentId = agent.id;
   });
 

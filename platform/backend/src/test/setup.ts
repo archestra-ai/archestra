@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests";
 
@@ -45,7 +45,7 @@ beforeEach(async () => {
   }
 
   // Replace the mocked database module with our test database
-  const dbModule = await import("./database/index.js");
+  const dbModule = await import("../database/index.js");
 
   // Replace the default export with our test database
   Object.defineProperty(dbModule, "default", {

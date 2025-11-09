@@ -172,7 +172,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
-- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test-setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
+- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
 
 **Team-based Access Control**:
 
@@ -266,4 +266,18 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
 - **Frontend**: Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
-- **Test Data**: Use model methods for creating/manipulating test data, following the pattern in `backend/src/test-setup.ts`
+- **Test Data**: Always prefer fixtures from `@/test` for setting up test data. Use factory functions like `makeUser()`, `makeOrganization()`, `makeTeam()` etc. that provide reasonable defaults with override capabilities. Reuse existing fixtures when possible, add new ones only when necessary.
+
+**Test Fixtures Usage**:
+```typescript
+import { test, expect } from "@/test";
+
+// Access fixtures via test context destructuring
+test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
+  const user = await makeUser({ email: "custom@test.com" });
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id, { name: "Custom Team" });
+
+  // test logic here...
+});
+```

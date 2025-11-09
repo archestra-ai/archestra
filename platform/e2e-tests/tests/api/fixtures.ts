@@ -30,19 +30,21 @@ const makeApiRequest = async ({
     "Content-Type": "application/json",
     Origin: UI_BASE_URL,
   },
+  ignoreStatusCheck = false,
 }: {
   request: APIRequestContext;
   method: "get" | "post" | "put" | "patch" | "delete";
   urlSuffix: string;
   data?: unknown;
   headers?: Record<string, string>;
+  ignoreStatusCheck?: boolean;
 }) => {
   const response = await request[method](`${API_BASE_URL}${urlSuffix}`, {
     headers,
     data,
   });
 
-  if (!response.ok()) {
+  if (!ignoreStatusCheck && !response.ok()) {
     throw new Error(
       `Failed to ${method} ${urlSuffix} with data ${JSON.stringify(data)}: ${response.status()} ${await response.text()}`,
     );

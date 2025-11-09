@@ -105,6 +105,7 @@ test.describe("Agents API CRUD", () => {
       request,
       method: "get",
       urlSuffix: `/api/agents/${createdAgent.id}`,
+      ignoreStatusCheck: true,
     });
     expect(getResponse.status()).toBe(404);
   });

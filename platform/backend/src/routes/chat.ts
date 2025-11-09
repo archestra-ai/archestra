@@ -3,14 +3,15 @@ import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
+import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
-import { ConversationModel, MessageModel } from "@/models";
+import { AgentModel, ConversationModel, MessageModel } from "@/models";
 import {
   constructResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
+  SelectConversationWithAgentSchema,
   SelectConversationWithMessagesSchema,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -423,12 +424,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Get MCP tools from remote server
-      const mcpTools = await getChatMcpTools();
+      // Get MCP tools for the agent via MCP Gateway
+      const mcpTools = await getChatMcpTools(conversation.agentId);
 
       fastify.log.info(
         {
           conversationId,
+          agentId: conversation.agentId,
           userId: user.id,
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
@@ -437,10 +439,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Create Anthropic client (call directly to Anthropic API)
+      // Create Anthropic client pointing to LLM Proxy
+      // URL format: /v1/anthropic/:agentId/v1/messages
       const anthropic = createAnthropic({
         apiKey: config.chat.anthropic.apiKey,
-        baseURL: config.chat.anthropic.baseUrl,
+        baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
       });
 
       // Stream with AI SDK
@@ -549,14 +552,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetChatConversations,
-        description: "List all conversations for current user",
+        description:
+          "List all conversations for current user with agent details",
         tags: ["Chat"],
-        response: constructResponseSchema(z.array(SelectConversationSchema)),
+        response: constructResponseSchema(
+          z.array(SelectConversationWithAgentSchema),
+        ),
       },
     },
     async (request, reply) => {
       return reply.send(
-        await ConversationModel.findAll(
+        await ConversationModel.findAllWithAgent(
           request.user.id,
           request.organizationId,
         ),
@@ -595,25 +601,93 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chat/agents/:agentId/mcp-tools",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentMcpTools,
+        description: "Get MCP tools available for an agent via MCP Gateway",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              name: z.string(),
+              description: z.string(),
+              parameters: z.record(z.string(), z.any()).nullable(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { agentId }, user }, reply) => {
+      // Verify agent exists and user has access
+      const agent = await AgentModel.findById(agentId, user.id);
+
+      if (!agent) {
+        return reply.status(404).send({
+          error: {
+            message: "Agent not found",
+            type: "not_found",
+          },
+        });
+      }
+
+      // Fetch MCP tools from gateway (same as used in chat)
+      const mcpTools = await getChatMcpTools(agentId);
+
+      // Convert AI SDK Tool format to simple array for frontend
+      const tools = Object.entries(mcpTools).map(([name, tool]) => ({
+        name,
+        description: tool.description || "",
+        parameters:
+          (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
+            ?.jsonSchema || null,
+      }));
+
+      return reply.send(tools);
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations",
     {
       schema: {
         operationId: RouteId.CreateChatConversation,
-        description: "Create a new conversation",
+        description: "Create a new conversation with an agent",
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
+          agentId: true,
           title: true,
           selectedModel: true,
-        }).partial(),
+        })
+          .required({ agentId: true })
+          .partial({ title: true, selectedModel: true }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ body: { title, selectedModel }, user, organizationId }, reply) => {
+    async (
+      { body: { agentId, title, selectedModel }, user, organizationId },
+      reply,
+    ) => {
+      // Validate that the agent exists and user has access to it
+      const agent = await AgentModel.findById(agentId);
+
+      if (!agent) {
+        return reply.status(404).send({
+          error: {
+            message: "Agent not found",
+            type: "not_found",
+          },
+        });
+      }
+
+      // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
           organizationId,
+          agentId,
           title,
           selectedModel: selectedModel || config.chat.defaultModel,
         }),
@@ -668,40 +742,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user, organizationId }, reply) => {
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
-    },
-  );
-
-  fastify.get(
-    "/api/chat/mcp-tools",
-    {
-      schema: {
-        operationId: RouteId.GetChatMcpTools,
-        description: "List available MCP tools for chat",
-        tags: ["Chat"],
-        response: constructResponseSchema(
-          z.array(
-            z.object({
-              name: z.string(),
-              description: z.string().optional(),
-              inputSchema: z.any(),
-            }),
-          ),
-        ),
-      },
-    },
-    async (_request, reply) => {
-      const client = await getChatMcpClient();
-      if (!client) {
-        return reply.send([]);
-      }
-
-      try {
-        const { tools } = await client.listTools();
-        return reply.send(tools);
-      } catch (error) {
-        fastify.log.error({ error }, "Failed to list MCP tools");
-        return reply.send([]);
-      }
     },
   );
 };

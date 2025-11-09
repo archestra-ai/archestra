@@ -344,6 +344,20 @@
       "when": 1762613941751,
       "tag": "0048_demonic_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1762695810148,
+      "tag": "0049_round_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1762709144647,
+      "tag": "0050_steady_talisman",
+      "breakpoints": true
     }
   ]
 }

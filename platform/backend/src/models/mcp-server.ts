@@ -1,5 +1,5 @@
 import { eq, inArray, isNull } from "drizzle-orm";
-import mcpClient, { constructMcpProxyUrl } from "@/clients/mcp-client";
+import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
@@ -304,6 +304,13 @@ class McpServerModel {
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
+    if (!catalogItem) {
+      logger.warn(
+        `No catalog item found for MCP server ${mcpServer.name}, cannot fetch tools`,
+      );
+      return [];
+    }
+
     // Load secrets if secretId is present
     let secrets: Record<string, unknown> = {};
     if (mcpServer.secretId) {
@@ -313,88 +320,27 @@ class McpServerModel {
       }
     }
 
-    /**
-     * For remote servers, connect using the server URL and secrets
-     */
-    if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-      try {
-        const config = mcpClient.createServerConfig({
-          name: mcpServer.name,
-          url: catalogItem.serverUrl,
-          secrets,
-        });
-        const tools = await mcpClient.connectAndGetTools(config);
-        // Transform to ensure description is always a string
-        return tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || `Tool: ${tool.name}`,
-          inputSchema: tool.inputSchema,
-        }));
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to get tools from remote MCP server ${mcpServer.name}:`,
-        );
-        throw error;
-      }
+    try {
+      // Use the new structured API for all server types
+      const tools = await mcpClient.connectAndGetTools({
+        catalogItem,
+        mcpServerId: mcpServer.id,
+        secrets,
+      });
+
+      // Transform to ensure description is always a string
+      return tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description || `Tool: ${tool.name}`,
+        inputSchema: tool.inputSchema,
+      }));
+    } catch (error) {
+      logger.error(
+        { err: error },
+        `Failed to get tools from MCP server ${mcpServer.name} (type: ${catalogItem.serverType}):`,
+      );
+      throw error;
     }
-
-    /**
-     * For local servers, check transport type and use appropriate endpoint
-     */
-    if (catalogItem?.serverType === "local") {
-      try {
-        // Check if this is a streamable-http server
-        const usesStreamableHttp =
-          await McpServerRuntimeManager.usesStreamableHttp(mcpServer.id);
-
-        let url: string;
-        if (usesStreamableHttp) {
-          // Use the HTTP endpoint URL for streamable-http servers
-          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
-            mcpServer.id,
-          );
-          if (!httpEndpointUrl) {
-            throw new Error(
-              `No HTTP endpoint URL found for streamable-http server ${mcpServer.name}`,
-            );
-          }
-          url = httpEndpointUrl;
-        } else {
-          // Use the MCP proxy endpoint for stdio servers
-          url = constructMcpProxyUrl(mcpServer.id);
-        }
-
-        const config = mcpClient.createServerConfig({
-          name: mcpServer.name,
-          url,
-          secrets, // Local servers might still use secrets for API keys etc.
-        });
-
-        logger.warn(
-          `Attempting to get tools from local MCP server ${mcpServer.name} with config ${JSON.stringify(config)}`,
-        );
-
-        const tools = await mcpClient.connectAndGetTools(config);
-        // Transform to ensure description is always a string
-        return tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description || `Tool: ${tool.name}`,
-          inputSchema: tool.inputSchema,
-        }));
-      } catch (error) {
-        logger.error(
-          { err: error },
-          `Failed to get tools from local MCP server ${mcpServer.name}:`,
-        );
-        throw error;
-      }
-    }
-
-    /**
-     * For other/unknown servers, return empty array
-     */
-    return [];
   }
 
   /**
@@ -414,18 +360,18 @@ class McpServerModel {
       }
     }
 
-    // For other remote servers, check if we can connect using catalog info
+    // Check if we can connect using catalog info
     if (catalogId) {
       try {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClient.createServerConfig({
-            name: serverName,
-            url: catalogItem.serverUrl,
+        if (catalogItem?.serverType === "remote") {
+          // Use a temporary ID for validation (we don't have a real server ID yet)
+          const tools = await mcpClient.connectAndGetTools({
+            catalogItem,
+            mcpServerId: "validation",
             secrets,
           });
-          const tools = await mcpClient.connectAndGetTools(config);
           return tools.length > 0;
         }
       } catch (error) {

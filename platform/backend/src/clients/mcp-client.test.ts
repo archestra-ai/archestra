@@ -31,15 +31,18 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 // Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
-const { mockUsesStreamableHttp, mockGetHttpEndpointUrl } = vi.hoisted(() => ({
-  mockUsesStreamableHttp: vi.fn(),
-  mockGetHttpEndpointUrl: vi.fn(),
-}));
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl, mockGetPod } =
+  vi.hoisted(() => ({
+    mockUsesStreamableHttp: vi.fn(),
+    mockGetHttpEndpointUrl: vi.fn(),
+    mockGetPod: vi.fn(),
+  }));
 
 vi.mock("@/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     usesStreamableHttp: mockUsesStreamableHttp,
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
+    getPod: mockGetPod,
   },
 }));
 
@@ -84,6 +87,7 @@ describe("McpClient", () => {
     mockClose.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
+    mockGetPod.mockReset();
   });
 
   describe("executeToolCall", () => {
@@ -614,11 +618,11 @@ describe("McpClient", () => {
         });
       });
 
-      test("uses stdio transport when streamable-http is false", async () => {
+      test("uses K8s attach transport when streamable-http is false", async () => {
         // Create tool assigned to agent
         const tool = await ToolModel.createToolIfNotExists({
           name: "local-streamable-http-server__stdio_tool",
-          description: "Tool using stdio",
+          description: "Tool using K8s attach",
           parameters: {},
           catalogId: localCatalogId,
           mcpServerId: localMcpServerId,
@@ -626,18 +630,21 @@ describe("McpClient", () => {
 
         await AgentToolModel.create(agentId, tool.id);
 
-        // Mock runtime manager to indicate stdio transport
+        // Mock runtime manager to indicate stdio transport (not HTTP)
         mockUsesStreamableHttp.mockResolvedValue(false);
 
-        // Mock fetch for stdio proxy endpoint
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({
-            result: {
-              content: [{ type: "text", text: "Success from stdio" }],
-              isError: false,
-            },
-          }),
+        // Mock K8sPod instance
+        const mockK8sPod = {
+          k8sAttachClient: {} as import("@kubernetes/client-node").Attach,
+          k8sNamespace: "default",
+          k8sPodName: "mcp-test-pod",
+        };
+        mockGetPod.mockReturnValue(mockK8sPod);
+
+        // Mock the tool call response
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Success from K8s attach" }],
+          isError: false,
         });
 
         const toolCall = {
@@ -648,21 +655,21 @@ describe("McpClient", () => {
 
         const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        // Verify stdio proxy was used (not HTTP transport)
+        // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
         expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
-        expect(mockCallTool).not.toHaveBeenCalled();
+        expect(mockGetPod).toHaveBeenCalledWith(localMcpServerId);
 
-        // Verify fetch was called with proxy endpoint
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining("/mcp_proxy/"),
-          expect.any(Object),
-        );
+        // Verify MCP SDK client was used
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "stdio_tool",
+          arguments: { input: "test" },
+        });
 
         // Verify result
-
         expect(result).toMatchObject({
           id: "call_1",
+          content: [{ type: "text", text: "Success from K8s attach" }],
           isError: false,
         });
       });

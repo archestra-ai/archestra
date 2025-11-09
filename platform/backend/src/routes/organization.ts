@@ -1,5 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import db, { schema } from "@/database";
 import { OrganizationModel } from "@/models";
 import {
   constructResponseSchema,
@@ -15,7 +17,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetOrganization,
         description: "Get organization details",
         tags: ["Organization"],
-        response: constructResponseSchema(SelectOrganizationSchema),
+        response: constructResponseSchema(
+          SelectOrganizationSchema.extend({
+            onboardingComplete: z.boolean(),
+          }),
+        ),
       },
     },
     async ({ organizationId }, reply) => {
@@ -31,7 +37,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(organization);
+        // Check if onboarding is complete by checking if there are any logs
+        const [interaction] = await db
+          .select()
+          .from(schema.interactionsTable)
+          .limit(1);
+        const [mcpToolCall] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .limit(1);
+
+        const onboardingComplete = !!(interaction || mcpToolCall);
+
+        return reply.send({
+          ...organization,
+          onboardingComplete,
+        });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

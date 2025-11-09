@@ -1,7 +1,7 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -15,7 +15,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
-import { N8nConnectionDialog } from "@/components/chat/n8n-connection-dialog";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import {
   Tooltip,
@@ -23,26 +22,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type ConversationWithAgent,
+  useChatAgentMcpTools,
+  useConversations,
+  useCreateConversation,
+  useDeleteConversation,
+} from "@/lib/chat.query";
 
-interface Conversation {
-  id: string;
-  title: string | null;
-  selectedModel: string;
-  userId: string;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ConversationWithMessages extends Conversation {
+interface ConversationWithMessages extends ConversationWithAgent {
   messages: UIMessage[];
-}
-
-interface McpTool {
-  name: string;
-  description?: string;
-  // biome-ignore lint/suspicious/noExplicitAny: MCP tool schemas are dynamic and come from server
-  inputSchema: any;
 }
 
 export default function ChatPage() {
@@ -52,6 +41,7 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
+  const [hideToolCalls, setHideToolCalls] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
 
   // Initialize conversation ID from URL on mount
@@ -72,18 +62,8 @@ export default function ChatPage() {
     }
   };
 
-  // Fetch conversations
-  const { data: conversations = [] } = useQuery<Conversation[]>({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const res = await fetch("/api/chat/conversations");
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - don't refetch unless explicitly invalidated
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-  });
+  // Fetch conversations with agent details
+  const { data: conversations = [] } = useConversations();
 
   // Fetch conversation with messages
   const { data: conversation } = useQuery<ConversationWithMessages>({
@@ -100,57 +80,52 @@ export default function ChatPage() {
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
   });
 
-  // Fetch available MCP tools
-  const { data: mcpTools = [] } = useQuery<McpTool[]>({
-    queryKey: ["mcp-tools"],
-    queryFn: async () => {
-      const res = await fetch("/api/chat/mcp-tools");
-      if (!res.ok) throw new Error("Failed to fetch MCP tools");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
+  // Get current agent info
+  const currentAgent =
+    conversation?.agent ||
+    conversations.find((c) => c.id === conversationId)?.agent;
 
-  // Create conversation mutation
-  const createConversation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/chat/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error("Failed to create conversation");
-      return res.json();
+  // Fetch MCP tools from gateway (same as used in chat backend)
+  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgent?.id);
+
+  // Group tools by MCP server name (everything before the last __)
+  const groupedTools = mcpTools.reduce(
+    (acc, tool) => {
+      const parts = tool.name.split("__");
+      // Last part is tool name, everything else is server name
+      const serverName =
+        parts.length > 1 ? parts.slice(0, -1).join("__") : "default";
+      if (!acc[serverName]) {
+        acc[serverName] = [];
+      }
+      acc[serverName].push(tool);
+      return acc;
     },
-    onSuccess: (newConversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    {} as Record<string, typeof mcpTools>,
+  );
+
+  // Create conversation mutation (requires agentId)
+  const createConversationMutation = useCreateConversation();
+  const handleSelectAgent = async (agentId: string) => {
+    const newConversation =
+      await createConversationMutation.mutateAsync(agentId);
+    if (newConversation) {
       selectConversation(newConversation.id);
-    },
-  });
+    }
+  };
 
   // Delete conversation mutation
-  const deleteConversation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/chat/conversations/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete conversation");
-      return res.json();
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+  const deleteConversationMutation = useDeleteConversation();
+  const handleDeleteConversation = async (id: string) => {
+    await deleteConversationMutation.mutateAsync(id);
 
-      // If we deleted the selected conversation, clear the selection
-      if (conversationId === deletedId) {
-        setConversationId(undefined);
-        setMessages([]);
-        router.push(pathname);
-      }
-    },
-  });
+    // If we deleted the selected conversation, clear the selection
+    if (conversationId === id) {
+      setConversationId(undefined);
+      setMessages([]);
+      router.push(pathname);
+    }
+  };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
   const { messages, sendMessage, status, setMessages } = useChat({
@@ -222,22 +197,6 @@ export default function ChatPage() {
     });
   };
 
-  // Group tools by MCP server (prefix before "__")
-  const mcpServerGroups = mcpTools.reduce(
-    (acc, tool) => {
-      const prefix = tool.name.includes("__")
-        ? tool.name.split("__")[0]
-        : "other";
-
-      if (!acc[prefix]) {
-        acc[prefix] = [];
-      }
-      acc[prefix].push(tool);
-      return acc;
-    },
-    {} as Record<string, McpTool[]>,
-  );
-
   return (
     <div className="flex h-screen">
       {/* Sidebar - Conversation List */}
@@ -245,9 +204,11 @@ export default function ChatPage() {
         conversations={conversations}
         selectedConversationId={conversationId}
         onSelectConversation={selectConversation}
-        onCreateConversation={() => createConversation.mutate()}
-        onDeleteConversation={(id) => deleteConversation.mutate(id)}
-        isCreatingConversation={createConversation.isPending}
+        onSelectAgent={handleSelectAgent}
+        onDeleteConversation={handleDeleteConversation}
+        isCreatingConversation={createConversationMutation.isPending}
+        hideToolCalls={hideToolCalls}
+        onToggleHideToolCalls={setHideToolCalls}
       />
 
       {/* Main Chat Area */}
@@ -264,42 +225,46 @@ export default function ChatPage() {
             {messages.length === 0 ? (
               <PromptSuggestions onSelectPrompt={handleSelectPrompt} />
             ) : (
-              <ChatMessages messages={messages} />
+              <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             )}
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
-                {mcpTools.length > 0 && (
+                {currentAgent && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(mcpServerGroups).map(
-                            ([serverName, tools]) => (
-                              <Tooltip key={serverName}>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                    <span className="font-medium">
-                                      {serverName}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      ({tools.length}{" "}
-                                      {tools.length === 1 ? "tool" : "tools"})
-                                    </span>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="max-w-sm max-h-64 overflow-y-auto"
-                                >
-                                  <div className="space-y-1">
-                                    {tools.map((tool) => (
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(groupedTools).map(
+                          ([serverName, tools]) => (
+                            <Tooltip key={serverName}>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                                  <span className="font-medium">
+                                    {serverName}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    ({tools.length}{" "}
+                                    {tools.length === 1 ? "tool" : "tools"})
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="max-w-sm max-h-64 overflow-y-auto"
+                              >
+                                <div className="space-y-1">
+                                  {tools.map((tool) => {
+                                    const parts = tool.name.split("__");
+                                    const toolName =
+                                      parts.length > 1
+                                        ? parts[parts.length - 1]
+                                        : tool.name;
+                                    return (
                                       <div
                                         key={tool.name}
                                         className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
                                       >
                                         <div className="font-mono font-medium">
-                                          {tool.name.split("__")[1] ||
-                                            tool.name}
+                                          {toolName}
                                         </div>
                                         {tool.description && (
                                           <div className="text-muted-foreground mt-0.5">
@@ -307,21 +272,15 @@ export default function ChatPage() {
                                           </div>
                                         )}
                                       </div>
-                                    ))}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            ),
-                          )}
-                        </div>
-                        <N8nConnectionDialog />
+                                    );
+                                  })}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ),
+                        )}
                       </div>
                     </TooltipProvider>
-                  </div>
-                )}
-                {mcpTools.length === 0 && (
-                  <div className="flex justify-end">
-                    <N8nConnectionDialog />
                   </div>
                 )}
                 <PromptInput onSubmit={handleSubmit}>

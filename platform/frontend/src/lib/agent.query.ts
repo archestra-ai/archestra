@@ -12,6 +12,7 @@ const {
   getAgents,
   getAllAgents,
   getDefaultAgent,
+  getAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
@@ -65,6 +66,20 @@ export function useDefaultAgent(params?: {
     queryKey: ["agents", "default"],
     queryFn: async () => (await getDefaultAgent()).data ?? null,
     initialData: params?.initialData,
+  });
+}
+
+export function useAgent(id: string | undefined) {
+  return useQuery({
+    queryKey: ["agents", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getAgent({ path: { id } });
+      return response.data ?? null;
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 }
 

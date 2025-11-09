@@ -20,8 +20,17 @@ setup("authenticate", async ({ page }) => {
   // Wait until the page redirects to the authenticated area
   await page.waitForURL(`${UI_BASE_URL}/test-agent`);
 
+  // Create a minimal log to mark onboarding as complete
+  // This prevents the onboarding dialog from appearing in tests
+  await page.request.post(`${UI_BASE_URL}/api/onboarding/complete`);
+
+  // Wait for page to refresh after onboarding completion
+  await page.waitForTimeout(1000);
+
   // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({
+    timeout: 10000,
+  });
 
   // Save the authentication state to a file
   await page.context().storageState({ path: authFile });

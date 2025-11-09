@@ -130,24 +130,6 @@ export function McpConnectionInstructions({
         </p>
 
         <p className="text-sm text-muted-foreground">
-          The MCP server supports:
-        </p>
-
-        <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1 ml-2">
-          <li>
-            <CodeText className="text-xs">initialize</CodeText> - Protocol
-            handshake
-          </li>
-          <li>
-            <CodeText className="text-xs">tools/list</CodeText> - List available
-            tools
-          </li>
-          <li>
-            <CodeText className="text-xs">tools/call</CodeText> - Execute tools
-          </li>
-        </ul>
-
-        <p className="text-sm text-muted-foreground">
           Use this endpoint in MCP-compatible applications like{" "}
           <a
             href="https://docs.cursor.com/"

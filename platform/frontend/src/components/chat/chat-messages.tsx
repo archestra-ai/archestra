@@ -22,6 +22,7 @@ import {
 
 interface ChatMessagesProps {
   messages: UIMessage[];
+  hideToolCalls?: boolean;
 }
 
 // Type guards for tool parts
@@ -44,7 +45,10 @@ function isToolPart(part: any): part is {
   );
 }
 
-export function ChatMessages({ messages }: ChatMessagesProps) {
+export function ChatMessages({
+  messages,
+  hideToolCalls = false,
+}: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -77,6 +81,16 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
                   ) {
                     return null;
                   }
+                }
+
+                // Hide tool calls if hideToolCalls is true
+                if (
+                  hideToolCalls &&
+                  isToolPart(part) &&
+                  (part.type?.startsWith("tool-") ||
+                    part.type === "dynamic-tool")
+                ) {
+                  return null;
                 }
 
                 switch (part.type) {

@@ -4647,17 +4647,23 @@ export type GetChatConversationsResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
     }>;
 };
 
 export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];
 
 export type CreateChatConversationData = {
-    body?: {
+    body: {
+        agentId: string;
         title?: string | null;
         selectedModel?: string;
     };
@@ -4724,6 +4730,7 @@ export type CreateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4870,6 +4877,7 @@ export type GetChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4950,6 +4958,7 @@ export type UpdateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4959,14 +4968,16 @@ export type UpdateChatConversationResponses = {
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
 
-export type GetChatMcpToolsData = {
+export type GetChatAgentMcpToolsData = {
     body?: never;
-    path?: never;
+    path: {
+        agentId: string;
+    };
     query?: never;
-    url: '/api/chat/mcp-tools';
+    url: '/api/chat/agents/{agentId}/mcp-tools';
 };
 
-export type GetChatMcpToolsErrors = {
+export type GetChatAgentMcpToolsErrors = {
     /**
      * Default Response
      */
@@ -5014,20 +5025,22 @@ export type GetChatMcpToolsErrors = {
     };
 };
 
-export type GetChatMcpToolsError = GetChatMcpToolsErrors[keyof GetChatMcpToolsErrors];
+export type GetChatAgentMcpToolsError = GetChatAgentMcpToolsErrors[keyof GetChatAgentMcpToolsErrors];
 
-export type GetChatMcpToolsResponses = {
+export type GetChatAgentMcpToolsResponses = {
     /**
      * Default Response
      */
     200: Array<{
         name: string;
-        description?: string;
-        inputSchema: unknown;
+        description: string;
+        parameters: {
+            [key: string]: unknown;
+        } | null;
     }>;
 };
 
-export type GetChatMcpToolsResponse = GetChatMcpToolsResponses[keyof GetChatMcpToolsResponses];
+export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -9547,7 +9560,7 @@ export type GetMcpToolCallsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -9612,19 +9625,15 @@ export type GetMcpToolCallsResponses = {
             id: string;
             agentId: string;
             mcpServerName: string;
+            method: string;
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
-            };
-            toolResult: {
-                id: string;
-                content: unknown;
-                isError: boolean;
-                error?: string;
-            };
+            } | null;
+            toolResult: unknown;
             createdAt: string;
         }>;
         pagination: {
@@ -9707,19 +9716,15 @@ export type GetMcpToolCallResponses = {
         id: string;
         agentId: string;
         mcpServerName: string;
+        method: string;
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
-        };
-        toolResult: {
-            id: string;
-            content: unknown;
-            isError: boolean;
-            error?: string;
-        };
+        } | null;
+        toolResult: unknown;
         createdAt: string;
     };
 };
@@ -9874,6 +9879,80 @@ export type HandleOAuthCallbackResponses = {
 };
 
 export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
+
+export type GetOnboardingLogsStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/logs-status';
+};
+
+export type GetOnboardingLogsStatusErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOnboardingLogsStatusError = GetOnboardingLogsStatusErrors[keyof GetOnboardingLogsStatusErrors];
+
+export type GetOnboardingLogsStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasLlmProxyLogs: boolean;
+        hasMcpGatewayLogs: boolean;
+    };
+};
+
+export type GetOnboardingLogsStatusResponse = GetOnboardingLogsStatusResponses[keyof GetOnboardingLogsStatusResponses];
+
+export type CompleteOnboardingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/complete';
+};
+
+export type CompleteOnboardingErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CompleteOnboardingError = CompleteOnboardingErrors[keyof CompleteOnboardingErrors];
+
+export type CompleteOnboardingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type CompleteOnboardingResponse = CompleteOnboardingResponses[keyof CompleteOnboardingResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
@@ -10497,6 +10576,7 @@ export type GetOrganizationResponses = {
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        onboardingComplete: boolean;
     };
 };
 

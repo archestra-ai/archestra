@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   Conversation,
+  ConversationWithAgent,
   ConversationWithMessages,
   InsertConversation,
   UpdateConversation,
@@ -33,6 +34,37 @@ class ConversationModel {
       .orderBy(desc(schema.conversationsTable.updatedAt));
 
     return conversations;
+  }
+
+  static async findAllWithAgent(
+    userId: string,
+    organizationId: string,
+  ): Promise<ConversationWithAgent[]> {
+    const rows = await db
+      .select({
+        conversation: schema.conversationsTable,
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.conversationsTable.userId, userId),
+          eq(schema.conversationsTable.organizationId, organizationId),
+        ),
+      )
+      .orderBy(desc(schema.conversationsTable.updatedAt));
+
+    return rows.map((row) => ({
+      ...row.conversation,
+      agent: row.agent || { id: "", name: "Unknown" },
+    }));
   }
 
   static async findById(

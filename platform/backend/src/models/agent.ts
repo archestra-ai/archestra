@@ -82,6 +82,12 @@ class AgentModel {
       )
       .$dynamic();
 
+    // Build where conditions
+    const whereConditions: SQL[] = [];
+
+    // Exclude default agents by default
+    whereConditions.push(eq(schema.agentsTable.isDefault, false));
+
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -93,7 +99,12 @@ class AgentModel {
         return [];
       }
 
-      query = query.where(inArray(schema.agentsTable.id, accessibleAgentIds));
+      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+    }
+
+    // Apply all where conditions if any exist
+    if (whereConditions.length > 0) {
+      query = query.where(and(...whereConditions));
     }
 
     const rows = await query;
@@ -146,6 +157,9 @@ class AgentModel {
 
     // Build where clause for filters and access control
     const whereConditions: SQL[] = [];
+
+    // Exclude default agents by default
+    whereConditions.push(eq(schema.agentsTable.isDefault, false));
 
     // Add name filter if provided
     if (filters?.name) {

@@ -58,6 +58,7 @@ jobs:
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           config: .github/kind.yaml
+          cluster_name: kind
           install_only: false
 
       - name: Setup Blacksmith Builder

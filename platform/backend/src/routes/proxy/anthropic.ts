@@ -5,7 +5,7 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportUsage } from "@/llm-metrics";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
@@ -156,10 +156,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch(resolvedAgent, {
-        provider: "anthropic",
-        model: body.model,
-      }),
+      fetch: getObservableFetch("anthropic", resolvedAgent),
     });
 
     try {
@@ -569,11 +566,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
 
         if (messageStartEvent?.message.usage) {
-          const modelIdentifier = {
-            provider: "anthropic",
-            model: body.model,
-          } as const;
-          reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
+          reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
         // Store the complete interaction

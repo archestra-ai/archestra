@@ -1,13 +1,12 @@
 /**
  * Custom observability metrics for LLMs: request metrics and token usage.
  * To instrument OpenAI or Anthropic clients, pass observable fetch to the fetch option.
- * For OpenAI or Anthropic streaming mode, proxy handlers call reportUsage() after consuming the stream.
+ * For OpenAI or Anthropic streaming mode, proxy handlers call reportLLMTokens() after consuming the stream.
  * To instrument Gemini, provide its instance to getObservableGenAI, which will wrap around its model calls.
  */
 
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
-import { llmPricing } from "@/llm-pricing";
 import logger from "@/logging";
 import type { Agent, SupportedProvider } from "@/types";
 import * as utils from "./routes/proxy/utils";
@@ -17,19 +16,10 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-// baselineModel is the model requested by user if the cost optimization is in effect
-type ProviderModel = {
-  provider: SupportedProvider;
-  model: string;
-  baselineModel?: string;
-};
-
 // LLM-specific metrics matching fastify-metrics format for consistency.
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
-let llmCostCounter: client.Counter<string>;
-let llmBaselineCostCounter: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -50,13 +40,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   const labelKeysChanged =
     JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
 
-  if (
-    !labelKeysChanged &&
-    llmRequestDuration &&
-    llmTokensCounter &&
-    llmCostCounter &&
-    llmBaselineCostCounter
-  ) {
+  if (!labelKeysChanged && llmRequestDuration && llmTokensCounter) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
     );
@@ -73,12 +57,6 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
     }
-    if (llmCostCounter) {
-      client.register.removeSingleMetric("llm_cost_usd");
-    }
-    if (llmBaselineCostCounter) {
-      client.register.removeSingleMetric("llm_baseline_cost_usd");
-    }
   } catch (_error) {
     // Ignore errors if metrics don't exist
   }
@@ -91,7 +69,6 @@ export function initializeMetrics(labelKeys: string[]): void {
     ...nextLabelKeys,
   ];
   const tokensLabelNames = [...baseLabelNames, "type", ...nextLabelKeys]; // type: input|output
-  const costLabelNames = [...baseLabelNames, "model", ...nextLabelKeys];
 
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
@@ -105,18 +82,6 @@ export function initializeMetrics(labelKeys: string[]): void {
     name: "llm_tokens_total",
     help: "Total tokens used",
     labelNames: tokensLabelNames,
-  });
-
-  llmCostCounter = new client.Counter({
-    name: "llm_cost_usd",
-    help: "Actual cost of LLM requests in USD",
-    labelNames: costLabelNames,
-  });
-
-  llmBaselineCostCounter = new client.Counter({
-    name: "llm_baseline_cost_usd",
-    help: "Baseline cost (without optimization) in USD",
-    labelNames: costLabelNames,
   });
 
   logger.info(
@@ -150,11 +115,11 @@ function buildMetricLabels(
 }
 
 /**
- * Reports LLM token usage and costs
+ * Reports LLM token usage
  */
-export function reportUsage(
+export function reportLLMTokens(
+  provider: SupportedProvider,
   agent: Agent,
-  { provider, model, baselineModel }: ProviderModel,
   usage: { input?: number; output?: number },
 ): void {
   if (!llmTokensCounter) {
@@ -162,7 +127,6 @@ export function reportUsage(
     return;
   }
 
-  // Report token usage
   if (usage.input && usage.input > 0) {
     llmTokensCounter.inc(
       buildMetricLabels(agent, { provider, type: "input" }),
@@ -175,38 +139,14 @@ export function reportUsage(
       usage.output,
     );
   }
-
-  // Report costs (OpenAI only for now)
-  if (provider === "openai" && model && usage.input > 0 && usage.output > 0) {
-    const normalizedModel = utils.adapters.openai.normalizeModel(model);
-    if (normalizedModel in llmPricing.openai) {
-      const cost = utils.adapters.openai.getUsageCost(normalizedModel, usage);
-      llmCostCounter.inc(
-        buildMetricLabels(agent, { provider, model: normalizedModel }),
-        cost,
-      );
-    }
-
-    if (baselineModel) {
-      const normalizedBaselineModel =
-        utils.adapters.openai.normalizeModel(baselineModel);
-      if (normalizedBaselineModel in llmPricing.openai) {
-        const baselineCost = utils.adapters.openai.getUsageCost(normalizedBaselineModel, usage);
-        llmBaselineCostCounter.inc(
-          buildMetricLabels(agent, { provider, model: normalizedBaselineModel }),
-          baselineCost,
-        );
-      }
-    }
-  }
 }
 
 /**
  * Returns a fetch wrapped in observability. Use it as OpenAI or Anthropic provider custom fetch implementation.
  */
 export function getObservableFetch(
+  provider: SupportedProvider,
   agent: Agent,
-  { provider, model, baselineModel }: ProviderModel,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -265,12 +205,9 @@ export function getObservableFetch(
 
       if (tokenUsage) {
         try {
-          reportUsage(
-            agent,
-            { provider, model, baselineModel },
-            tokenUsage,
-          );
+          reportLLMTokens(provider, agent, tokenUsage,);
         } catch (error) {
+          logger.error("Error sending LLM usage metrics");
           logger.error(error);
         }
       }
@@ -283,11 +220,7 @@ export function getObservableFetch(
 /**
  * Wraps observability around GenAI's LLM request methods
  */
-export function getObservableGenAI(
-  genAI: GoogleGenAI,
-  agent: Agent,
-  model: string,
-) {
+export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
   const originalGenerateContent = genAI.models.generateContent;
   const provider: SupportedProvider = "gemini";
   genAI.models.generateContent = async (...args) => {
@@ -312,7 +245,7 @@ export function getObservableGenAI(
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportUsage(agent, { provider, model }, { input, output });
+        reportLLMTokens(provider, agent, { input, output });
       }
 
       return result;

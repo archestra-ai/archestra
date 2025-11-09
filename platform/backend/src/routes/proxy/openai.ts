@@ -5,7 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportUsage } from "@/llm-metrics";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
@@ -220,11 +220,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : new OpenAIProvider({
             apiKey: openAiApiKey,
             baseURL: config.llm.openai.baseUrl,
-            fetch: getObservableFetch(resolvedAgent, {
-              provider: "openai",
-              model,
-              baselineModel,
-            }),
+            fetch: getObservableFetch("openai", resolvedAgent),
           });
 
       // Convert to common format and evaluate trusted data policies
@@ -556,12 +552,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Report token usage metrics for streaming
         if (tokenUsage) {
-          const modelIdentifier = {
-            provider: "openai",
-            model,
-            baselineModel,
-          } as const;
-          reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
+          reportLLMTokens("openai", resolvedAgent, tokenUsage);
         }
         const cost = model in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(model, tokenUsage) : null
         const baselineCost = baselineModel in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(baselineModel, tokenUsage) : null

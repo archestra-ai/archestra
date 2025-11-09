@@ -17,6 +17,9 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+// originalModel is the model requested by user if the cost optimization is in effect
+type ProviderModel = { provider: SupportedProvider, model: string, originalModel?: string };
+
 // LLM-specific metrics matching fastify-metrics format for consistency.
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
@@ -156,11 +159,9 @@ function getCost(model: PricingModel, usage: { input?: number, output?: number }
  * Reports LLM token usage and costs
  */
 export function reportUsage(
-  provider: SupportedProvider,
   agent: Agent,
+  { provider, model, originalModel }: ProviderModel,
   usage: { input?: number, output?: number },
-  model: string,
-  requestedModel?: string,
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
@@ -189,8 +190,8 @@ export function reportUsage(
       llmCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), cost,);
     }
 
-    if (requestedModel) {
-      const normalizedModel = utils.adapters.openai.normalizeModel(requestedModel);
+    if (originalModel) {
+      const normalizedModel = utils.adapters.openai.normalizeModel(originalModel);
       if (normalizedModel in llmPricing.openai) {
         const requestedCost = getCost(normalizedModel, usage);
         llmRequestedCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), requestedCost,);
@@ -203,10 +204,8 @@ export function reportUsage(
  * Returns a fetch wrapped in observability. Use it as OpenAI or Anthropic provider custom fetch implementation.
  */
 export function getObservableFetch(
-  provider: SupportedProvider,
   agent: Agent,
-  model: string,
-  requestedModel?: string,
+  { provider, model, originalModel }: ProviderModel,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -253,12 +252,12 @@ export function getObservableFetch(
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );
-          reportUsage(provider, agent, { input, output }, model, requestedModel);
+          reportUsage(agent, {provider, model, originalModel}, { input, output });
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
             data.usage,
           );
-          reportUsage(provider, agent, { input, output }, model, requestedModel);
+          reportUsage(agent, {provider, model, originalModel}, { input, output });
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -274,7 +273,7 @@ export function getObservableFetch(
 /**
  * Wraps observability around GenAI's LLM request methods
  */
-export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
+export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent, model: string) {
   const originalGenerateContent = genAI.models.generateContent;
   const provider: SupportedProvider = "gemini";
   genAI.models.generateContent = async (...args) => {
@@ -299,7 +298,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportUsage(provider, agent, {input, output});
+        reportUsage(agent, { provider, model },{input, output});
       }
 
       return result;

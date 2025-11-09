@@ -156,7 +156,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch("anthropic", resolvedAgent, body.model),
+      fetch: getObservableFetch(resolvedAgent, { provider: "anthropic", model: body.model }),
     });
 
     try {
@@ -566,7 +566,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
 
         if (messageStartEvent?.message.usage) {
-          reportUsage("anthropic", resolvedAgent, tokenUsage, body.model);
+          const modelIdentifier = { provider: "anthropic", model: body.model } as const;
+          reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
         }
 
         // Store the complete interaction

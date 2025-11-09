@@ -199,15 +199,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "MCP tools injected",
       );
 
-      const requestedModel = body.model;
+      const originalModel = body.model;
       const model = resolvedAgent.optimizeCost
         ? utils.adapters.openai.getOptimizedModel(tools, messages)
-        : requestedModel;
+        : originalModel;
       fastify.log.info(
         {
           resolvedAgentId,
           optimizeCost: resolvedAgent.optimizeCost,
-          requestedModel,
+          requestedModel: originalModel,
           model,
         },
         "Optimized model selected",
@@ -219,7 +219,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgent, model, requestedModel),
+          fetch: getObservableFetch(resolvedAgent, {provider: "openai", model, originalModel}),
         });
 
 
@@ -552,7 +552,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Report token usage metrics for streaming
         if (tokenUsage) {
-          reportUsage("openai", resolvedAgent, tokenUsage);
+          const modelIdentifier = { provider: "openai", model, originalModel} as const;
+          reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
         }
 
         // Store the complete interaction

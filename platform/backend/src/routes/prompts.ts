@@ -17,6 +17,12 @@ const PromptSchema = z.object({
   createdBy: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  agents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  ),
 });
 
 const CreatePromptSchema = z.object({

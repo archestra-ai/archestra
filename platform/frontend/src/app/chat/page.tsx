@@ -18,7 +18,13 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +37,7 @@ import {
   useConversations,
   useCreateConversation,
   useDeleteConversation,
+  useUpdateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
@@ -127,6 +134,12 @@ export default function ChatPage() {
     if (newConversation) {
       selectConversation(newConversation.id);
     }
+  };
+
+  // Update conversation mutation
+  const updateConversationMutation = useUpdateConversation();
+  const handleUpdateConversation = async (id: string, title: string) => {
+    await updateConversationMutation.mutateAsync({ id, title });
   };
 
   // Delete conversation mutation
@@ -226,7 +239,8 @@ export default function ChatPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please configure your Anthropic API key in Chat Settings to start using the chat feature.
+              Please configure your Anthropic API key in Chat Settings to start
+              using the chat feature.
             </p>
             <Button asChild>
               <Link href="/settings/chat">Go to Chat Settings</Link>
@@ -245,6 +259,7 @@ export default function ChatPage() {
         selectedConversationId={conversationId}
         onSelectConversation={selectConversation}
         onSelectAgent={handleSelectAgent}
+        onUpdateConversation={handleUpdateConversation}
         onDeleteConversation={handleDeleteConversation}
         isCreatingConversation={createConversationMutation.isPending}
         hideToolCalls={hideToolCalls}
@@ -265,6 +280,7 @@ export default function ChatPage() {
             {messages.length === 0 ? (
               <PromptSuggestions
                 agentId={currentAgent?.id}
+                agentName={currentAgent?.name}
                 onSelectPrompt={handleSelectPrompt}
               />
             ) : (

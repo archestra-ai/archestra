@@ -96,16 +96,12 @@ function ChatConfigDialogContent({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Configure Chat Prompts</DialogTitle>
-          <DialogDescription>
-            Assign prompts to {agent.name}.
-          </DialogDescription>
+          <DialogDescription>Assign prompts to {agent.name}.</DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
           {/* System Prompt Selection */}
           <div className="space-y-2">
-            <Label htmlFor="systemPrompt">
-              System Prompt (Optional)
-            </Label>
+            <Label htmlFor="systemPrompt">System Prompt (Optional)</Label>
             <Select
               value={selectedSystemPromptId || "none"}
               onValueChange={(value) =>

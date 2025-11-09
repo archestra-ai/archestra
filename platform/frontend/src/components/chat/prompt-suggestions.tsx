@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Tooltip,
@@ -9,11 +10,13 @@ import { useAgentPrompts } from "@/lib/agent-prompts.query";
 
 interface PromptSuggestionsProps {
   agentId?: string;
+  agentName?: string;
   onSelectPrompt: (prompt: string) => void;
 }
 
 export function PromptSuggestions({
   agentId,
+  agentName,
   onSelectPrompt,
 }: PromptSuggestionsProps) {
   // If no agentId, show empty state
@@ -108,6 +111,17 @@ export function PromptSuggestions({
             </p>
           )}
         </div>
+
+        {agentId && agentName && (
+          <div className="text-center pt-2">
+            <Link
+              href={`/agents?agentId=${agentId}`}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              + Add more prompts to {agentName}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

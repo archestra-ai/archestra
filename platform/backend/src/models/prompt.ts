@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PromptType } from "@/database/schemas/prompt";
 
@@ -58,39 +58,55 @@ class PromptModel {
 
   /**
    * Find all prompts for an organization
-   * Returns only active (latest) versions
+   * Returns only active (latest) versions with agent information
    */
   static async findByOrganizationId(
     organizationId: string,
     type?: PromptType,
-  ): Promise<Prompt[]> {
-    let query = db
-      .select()
-      .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.organizationId, organizationId),
-          eq(schema.promptsTable.isActive, true),
-        ),
-      )
-      .orderBy(desc(schema.promptsTable.createdAt));
+  ): Promise<
+    (Prompt & {
+      agents: Array<{ id: string; name: string }>;
+    })[]
+  > {
+    let baseConditions = [
+      eq(schema.promptsTable.organizationId, organizationId),
+      eq(schema.promptsTable.isActive, true),
+    ];
 
     if (type) {
-      query = db
-        .select()
-        .from(schema.promptsTable)
-        .where(
-          and(
-            eq(schema.promptsTable.organizationId, organizationId),
-            eq(schema.promptsTable.type, type),
-            eq(schema.promptsTable.isActive, true),
-          ),
-        )
-        .orderBy(desc(schema.promptsTable.createdAt));
+      baseConditions.push(eq(schema.promptsTable.type, type));
     }
 
-    const prompts = await query;
-    return prompts as Prompt[];
+    const prompts = await db
+      .select()
+      .from(schema.promptsTable)
+      .where(and(...baseConditions))
+      .orderBy(desc(schema.promptsTable.createdAt));
+
+    // For each prompt, fetch the agents that use it
+    const promptsWithAgents = await Promise.all(
+      prompts.map(async (prompt) => {
+        const agents = await db
+          .select({
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+          })
+          .from(schema.agentPromptsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentPromptsTable.promptId, prompt.id))
+          .orderBy(schema.agentsTable.name);
+
+        return {
+          ...(prompt as Prompt),
+          agents,
+        };
+      }),
+    );
+
+    return promptsWithAgents;
   }
 
   /**

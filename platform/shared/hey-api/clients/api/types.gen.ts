@@ -11119,6 +11119,10 @@ export type GetPromptsResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        agents: Array<{
+            id: string;
+            name: string;
+        }>;
     }>;
 };
 
@@ -11201,6 +11205,10 @@ export type CreatePromptResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        agents: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -11351,6 +11359,10 @@ export type GetPromptResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        agents: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -11434,6 +11446,10 @@ export type UpdatePromptResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        agents: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -11514,6 +11530,10 @@ export type GetPromptVersionsResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        agents: Array<{
+            id: string;
+            name: string;
+        }>;
     }>;
 };
 

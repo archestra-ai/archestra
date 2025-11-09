@@ -5,6 +5,7 @@ const {
   getChatConversations,
   getChatAgentMcpTools,
   createChatConversation,
+  updateChatConversation,
   deleteChatConversation,
 } = archestraApiSdk;
 
@@ -50,6 +51,33 @@ export function useCreateConversation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useUpdateConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      title,
+    }: {
+      id: string;
+      title?: string | null;
+    }) => {
+      const response = await updateChatConversation({
+        path: { id },
+        body: { title },
+      });
+      if (response.error) throw new Error("Failed to update conversation");
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }

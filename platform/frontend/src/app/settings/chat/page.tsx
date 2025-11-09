@@ -1,8 +1,9 @@
 "use client";
 
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,15 +35,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useChatSettings,
   useUpdateChatSettings,
@@ -258,64 +263,109 @@ function ChatSettingsContent() {
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Version</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {prompts && prompts.length > 0 ? (
-                prompts.map((prompt) => (
-                  <TableRow key={prompt.id}>
-                    <TableCell className="font-medium">{prompt.name}</TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          prompt.type === "system"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
-                      >
-                        {prompt.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>v{prompt.version}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditPrompt(prompt)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePrompt(prompt.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+          {prompts && prompts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {prompts.map((prompt) => (
+                <Card key={prompt.id} className="flex flex-col relative">
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4 overflow-hidden">
+                      <div className="min-w-0 flex-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="text-lg font-semibold mb-1 cursor-help overflow-hidden whitespace-nowrap text-ellipsis w-full">
+                                {prompt.name}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs break-words">
+                                {prompt.name}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="secondary"
+                            className={
+                              prompt.type === "system"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            }
+                          >
+                            {prompt.type}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            v{prompt.version}
+                          </span>
+                        </div>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-muted-foreground"
-                  >
-                    No prompts created yet
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 flex-shrink-0"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleEditPrompt(prompt)}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeletePrompt(prompt.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {prompt.content}
+                    </p>
+                    {prompt.agents && prompt.agents.length > 0 ? (
+                      <div className="text-xs text-muted-foreground pt-2 border-t">
+                        <span className="font-medium">
+                          Agents using: {prompt.agents.length}
+                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {prompt.agents.map((agent) => (
+                            <span
+                              key={agent.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md bg-secondary text-foreground"
+                            >
+                              {agent.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground pt-2 border-t">
+                        <span className="font-medium">
+                          Not assigned to any agents
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No prompts created yet</p>
+              <p className="text-sm mt-1">
+                Click &quot;New Prompt&quot; to create your first prompt
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

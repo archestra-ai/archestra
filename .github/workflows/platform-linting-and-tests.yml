@@ -71,6 +71,18 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
 
+      - name: Wait for services to be healthy
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          echo "Waiting for platform container to be healthy..."
+          timeout 120 sh -c 'until docker inspect --format="{{.State.Health.Status}}" archestra-platform-test | grep -q "healthy"; do sleep 2; done'
+          echo "Platform container is healthy"
+
+          echo "Verifying services are accessible..."
+          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
+          curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
+          echo "All services are ready"
+
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests

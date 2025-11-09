@@ -91,17 +91,83 @@ jobs:
 
       - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+<<<<<<< HEAD
         run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
+=======
+        run: kind load docker-image archestra/platform:ci-test
+>>>>>>> 862c401 (refactor: migrate e2e tests from docker-compose to Kubernetes)
 
       - name: Deploy WireMock to Kubernetes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
+<<<<<<< HEAD
           helm install wiremock ./platform/helm/wiremock --wait --timeout=2m
+=======
+          # Create ConfigMap for WireMock mappings
+          kubectl create configmap wiremock-mappings --from-file=platform/e2e-tests/wiremock-mappings
+
+          # Deploy WireMock
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: wiremock
+          spec:
+            type: NodePort
+            ports:
+              - port: 8080
+                targetPort: 8080
+                nodePort: 30080
+                protocol: TCP
+                name: http
+            selector:
+              app: wiremock
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: wiremock
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: wiremock
+            template:
+              metadata:
+                labels:
+                  app: wiremock
+              spec:
+                containers:
+                  - name: wiremock
+                    image: wiremock/wiremock:3.13.1
+                    args:
+                      - --global-response-templating
+                      - --disable-gzip
+                      - --verbose
+                    ports:
+                      - containerPort: 8080
+                        name: http
+                    volumeMounts:
+                      - name: mappings
+                        mountPath: /home/wiremock/mappings
+                volumes:
+                  - name: mappings
+                    configMap:
+                      name: wiremock-mappings
+          EOF
+
+          # Wait for WireMock to be ready
+          kubectl rollout status deployment/wiremock --timeout=2m
+>>>>>>> 862c401 (refactor: migrate e2e tests from docker-compose to Kubernetes)
 
       - name: Deploy Archestra Platform with Helm
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
+<<<<<<< HEAD
           helm install archestra-platform ./platform/helm/archestra \
+=======
+          helm install archestra-platform ./platform/helm \
+>>>>>>> 862c401 (refactor: migrate e2e tests from docker-compose to Kubernetes)
             --values .github/values-ci.yaml \
             --set archestra.image=archestra/platform:ci-test \
             --wait --timeout=5m
@@ -117,6 +183,7 @@ jobs:
 
           echo "=== Archestra Platform Logs ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
+<<<<<<< HEAD
 
       - name: Wait for services to be healthy
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -129,6 +196,8 @@ jobs:
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
           echo "All services are ready"
+=======
+>>>>>>> 862c401 (refactor: migrate e2e tests from docker-compose to Kubernetes)
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

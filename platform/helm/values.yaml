@@ -97,8 +97,16 @@ archestra:
 
   # Service configuration
   service:
+    # Service type - ClusterIP, NodePort, or LoadBalancer
+    type: ClusterIP
     # Annotations to add to the Kubernetes Service
     annotations: {}
+    # Node ports for NodePort service type (optional)
+    # Only used when service.type is NodePort
+    nodePorts:
+      backend: null
+      metrics: null
+      frontend: null
 
   # Ingress configuration
   ingress:

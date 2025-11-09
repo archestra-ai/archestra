@@ -9,20 +9,29 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.archestra.service.type | default "ClusterIP" }}
   ports:
     - port: 9000
       targetPort: backend
       protocol: TCP
       name: backend
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.backend }}
+      nodePort: {{ .Values.archestra.service.nodePorts.backend }}
+      {{- end }}
     - port: 9050
       targetPort: metrics
       protocol: TCP
       name: metrics
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.metrics }}
+      nodePort: {{ .Values.archestra.service.nodePorts.metrics }}
+      {{- end }}
     - port: 3000
       targetPort: frontend
       protocol: TCP
       name: frontend
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.frontend }}
+      nodePort: {{ .Values.archestra.service.nodePorts.frontend }}
+      {{- end }}
   selector:
     {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
 ---
@@ -79,6 +88,32 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          # Startup probe - gives the application time to start up
+          # Checks every 10 seconds for up to 5 minutes (30 failures * 10s)
+          startupProbe:
+            httpGet:
+              path: /
+              port: frontend
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          # Liveness probe - restarts the container if it becomes unresponsive
+          livenessProbe:
+            httpGet:
+              path: /
+              port: frontend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe - marks the container as ready to receive traffic
+          readinessProbe:
+            httpGet:
+              path: /
+              port: frontend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
           volumeMounts:
             - name: kubeconfig

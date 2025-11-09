@@ -1,0 +1,38 @@
+# CI-specific values for the Archestra Helm chart
+# This file is used during e2e testing in GitHub Actions
+
+archestra:
+  # Image will be set via --set during deployment
+  # image: archestra/platform:ci-test
+
+  # Environment variables for e2e testing
+  env:
+    ARCHESTRA_OPENAI_BASE_URL: "http://wiremock:8080/v1"
+    ARCHESTRA_ANTHROPIC_BASE_URL: "http://wiremock:8080"
+    ARCHESTRA_METRICS_SECRET: "foo-bar"
+    ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
+    ARCHESTRA_AUTH_SECRET: "e2e-auth-secret"
+
+  # Use NodePort service type to expose services on fixed ports
+  service:
+    type: NodePort
+    nodePorts:
+      backend: 30000
+      metrics: 30050
+      frontend: 30300
+
+# PostgreSQL configuration for CI
+postgresql:
+  # Use the internal PostgreSQL instance
+  external_database_url: null
+  enabled: true
+  auth:
+    database: archestra_dev
+    username: archestra
+    password: archestra_dev_password
+  # Use NodePort to expose PostgreSQL for debugging if needed
+  primary:
+    service:
+      type: NodePort
+      nodePorts:
+        postgresql: 30432

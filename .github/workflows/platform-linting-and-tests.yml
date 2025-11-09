@@ -53,6 +53,13 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Install Kind
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
+        with:
+          config: .github/kind.yaml
+          install_only: false
+
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
@@ -67,9 +74,88 @@ jobs:
           load: true
           tags: archestra/platform:ci-test
 
-      - name: Start platform with docker compose
+      - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
+        run: kind load docker-image archestra/platform:ci-test
+
+      - name: Deploy WireMock to Kubernetes
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          # Create ConfigMap for WireMock mappings
+          kubectl create configmap wiremock-mappings --from-file=platform/e2e-tests/wiremock-mappings
+
+          # Deploy WireMock
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: wiremock
+          spec:
+            type: NodePort
+            ports:
+              - port: 8080
+                targetPort: 8080
+                nodePort: 30080
+                protocol: TCP
+                name: http
+            selector:
+              app: wiremock
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: wiremock
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: wiremock
+            template:
+              metadata:
+                labels:
+                  app: wiremock
+              spec:
+                containers:
+                  - name: wiremock
+                    image: wiremock/wiremock:3.13.1
+                    args:
+                      - --global-response-templating
+                      - --disable-gzip
+                      - --verbose
+                    ports:
+                      - containerPort: 8080
+                        name: http
+                    volumeMounts:
+                      - name: mappings
+                        mountPath: /home/wiremock/mappings
+                volumes:
+                  - name: mappings
+                    configMap:
+                      name: wiremock-mappings
+          EOF
+
+          # Wait for WireMock to be ready
+          kubectl rollout status deployment/wiremock --timeout=2m
+
+      - name: Deploy Archestra Platform with Helm
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          helm install archestra-platform ./platform/helm \
+            --values .github/values-ci.yaml \
+            --set archestra.image=archestra/platform:ci-test \
+            --wait --timeout=5m
+
+      - name: Verify deployment
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide
+
+          echo "=== Kubernetes Services ==="
+          kubectl get services
+
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -102,24 +188,29 @@ jobs:
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
 
-      - name: Show container logs on failure
+      - name: Show logs on failure
         if: failure()
         run: |
-          echo "=== Container Status ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide
 
-          echo "=== Platform Container Logs ==="
-          docker logs archestra-platform-test
+          echo "=== Kubernetes Services ==="
+          kubectl get services
 
-          echo "=== PostgreSQL Container Logs ==="
-          docker logs archestra-platform-test-postgresql
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
 
-          echo "=== WireMock Container Logs ==="
-          docker logs archestra-platform-test-wiremock
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
-          echo "=== All Container Stats ==="
+          echo "=== WireMock Logs ==="
+          kubectl logs -l app=wiremock --tail=200
 
-          docker stats --no-stream
+          echo "=== Describe Archestra Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
+
+          echo "=== Describe PostgreSQL Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=postgresql
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

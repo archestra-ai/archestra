@@ -1,8 +1,4 @@
-import {
-  createTestAdmin,
-  createTestOrganization,
-  createTestUser,
-} from "@/test-utils";
+import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import InteractionModel from "./interaction";
 import TeamModel from "./team";
@@ -10,12 +6,9 @@ import TeamModel from "./team";
 describe("InteractionModel", () => {
   let agentId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     // Create test agent
-    const agent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    const agent = await makeAgent();
     agentId = agent.id;
   });
 
@@ -53,67 +46,6 @@ describe("InteractionModel", () => {
       expect(interaction.agentId).toBe(agentId);
       expect(interaction.request).toBeDefined();
       expect(interaction.response).toBeDefined();
-    });
-  });
-
-  describe("findAll", () => {
-    test("returns all interactions", async () => {
-      await InteractionModel.create({
-        agentId,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Message 1" }],
-        },
-        response: {
-          id: "response-1",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Response 1",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      await InteractionModel.create({
-        agentId,
-        request: {
-          model: "gpt-4",
-          messages: [{ role: "user", content: "Message 2" }],
-        },
-        response: {
-          id: "response-2",
-          object: "chat.completion",
-          created: Date.now(),
-          model: "gpt-4",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Response 2",
-                refusal: null,
-              },
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        },
-        type: "openai:chatCompletions",
-      });
-
-      const interactions = await InteractionModel.findAll();
-      expect(interactions).toHaveLength(2);
     });
   });
 
@@ -230,10 +162,8 @@ describe("InteractionModel", () => {
   });
 
   describe("Access Control", () => {
-    test("admin can see all interactions", async () => {
-      const _user1Id = await createTestUser();
-      const _user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
+    test("admin can see all interactions", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
 
       const agent1 = await AgentModel.create({
         name: "Agent 1",
@@ -270,30 +200,32 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(adminId, true);
-      expect(interactions).toHaveLength(2);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+      );
+      expect(interactions.data).toHaveLength(2);
     });
 
-    test("member only sees interactions for accessible agents", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("member only sees interactions for accessible agents", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create teams and add users
-      const team1 = await TeamModel.create({
-        name: "Team 1",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team1.id, user1Id);
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      await TeamModel.addMember(team1.id, user1.id);
 
-      const team2 = await TeamModel.create({
-        name: "Team 2",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team2.id, user2Id);
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
+      await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents with team assignments
       const agent1 = await AgentModel.create({
@@ -331,14 +263,18 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user1Id, false);
-      expect(interactions).toHaveLength(1);
-      expect(interactions[0].agentId).toBe(agent1.id);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user1.id,
+        false,
+      );
+      expect(interactions.data).toHaveLength(1);
+      expect(interactions.data[0].agentId).toBe(agent1.id);
     });
 
-    test("member with no access sees no interactions", async () => {
-      const _user1Id = await createTestUser();
-      const user2Id = await createTestUser();
+    test("member with no access sees no interactions", async ({ makeUser }) => {
+      const user = await makeUser();
 
       const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
@@ -355,13 +291,17 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      const interactions = await InteractionModel.findAll(user2Id, false);
-      expect(interactions).toHaveLength(0);
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        user.id,
+        false,
+      );
+      expect(interactions.data).toHaveLength(0);
     });
 
-    test("findById returns interaction for admin", async () => {
-      const _user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
+    test("findById returns interaction for admin", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
 
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
@@ -380,25 +320,26 @@ describe("InteractionModel", () => {
 
       const found = await InteractionModel.findById(
         interaction.id,
-        adminId,
+        admin.id,
         true,
       );
       expect(found).not.toBeNull();
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns interaction for user with agent access", async () => {
-      const user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("findById returns interaction for user with agent access", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create team and add user
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",
@@ -420,16 +361,17 @@ describe("InteractionModel", () => {
 
       const found = await InteractionModel.findById(
         interaction.id,
-        user1Id,
+        user.id,
         false,
       );
       expect(found).not.toBeNull();
       expect(found?.id).toBe(interaction.id);
     });
 
-    test("findById returns null for user without agent access", async () => {
-      const _user1Id = await createTestUser();
-      const user2Id = await createTestUser();
+    test("findById returns null for user without agent access", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
 
       const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
@@ -448,7 +390,7 @@ describe("InteractionModel", () => {
 
       const found = await InteractionModel.findById(
         interaction.id,
-        user2Id,
+        user.id,
         false,
       );
       expect(found).toBeNull();

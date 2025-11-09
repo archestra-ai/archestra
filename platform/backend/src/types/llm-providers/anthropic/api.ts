@@ -64,7 +64,6 @@ export const MessagesRequestSchema = z.object({
     ])
     .optional(),
   temperature: z.number().optional(),
-  thinking: z.any().optional(),
   tool_choice: ToolChoiceSchema.optional(),
   tools: z.array(ToolSchema).optional(),
   top_k: z.number().optional(),

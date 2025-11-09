@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
 
 interface BulkAssignAgentDialogProps {
   tools: Array<{
@@ -40,10 +42,20 @@ export function BulkAssignAgentDialog({
 }: BulkAssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
+  const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
+  const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
+    string | null
+  >(null);
+
+  // Determine if tools are from local server by checking catalogId
+  const mcpServer = mcpServers.data?.find(
+    (server) => server.catalogId === catalogId,
+  );
+  const isLocalServer = mcpServer?.serverType === "local";
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
@@ -80,7 +92,12 @@ export function BulkAssignAgentDialog({
         assignMutation.mutateAsync({
           agentId: assignment.agentId,
           toolId: assignment.toolId,
-          credentialSourceMcpServerId,
+          credentialSourceMcpServerId: isLocalServer
+            ? null
+            : credentialSourceMcpServerId,
+          executionSourceMcpServerId: isLocalServer
+            ? executionSourceMcpServerId
+            : null,
         }),
       ),
     );
@@ -122,11 +139,14 @@ export function BulkAssignAgentDialog({
     setSelectedAgentIds([]);
     setSearchQuery("");
     setCredentialSourceMcpServerId(null);
+    setExecutionSourceMcpServerId(null);
     onOpenChange(false);
   }, [
     tools,
     selectedAgentIds,
     credentialSourceMcpServerId,
+    executionSourceMcpServerId,
+    isLocalServer,
     assignMutation,
     onOpenChange,
   ]);
@@ -148,6 +168,7 @@ export function BulkAssignAgentDialog({
           setSelectedAgentIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
+          setExecutionSourceMcpServerId(null);
         }
       }}
     >
@@ -199,19 +220,46 @@ export function BulkAssignAgentDialog({
           </div>
 
           <div className="mt-10">
-            <Label htmlFor="token-select" className="text-md font-medium mb-1">
-              Token to use
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select which token will be used when agents execute these tools
-            </p>
-            <TokenSelect
-              value={credentialSourceMcpServerId}
-              onValueChange={setCredentialSourceMcpServerId}
-              className="w-full"
-              catalogId={catalogId}
-              agentIds={selectedAgentIds}
-            />
+            {isLocalServer ? (
+              <>
+                <Label
+                  htmlFor="installation-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use *
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select whose MCP server installation will execute the tool
+                </p>
+                <InstallationSelect
+                  value={executionSourceMcpServerId}
+                  onValueChange={setExecutionSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                  agentIds={selectedAgentIds}
+                />
+              </>
+            ) : (
+              <>
+                <Label
+                  htmlFor="token-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use *
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select which token will be used when agents execute these
+                  tools
+                </p>
+                <TokenSelect
+                  value={credentialSourceMcpServerId}
+                  onValueChange={setCredentialSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                  agentIds={selectedAgentIds}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -222,6 +270,7 @@ export function BulkAssignAgentDialog({
               setSelectedAgentIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
+              setExecutionSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >
@@ -229,7 +278,12 @@ export function BulkAssignAgentDialog({
           </Button>
           <Button
             onClick={handleAssign}
-            disabled={selectedAgentIds.length === 0 || assignMutation.isPending}
+            disabled={
+              selectedAgentIds.length === 0 ||
+              assignMutation.isPending ||
+              (isLocalServer && !executionSourceMcpServerId) ||
+              (!isLocalServer && !credentialSourceMcpServerId)
+            }
           >
             {assignMutation.isPending
               ? "Assigning..."

@@ -1,16 +1,16 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { McpToolCallModel } from "@/models";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   PaginationQuerySchema,
-  RouteId,
   SelectMcpToolCallSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -33,46 +33,45 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "method",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectMcpToolCallSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectMcpToolCallSchema),
+        ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
+    async (
+      {
+        query: { agentId, limit, offset, sortBy, sortDirection },
+        user,
+        headers,
+      },
+      reply,
+    ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
       if (agentId) {
-        const result =
+        return reply.send(
           await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
             agentId,
             pagination,
             sorting,
-          );
-        return reply.send(result);
+          ),
+        );
       }
 
-      const result = await McpToolCallModel.findAllPaginated(
-        pagination,
-        sorting,
-        user.id,
-        user.isAdmin,
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
       );
 
-      return reply.send(result);
+      return reply.send(
+        await McpToolCallModel.findAllPaginated(
+          pagination,
+          sorting,
+          user.id,
+          isMcpServerAdmin,
+        ),
+      );
     },
   );
 
@@ -86,29 +85,19 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           mcpToolCallId: UuidIdSchema,
         }),
-        response: {
-          200: SelectMcpToolCallSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectMcpToolCallSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
+    async ({ params: { mcpToolCallId }, user, headers }, reply) => {
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
+      );
 
       const mcpToolCall = await McpToolCallModel.findById(
-        request.params.mcpToolCallId,
+        mcpToolCallId,
         user.id,
-        user.isAdmin,
+        isMcpServerAdmin,
       );
 
       if (!mcpToolCall) {

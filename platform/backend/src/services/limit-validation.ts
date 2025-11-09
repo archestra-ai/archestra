@@ -33,8 +33,8 @@ class LimitValidationService {
       if (agentTeamIds.length > 0) {
         const teams = await db
           .select()
-          .from(schema.team)
-          .where(inArray(schema.team.id, agentTeamIds));
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, agentTeamIds));
         if (teams.length > 0 && teams[0].organizationId) {
           organizationId = teams[0].organizationId;
         }
@@ -79,8 +79,8 @@ class LimitValidationService {
         );
         const teams = await db
           .select()
-          .from(schema.team)
-          .where(inArray(schema.team.id, agentTeamIds));
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, agentTeamIds));
         logger.info(
           `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );

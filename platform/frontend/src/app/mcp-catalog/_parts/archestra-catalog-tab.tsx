@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRole } from "@/lib/auth.hook";
+import { useHasPermissions } from "@/lib/auth.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
@@ -31,6 +31,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
+import { ConfigureEnvironmentDialog } from "./configure-environment-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
@@ -49,15 +50,15 @@ export function ArchestraCatalogTab({
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
+  const [configureEnvServer, setConfigureEnvServer] =
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
     category: SelectedCategory;
   }>({
-    type: "remote",
+    type: "all",
     category: "all",
   });
-
-  const userRole = useRole();
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
@@ -66,6 +67,10 @@ export function ArchestraCatalogTab({
 
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
+
+  const { data: userIsMcpServerAdmin = false } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
 
   // Use server-side search and category filtering
   const {
@@ -82,6 +87,25 @@ export function ArchestraCatalogTab({
 
   const handleAddToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
+    // For local servers, open the environment configuration dialog
+    if (server.server.type === "local") {
+      setConfigureEnvServer(server);
+      return;
+    }
+
+    // For remote servers, proceed with direct addition
+    await addServerToCatalog(server, undefined);
+  };
+
+  const addServerToCatalog = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+    environment?: Array<{
+      key: string;
+      type: "plain_text" | "secret";
+      value?: string;
+      promptOnInstallation: boolean;
+    }>,
   ) => {
     if (server.name === GITHUB_MCP_SERVER_NAME) {
       server.user_config = {
@@ -107,6 +131,25 @@ export function ArchestraCatalogTab({
           }
         : undefined;
 
+    // For local servers, extract local_config from manifest
+    const localConfig =
+      server.server.type === "local"
+        ? {
+            command: server.server.command,
+            arguments: server.server.args,
+            environment:
+              environment ||
+              (server.server.env
+                ? Object.entries(server.server.env).map(([key, value]) => ({
+                    key,
+                    type: "plain_text" as const,
+                    value,
+                    promptOnInstallation: false,
+                  }))
+                : undefined),
+          }
+        : undefined;
+
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
@@ -117,6 +160,7 @@ export function ArchestraCatalogTab({
         server.server.type === "remote"
           ? (server.server.docs_url ?? undefined)
           : undefined,
+      localConfig,
       userConfig: server.user_config,
       oauthConfig: rewrittenOauth,
     });
@@ -277,7 +321,7 @@ export function ArchestraCatalogTab({
                     isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
-                    userRole={userRole}
+                    userIsMcpServerAdmin={userIsMcpServerAdmin}
                   />
                 ))}
               </div>
@@ -315,6 +359,31 @@ export function ArchestraCatalogTab({
         server={requestServer}
         onClose={() => setRequestServer(null)}
       />
+
+      <ConfigureEnvironmentDialog
+        isOpen={!!configureEnvServer}
+        onClose={() => setConfigureEnvServer(null)}
+        onConfirm={(environment) => {
+          if (configureEnvServer) {
+            addServerToCatalog(configureEnvServer, environment);
+            setConfigureEnvServer(null);
+          }
+        }}
+        serverName={configureEnvServer?.name || ""}
+        defaultEnvironment={
+          configureEnvServer?.server.type === "local" &&
+          configureEnvServer.server.env
+            ? Object.entries(configureEnvServer.server.env).map(
+                ([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                  promptOnInstallation: false,
+                }),
+              )
+            : []
+        }
+      />
     </div>
   );
 }
@@ -327,7 +396,7 @@ function ServerCard({
   isAdding,
   onOpenReadme,
   isInCatalog,
-  userRole,
+  userIsMcpServerAdmin,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -341,9 +410,8 @@ function ServerCard({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
-  userRole: "admin" | "member";
+  userIsMcpServerAdmin: boolean;
 }) {
-  const isAdmin = userRole === "admin";
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -431,7 +499,9 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              isAdmin ? onAddToCatalog(server) : onRequestInstallation(server)
+              userIsMcpServerAdmin
+                ? onAddToCatalog(server)
+                : onRequestInstallation(server)
             }
             disabled={isAdding || isInCatalog}
             size="sm"
@@ -439,7 +509,7 @@ function ServerCard({
           >
             {isInCatalog
               ? "Added"
-              : isAdmin
+              : userIsMcpServerAdmin
                 ? "Add to Your Registry"
                 : "Request to add to internal registry"}
           </Button>

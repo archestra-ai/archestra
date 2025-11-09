@@ -43,7 +43,7 @@ class McpServerInstallationRequestModel {
     request: InsertMcpServerInstallationRequest,
   ): Promise<McpServerInstallationRequest> {
     const [createdRequest] = await db
-      .insert(schema.mcpServerInstallationRequestTable)
+      .insert(schema.mcpServerInstallationRequestsTable)
       .values(request)
       .returning();
 
@@ -53,8 +53,8 @@ class McpServerInstallationRequestModel {
   static async findAll(): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
-      .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
+      .from(schema.mcpServerInstallationRequestsTable)
+      .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
   static async findById(
@@ -62,8 +62,8 @@ class McpServerInstallationRequestModel {
   ): Promise<McpServerInstallationRequest | null> {
     const [request] = await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
-      .where(eq(schema.mcpServerInstallationRequestTable.id, id));
+      .from(schema.mcpServerInstallationRequestsTable)
+      .where(eq(schema.mcpServerInstallationRequestsTable.id, id));
 
     return request || null;
   }
@@ -73,9 +73,9 @@ class McpServerInstallationRequestModel {
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
-      .where(eq(schema.mcpServerInstallationRequestTable.status, status))
-      .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
+      .from(schema.mcpServerInstallationRequestsTable)
+      .where(eq(schema.mcpServerInstallationRequestsTable.status, status))
+      .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
   static async findByRequestedBy(
@@ -83,9 +83,9 @@ class McpServerInstallationRequestModel {
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
-      .where(eq(schema.mcpServerInstallationRequestTable.requestedBy, userId))
-      .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
+      .from(schema.mcpServerInstallationRequestsTable)
+      .where(eq(schema.mcpServerInstallationRequestsTable.requestedBy, userId))
+      .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
   static async findByExternalCatalogId(
@@ -93,14 +93,14 @@ class McpServerInstallationRequestModel {
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
+      .from(schema.mcpServerInstallationRequestsTable)
       .where(
         eq(
-          schema.mcpServerInstallationRequestTable.externalCatalogId,
+          schema.mcpServerInstallationRequestsTable.externalCatalogId,
           externalCatalogId,
         ),
       )
-      .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
+      .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt));
   }
 
   static async findPendingByExternalCatalogId(
@@ -108,17 +108,17 @@ class McpServerInstallationRequestModel {
   ): Promise<McpServerInstallationRequest | null> {
     const [request] = await db
       .select()
-      .from(schema.mcpServerInstallationRequestTable)
+      .from(schema.mcpServerInstallationRequestsTable)
       .where(
         and(
           eq(
-            schema.mcpServerInstallationRequestTable.externalCatalogId,
+            schema.mcpServerInstallationRequestsTable.externalCatalogId,
             externalCatalogId,
           ),
-          eq(schema.mcpServerInstallationRequestTable.status, "pending"),
+          eq(schema.mcpServerInstallationRequestsTable.status, "pending"),
         ),
       )
-      .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt))
+      .orderBy(desc(schema.mcpServerInstallationRequestsTable.createdAt))
       .limit(1);
 
     return request || null;
@@ -129,9 +129,9 @@ class McpServerInstallationRequestModel {
     request: Partial<UpdateMcpServerInstallationRequest>,
   ): Promise<McpServerInstallationRequest | null> {
     const [updatedRequest] = await db
-      .update(schema.mcpServerInstallationRequestTable)
+      .update(schema.mcpServerInstallationRequestsTable)
       .set(request)
-      .where(eq(schema.mcpServerInstallationRequestTable.id, id))
+      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
       .returning();
 
     return updatedRequest || null;
@@ -213,14 +213,14 @@ class McpServerInstallationRequestModel {
 
     // Update the request status
     const [updatedRequest] = await db
-      .update(schema.mcpServerInstallationRequestTable)
+      .update(schema.mcpServerInstallationRequestsTable)
       .set({
         status: "approved",
         reviewedBy,
         reviewedAt: new Date(),
         adminResponse,
       })
-      .where(eq(schema.mcpServerInstallationRequestTable.id, id))
+      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
       .returning();
 
     return updatedRequest || null;
@@ -232,14 +232,14 @@ class McpServerInstallationRequestModel {
     adminResponse?: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [updatedRequest] = await db
-      .update(schema.mcpServerInstallationRequestTable)
+      .update(schema.mcpServerInstallationRequestsTable)
       .set({
         status: "declined",
         reviewedBy,
         reviewedAt: new Date(),
         adminResponse,
       })
-      .where(eq(schema.mcpServerInstallationRequestTable.id, id))
+      .where(eq(schema.mcpServerInstallationRequestsTable.id, id))
       .returning();
 
     return updatedRequest || null;
@@ -277,8 +277,8 @@ class McpServerInstallationRequestModel {
 
   static async delete(id: string): Promise<boolean> {
     const result = await db
-      .delete(schema.mcpServerInstallationRequestTable)
-      .where(eq(schema.mcpServerInstallationRequestTable.id, id));
+      .delete(schema.mcpServerInstallationRequestsTable)
+      .where(eq(schema.mcpServerInstallationRequestsTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
   }

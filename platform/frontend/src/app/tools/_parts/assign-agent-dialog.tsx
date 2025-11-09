@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
@@ -38,11 +39,23 @@ export function AssignAgentDialog({
 }: AssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
-  const mcpServers = useMcpServers();
+  const { data: mcpCatalog } = useInternalMcpCatalog();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
+  const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
+    string | null
+  >(null);
+
+  // Determine if tool is from local server
+  const mcpCatalogItem = useMemo(() => {
+    if (!tool?.tool.catalogId) return null;
+    return mcpCatalog?.find((item) => item.id === tool.tool.catalogId);
+  }, [tool?.tool.catalogId, mcpCatalog]);
+
+  const catalogId = tool?.tool.catalogId ?? "";
+  const isLocalServer = mcpCatalogItem?.serverType === "local";
 
   const filteredAgents = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
@@ -70,7 +83,12 @@ export function AssignAgentDialog({
         assignMutation.mutateAsync({
           agentId,
           toolId: tool.tool.id,
-          credentialSourceMcpServerId: credentialSourceMcpServerId || null,
+          credentialSourceMcpServerId: isLocalServer
+            ? null
+            : credentialSourceMcpServerId || null,
+          executionSourceMcpServerId: isLocalServer
+            ? executionSourceMcpServerId || null
+            : null,
         }),
       ),
     );
@@ -112,11 +130,14 @@ export function AssignAgentDialog({
     setSelectedAgentIds([]);
     setSearchQuery("");
     setCredentialSourceMcpServerId(null);
+    setExecutionSourceMcpServerId(null);
     onOpenChange(false);
   }, [
     tool,
     selectedAgentIds,
     credentialSourceMcpServerId,
+    executionSourceMcpServerId,
+    isLocalServer,
     assignMutation,
     onOpenChange,
   ]);
@@ -138,6 +159,7 @@ export function AssignAgentDialog({
           setSelectedAgentIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
+          setExecutionSourceMcpServerId(null);
         }
       }}
     >
@@ -190,24 +212,46 @@ export function AssignAgentDialog({
 
         {selectedAgentIds.length > 0 && (
           <div className="pt-4 border-t">
-            <Label htmlFor="token-select" className="text-md font-medium mb-1">
-              Token to use
-            </Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Select which token will be used when these agents execute this
-              tool
-            </p>
-            <TokenSelect
-              value={credentialSourceMcpServerId}
-              onValueChange={setCredentialSourceMcpServerId}
-              className="w-full"
-              catalogId={
-                mcpServers.data?.find(
-                  (server) => server.id === tool?.tool.mcpServerId,
-                )?.catalogId ?? ""
-              }
-              agentIds={selectedAgentIds}
-            />
+            {isLocalServer ? (
+              <>
+                <Label
+                  htmlFor="installation-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use *
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select whose MCP server installation will execute the tool
+                </p>
+                <InstallationSelect
+                  value={executionSourceMcpServerId}
+                  onValueChange={setExecutionSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                  agentIds={selectedAgentIds}
+                />
+              </>
+            ) : (
+              <>
+                <Label
+                  htmlFor="token-select"
+                  className="text-md font-medium mb-1"
+                >
+                  Credential to use *
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select which token will be used when these agents execute this
+                  tool
+                </p>
+                <TokenSelect
+                  value={credentialSourceMcpServerId}
+                  onValueChange={setCredentialSourceMcpServerId}
+                  className="w-full"
+                  catalogId={catalogId}
+                  agentIds={selectedAgentIds}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -218,6 +262,7 @@ export function AssignAgentDialog({
               setSelectedAgentIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
+              setExecutionSourceMcpServerId(null);
               onOpenChange(false);
             }}
           >
@@ -225,7 +270,16 @@ export function AssignAgentDialog({
           </Button>
           <Button
             onClick={handleAssign}
-            disabled={selectedAgentIds.length === 0 || assignMutation.isPending}
+            disabled={
+              selectedAgentIds.length === 0 ||
+              assignMutation.isPending ||
+              (selectedAgentIds.length > 0 &&
+                isLocalServer &&
+                !executionSourceMcpServerId) ||
+              (selectedAgentIds.length > 0 &&
+                !isLocalServer &&
+                !credentialSourceMcpServerId)
+            }
           >
             {assignMutation.isPending
               ? "Assigning..."

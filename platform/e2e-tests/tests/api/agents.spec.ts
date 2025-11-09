@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 import { API_BASE_URL } from "../../consts";
-import { createApiKey, deleteApiKey } from "../../utils/auth";
+import utils from "../../utils";
 
 const createAgent = async (request: APIRequestContext, apiKey: string, name: string = "Test Agent") => {
   const newAgent = {
@@ -31,7 +31,7 @@ test.describe("Agents API CRUD", () => {
 
   test.beforeAll(async ({ request }) => {
     // Create API key for testing
-    const keyData = await createApiKey(request, "Agents API Test Key");
+    const keyData = await utils.auth.createApiKey(request, "Agents API Test Key");
     apiKey = keyData.key;
     apiKeyId = keyData.id;
   });
@@ -39,7 +39,7 @@ test.describe("Agents API CRUD", () => {
   test.afterAll(async ({ request }) => {
     // Clean up API key after tests
     if (apiKeyId) {
-      await deleteApiKey(request, apiKeyId);
+      await utils.auth.deleteApiKey(request, apiKeyId);
     }
   });
 

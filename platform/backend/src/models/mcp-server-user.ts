@@ -7,9 +7,9 @@ class McpServerUserModel {
    */
   static async getUserPersonalMcpServerIds(userId: string): Promise<string[]> {
     const mcpServerUsers = await db
-      .select({ mcpServerId: schema.mcpServerUserTable.mcpServerId })
-      .from(schema.mcpServerUserTable)
-      .where(eq(schema.mcpServerUserTable.userId, userId));
+      .select({ mcpServerId: schema.mcpServerUsersTable.mcpServerId })
+      .from(schema.mcpServerUsersTable)
+      .where(eq(schema.mcpServerUsersTable.userId, userId));
 
     return mcpServerUsers.map((su) => su.mcpServerId);
   }
@@ -23,11 +23,11 @@ class McpServerUserModel {
   ): Promise<boolean> {
     const mcpServerUser = await db
       .select()
-      .from(schema.mcpServerUserTable)
+      .from(schema.mcpServerUsersTable)
       .where(
         and(
-          eq(schema.mcpServerUserTable.mcpServerId, mcpServerId),
-          eq(schema.mcpServerUserTable.userId, userId),
+          eq(schema.mcpServerUsersTable.mcpServerId, mcpServerId),
+          eq(schema.mcpServerUsersTable.userId, userId),
         ),
       )
       .limit(1);
@@ -47,16 +47,16 @@ class McpServerUserModel {
   > {
     const result = await db
       .select({
-        userId: schema.mcpServerUserTable.userId,
+        userId: schema.mcpServerUsersTable.userId,
         email: schema.usersTable.email,
-        createdAt: schema.mcpServerUserTable.createdAt,
+        createdAt: schema.mcpServerUsersTable.createdAt,
       })
-      .from(schema.mcpServerUserTable)
+      .from(schema.mcpServerUsersTable)
       .innerJoin(
         schema.usersTable,
-        eq(schema.mcpServerUserTable.userId, schema.usersTable.id),
+        eq(schema.mcpServerUsersTable.userId, schema.usersTable.id),
       )
-      .where(eq(schema.mcpServerUserTable.mcpServerId, mcpServerId));
+      .where(eq(schema.mcpServerUsersTable.mcpServerId, mcpServerId));
 
     return result;
   }
@@ -69,7 +69,7 @@ class McpServerUserModel {
     userId: string,
   ): Promise<void> {
     await db
-      .insert(schema.mcpServerUserTable)
+      .insert(schema.mcpServerUsersTable)
       .values({
         mcpServerId,
         userId,

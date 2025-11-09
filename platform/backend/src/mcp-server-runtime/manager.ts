@@ -158,22 +158,59 @@ class McpServerRuntimeManager {
   /**
    * Start a single MCP server pod
    */
-  async startServer(mcpServer: McpServer): Promise<void> {
+  async startServer(
+    mcpServer: McpServer,
+    userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
+  ): Promise<void> {
     const { id, name } = mcpServer;
     logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
 
     try {
+      // Fetch catalog item (needed for conditional env var logic)
+      let catalogItem = null;
+      if (mcpServer.catalogId) {
+        catalogItem = await InternalMcpCatalogModel.findById(
+          mcpServer.catalogId,
+        );
+      }
+
       const k8sPod = new K8sPod(
         mcpServer,
         this.k8sApi,
         this.k8sAttach,
         this.k8sLog,
         this.namespace,
+        catalogItem,
+        userConfigValues,
+        environmentValues,
       );
 
       // Register the pod BEFORE starting it
       this.mcpServerIdToPodMap.set(id, k8sPod);
       logger.info(`Registered MCP server pod ${id} in map`);
+
+      // If MCP server has a secretId, fetch secret from database and create K8s Secret
+      if (mcpServer.secretId) {
+        const SecretModel = (await import("@/models/secret")).default;
+        const secret = await SecretModel.getMcpServerSecret(mcpServer.secretId);
+
+        if (secret?.secret && typeof secret.secret === "object") {
+          const secretData: Record<string, string> = {};
+
+          // Convert secret.secret (Record<string, unknown>) to Record<string, string>
+          for (const [key, value] of Object.entries(secret.secret)) {
+            secretData[key] = String(value);
+          }
+
+          // Create K8s Secret from database secret
+          await k8sPod.createK8sSecret(secretData);
+          logger.info(
+            { mcpServerId: id, secretId: mcpServer.secretId },
+            "Created K8s Secret from database secret",
+          );
+        }
+      }
 
       await k8sPod.startOrCreatePod();
       logger.info(`Successfully started MCP server pod ${id} (${name})`);
@@ -198,7 +235,12 @@ class McpServerRuntimeManager {
     const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
 
     if (k8sPod) {
+      // Delete pod first
       await k8sPod.stopPod();
+
+      // Delete K8s Secret (if it exists)
+      await k8sPod.deleteK8sSecret();
+
       this.mcpServerIdToPodMap.delete(mcpServerId);
     }
   }

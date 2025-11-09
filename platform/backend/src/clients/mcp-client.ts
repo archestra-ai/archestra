@@ -1,10 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { getInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
-
 import {
   InternalMcpCatalogModel,
   McpServerModel,
@@ -20,108 +20,85 @@ import type {
   McpServerConfig,
 } from "@/types";
 
-// Get the API base URL from config
-const API_BASE_URL =
-  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
+export const constructMcpProxyUrl = (mcpServerId: string) =>
+  `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;
 
 class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
 
   /**
-   * Helper to persist error results for tool calls
+   * Execute a single tool call against its assigned MCP server
    */
-  private async persistErrorResults(
-    mcpToolCalls: CommonToolCall[],
+  async executeToolCall(
+    toolCall: CommonToolCall,
     agentId: string,
-    mcpServerName: string,
-    errorMessage: string,
-  ): Promise<CommonToolResult[]> {
-    const results: CommonToolResult[] = [];
+  ): Promise<CommonToolResult> {
+    // Get MCP tool information for this specific tool
+    const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
+      [toolCall.name],
+      agentId,
+    );
 
-    for (const toolCall of mcpToolCalls) {
-      const toolResult: CommonToolResult = {
+    const tool = mcpTools[0];
+    if (!tool) {
+      // Not an MCP tool or not assigned to this agent
+      const errorResult: CommonToolResult = {
         id: toolCall.id,
         content: null,
         isError: true,
-        error: errorMessage,
+        error: "Tool not found or not assigned to agent",
       };
-
-      results.push(toolResult);
 
       // Persist error to database
       try {
         await McpToolCallModel.create({
           agentId,
-          mcpServerName,
+          mcpServerName: "unknown",
           method: "tools/call",
           toolCall,
-          toolResult,
+          toolResult: errorResult,
         });
         logger.info(
-          {
-            toolName: toolCall.name,
-            error: errorMessage,
-          },
-          "✅ Saved early-return error:",
+          { toolName: toolCall.name },
+          "✅ Saved error: tool not found",
         );
       } catch (dbError) {
-        logger.error({ err: dbError }, "Failed to persist early-return error:");
+        logger.error({ err: dbError }, "Failed to persist error");
       }
+
+      return errorResult;
     }
 
-    return results;
-  }
+    // Determine which MCP server to route to
+    // Use executionSourceMcpServerId if present (for local servers), otherwise fall back to mcpServerId
+    const targetMcpServerId =
+      tool.executionSourceMcpServerId || tool.mcpServerId;
 
-  /**
-   * Execute tool calls against their assigned MCP servers
-   */
-  async executeToolCalls(
-    toolCalls: CommonToolCall[],
-    agentId: string,
-  ): Promise<CommonToolResult[]> {
-    if (toolCalls.length === 0) {
-      return [];
-    }
+    if (!targetMcpServerId) {
+      const errorResult: CommonToolResult = {
+        id: toolCall.id,
+        content: null,
+        isError: true,
+        error: "No execution source specified for MCP tool",
+      };
 
-    // Get MCP tools assigned to the agent
-    const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
-      toolCalls.map((tc) => tc.name),
-      agentId,
-    );
-
-    // Filter tool calls to only those that are MCP tools
-    const mcpToolCalls = toolCalls.filter((tc) =>
-      mcpTools.some((mt) => mt.toolName === tc.name),
-    );
-
-    if (mcpToolCalls.length === 0) {
-      return [];
-    }
-
-    // Create a mapping of tool names to response modifier templates
-    const templatesByToolName = new Map<string, string>();
-    for (const tool of mcpTools) {
-      if (tool.responseModifierTemplate) {
-        templatesByToolName.set(tool.toolName, tool.responseModifierTemplate);
+      try {
+        await McpToolCallModel.create({
+          agentId,
+          mcpServerName: tool.mcpServerName || "unknown",
+          toolCall,
+          toolResult: errorResult,
+        });
+        logger.info(
+          { toolName: toolCall.name },
+          "✅ Saved error: no execution source",
+        );
+      } catch (dbError) {
+        logger.error({ err: dbError }, "Failed to persist error");
       }
-    }
 
-    const results: CommonToolResult[] = [];
-
-    /**
-     * TODO:
-     * For now, assume all MCP tools use the same server
-     * Get the first tool's secret ID (all tools should use same server for an agent)
-     */
-    const firstTool = mcpTools[0];
-    if (!firstTool) {
-      return await this.persistErrorResults(
-        mcpToolCalls,
-        agentId,
-        "unknown",
-        "No MCP tools found",
-      );
+      return errorResult;
     }
 
     // Load secrets from the secrets table
@@ -129,10 +106,10 @@ class McpClient {
     let secrets: Record<string, unknown> = {};
     let secretId: string | null = null;
 
-    if (firstTool.credentialSourceMcpServerId) {
+    if (tool.credentialSourceMcpServerId) {
       // User selected a specific token (team or user) to use
       const credentialSourceServer = await McpServerModel.findById(
-        firstTool.credentialSourceMcpServerId,
+        tool.credentialSourceMcpServerId,
       );
       if (credentialSourceServer?.secretId) {
         secretId = credentialSourceServer.secretId;
@@ -147,209 +124,128 @@ class McpClient {
     }
 
     try {
+      // Use catalogId from the tool (required for MCP tools)
+      if (!tool.catalogId) {
+        const errorResult: CommonToolResult = {
+          id: toolCall.id,
+          content: null,
+          isError: true,
+          error: "Tool is missing catalogId",
+        };
+
+        try {
+          await McpToolCallModel.create({
+            agentId,
+            mcpServerName: tool.mcpServerName || "unknown",
+            toolCall,
+            toolResult: errorResult,
+          });
+          logger.info(
+            { toolName: toolCall.name },
+            "✅ Saved error: missing catalogId",
+          );
+        } catch (dbError) {
+          logger.error({ err: dbError }, "Failed to persist error");
+        }
+
+        return errorResult;
+      }
+
       const catalogItem = await InternalMcpCatalogModel.findById(
-        firstTool.mcpServerCatalogId,
+        tool.catalogId,
       );
 
       if (!catalogItem) {
-        return await this.persistErrorResults(
-          mcpToolCalls,
-          agentId,
-          firstTool.mcpServerName,
-          `No catalog item found for MCP server ${firstTool.mcpServerName}`,
-        );
+        const errorResult: CommonToolResult = {
+          id: toolCall.id,
+          content: null,
+          isError: true,
+          error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
+        };
+
+        try {
+          await McpToolCallModel.create({
+            agentId,
+            mcpServerName: tool.mcpServerName || "unknown",
+            toolCall,
+            toolResult: errorResult,
+          });
+          logger.info(
+            { toolName: toolCall.name },
+            "✅ Saved error: catalog not found",
+          );
+        } catch (dbError) {
+          logger.error({ err: dbError }, "Failed to persist error");
+        }
+
+        return errorResult;
       }
 
       // For local servers, check if they use streamable-http transport
       if (catalogItem.serverType === "local") {
         const usesStreamableHttp =
-          await McpServerRuntimeManager.usesStreamableHttp(
-            firstTool.mcpServerId,
-          );
+          await McpServerRuntimeManager.usesStreamableHttp(targetMcpServerId);
 
         if (usesStreamableHttp) {
           // Use streamable HTTP transport for these servers
-          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
-            firstTool.mcpServerId,
-          );
+          const httpEndpointUrl =
+            McpServerRuntimeManager.getHttpEndpointUrl(targetMcpServerId);
 
           if (!httpEndpointUrl) {
-            return await this.persistErrorResults(
-              mcpToolCalls,
-              agentId,
-              firstTool.mcpServerName,
-              `No HTTP endpoint URL found for streamable-http server ${firstTool.mcpServerName}`,
-            );
+            const errorResult: CommonToolResult = {
+              id: toolCall.id,
+              content: null,
+              isError: true,
+              error: `No HTTP endpoint URL found for streamable-http server ${tool.mcpServerName || "unknown"}`,
+            };
+
+            try {
+              await McpToolCallModel.create({
+                agentId,
+                mcpServerName: tool.mcpServerName || "unknown",
+                toolCall,
+                toolResult: errorResult,
+              });
+              logger.info(
+                { toolName: toolCall.name },
+                "✅ Saved error: no HTTP endpoint",
+              );
+            } catch (dbError) {
+              logger.error({ err: dbError }, "Failed to persist error");
+            }
+
+            return errorResult;
           }
 
           // Use the same logic as remote servers with StreamableHTTPClientTransport
-          const client = await this.getOrCreateConnection(
-            firstTool.mcpServerId,
-            {
-              id: firstTool.mcpServerId,
-              url: httpEndpointUrl,
-              name: firstTool.mcpServerName,
-              headers: {},
-            },
-          );
+          const client = await this.getOrCreateConnection(targetMcpServerId, {
+            id: targetMcpServerId,
+            url: httpEndpointUrl,
+            name: tool.mcpServerName || "unknown",
+            headers: {},
+          });
 
-          // Execute each MCP tool call via the HTTP client
-          for (const toolCall of mcpToolCalls) {
-            try {
-              // Strip the server prefix from tool name for MCP server call
-              const serverPrefix = `${firstTool.mcpServerName}__`;
-              const mcpToolName = toolCall.name.startsWith(serverPrefix)
-                ? toolCall.name.substring(serverPrefix.length)
-                : toolCall.name;
-
-              const result = await client.callTool({
-                name: mcpToolName,
-                arguments: toolCall.arguments,
-              });
-
-              // Apply response modifier template if one exists
-              let modifiedContent = result.content;
-              const template = templatesByToolName.get(toolCall.name);
-              if (template) {
-                try {
-                  modifiedContent = applyResponseModifierTemplate(
-                    template,
-                    result.content,
-                  );
-                } catch (error) {
-                  logger.error(
-                    { err: error },
-                    `Error applying response modifier template for tool ${toolCall.name}:`,
-                  );
-                  // If template fails, use original content
-                }
-              }
-
-              const toolResult: CommonToolResult = {
-                id: toolCall.id,
-                content: modifiedContent,
-                isError: !!result.isError,
-              };
-
-              results.push(toolResult);
-
-              // Persist tool call and result to database
-              try {
-                const savedToolCall = await McpToolCallModel.create({
-                  agentId,
-                  mcpServerName: firstTool.mcpServerName,
-                  method: "tools/call",
-                  toolCall,
-                  toolResult,
-                });
-                logger.info(
-                  {
-                    id: savedToolCall.id,
-                    toolName: toolCall.name,
-                    resultContent:
-                      typeof toolResult.content === "string"
-                        ? toolResult.content.substring(0, 100)
-                        : JSON.stringify(toolResult.content).substring(0, 100),
-                  },
-                  "✅ Saved streamable-http MCP tool call (success):",
-                );
-              } catch (dbError) {
-                logger.error(
-                  { err: dbError },
-                  "Failed to persist streamable-http MCP tool call:",
-                );
-                // Continue execution even if persistence fails
-              }
-            } catch (error) {
-              const toolResult: CommonToolResult = {
-                id: toolCall.id,
-                content: null,
-                isError: true,
-                error: error instanceof Error ? error.message : "Unknown error",
-              };
-
-              results.push(toolResult);
-
-              // Persist failed tool call to database
-              try {
-                const savedToolCall = await McpToolCallModel.create({
-                  agentId,
-                  mcpServerName: firstTool.mcpServerName,
-                  method: "tools/call",
-                  toolCall,
-                  toolResult,
-                });
-                logger.info(
-                  {
-                    id: savedToolCall.id,
-                    toolName: toolCall.name,
-                    error: toolResult.error,
-                  },
-                  "✅ Saved streamable-http MCP tool call (error):",
-                );
-              } catch (dbError) {
-                logger.error(
-                  { err: dbError },
-                  "Failed to persist failed streamable-http MCP tool call:",
-                );
-              }
-            }
-          }
-
-          return results;
-        }
-
-        // For stdio-based local servers, use direct JSON-RPC calls via proxy
-        const proxyUrl = `${API_BASE_URL}/mcp_proxy/${firstTool.mcpServerId}`;
-
-        // Execute each MCP tool call via direct JSON-RPC
-        for (const toolCall of mcpToolCalls) {
           try {
             // Strip the server prefix from tool name for MCP server call
-            const serverPrefix = `${firstTool.mcpServerName}__`;
+            // For local servers, use catalog name (without userId) for prefix
+            const prefixName =
+              tool.catalogName || tool.mcpServerName || "unknown";
+            const serverPrefix = `${prefixName}__`;
             const mcpToolName = toolCall.name.startsWith(serverPrefix)
               ? toolCall.name.substring(serverPrefix.length)
               : toolCall.name;
 
-            const response = await fetch(proxyUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: Date.now(),
-                method: "tools/call",
-                params: {
-                  name: mcpToolName,
-                  arguments: toolCall.arguments,
-                },
-              }),
+            const result = await client.callTool({
+              name: mcpToolName,
+              arguments: toolCall.arguments,
             });
-
-            if (!response.ok) {
-              throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`,
-              );
-            }
-
-            const jsonResult = await response.json();
-
-            if (jsonResult.error) {
-              throw new Error(
-                `JSON-RPC error ${jsonResult.error.code}: ${jsonResult.error.message}`,
-              );
-            }
-
-            const result = jsonResult.result;
 
             // Apply response modifier template if one exists
             let modifiedContent = result.content;
-            const template = templatesByToolName.get(toolCall.name);
-            if (template) {
+            if (tool.responseModifierTemplate) {
               try {
                 modifiedContent = applyResponseModifierTemplate(
-                  template,
+                  tool.responseModifierTemplate,
                   result.content,
                 );
               } catch (error) {
@@ -367,13 +263,11 @@ class McpClient {
               isError: !!result.isError,
             };
 
-            results.push(toolResult);
-
             // Persist tool call and result to database
             try {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
-                mcpServerName: firstTool.mcpServerName,
+                mcpServerName: tool.mcpServerName || "unknown",
                 method: "tools/call",
                 toolCall,
                 toolResult,
@@ -387,15 +281,16 @@ class McpClient {
                       ? toolResult.content.substring(0, 100)
                       : JSON.stringify(toolResult.content).substring(0, 100),
                 },
-                "✅ Saved local MCP tool call (success):",
+                "✅ Saved streamable-http MCP tool call (success):",
               );
             } catch (dbError) {
               logger.error(
                 { err: dbError },
-                "Failed to persist local MCP tool call:",
+                "Failed to persist streamable-http MCP tool call:",
               );
-              // Continue execution even if persistence fails
             }
+
+            return toolResult;
           } catch (error) {
             const toolResult: CommonToolResult = {
               id: toolCall.id,
@@ -404,13 +299,11 @@ class McpClient {
               error: error instanceof Error ? error.message : "Unknown error",
             };
 
-            results.push(toolResult);
-
             // Persist failed tool call to database
             try {
               const savedToolCall = await McpToolCallModel.create({
                 agentId,
-                mcpServerName: firstTool.mcpServerName,
+                mcpServerName: tool.mcpServerName || "unknown",
                 method: "tools/call",
                 toolCall,
                 toolResult,
@@ -421,89 +314,70 @@ class McpClient {
                   toolName: toolCall.name,
                   error: toolResult.error,
                 },
-                "✅ Saved local MCP tool call (error):",
+                "✅ Saved streamable-http MCP tool call (error):",
               );
             } catch (dbError) {
               logger.error(
                 { err: dbError },
-                "Failed to persist local MCP tool call:",
+                "Failed to persist failed streamable-http MCP tool call:",
               );
-              // Continue execution even if persistence fails
             }
+
+            return toolResult;
           }
         }
 
-        return results;
-      }
-
-      // For remote servers, use the standard MCP SDK client
-      let client: Client | null = null;
-
-      if (catalogItem.serverType === "remote") {
-        // Generic remote server with catalog info
-        const config = this.createServerConfig({
-          name: firstTool.mcpServerName,
-          /**
-           * TODO: update SelectInternalMcpCatalogSchema to be a discriminated union of remote and local types
-           * this way that typescript knows that when serverType is remote, serverUrl will ALWAYS be set
-           */
-          url: catalogItem.serverUrl as string,
-          secrets,
-        });
-        client = await this.getOrCreateConnection(
-          firstTool.mcpServerCatalogId,
-          config,
-        );
-
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          // Generic remote server with catalog info
-          const config = this.createServerConfig({
-            name: firstTool.mcpServerName,
-            url: catalogItem.serverUrl,
-            secrets,
-          });
-          // Use catalog ID + secret ID as cache key to ensure different credentials = different connections
-          const connectionKey = secretId
-            ? `${firstTool.mcpServerCatalogId}:${secretId}`
-            : firstTool.mcpServerCatalogId;
-          client = await this.getOrCreateConnection(connectionKey, config);
-        }
-      } else {
-        throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
-      }
-
-      if (!client) {
-        return await this.persistErrorResults(
-          mcpToolCalls,
-          agentId,
-          firstTool.mcpServerName,
-          "Failed to create MCP client",
-        );
-      }
-
-      // Execute each MCP tool call
-      for (const toolCall of mcpToolCalls) {
+        // Execute the tool call via direct JSON-RPC (stdio transport)
         try {
           // Strip the server prefix from tool name for MCP server call
-          // Tool name format: <server-name>__<native-tool-name>
-          // Example: githubcopilot__remote-mcp__search_issues -> search_issues
-          const serverPrefix = `${firstTool.mcpServerName}__`;
+          // For local servers, use catalog name (without userId) for prefix
+          const prefixName =
+            tool.catalogName || tool.mcpServerName || "unknown";
+          const serverPrefix = `${prefixName}__`;
           const mcpToolName = toolCall.name.startsWith(serverPrefix)
             ? toolCall.name.substring(serverPrefix.length)
             : toolCall.name;
 
-          const result = await client.callTool({
-            name: mcpToolName,
-            arguments: toolCall.arguments,
-          });
+          const response = await fetch(
+            constructMcpProxyUrl(targetMcpServerId),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${getInternalJwt()}`,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: Date.now(),
+                method: "tools/call",
+                params: {
+                  name: mcpToolName,
+                  arguments: toolCall.arguments,
+                },
+              }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const jsonResult = await response.json();
+
+          if (jsonResult.error) {
+            throw new Error(
+              `JSON-RPC error ${jsonResult.error.code}: ${jsonResult.error.message}`,
+            );
+          }
+
+          const result = jsonResult.result;
 
           // Apply response modifier template if one exists
           let modifiedContent = result.content;
-          const template = templatesByToolName.get(toolCall.name);
-          if (template) {
+          if (tool.responseModifierTemplate) {
             try {
               modifiedContent = applyResponseModifierTemplate(
-                template,
+                tool.responseModifierTemplate,
                 result.content,
               );
             } catch (error) {
@@ -521,13 +395,157 @@ class McpClient {
             isError: !!result.isError,
           };
 
-          results.push(toolResult);
+          // Persist tool call and result to database
+          try {
+            const savedToolCall = await McpToolCallModel.create({
+              agentId,
+              mcpServerName: tool.mcpServerName || "unknown",
+              toolCall,
+              toolResult,
+            });
+            logger.info(
+              {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                resultContent:
+                  typeof toolResult.content === "string"
+                    ? toolResult.content.substring(0, 100)
+                    : JSON.stringify(toolResult.content).substring(0, 100),
+              },
+              "✅ Saved local MCP tool call (success):",
+            );
+          } catch (dbError) {
+            logger.error(
+              { err: dbError },
+              "Failed to persist local MCP tool call:",
+            );
+          }
+
+          return toolResult;
+        } catch (error) {
+          const toolResult: CommonToolResult = {
+            id: toolCall.id,
+            content: null,
+            isError: true,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+
+          // Persist failed tool call to database
+          try {
+            const savedToolCall = await McpToolCallModel.create({
+              agentId,
+              mcpServerName: tool.mcpServerName || "unknown",
+              toolCall,
+              toolResult,
+            });
+            logger.info(
+              {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                error: toolResult.error,
+              },
+              "✅ Saved local MCP tool call (error):",
+            );
+          } catch (dbError) {
+            logger.error(
+              { err: dbError },
+              "Failed to persist local MCP tool call:",
+            );
+          }
+
+          return toolResult;
+        }
+      }
+
+      // For remote servers, use the standard MCP SDK client
+      if (catalogItem.serverType === "remote") {
+        if (!catalogItem.serverUrl) {
+          const errorResult: CommonToolResult = {
+            id: toolCall.id,
+            content: null,
+            isError: true,
+            error: "Remote server missing serverUrl",
+          };
+
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: tool.mcpServerName || "unknown",
+              toolCall,
+              toolResult: errorResult,
+            });
+            logger.info(
+              { toolName: toolCall.name },
+              "✅ Saved error: missing serverUrl",
+            );
+          } catch (dbError) {
+            logger.error({ err: dbError }, "Failed to persist error");
+          }
+
+          return errorResult;
+        }
+
+        // Generic remote server with catalog info
+        const config = this.createServerConfig({
+          name: tool.mcpServerName || "unknown",
+          url: catalogItem.serverUrl,
+          secrets,
+        });
+
+        // Use catalog ID + secret ID as cache key to ensure different credentials = different connections
+        const connectionKey = secretId
+          ? `${catalogItem.id}:${secretId}`
+          : catalogItem.id;
+
+        try {
+          const client = await this.getOrCreateConnection(
+            connectionKey,
+            config,
+          );
+
+          // Strip the server prefix from tool name for MCP server call
+          // Tool name format: <server-name>__<native-tool-name>
+          // Example: githubcopilot__remote-mcp__search_issues -> search_issues
+          const prefixName =
+            tool.catalogName || tool.mcpServerName || "unknown";
+          const serverPrefix = `${prefixName}__`;
+          const mcpToolName = toolCall.name.startsWith(serverPrefix)
+            ? toolCall.name.substring(serverPrefix.length)
+            : toolCall.name;
+
+          const result = await client.callTool({
+            name: mcpToolName,
+            arguments: toolCall.arguments,
+          });
+
+          // Apply response modifier template if one exists
+          let modifiedContent = result.content;
+          if (tool.responseModifierTemplate) {
+            try {
+              modifiedContent = applyResponseModifierTemplate(
+                tool.responseModifierTemplate,
+                result.content,
+              );
+            } catch (error) {
+              logger.error(
+                { err: error },
+                `Error applying response modifier template for tool ${toolCall.name}:`,
+              );
+              // If template fails, use original content
+            }
+          }
+
+          const toolResult: CommonToolResult = {
+            id: toolCall.id,
+            content: modifiedContent,
+            isError: !!result.isError,
+          };
 
           // Persist tool call and result to database
           try {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
-              mcpServerName: firstTool.mcpServerName,
+              mcpServerName: tool.mcpServerName || "unknown",
               method: "tools/call",
               toolCall,
               toolResult,
@@ -545,8 +563,9 @@ class McpClient {
             );
           } catch (dbError) {
             logger.error({ err: dbError }, "Failed to persist MCP tool call:");
-            // Continue execution even if persistence fails
           }
+
+          return toolResult;
         } catch (error) {
           const toolResult: CommonToolResult = {
             id: toolCall.id,
@@ -555,13 +574,11 @@ class McpClient {
             error: error instanceof Error ? error.message : "Unknown error",
           };
 
-          results.push(toolResult);
-
           // Persist failed tool call to database
           try {
             const savedToolCall = await McpToolCallModel.create({
               agentId,
-              mcpServerName: firstTool.mcpServerName,
+              mcpServerName: tool.mcpServerName || "unknown",
               method: "tools/call",
               toolCall,
               toolResult,
@@ -576,39 +593,37 @@ class McpClient {
             );
           } catch (dbError) {
             logger.error({ err: dbError }, "Failed to persist MCP tool call:");
-            // Continue execution even if persistence fails
           }
+
+          return toolResult;
         }
       }
+
+      throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
     } catch (error) {
-      // MCP server connection failed - mark all tool calls as failed
-      for (const toolCall of mcpToolCalls) {
-        const toolResult: CommonToolResult = {
-          id: toolCall.id,
-          content: null,
-          isError: true,
-          error: `Failed to connect to MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        };
+      // Top-level error (e.g., catalog lookup failed)
+      const toolResult: CommonToolResult = {
+        id: toolCall.id,
+        content: null,
+        isError: true,
+        error: `Failed to execute tool: ${error instanceof Error ? error.message : "Unknown error"}`,
+      };
 
-        results.push(toolResult);
-
-        // Persist connection failure to database
-        try {
-          await McpToolCallModel.create({
-            agentId,
-            mcpServerName: firstTool.mcpServerName,
-            method: "tools/call",
-            toolCall,
-            toolResult,
-          });
-        } catch (dbError) {
-          logger.error({ err: dbError }, "Failed to persist MCP tool call:");
-          // Continue execution even if persistence fails
-        }
+      // Persist connection failure to database
+      try {
+        await McpToolCallModel.create({
+          agentId,
+          mcpServerName: tool.mcpServerName || "unknown",
+          method: "tools/call",
+          toolCall,
+          toolResult,
+        });
+      } catch (dbError) {
+        logger.error({ err: dbError }, "Failed to persist MCP tool call:");
       }
-    }
 
-    return results;
+      return toolResult;
+    }
   }
 
   /**
@@ -675,6 +690,7 @@ class McpClient {
             method: "tools/list",
             params: {},
           }),
+          signal: AbortSignal.timeout(5_000),
         });
 
         if (!response.ok) {
@@ -789,8 +805,12 @@ class McpClient {
     // Build headers from secrets
     const headers: Record<string, string> = {};
 
+    // For internal /mcp_proxy endpoints, add JWT auth
+    if (url.includes("/mcp_proxy/")) {
+      headers.Authorization = `Bearer ${getInternalJwt()}`;
+    }
     // All tokens (OAuth and PAT) are stored as access_token
-    if (secrets.access_token) {
+    else if (secrets.access_token) {
       headers.Authorization = `Bearer ${secrets.access_token}`;
     }
 

@@ -46,30 +46,38 @@ ARG VERSION=dev
 ARG ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=""
 ARG ARCHESTRA_EASTER_EGG_VIDEO_URL=""
 
-ENV ARCHESTRA_VERSION=${VERSION}
-ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
-ENV NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
-
 ENV NODE_ENV=production
-ENV ARCHESTRA_AUTH_SECRET=""
+# disable telemetry for next.js
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
-# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
-# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
+ENV ARCHESTRA_VERSION=${VERSION}
+ENV ARCHESTRA_FRONTEND_URL=""
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
-ENV NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=${ARCHESTRA_API_BASE_URL}
+ENV ARCHESTRA_ANALYTICS="enabled"
+
+ENV ARCHESTRA_OPENAI_BASE_URL="https://api.openai.com/v1"
+ENV ARCHESTRA_ANTHROPIC_BASE_URL="https://api.anthropic.com"
 
 ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
 ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV ARCHESTRA_OPENAI_BASE_URL="https://api.openai.com/v1"
-ENV ARCHESTRA_ANTHROPIC_BASE_URL="https://api.anthropic.com"
+ENV ARCHESTRA_AUTH_COOKIE_DOMAIN=""
+ENV ARCHESTRA_AUTH_SECRET=""
+
 ENV ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="false"
 ENV ARCHESTRA_ORCHESTRATOR_KUBECONFIG=""
 ENV ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="default"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+
 ENV ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
+ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=""
+ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=""
+ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=""
+
 ENV ARCHESTRA_LOGGING_LEVEL="info"
+ENV ARCHESTRA_METRICS_SECRET="archestra-metrics-secret"
+
+ENV ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE}
+ENV ARCHESTRA_EASTER_EGG_VIDEO_URL=${ARCHESTRA_EASTER_EGG_VIDEO_URL}
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \
@@ -84,7 +92,7 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Mark PostgreSQL data directory as a volume for data persistence
-VOLUME /var/lib/postgresql/data
+VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -104,24 +112,23 @@ COPY --from=builder /app/frontend/public ./frontend/public
 COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 
-# Create supervisord configuration
+# Create base supervisord configuration (without postgres)
+#
+# Important notes about supervisord environment variable handling:
+# - Subprocesses automatically inherit ALL environment variables from the shell that starts supervisord
+#   See: https://supervisord.org/subprocess.html#subprocess-environment
+# - You ONLY need to explicitly set environment variables in the config when:
+#   1. Using placeholder substitution (e.g., DATABASE_URL="placeholder" that gets replaced via sed)
+#   2. Mapping ENV variables to different names (e.g., ARCHESTRA_* -> NEXT_PUBLIC_*)
+#   3. Setting hardcoded values not in ENV (e.g., HOSTNAME="0.0.0.0")
+# - All ENV variables declared in the Dockerfile are automatically available to all programs
+#   See: https://supervisord.org/configuration.html#supervisord-section-values
 RUN cat > /etc/supervisord.conf <<'EOF'
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
 pidfile=/var/run/supervisord.pid
-
-[program:postgres]
-user=postgres
-command=postgres -D /var/lib/postgresql/data
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-priority=1
 
 [program:backend]
 directory=/app/backend
@@ -133,7 +140,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",ARCHESTRA_OPENAI_BASE_URL="%(ENV_ARCHESTRA_OPENAI_BASE_URL)s",ARCHESTRA_ANTHROPIC_BASE_URL="%(ENV_ARCHESTRA_ANTHROPIC_BASE_URL)s",ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="%(ENV_ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER)s",ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="%(ENV_ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE)s",ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="%(ENV_ARCHESTRA_ORCHESTRATOR_KUBECONFIG)s",ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="%(ENV_ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT)s",ARCHESTRA_LOGGING_LEVEL="%(ENV_ARCHESTRA_LOGGING_LEVEL)s",ARCHESTRA_VERSION="%(ENV_ARCHESTRA_VERSION)s"
+# DATABASE_URL is set to a placeholder here and replaced via sed in docker-entrypoint.sh
+# All other environment variables (NODE_ENV, ARCHESTRA_*, etc.) are inherited automatically
+environment=DATABASE_URL="placeholder"
 
 [program:frontend]
 directory=/app/frontend
@@ -145,7 +154,24 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL)s"
+# HOSTNAME is a hardcoded value, and NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
+# All other environment variables (NODE_ENV, etc.) are inherited automatically
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE="%(ENV_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE)s",NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL="%(ENV_ARCHESTRA_EASTER_EGG_VIDEO_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s"
+EOF
+
+# Create postgres program configuration (to be conditionally included)
+RUN cat > /etc/supervisord.postgres.conf <<'EOF'
+
+[program:postgres]
+user=postgres
+command=postgres -D /var/lib/postgresql/data
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=1
 EOF
 
 # Create initialization script
@@ -153,45 +179,77 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Generate and persist ARCHESTRA_AUTH_SECRET if not set
+if [ -z "$ARCHESTRA_AUTH_SECRET" ]; then
+    SECRET_FILE="/app/data/.auth_secret"
+
+    if [ -f "$SECRET_FILE" ]; then
+        # Load existing secret
+        export ARCHESTRA_AUTH_SECRET=$(cat "$SECRET_FILE")
+        echo "Loaded existing ARCHESTRA_AUTH_SECRET from $SECRET_FILE"
+    else
+        # Generate new random secret (64 characters)
+        export ARCHESTRA_AUTH_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+
+        # Persist it
+        mkdir -p /app/data
+        echo "$ARCHESTRA_AUTH_SECRET" > "$SECRET_FILE"
+        chmod 600 "$SECRET_FILE"
+        echo "Generated and saved new ARCHESTRA_AUTH_SECRET to $SECRET_FILE"
+    fi
+fi
+
+# Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)
+USE_EXTERNAL_DB=false
+if [ -n "$ARCHESTRA_DATABASE_URL" ] || [ -n "$DATABASE_URL" ]; then
+    USE_EXTERNAL_DB=true
+fi
+
 # Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
 EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
 
-if [ -n "$EFFECTIVE_DATABASE_URL" ]; then
-    # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
-else
-    # Use defaults
+if [ "$USE_EXTERNAL_DB" = "false" ]; then
+    echo "Using internal PostgreSQL database"
+
+    # Use defaults for internal database
     POSTGRES_USER=${POSTGRES_USER:-archestra}
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
-fi
 
-# Initialize PostgreSQL if data directory is empty
-if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
-    echo "Initializing PostgreSQL database..."
-    su-exec postgres initdb -D /var/lib/postgresql/data
+    # Append postgres program to supervisord config
+    cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
 
-    # Configure PostgreSQL
-    echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
-    echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
+    # Initialize PostgreSQL if data directory is empty
+    if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo "Initializing PostgreSQL database..."
+        su-exec postgres initdb -D /var/lib/postgresql/data
 
-    # Start PostgreSQL temporarily to create user and database
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+        # Configure PostgreSQL
+        echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
+        echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
 
-    # Create user and database
-    psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
-        CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
-        CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
-        GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
+        # Start PostgreSQL temporarily to create user and database
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+
+        # Create user and database
+        psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+            CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
+            CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
+            GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
-    # Stop PostgreSQL
-    su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+        # Stop PostgreSQL
+        su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 
-    echo "PostgreSQL initialized successfully"
+        echo "PostgreSQL initialized successfully"
+    fi
+else
+    echo "Using external PostgreSQL database"
+    # Extract credentials from DATABASE_URL if needed (postgresql://user:pass@host:port/db)
+    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
 fi
 
 # Update supervisord config with actual environment variables
@@ -209,7 +267,7 @@ EOF
 RUN chmod +x /docker-entrypoint.sh
 
 # Expose ports
-EXPOSE 5432 9000 3000
+EXPOSE 5432 9000 9050 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

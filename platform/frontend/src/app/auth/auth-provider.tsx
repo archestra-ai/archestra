@@ -25,6 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         EMAIL_PLACEHOLDER,
         PASSWORD_PLACEHOLDER,
       }}
+      apiKey
+      twoFactor={["totp"]}
+      deleteUser
     >
       {children}
     </AuthUIProvider>

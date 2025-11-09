@@ -31,36 +31,6 @@ class InteractionModel {
     return interaction;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Interaction[]> {
-    let query = db
-      .select()
-      .from(schema.interactionsTable)
-      .orderBy(desc(schema.interactionsTable.createdAt))
-      .$dynamic();
-
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.interactionsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    const rows = await query;
-    return rows as Interaction[];
-  }
-
   /**
    * Find all interactions with pagination and sorting support
    */
@@ -68,14 +38,14 @@ class InteractionModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
 
     // Build where clause for access control
     let whereClause: SQL | undefined;
-    if (userId && !isAdmin) {
+    if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -138,7 +108,7 @@ class InteractionModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<Interaction | null> {
     const [interaction] = await db
       .select()
@@ -149,8 +119,8 @@ class InteractionModel {
       return null;
     }
 
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
+    // Check access control for non-agent admins
+    if (userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.agentId,

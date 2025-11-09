@@ -29,6 +29,7 @@ export interface UnassignedToolData {
     updatedAt: string;
     mcpServerId: string | null;
     mcpServerName: string | null;
+    catalogId: string | null;
   };
   agent: null;
   createdAt: string;
@@ -88,6 +89,7 @@ export function UnassignedToolsList({
         updatedAt: String(tool.updatedAt),
         mcpServerId: tool.mcpServer?.id || null,
         mcpServerName: tool.mcpServer?.name || null,
+        catalogId: tool.catalogId,
       },
       agent: null,
       createdAt: String(tool.createdAt),

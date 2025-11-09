@@ -1,5 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { trace } from "@opentelemetry/api";
+import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
@@ -10,61 +10,13 @@ import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
-  ErrorResponseSchema,
+  constructResponseSchema,
   OpenAi,
-  RouteId,
   UuidIdSchema,
 } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into OpenAI tools array
- * Assigned tools take priority and override tools with the same name from the request
- */
-export const injectTools = async (
-  requestTools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
-  agentId: string,
-): Promise<z.infer<typeof OpenAi.Tools.ToolSchema>[]> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to OpenAI format
-  const assignedOpenAITools: z.infer<typeof OpenAi.Tools.ToolSchema>[] =
-    assignedTools.map((tool) => ({
-      type: "function" as const,
-      function: {
-        name: tool.name,
-        description: tool.description || undefined,
-        parameters: tool.parameters,
-      },
-    }));
-
-  // Create a map of request tools by name for easy lookup
-  const requestToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >();
-  for (const tool of requestTools || []) {
-    const toolName =
-      tool.type === "function" ? tool.function.name : tool.custom.name;
-    requestToolMap.set(toolName, tool);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  const mergedToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >(requestToolMap);
-  for (const assignedTool of assignedOpenAITools) {
-    // All assigned tools are function type since we create them that way above
-    if (assignedTool.type === "function") {
-      mergedToolMap.set(assignedTool.function.name, assignedTool);
-    }
-  }
-
-  return Array.from(mergedToolMap.values());
-};
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -181,13 +133,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const resolvedAgentId = resolvedAgent.id;
 
-    // Add OpenTelemetry trace attributes
-    utils.tracing.sprinkleTraceAttributes(
-      "openai",
-      utils.tracing.RouteCategory.LLM_PROXY,
-      resolvedAgent,
-    );
-
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
       "Agent resolved",
@@ -228,6 +173,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Persist non-MCP tools declared by client for tracking
       await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
@@ -247,19 +193,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resolvedAgentId,
       );
 
-      // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(tools, resolvedAgentId);
-
-      fastify.log.info(
-        {
-          resolvedAgentId,
-          requestToolsCount: tools?.length || 0,
-          mergedToolsCount: mergedTools.length,
-          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
-          mergedTools: JSON.stringify(mergedTools),
-        },
-        "MCP tools injected",
-      );
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
@@ -338,31 +274,22 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (stream) {
         // Handle streaming response with span to measure LLM call duration
-        const tracer = trace.getTracer("archestra");
-        const streamingResponse = await tracer.startActiveSpan(
+        const streamingResponse = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
-          {
-            attributes: {
-              "llm.model": body.model,
-              "llm.stream": true,
-            },
-          },
+          "openai",
+          body.model,
+          true,
+          resolvedAgent,
           async (llmSpan) => {
-            try {
-              const response = await openAiClient.chat.completions.create({
-                ...body,
-                messages: filteredMessages,
-                tools: mergedTools.length > 0 ? mergedTools : undefined,
-                stream: true,
-                stream_options: { include_usage: true },
-              });
-              llmSpan.end();
-              return response;
-            } catch (error) {
-              llmSpan.recordException(error as Error);
-              llmSpan.end();
-              throw error;
-            }
+            const response = await openAiClient.chat.completions.create({
+              ...body,
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: true,
+              stream_options: { include_usage: true },
+            });
+            llmSpan.end();
+            return response;
           },
         );
 
@@ -592,97 +519,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               };
               reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
             }
-
-            // Execute MCP tools and continue streaming conversation
-            if (accumulatedToolCalls.length > 0) {
-              const commonToolCalls =
-                utils.adapters.openai.toolCallsToCommon(accumulatedToolCalls);
-
-              fastify.log.info(
-                {
-                  resolvedAgentId,
-                  toolCalls: commonToolCalls.map((tc) => ({
-                    id: tc.id,
-                    name: tc.name,
-                    argumentKeys: Object.keys(tc.arguments),
-                  })),
-                },
-                "Executing MCP tool calls (streaming)",
-              );
-
-              const mcpResults = await utils.tools.executeMcpToolCalls(
-                commonToolCalls,
-                resolvedAgentId,
-              );
-
-              fastify.log.info(
-                {
-                  resolvedAgentId,
-                  results: mcpResults.map((r) => ({
-                    id: r.id,
-                    isError: r.isError,
-                    contentLength:
-                      typeof r.content === "string"
-                        ? r.content.length
-                        : JSON.stringify(r.content).length,
-                  })),
-                },
-                "MCP tool calls completed (streaming)",
-              );
-
-              if (mcpResults.length > 0) {
-                // Convert MCP results to OpenAI tool messages
-                const toolMessages =
-                  utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-                // Update conversation with tool results
-                const updatedMessages = [
-                  ...filteredMessages,
-                  assistantMessage,
-                  ...toolMessages,
-                ];
-
-                /**
-                 * Make another streaming call with the tool results (without tools to prevent loops)
-                 *
-                 * We also need to remove tool_choice otherwise openai complains about:
-                 * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-                 */
-                const continuationStream = await tracer.startActiveSpan(
-                  "openai.chat.completions.continuation",
-                  {
-                    attributes: {
-                      "llm.model": body.model,
-                      "llm.stream": true,
-                      "llm.continuation": true,
-                    },
-                  },
-                  async (continuationSpan) => {
-                    try {
-                      const response =
-                        await openAiClient.chat.completions.create({
-                          ...body,
-                          messages: updatedMessages,
-                          tools: undefined,
-                          tool_choice: undefined,
-                          stream: true,
-                        });
-                      continuationSpan.end();
-                      return response;
-                    } catch (error) {
-                      continuationSpan.recordException(error as Error);
-                      continuationSpan.end();
-                      throw error;
-                    }
-                  },
-                );
-
-                // Stream the continuation response
-                for await (const chunk of continuationStream) {
-                  reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-                }
-              }
-            }
+            // Tool calls have been streamed to client
+            // Client is responsible for executing tools via MCP Gateway and sending results back
           }
         }
 
@@ -725,30 +563,21 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       } else {
         // Non-streaming response with span to measure LLM call duration
-        const tracer = trace.getTracer("archestra");
-        let response = await tracer.startActiveSpan(
+        const response = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
-          {
-            attributes: {
-              "llm.model": body.model,
-              "llm.stream": false,
-            },
-          },
+          "openai",
+          body.model,
+          false,
+          resolvedAgent,
           async (llmSpan) => {
-            try {
-              const response = await openAiClient.chat.completions.create({
-                ...body,
-                messages: filteredMessages,
-                tools: mergedTools.length > 0 ? mergedTools : undefined,
-                stream: false,
-              });
-              llmSpan.end();
-              return response;
-            } catch (error) {
-              llmSpan.recordException(error as Error);
-              llmSpan.end();
-              throw error;
-            }
+            const response = await openAiClient.chat.completions.create({
+              ...body,
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: false,
+            });
+            llmSpan.end();
+            return response;
           },
         );
 
@@ -789,98 +618,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               logprobs: null,
             },
           ];
-        } else if (
-          assistantMessage.tool_calls &&
-          assistantMessage.tool_calls.length > 0
-        ) {
-          // Tool calls are allowed - execute MCP tools
-          const commonToolCalls = utils.adapters.openai.toolCallsToCommon(
-            assistantMessage.tool_calls,
-          );
-
-          fastify.log.info(
-            {
-              resolvedAgentId,
-              toolCalls: commonToolCalls.map((tc) => ({
-                id: tc.id,
-                name: tc.name,
-                argumentKeys: Object.keys(tc.arguments),
-              })),
-            },
-            "Executing MCP tool calls (non-streaming)",
-          );
-
-          const mcpResults = await utils.tools.executeMcpToolCalls(
-            commonToolCalls,
-            resolvedAgentId,
-          );
-
-          fastify.log.info(
-            {
-              resolvedAgentId,
-              results: mcpResults.map((r) => ({
-                id: r.id,
-                isError: r.isError,
-                contentLength:
-                  typeof r.content === "string"
-                    ? r.content.length
-                    : JSON.stringify(r.content).length,
-              })),
-            },
-            "MCP tool calls completed (non-streaming)",
-          );
-
-          if (mcpResults.length > 0) {
-            // Convert MCP results to OpenAI tool messages and append to response
-            const toolMessages =
-              utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-            // For non-streaming, we need to make another LLM call with the tool results
-            const updatedMessages = [
-              ...filteredMessages,
-              assistantMessage,
-              ...toolMessages,
-            ];
-
-            /**
-             * Make another call with the tool results (without tools to prevent loops)
-             *
-             * We also need to remove tool_choice otherwise openai complains about:
-             * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-             */
-            const finalResponse = await tracer.startActiveSpan(
-              "openai.chat.completions.continuation",
-              {
-                attributes: {
-                  "llm.model": body.model,
-                  "llm.stream": false,
-                  "llm.continuation": true,
-                },
-              },
-              async (continuationSpan) => {
-                try {
-                  const response = await openAiClient.chat.completions.create({
-                    ...body,
-                    messages: updatedMessages,
-                    tools: undefined,
-                    tool_choice: undefined,
-                    stream: false,
-                  });
-                  continuationSpan.end();
-                  return response;
-                } catch (error) {
-                  continuationSpan.recordException(error as Error);
-                  continuationSpan.end();
-                  throw error;
-                }
-              },
-            );
-
-            // Update the response with the final LLM response
-            response = finalResponse;
-            assistantMessage = finalResponse.choices[0].message;
-          }
         }
+        // Tool calls are allowed - return response with tool_calls to client
+        // Client is responsible for executing tools via MCP Gateway and sending results back
 
         // Extract token usage from response
         const tokenUsage = response.usage
@@ -932,13 +672,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers }, reply) => {
@@ -962,13 +698,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers, params }, reply) => {

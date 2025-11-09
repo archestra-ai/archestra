@@ -33,35 +33,36 @@ function MembersSettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const hasPermissionTodo = "TODO:";
+
   const members = activeOrg ? (
     <div className="space-y-6">
-      {activeMemberRole &&
-        (activeMemberRole === "admin" || activeMemberRole === "owner") && (
-          <Dialog
-            open={inviteDialogOpen}
-            onOpenChange={(open) => {
-              setInviteDialogOpen(open);
-              if (!open) {
-                queryClient.invalidateQueries({
-                  queryKey: organizationKeys.invitations(),
-                });
-              }
-            }}
-          >
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Invite Member</DialogTitle>
-              </DialogHeader>
-              <InviteByLinkCard
-                organizationId={activeOrg.id}
-                onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
-              />
-            </DialogContent>
-          </Dialog>
-        )}
+      {activeMemberRole && hasPermissionTodo && (
+        <Dialog
+          open={inviteDialogOpen}
+          onOpenChange={(open) => {
+            setInviteDialogOpen(open);
+            if (!open) {
+              queryClient.invalidateQueries({
+                queryKey: organizationKeys.invitations(),
+              });
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Invite Member</DialogTitle>
+            </DialogHeader>
+            <InviteByLinkCard
+              organizationId={activeOrg.id}
+              onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
       <OrganizationMembersCard
         action={() => {
-          if (activeMemberRole === "admin" || activeMemberRole === "owner") {
+          if (hasPermissionTodo) {
             setInviteDialogOpen(true);
           }
         }}

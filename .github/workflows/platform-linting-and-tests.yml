@@ -69,23 +69,7 @@ jobs:
 
       - name: Start platform with docker compose
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
-
-          echo "=== Containers started ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
-
-          echo "=== Waiting for services to initialize (30s) ==="
-          sleep 30
-
-          echo "=== Container status after wait ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
-
-          echo "=== WireMock Container Logs ==="
-          docker logs archestra-platform-test-wiremock
-
-          echo "=== Quick log check for each container ==="
-          docker logs archestra-platform-test --tail 50
+        run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -98,12 +82,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium
+          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
 
       - name: Install Playwright browsers
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit firefox
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -111,7 +95,7 @@ jobs:
         run: pnpm test:e2e
 
       - name: Upload Playwright report
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

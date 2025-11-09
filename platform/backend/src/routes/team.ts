@@ -1,21 +1,18 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamMemberBodySchema,
   CreateTeamBodySchema,
-  ErrorResponseSchema,
-  RouteId,
+  constructResponseSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Get all teams in the organization
-   */
   fastify.get(
     "/api/teams",
     {
@@ -23,28 +20,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTeams,
         description: "Get all teams in the organization",
         tags: ["Teams"],
-        response: {
-          200: z.array(SelectTeamSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectTeamSchema)),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const teams = await TeamModel.findByOrganization(user.organizationId);
-        return reply.send(teams);
+        return reply.send(
+          await TeamModel.findByOrganization(request.organizationId),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -58,55 +41,27 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Create a new team (Admin only)
-   */
   fastify.post(
     "/api/teams",
     {
       schema: {
         operationId: RouteId.CreateTeam,
-        description: "Create a new team (Admin only)",
+        description: "Create a new team",
         tags: ["Teams"],
         body: CreateTeamBodySchema,
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ body: { name, description }, user, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can create teams",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const team = await TeamModel.create({
-          name: request.body.name,
-          description: request.body.description,
-          organizationId: user.organizationId,
-          createdBy: user.id,
-        });
-
-        return reply.send(team);
+        return reply.send(
+          await TeamModel.create({
+            name,
+            description,
+            organizationId,
+            createdBy: user.id,
+          }),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -120,9 +75,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get a team by ID
-   */
   fastify.get(
     "/api/teams/:id",
     {
@@ -133,28 +85,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const team = await TeamModel.findById(request.params.id);
+        const team = await TeamModel.findById(id);
 
         if (!team) {
           return reply.status(404).send({
@@ -166,7 +102,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Verify the team belongs to the user's organization
-        if (team.organizationId !== user.organizationId) {
+        if (team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -189,57 +125,25 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Update a team (Admin only)
-   */
   fastify.put(
     "/api/teams/:id",
     {
       schema: {
         operationId: RouteId.UpdateTeam,
-        description: "Update a team (Admin only)",
+        description: "Update a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
         body: UpdateTeamBodySchema,
-        response: {
-          200: SelectTeamSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can update teams",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(request.params.id);
-        if (
-          !existingTeam ||
-          existingTeam.organizationId !== user.organizationId
-        ) {
+        const existingTeam = await TeamModel.findById(id);
+        if (!existingTeam || existingTeam.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -248,7 +152,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const team = await TeamModel.update(request.params.id, request.body);
+        const team = await TeamModel.update(id, body);
 
         if (!team) {
           return reply.status(404).send({
@@ -273,56 +177,24 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Delete a team (Admin only)
-   */
   fastify.delete(
     "/api/teams/:id",
     {
       schema: {
         operationId: RouteId.DeleteTeam,
-        description: "Delete a team (Admin only)",
+        description: "Delete a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete teams",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(request.params.id);
-        if (
-          !existingTeam ||
-          existingTeam.organizationId !== user.organizationId
-        ) {
+        const existingTeam = await TeamModel.findById(id);
+        if (!existingTeam || existingTeam.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -331,7 +203,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const success = await TeamModel.delete(request.params.id);
+        const success = await TeamModel.delete(id);
 
         if (!success) {
           return reply.status(404).send({
@@ -356,9 +228,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get team members
-   */
   fastify.get(
     "/api/teams/:id/members",
     {
@@ -369,30 +238,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: {
-          200: z.array(SelectTeamMemberSchema),
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectTeamMemberSchema)),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -401,8 +254,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const members = await TeamModel.getTeamMembers(request.params.id);
-        return reply.send(members);
+        return reply.send(await TeamModel.getTeamMembers(id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -416,54 +268,25 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Add a member to a team (Admin only)
-   */
   fastify.post(
     "/api/teams/:id/members",
     {
       schema: {
         operationId: RouteId.AddTeamMember,
-        description: "Add a member to a team (Admin only)",
+        description: "Add a member to a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
         }),
         body: AddTeamMemberBodySchema,
-        response: {
-          200: SelectTeamMemberSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTeamMemberSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, organizationId }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can add team members",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -472,11 +295,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const member = await TeamModel.addMember(
-          request.params.id,
-          request.body.userId,
-          request.body.role,
-        );
+        const member = await TeamModel.addMember(id, body.userId, body.role);
 
         return reply.send(member);
       } catch (error) {
@@ -492,54 +311,25 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Remove a member from a team (Admin only)
-   */
   fastify.delete(
     "/api/teams/:id/members/:userId",
     {
       schema: {
         operationId: RouteId.RemoveTeamMember,
-        description: "Remove a member from a team (Admin only)",
+        description: "Remove a member from a team",
         tags: ["Teams"],
         params: z.object({
           id: z.string(),
           userId: z.string(),
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id, userId }, organizationId, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can remove team members",
-              type: "forbidden",
-            },
-          });
-        }
-
         // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(request.params.id);
-        if (!team || team.organizationId !== user.organizationId) {
+        const team = await TeamModel.findById(id);
+        if (!team || team.organizationId !== organizationId) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -548,10 +338,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const success = await TeamModel.removeMember(
-          request.params.id,
-          request.params.userId,
-        );
+        const success = await TeamModel.removeMember(id, userId);
 
         if (!success) {
           return reply.status(404).send({
@@ -562,18 +349,24 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const { success: userIsAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
+        );
+
         // Clean up invalid credential sources (personal tokens) for this user
         // if they no longer have access to agents through other teams
         try {
           const cleanedCount =
             await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-              request.params.userId,
-              request.params.id,
+              userId,
+              id,
+              userIsAgentAdmin,
             );
 
           if (cleanedCount > 0) {
             fastify.log.info(
-              `Cleaned up ${cleanedCount} invalid credential sources for user ${request.params.userId}`,
+              `Cleaned up ${cleanedCount} invalid credential sources for user ${userId}`,
             );
           }
         } catch (cleanupError) {

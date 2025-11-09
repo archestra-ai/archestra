@@ -21,7 +21,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
-    "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts"
+    "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
+    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.40",
@@ -35,10 +36,12 @@
     "@fastify/swagger": "^9.5.2",
     "@google/genai": "^1.28.0",
     "@kubernetes/client-node": "^1.4.0",
+    "@kubiks/otel-drizzle": "^2.1.0",
     "@modelcontextprotocol/sdk": "^1.21.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.66.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.207.0",
+    "@opentelemetry/otlp-exporter-base": "^0.207.0",
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/sdk-node": "^0.207.0",
     "@opentelemetry/semantic-conventions": "^1.28.0",
@@ -55,6 +58,7 @@
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",
     "handlebars": "^4.7.8",
+    "jose": "^6.1.0",
     "lodash-es": "^4.17.21",
     "openai": "^6.6.0",
     "pg": "^8.16.3",

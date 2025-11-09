@@ -1,8 +1,4 @@
-import {
-  createTestAdmin,
-  createTestOrganization,
-  createTestUser,
-} from "@/test-utils";
+import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import TeamModel from "./team";
 
@@ -15,14 +11,14 @@ describe("AgentModel", () => {
   });
 
   describe("Access Control", () => {
-    test("can create agent with team assignments", async () => {
-      const userId = await createTestUser();
-      const orgId = await createTestOrganization();
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: userId,
-      });
+    test("can create agent with team assignments", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",
@@ -33,38 +29,35 @@ describe("AgentModel", () => {
       expect(agent.teams).toHaveLength(1);
     });
 
-    test("admin can see all agents", async () => {
-      const adminId = await createTestAdmin();
+    test("admin can see all agents", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
 
       await AgentModel.create({ name: "Agent 1", teams: [] });
       await AgentModel.create({ name: "Agent 2", teams: [] });
       await AgentModel.create({ name: "Agent 3", teams: [] });
 
-      const agents = await AgentModel.findAll(adminId, true);
+      const agents = await AgentModel.findAll(admin.id, true);
       expect(agents).toHaveLength(3);
     });
 
-    test("member only sees agents in their teams", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("member only sees agents in their teams", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create two teams
-      const team1 = await TeamModel.create({
-        name: "Team 1",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      const team2 = await TeamModel.create({
-        name: "Team 2",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
       // Add user1 to team1, user2 to team2
-      await TeamModel.addMember(team1.id, user1Id);
-      await TeamModel.addMember(team2.id, user2Id);
+      await TeamModel.addMember(team1.id, user1.id);
+      await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents assigned to different teams
       const agent1 = await AgentModel.create({
@@ -81,23 +74,24 @@ describe("AgentModel", () => {
       });
 
       // user1 only has access to agent1 (via team1)
-      const agents = await AgentModel.findAll(user1Id, false);
+      const agents = await AgentModel.findAll(user1.id, false);
       expect(agents).toHaveLength(1);
       expect(agents[0].id).toBe(agent1.id);
     });
 
-    test("member with no team membership sees empty list", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("member with no team membership sees empty list", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user1.id);
 
       await AgentModel.create({
         name: "Agent 1",
@@ -105,81 +99,79 @@ describe("AgentModel", () => {
       });
 
       // user2 is not in any team
-      const agents = await AgentModel.findAll(user2Id, false);
+      const agents = await AgentModel.findAll(user2.id, false);
       expect(agents).toHaveLength(0);
     });
 
-    test("findById returns agent for admin", async () => {
-      const adminId = await createTestAdmin();
+    test("findById returns agent for admin", async ({ makeAdmin }) => {
+      const admin = await makeAdmin();
 
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, adminId, true);
+      const foundAgent = await AgentModel.findById(agent.id, admin.id, true);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
 
-    test("findById returns agent for user in assigned team", async () => {
-      const user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("findById returns agent for user in assigned team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, user1Id, false);
+      const foundAgent = await AgentModel.findById(agent.id, user.id, false);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
 
-    test("findById returns null for user not in assigned teams", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("findById returns null for user not in assigned teams", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user1.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",
         teams: [team.id],
       });
 
-      const foundAgent = await AgentModel.findById(agent.id, user2Id, false);
+      const foundAgent = await AgentModel.findById(agent.id, user2.id, false);
       expect(foundAgent).toBeNull();
     });
 
-    test("update syncs team assignments correctly", async () => {
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("update syncs team assignments correctly", async ({
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team1 = await TeamModel.create({
-        name: "Team 1",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      const team2 = await TeamModel.create({
-        name: "Team 2",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
+      const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
       const agent = await AgentModel.create({
         name: "Test Agent",
@@ -199,15 +191,15 @@ describe("AgentModel", () => {
       expect(updatedAgent?.teams).not.toContain(team1.id);
     });
 
-    test("update without teams keeps existing assignments", async () => {
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("update without teams keeps existing assignments", async ({
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
+      const team = await makeTeam(org.id, admin.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",
@@ -225,15 +217,15 @@ describe("AgentModel", () => {
       expect(updatedAgent?.teams).toEqual(initialTeams);
     });
 
-    test("teams is always populated in responses", async () => {
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("teams is always populated in responses", async ({
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
+      const team = await makeTeam(org.id, admin.id);
 
       const agent = await AgentModel.create({
         name: "Test Agent",

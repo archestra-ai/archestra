@@ -1,22 +1,23 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import {
   AgentModel,
   AgentTeamModel,
   AgentToolModel,
+  InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
   UserModel,
 } from "@/models";
 import {
-  ErrorResponseSchema,
-  RouteId,
+  constructResponseSchema,
   SelectAgentToolSchema,
   SelectToolSchema,
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -26,28 +27,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgentTools,
         description: "Get all agent-tool relationships with details",
         tags: ["Agent Tools"],
-        response: {
-          200: z.array(SelectAgentToolSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectAgentToolSchema)),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const agentTools = await AgentToolModel.findAll(user.id, user.isAdmin);
-        return reply.send(agentTools);
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+        return reply.send(
+          await AgentToolModel.findAll(request.user.id, isAgentAdmin),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -75,20 +66,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
           })
           .nullish(),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          400: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
       try {
         const { agentId, toolId } = request.params;
-        const { credentialSourceMcpServerId } = request.body || {};
+        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+          request.body || {};
 
         // Validate that agent exists
         const agent = await AgentModel.findById(agentId);
@@ -112,6 +100,36 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        // Check if tool is from local server (requires executionSourceMcpServerId)
+        if (tool.catalogId) {
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            tool.catalogId,
+          );
+          if (catalogItem?.serverType === "local") {
+            if (!executionSourceMcpServerId) {
+              return reply.status(400).send({
+                error: {
+                  message:
+                    "Execution source installation is required for local MCP server tools",
+                  type: "validation_error",
+                },
+              });
+            }
+          }
+          // Check if tool is from remote server (requires credentialSourceMcpServerId)
+          if (catalogItem?.serverType === "remote") {
+            if (!credentialSourceMcpServerId) {
+              return reply.status(400).send({
+                error: {
+                  message:
+                    "Credential source is required for remote MCP server tools",
+                  type: "validation_error",
+                },
+              });
+            }
+          }
+        }
+
         // If a credential source is specified, validate it
         if (credentialSourceMcpServerId) {
           const validationError = await validateCredentialSource(
@@ -124,11 +142,24 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // If an execution source is specified, validate it
+        if (executionSourceMcpServerId) {
+          const validationError = await validateExecutionSource(
+            toolId,
+            executionSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
+        }
+
         // Create the assignment (no-op if already exists)
         await AgentToolModel.createIfNotExists(
           agentId,
           toolId,
           credentialSourceMcpServerId,
+          executionSourceMcpServerId,
         );
 
         return reply.send({ success: true });
@@ -156,10 +187,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           toolId: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {
@@ -193,11 +221,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        response: {
-          200: z.array(SelectToolSchema),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
     async (request, reply) => {
@@ -246,27 +270,27 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolResultTreatment: true,
           responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
+          executionSourceMcpServerId: true,
         }).partial(),
-        response: {
-          200: UpdateAgentToolSchema,
-          400: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async (request, reply) => {
       try {
         const { id } = request.params;
-        const { credentialSourceMcpServerId } = request.body;
+        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+          request.body;
 
-        // If credentialSourceMcpServerId is being updated, validate it
-        if (credentialSourceMcpServerId) {
-          // First, get the agent-tool to find the agentId
+        // Get the agent-tool relationship for validation (needed for both credential and execution source)
+        let agentToolForValidation:
+          | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
+          | undefined;
+
+        if (credentialSourceMcpServerId || executionSourceMcpServerId) {
           const agentTools = await AgentToolModel.findAll();
-          const agentTool = agentTools.find((at) => at.id === id);
+          agentToolForValidation = agentTools.find((at) => at.id === id);
 
-          if (!agentTool) {
+          if (!agentToolForValidation) {
             return reply.status(404).send({
               error: {
                 message: `Agent-tool relationship with ID ${id} not found`,
@@ -274,13 +298,65 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             });
           }
+        }
+
+        // If credentialSourceMcpServerId is being updated, validate it
+        if (credentialSourceMcpServerId && agentToolForValidation) {
           const validationError = await validateCredentialSource(
-            agentTool.agent.id,
+            agentToolForValidation.agent.id,
             credentialSourceMcpServerId,
           );
 
           if (validationError) {
             return reply.status(validationError.status).send(validationError);
+          }
+        }
+
+        // If executionSourceMcpServerId is being updated, validate it
+        if (executionSourceMcpServerId && agentToolForValidation) {
+          const validationError = await validateExecutionSource(
+            agentToolForValidation.tool.id,
+            executionSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
+        }
+
+        if (
+          executionSourceMcpServerId === null &&
+          agentToolForValidation &&
+          agentToolForValidation.tool.catalogId
+        ) {
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            agentToolForValidation.tool.catalogId,
+          );
+          // Check if tool is from local server and executionSourceMcpServerId is being set to null
+          if (
+            catalogItem?.serverType === "local" &&
+            !executionSourceMcpServerId
+          ) {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "Execution source installation is required for local MCP server tools and cannot be set to null",
+                type: "validation_error",
+              },
+            });
+          }
+          // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+          if (
+            catalogItem?.serverType === "remote" &&
+            !credentialSourceMcpServerId
+          ) {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "Credential source is required for remote MCP server tools and cannot be set to null",
+                type: "validation_error",
+              },
+            });
           }
         }
 
@@ -324,12 +400,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .pipe(z.array(UuidIdSchema)),
           catalogId: UuidIdSchema.optional(),
         }),
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               id: z.string(),
               name: z.string(),
               authType: z.enum(["personal", "team"]),
+              serverType: z.enum(["local", "remote"]),
               catalogId: z.string().nullable(),
               ownerId: z.string().nullable(),
               ownerEmail: z.string().nullable(),
@@ -344,26 +421,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 .optional(),
             }),
           ),
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        ),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const { agentIds, catalogId } = request.query;
 
         // Validate that at least one agent ID is provided
@@ -385,8 +447,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+
         // Get all MCP servers accessible to the user
-        const allServers = await McpServerModel.findAll(user.id, user.isAdmin);
+        const allServers = await McpServerModel.findAll(
+          request.user.id,
+          isAgentAdmin,
+        );
 
         // Filter by catalogId if provided
         const filteredServers = catalogId
@@ -400,15 +470,31 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Admin personal tokens can be used with any agent
             if (server.authType === "personal" && server.ownerId) {
               const ownerId = server.ownerId;
-              const owner = await UserModel.getUserById(ownerId);
-              if (owner?.role === "admin") {
+              // const owner = await UserModel.getById(ownerId);
+
+              /**
+               * NOTE: I'm doubtful this will work as intended, right now better-auth's
+               * hasPermissions API requires passing in request headers to do the authz check
+               * HOWEVER, in this particular context, we are looking at a user which may
+               * not necessarily be the user identified by the request.headers...
+               */
+              const { success: isAgentAdmin } = await hasPermission(
+                { agent: ["admin"] },
+                request.headers,
+              );
+
+              if (isAgentAdmin) {
                 return { server, valid: true };
               }
 
               // Member personal tokens: check if owner belongs to any of the agents' teams
               const hasAccessResults = await Promise.all(
                 agentIds.map((agentId) =>
-                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, false),
+                  /**
+                   * NOTE: this is granting too much access here.. we should refactor this,
+                   * see the comment above the hasPermission call above for more context..
+                   */
+                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, true),
                 ),
               );
               const hasAccessToAny = hasAccessResults.some(
@@ -440,6 +526,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: server.id,
             name: server.name,
             authType: server.authType as "personal" | "team",
+            serverType: server.serverType,
             catalogId: server.catalogId,
             ownerId: server.ownerId,
             ownerEmail: server.ownerEmail ?? null,
@@ -492,7 +579,7 @@ async function validateCredentialSource(
 
   // Get the token owner's details
   const owner = mcpServer.ownerId
-    ? await UserModel.getUserById(mcpServer.ownerId)
+    ? await UserModel.getById(mcpServer.ownerId)
     : null;
   if (!owner) {
     return {
@@ -522,17 +609,17 @@ async function validateCredentialSource(
       };
     }
   } else if (mcpServer.authType === "personal") {
-    // For personal tokens: check if owner is admin OR if owner belongs to a team that the agent is assigned to
-    // Admins can use their tokens with any agent
-    if (owner.role === "admin") {
-      return null;
-    }
-
-    // Members must belong to a team that the agent is assigned to
+    /**
+     * For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent
+     * is assigned to
+     *
+     * NOTE: this is granting too much access here.. we should refactor this,
+     * see the comment above the hasPermission call above for more context..
+     */
     const hasAccess = await AgentTeamModel.userHasAgentAccess(
       owner.id,
       agentId,
-      false, // isAdmin = false to check actual team membership
+      true,
     );
 
     if (!hasAccess) {
@@ -545,6 +632,53 @@ async function validateCredentialSource(
         },
       };
     }
+  }
+
+  return null;
+}
+
+/**
+ * Validates that an executionSourceMcpServerId is valid for the given tool.
+ * Returns an error object if validation fails, or null if valid.
+ *
+ * Validation rules:
+ * - MCP server must exist
+ * - Tool must exist
+ * - Execution source must be from the same catalog as the tool (catalog compatibility)
+ */
+async function validateExecutionSource(
+  toolId: string,
+  executionSourceMcpServerId: string,
+): Promise<{
+  status: 400 | 404;
+  error: { message: string; type: string };
+} | null> {
+  // 1. Check MCP server exists
+  const mcpServer = await McpServerModel.findById(executionSourceMcpServerId);
+  if (!mcpServer) {
+    return {
+      status: 404,
+      error: { message: "MCP server not found", type: "not_found" },
+    };
+  }
+
+  // 2. Get tool and verify catalog compatibility
+  const tool = await ToolModel.findById(toolId);
+  if (!tool) {
+    return {
+      status: 404,
+      error: { message: "Tool not found", type: "not_found" },
+    };
+  }
+
+  if (tool.catalogId !== mcpServer.catalogId) {
+    return {
+      status: 400,
+      error: {
+        message: "Execution source must be from the same catalog as the tool",
+        type: "validation_error",
+      },
+    };
   }
 
   return null;

@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "id": "6e80465e-84e5-4b25-86d2-1212d9c55704",
+=======
+  "id": "b0a4ad75-2436-4b22-a82a-0d5b37940caf",
+>>>>>>> main
   "prevId": "cd78c819-8124-428b-8788-89a6d2212092",
   "version": "7",
   "dialect": "postgresql",
@@ -846,6 +850,74 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+<<<<<<< HEAD
+=======
+    "public.two_factor": {
+      "name": "two_factor",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "secret": {
+          "name": "secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backup_codes": {
+          "name": "backup_codes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "two_factor_user_id_user_id_fk": {
+          "name": "two_factor_user_id_user_id_fk",
+          "tableFrom": "two_factor",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+>>>>>>> main
     "public.verification": {
       "name": "verification",
       "schema": "",
@@ -1951,23 +2023,34 @@
           "primaryKey": false,
           "notNull": true
         },
+<<<<<<< HEAD
         "method": {
           "name": "method",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
         },
+=======
+>>>>>>> main
         "tool_call": {
           "name": "tool_call",
           "type": "jsonb",
           "primaryKey": false,
+<<<<<<< HEAD
           "notNull": false
+=======
+          "notNull": true
+>>>>>>> main
         },
         "tool_result": {
           "name": "tool_result",
           "type": "jsonb",
           "primaryKey": false,
+<<<<<<< HEAD
           "notNull": false
+=======
+          "notNull": true
+>>>>>>> main
         },
         "created_at": {
           "name": "created_at",
@@ -2794,6 +2877,16 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+<<<<<<< HEAD
+=======
+        },
+        "two_factor_enabled": {
+          "name": "two_factor_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+>>>>>>> main
         }
       },
       "indexes": {},
@@ -2824,4 +2917,8 @@
     "schemas": {},
     "tables": {}
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> main

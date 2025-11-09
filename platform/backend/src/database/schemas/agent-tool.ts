@@ -34,6 +34,11 @@ const agentToolsTable = pgTable(
     credentialSourceMcpServerId: uuid(
       "credential_source_mcp_server_id",
     ).references(() => mcpServerTable.id, { onDelete: "set null" }),
+    // executionSourceMcpServerId specifies which MCP server pod to route tool calls to
+    // Used for local MCP servers to choose between multiple installations of same catalog
+    executionSourceMcpServerId: uuid(
+      "execution_source_mcp_server_id",
+    ).references(() => mcpServerTable.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

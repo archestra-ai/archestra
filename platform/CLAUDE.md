@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key URLs
 
 - **Frontend**: <http://localhost:3000/>
+- **Backend**: <http://localhost:9000/> (Fastify API server)
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools)
 - **Tools Inspector**: <http://localhost:3000/tools>
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
@@ -25,6 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
 - **MCP Gateway Logs**: <http://localhost:3000/logs/mcp-gateway> (View MCP tool call logs)
+- **Roles**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
@@ -33,7 +35,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
+- **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
+- **Backend Metrics**: <http://localhost:9050/metrics> (Prometheus metrics endpoint, separate from main API)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
@@ -45,7 +49,7 @@ pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
-pnpm test:e2e                           # Run e2e tests with Playwright (includes WireMock)
+pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox) (chromium, webkit, firefox)
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -66,7 +70,9 @@ docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Sta
 ## Environment Variables
 
 ```bash
-# Required (ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL)
+# Database Configuration
+# ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL
+# When using external database, internal postgres container will not start
 ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
 # Provider API Keys
@@ -77,6 +83,14 @@ ANTHROPIC_API_KEY=your-api-key-here
 # Provider Base URLs (optional - for testing)
 ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
+
+# Analytics (optional - disabled for local dev and e2e tests)
+ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
+
+# Authentication Secret (auto-generated in Helm/Docker if not set)
+# In Helm: Auto-generated on first install and persisted
+# In Docker: Auto-generated and saved to /app/data/.auth_secret
+ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
@@ -89,6 +103,12 @@ ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
 ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
+NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Frontend display of base image
+
+# OpenTelemetry Authentication
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=  # Username for OTLP basic auth (requires password)
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=  # Password for OTLP basic auth (requires username)
+ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes precedence over basic auth)
 
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
@@ -96,9 +116,9 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Architecture
 
-**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
+**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
 
 **Workspaces**:
 
@@ -107,22 +127,42 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
 
+## Tool Execution Architecture
+
+**LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
+1. Call LLM proxy → receive tool_use/tool_calls
+2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
+3. Send tool results back to LLM proxy
+4. Receive final answer
+
+Tool invocation policies and trusted data policies are still enforced by the proxy.
+
 ## Authentication
 
-- **API Key Auth**: API keys can be used via `Authorization` header
-- API keys have all permissions by default
-- API keys work as fallback when session auth fails (e.g., "No active organization" errors)
-- Use `pnpm test:e2e` to run API tests with API key authentication
+- **Better-Auth**: Session management with dynamic RBAC
+- **API Key Auth**: `Authorization: ${apiKey}` header (not Bearer)
+- **Custom Roles**: Up to 50 custom roles per organization
+- **Middleware**: Fastify plugin at `backend/src/auth/fastify-plugin/`
+- **Route Permissions**: Configure in `shared/access-control.ts`
+- **Request Context**: `request.user` and `request.organizationId`
+- **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
 
 ## Observability
 
-**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes. Traces stored in Grafana Tempo, viewable via Grafana UI.
+**Tracing**: LLM proxy routes add agent data via `startActiveLlmSpan()`. Traces include `agent.id`, `agent.name` and dynamic `agent.<label>` attributes. Agent label keys are fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo.
 
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic agent labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
 ## Coding Conventions
+
+**Database Architecture Guidelines**:
+
+- **Model-Only Database Access**: All database queries MUST go through `backend/src/models/` - never directly in routes or services
+- **Model Creation**: Create model files for any new database entities you need to interact with
+- **CRUD Centralization**: Models should handle all CRUD operations and complex queries
+- **No Business Logic**: Keep models focused on data access, business logic goes in services
 
 **Frontend**:
 
@@ -131,24 +171,38 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Small focused components with extracted business logic
 - Flat file structure, avoid barrel files
 - Only export what's needed externally
+- **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
 
 **Backend**:
 
-- Use Drizzle ORM for database operations
+- Use Drizzle ORM for database operations through MODELS ONLY!
+- Table exports: Use plural names with "Table" suffix (e.g., `agentLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
-- When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
+- Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
+- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
 
 **Team-based Access Control**:
 
-- Agents and MCP servers use team-based authorization (not user-based)
+- Agents and MCP servers use team-based authorization
 - Teams managed via better-auth organization plugin
 - Junction tables: `agent_team` and `mcp_server_team`
-- Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
-- Admin-only team CRUD operations via `/api/teams/*` routes
-- Members can read teams and access team-assigned agents/MCP servers
+- Breaking change: `usersWithAccess[]` replaced with `teams[]`
+- Admin-only team CRUD via `/api/teams/*`
+- Members can read teams and access assigned resources
+
+**Custom RBAC Roles**:
+
+- Extends predefined roles (admin, member)
+- Up to 50 custom roles per organization
+- 30 resources across 4 categories with CRUD permissions
+- Permission validation: can only grant what you have
+- Predefined roles are immutable
+- API: `/api/roles/*` (GET, POST, PUT, DELETE)
+- Database: `organizationRolesTable`
+- UI: Admin-only roles management at `/settings/roles`
 
 **Agent Labels**:
 
@@ -157,7 +211,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Keys and values stored separately for consistency and reuse
 - One value per key per agent (updating same key replaces value)
 - Labels returned in alphabetical order by key for consistency
-- API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
+- API endpoints: GET `/api/agents/labels/keys`, GET `/api/agents/labels/values?key=<key>` (key param filters values by key)
 
 **MCP Server Installation Requests**:
 
@@ -182,6 +236,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Configuring Transport Type**:
+
 - Set `transportType: "streamable-http"` in `localConfig` for HTTP transport
 - Optionally specify `httpPort` (defaults to 8080) and `httpPath` (defaults to /mcp)
 - Stdio transport serializes requests (one at a time), HTTP allows concurrent connections
@@ -195,13 +250,43 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+- Secret-based env vars via `archestra.envFromSecrets` for sensitive data injection (e.g., API keys from K8s Secrets)
+- Bulk env var import via `archestra.envFrom` for importing all keys from Secrets/ConfigMaps at once
 
 **White-labeling**:
-- Admin-only via `/api/organization/appearance` endpoints  
+
 - Custom logos: PNG only, max 2MB, stored as base64
 - 5 fonts: Lato, Inter, Open Sans, Roboto, Source Sans Pro
 - Real-time theme and font preview in settings
 - Custom logos display with "Powered by Archestra" attribution
-- Database columns: theme, customFont, logoType, logo
+- Database columns: theme, customFont, logo
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking
+**Archestra MCP Server**:
+
+- Built-in tools automatically injected into all agents
+- Tools prefixed with `archestra__` to avoid conflicts
+- Available tools:
+  - `archestra__whoami`: Returns agent name and ID
+  - `archestra__search_private_mcp_registry`: Search internal MCP catalog
+- Planned tool (temporarily disabled):
+  - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
+- Implementation: `backend/src/archestra-mcp-server.ts`
+
+**Testing**:
+
+- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Frontend**: Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
+- **Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
+
+**Test Fixtures Usage**:
+```typescript
+import { test, expect } from "@/test";
+
+test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
+  const user = await makeUser({ email: "custom@test.com" });
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id, { name: "Custom Team" });
+  // test logic...
+});
+```
+- never amend commits

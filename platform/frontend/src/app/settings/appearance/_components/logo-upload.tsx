@@ -2,7 +2,7 @@
 
 import { Upload, X } from "lucide-react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,75 +11,76 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  useDeleteOrganizationLogo,
-  useUploadOrganizationLogo,
-} from "@/lib/organization.query";
+import { useUpdateOrganization } from "@/lib/organization.query";
 
 interface LogoUploadProps {
   currentLogo?: string | null;
-  logoType?: "default" | "custom";
   onLogoChange?: () => void;
 }
 
-export function LogoUpload({
-  currentLogo,
-  logoType,
-  onLogoChange,
-}: LogoUploadProps) {
+export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentLogo || null);
-  const uploadMutation = useUploadOrganizationLogo();
-  const deleteMutation = useDeleteOrganizationLogo();
+  const uploadOrganizationLogoMutation = useUpdateOrganization(
+    "Logo uploaded successfully",
+    "Failed to upload logo",
+  );
 
-  const handleFileSelect = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-    // Validate file type
-    if (file.type !== "image/png") {
-      alert("Please upload a PNG file");
-      return;
-    }
-
-    // Validate file size (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size must be less than 2MB");
-      return;
-    }
-
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target?.result as string;
-      setPreview(base64);
-
-      try {
-        await uploadMutation.mutateAsync(base64);
-        onLogoChange?.();
-      } catch (error) {
-        console.error("Failed to upload logo:", error);
-        setPreview(currentLogo || null);
+      // Validate file type
+      if (file.type !== "image/png") {
+        alert("Please upload a PNG file");
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-  };
 
-  const handleRemoveLogo = async () => {
+      // Validate file size (2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File size must be less than 2MB");
+        return;
+      }
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        setPreview(base64);
+
+        try {
+          await uploadOrganizationLogoMutation.mutateAsync({
+            logo: base64,
+          });
+          onLogoChange?.();
+        } catch (error) {
+          console.error("Failed to upload logo:", error);
+          setPreview(currentLogo || null);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [currentLogo, onLogoChange, uploadOrganizationLogoMutation],
+  );
+
+  const handleRemoveLogo = useCallback(async () => {
     try {
-      await deleteMutation.mutateAsync();
+      await uploadOrganizationLogoMutation.mutateAsync({
+        logo: null,
+      });
       setPreview(null);
       onLogoChange?.();
     } catch (error) {
       console.error("Failed to remove logo:", error);
     }
-  };
+  }, [onLogoChange, uploadOrganizationLogoMutation]);
 
-  const handleUploadClick = () => {
+  const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
+
+  const hasPreviewOrCurrentLogo = preview || currentLogo;
 
   return (
     <Card>
@@ -92,7 +93,7 @@ export function LogoUpload({
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="relative h-16 w-48 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden">
-            {preview || (logoType === "custom" && currentLogo) ? (
+            {hasPreviewOrCurrentLogo ? (
               <Image
                 src={preview || currentLogo || ""}
                 alt="Organization logo"
@@ -109,18 +110,18 @@ export function LogoUpload({
               variant="outline"
               size="sm"
               onClick={handleUploadClick}
-              disabled={uploadMutation.isPending}
+              disabled={uploadOrganizationLogoMutation.isPending}
             >
               <Upload className="h-4 w-4 mr-2" />
-              {preview || logoType === "custom" ? "Change" : "Upload"}
+              {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
             </Button>
 
-            {(preview || logoType === "custom") && (
+            {hasPreviewOrCurrentLogo && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleRemoveLogo}
-                disabled={deleteMutation.isPending}
+                disabled={uploadOrganizationLogoMutation.isPending}
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove

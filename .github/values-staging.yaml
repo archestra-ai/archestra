@@ -25,6 +25,10 @@ archestra:
             pathType: Prefix
       - host: backend.archestra.dev
         paths:
+          # Block public access to metrics endpoint
+          - path: /metrics
+            port: 1
+            pathType: Exact
           - path: /
             port: 9000
             pathType: Prefix

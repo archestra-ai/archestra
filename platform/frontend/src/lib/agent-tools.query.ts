@@ -46,16 +46,24 @@ export function useAssignTool() {
       agentId,
       toolId,
       credentialSourceMcpServerId,
+      executionSourceMcpServerId,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
+      executionSourceMcpServerId?: string | null;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
-        body: credentialSourceMcpServerId
-          ? { credentialSourceMcpServerId }
-          : undefined,
+        body:
+          credentialSourceMcpServerId || executionSourceMcpServerId
+            ? {
+                credentialSourceMcpServerId:
+                  credentialSourceMcpServerId || undefined,
+                executionSourceMcpServerId:
+                  executionSourceMcpServerId || undefined,
+              }
+            : undefined,
       });
       return data?.success ?? false;
     },

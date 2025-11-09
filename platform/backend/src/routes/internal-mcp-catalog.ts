@@ -1,11 +1,11 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   InsertInternalMcpCatalogSchema,
-  RouteId,
   SelectInternalMcpCatalogSchema,
   UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -19,10 +19,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetInternalMcpCatalog,
         description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
-        response: {
-          200: z.array(SelectInternalMcpCatalogSchema),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(SelectInternalMcpCatalogSchema),
+        ),
       },
     },
     async (_request, reply) => {
@@ -53,10 +52,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async (request, reply) => {
@@ -85,11 +81,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async (request, reply) => {
@@ -136,11 +128,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: SelectInternalMcpCatalogSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
     async (request, reply) => {
@@ -240,11 +228,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async (request, reply) => {

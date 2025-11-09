@@ -19,7 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "strict": true,
     "rootDir": "./src",
-    "types": ["node", "vitest/globals"],
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
     }
@@ -29,6 +29,5 @@
   ],
   "exclude": [
     "node_modules",
-    "src/test-setup.ts"
   ]
 }

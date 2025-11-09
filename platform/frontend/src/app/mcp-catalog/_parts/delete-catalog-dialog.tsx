@@ -29,6 +29,13 @@ export function DeleteCatalogDialog({
     onClose();
   };
 
+  const ConfirmationContent = ({ name }: { name: string }) => (
+    <div>
+      Are you sure you want to delete{" "}
+      <span className="font-semibold break-all">"{name}"</span>?
+    </div>
+  );
+
   return (
     <Dialog open={!!item} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -38,14 +45,16 @@ export function DeleteCatalogDialog({
             {item &&
               (() => {
                 return installationCount > 0 ? (
-                  <span>
-                    Are you sure you want to delete "{item.name}"? There are
-                    currently <strong>{installationCount}</strong>{" "}
-                    installation(s) of this server. Deleting this catalog entry
-                    will also uninstall all associated servers.
-                  </span>
+                  <div className="space-y-3">
+                    <ConfirmationContent name={item.name} />
+                    <div className="text-sm">
+                      There are currently <strong>{installationCount}</strong>{" "}
+                      installation(s) of this server. Deleting this catalog
+                      entry will also uninstall all associated servers.
+                    </div>
+                  </div>
                 ) : (
-                  `Are you sure you want to delete "${item.name}"?`
+                  <ConfirmationContent name={item.name} />
                 );
               })()}
           </DialogDescription>

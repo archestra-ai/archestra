@@ -3,7 +3,7 @@ import { PassThrough, Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
-import type { z } from "zod";
+import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -27,6 +27,9 @@ export default class K8sPod {
   private podName: string;
   private state: K8sPodState = "not_created";
   private errorMessage: string | null = null;
+  private catalogItem?: InternalMcpCatalog | null;
+  private userConfigValues?: Record<string, string>;
+  private environmentValues?: Record<string, string>;
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
@@ -42,17 +45,42 @@ export default class K8sPod {
     k8sAttach: Attach,
     k8sLog: k8s.Log,
     namespace: string,
+    catalogItem?: InternalMcpCatalog | null,
+    userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
     this.k8sAttach = k8sAttach;
     this.k8sLog = k8sLog;
     this.namespace = namespace;
-    this.podName = `mcp-${K8sPod.slugifyMcpServerName(mcpServer.name)}`;
+    this.catalogItem = catalogItem;
+    this.userConfigValues = userConfigValues;
+    this.environmentValues = environmentValues;
+    this.podName = K8sPod.constructPodName(mcpServer);
   }
 
   /**
-   * Converts an MCP server name into a valid Kubernetes DNS subdomain name.
+   * Constructs a valid Kubernetes pod name for an MCP server.
+   *
+   * Creates a pod name in the format "mcp-<slugified-name>".
+   */
+  static constructPodName(mcpServer: McpServer): string {
+    const slugified = K8sPod.ensureStringIsRfc1123Compliant(mcpServer.name);
+    return `mcp-${slugified}`.substring(0, 253);
+  }
+
+  /**
+   * Constructs the Kubernetes Secret name for an MCP server.
+   *
+   * Creates a secret name in the format "mcp-server-{id}-secrets".
+   */
+  static constructK8sSecretName(mcpServerId: string): string {
+    return `mcp-server-${mcpServerId}-secrets`;
+  }
+
+  /**
+   * Ensures a string is RFC 1123 compliant for Kubernetes DNS subdomain names and label values.
    *
    * According to RFC 1123, Kubernetes DNS subdomain names must:
    * - contain no more than 253 characters
@@ -60,15 +88,29 @@ export default class K8sPod {
    * - start with an alphanumeric character
    * - end with an alphanumeric character
    */
-  static slugifyMcpServerName(name: string): string {
-    return name
+  static ensureStringIsRfc1123Compliant(input: string): string {
+    return input
       .toLowerCase()
-      .replace(/ /g, "-")
-      .replace(/[^a-z0-9.-]/g, "")
+      .replace(/\s+/g, "-") // replace any whitespace with hyphens
+      .replace(/[^a-z0-9.-]/g, "") // remove invalid characters
       .replace(/-+/g, "-") // collapse consecutive hyphens
+      .replace(/\.+/g, ".") // collapse consecutive dots
       .replace(/^[^a-z0-9]+/, "") // remove leading non-alphanumeric
-      .replace(/[^a-z0-9]+$/, "") // remove trailing non-alphanumeric
-      .substring(0, 253); // limit to 253 characters
+      .replace(/[^a-z0-9]+$/, ""); // remove trailing non-alphanumeric
+  }
+
+  /**
+   * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
+   */
+  static sanitizeMetadataLabels(
+    labels: Record<string, string>,
+  ): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(labels)) {
+      sanitized[K8sPod.ensureStringIsRfc1123Compliant(key)] =
+        K8sPod.ensureStringIsRfc1123Compliant(value);
+    }
+    return sanitized;
   }
 
   /**
@@ -83,21 +125,250 @@ export default class K8sPod {
   }
 
   /**
+   * Create a Kubernetes Secret for environment variables marked as "secret" type
+   */
+  async createK8sSecret(secretData: Record<string, string>): Promise<void> {
+    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+
+    if (Object.keys(secretData).length === 0) {
+      logger.debug(
+        { mcpServerId: this.mcpServer.id },
+        "No secret data provided, skipping K8s Secret creation",
+      );
+      return;
+    }
+
+    try {
+      // Convert secret data to base64 (K8s requires base64 encoding for secret values)
+      const data: Record<string, string> = {};
+      for (const [key, value] of Object.entries(secretData)) {
+        data[key] = Buffer.from(value).toString("base64");
+      }
+
+      const secret: k8s.V1Secret = {
+        metadata: {
+          name: k8sSecretName,
+          labels: K8sPod.sanitizeMetadataLabels({
+            app: "mcp-server",
+            "mcp-server-id": this.mcpServer.id,
+            "mcp-server-name": this.mcpServer.name,
+          }),
+        },
+        type: "Opaque",
+        data,
+      };
+
+      await this.k8sApi.createNamespacedSecret({
+        namespace: this.namespace,
+        body: secret,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+          namespace: this.namespace,
+        },
+        "Created K8s Secret for MCP server",
+      );
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+        },
+        "Failed to create K8s Secret",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete the Kubernetes Secret for this MCP server
+   */
+  async deleteK8sSecret(): Promise<void> {
+    const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+
+    try {
+      await this.k8sApi.deleteNamespacedSecret({
+        name: k8sSecretName,
+        namespace: this.namespace,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+          namespace: this.namespace,
+        },
+        "Deleted K8s Secret for MCP server",
+      );
+    } catch (error: unknown) {
+      // If secret doesn't exist (404), that's okay
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        error.statusCode === 404
+      ) {
+        logger.debug(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName: k8sSecretName,
+          },
+          "K8s Secret not found (already deleted or never created)",
+        );
+        return;
+      }
+
+      logger.error(
+        {
+          err: error,
+          mcpServerId: this.mcpServer.id,
+          secretName: k8sSecretName,
+        },
+        "Failed to delete K8s Secret",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Generate the pod specification for this MCP server
+   *
+   * @param dockerImage - The Docker image to use for the container
+   * @param localConfig - The local configuration for the MCP server
+   * @param needsHttp - Whether the pod needs HTTP port exposure
+   * @param httpPort - The HTTP port to expose (if needsHttp is true)
+   * @returns The Kubernetes pod specification
+   */
+  generatePodSpec(
+    dockerImage: string,
+    localConfig: z.infer<typeof LocalConfigSchema>,
+    needsHttp: boolean,
+    httpPort: number,
+  ): k8s.V1Pod {
+    return {
+      metadata: {
+        name: this.podName,
+        labels: K8sPod.sanitizeMetadataLabels({
+          app: "mcp-server",
+          "mcp-server-id": this.mcpServer.id,
+          "mcp-server-name": this.mcpServer.name,
+        }),
+      },
+      spec: {
+        containers: [
+          {
+            name: "mcp-server",
+            image: dockerImage,
+            env: this.createPodEnvFromConfig(),
+            /**
+             * Use the command from local config if provided
+             * If not provided, Kubernetes will use the Docker image's default CMD
+             */
+            ...(localConfig.command
+              ? {
+                  command: [localConfig.command],
+                }
+              : {}),
+            args: localConfig.arguments || [],
+            // For stdio-based MCP servers, we use stdin/stdout
+            stdin: true,
+            tty: false,
+            // For HTTP-based MCP servers, expose port
+            ports: needsHttp
+              ? [
+                  {
+                    containerPort: httpPort,
+                    protocol: "TCP",
+                  },
+                ]
+              : undefined,
+          },
+        ],
+        restartPolicy: "Always",
+      },
+    };
+  }
+
+  /**
    * Create environment variables for the pod
    *
    * This method processes environment variables from the local config and ensures
    * that values are properly formatted. It strips surrounding quotes (both single
    * and double) from values, as they are often used as delimiters in the UI but
    * should not be part of the actual environment variable value.
+   *
+   * Additionally, it merges environment values passed from the frontend (for secrets
+   * and user-provided values) with the catalog's plain text environment variables.
+   *
+   * For environment variables marked as "secret" type in the catalog, this method
+   * will use valueFrom.secretKeyRef to reference the Kubernetes Secret instead of
+   * including the value directly in the pod spec.
    */
-  static createPodEnvFromConfig(
-    localConfig?: z.infer<typeof LocalConfigSchema>,
-  ): k8s.V1EnvVar[] {
+  createPodEnvFromConfig(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
+    const envMap = new Map<string, string>();
+    const secretEnvVars = new Set<string>();
 
-    // Add environment variables from local config
-    if (localConfig?.environment) {
-      Object.entries(localConfig.environment).forEach(([key, value]) => {
+    // Process all environment variables from catalog
+    if (this.catalogItem?.localConfig?.environment) {
+      for (const envDef of this.catalogItem.localConfig.environment) {
+        // Track secret-type env vars
+        if (envDef.type === "secret") {
+          secretEnvVars.add(envDef.key);
+        }
+
+        // Add env var value to envMap based on prompting behavior
+        let value: string | undefined;
+        if (envDef.promptOnInstallation) {
+          // Prompted during installation - get from environmentValues
+          value = this.environmentValues?.[envDef.key];
+        } else {
+          // Static value from catalog - get from envDef.value
+          value = envDef.value;
+        }
+        // Add to envMap if value exists
+        // (Only non-secret plain_text vars will be used directly in pod env)
+        if (value) {
+          envMap.set(envDef.key, value);
+        }
+      }
+    } else if (this.environmentValues) {
+      // Fallback: If no catalog item but environmentValues provided,
+      // process them directly (backward compatibility for tests and direct usage)
+      Object.entries(this.environmentValues).forEach(([key, value]) => {
+        envMap.set(key, value);
+      });
+    }
+
+    // Add user config values as environment variables
+    if (this.userConfigValues) {
+      Object.entries(this.userConfigValues).forEach(([key, value]) => {
+        // Convert to uppercase with underscores for environment variable convention
+        const envKey = key.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+        envMap.set(envKey, value);
+      });
+    }
+
+    // Convert map to k8s env vars, using conditional logic for secrets
+    envMap.forEach((value, key) => {
+      // If this env var is marked as "secret" type, use valueFrom.secretKeyRef
+      if (secretEnvVars.has(key)) {
+        const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
+        env.push({
+          name: key,
+          valueFrom: {
+            secretKeyRef: {
+              name: k8sSecretName,
+              key: key,
+            },
+          },
+        });
+      } else {
+        // For plain text env vars, use value directly
         let processedValue = String(value);
 
         // Strip surrounding quotes (both single and double)
@@ -116,10 +387,8 @@ export default class K8sPod {
           name: key,
           value: processedValue,
         });
-      });
-    }
-
-    // TODO: Load OAuth tokens and user config from secrets
+      }
+    });
 
     return env;
   }
@@ -229,50 +498,14 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
-      const podSpec: k8s.V1Pod = {
-        metadata: {
-          name: this.podName,
-          labels: {
-            app: "mcp-server",
-            "mcp-server-id": this.mcpServer.id,
-            "mcp-server-name": this.mcpServer.name,
-          },
-        },
-        spec: {
-          containers: [
-            {
-              name: "mcp-server",
-              image: dockerImage,
-              env: K8sPod.createPodEnvFromConfig(catalogItem.localConfig),
-              // Use the command and arguments from local config if provided
-              // If not provided, Kubernetes will use the Docker image's default CMD
-              ...(catalogItem.localConfig.command
-                ? {
-                    command: [catalogItem.localConfig.command],
-                    args: catalogItem.localConfig.arguments || [],
-                  }
-                : {}),
-              // For stdio-based MCP servers, we use stdin/stdout
-              stdin: true,
-              tty: false,
-              // For HTTP-based MCP servers, expose port
-              ports: needsHttp
-                ? [
-                    {
-                      containerPort: httpPort,
-                      protocol: "TCP",
-                    },
-                  ]
-                : undefined,
-            },
-          ],
-          restartPolicy: "Always",
-        },
-      };
-
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
-        body: podSpec,
+        body: this.generatePodSpec(
+          dockerImage,
+          catalogItem.localConfig,
+          needsHttp,
+          httpPort,
+        ),
       });
 
       logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);
@@ -501,6 +734,7 @@ export default class K8sPod {
    */
   async removePod(): Promise<void> {
     await this.stopPod();
+    await this.deleteK8sSecret();
   }
 
   /**

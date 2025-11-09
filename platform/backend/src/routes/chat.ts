@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -6,15 +7,14 @@ import { getChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import { ConversationModel, MessageModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
+  ErrorResponsesSchema,
   InsertConversationSchema,
-  RouteId,
   SelectConversationSchema,
   SelectConversationWithMessagesSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const N8N_SYSTEM_PROMPT = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
 
@@ -395,45 +395,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Stream chat response with MCP tools (useChat format)",
         tags: ["Chat"],
         body: z.object({
-          id: UuidIdSchema.optional(), // Chat ID from useChat
+          id: UuidIdSchema, // Chat ID from useChat
           messages: z.array(z.any()), // UIMessage[]
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
-        response: {
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
-    async (request, reply) => {
-      const { id: conversationId, messages } = request.body;
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      // Conversation ID is required
-      if (!conversationId) {
-        return reply.status(400).send({
-          error: {
-            message: "Conversation ID is required",
-            type: "bad_request",
-          },
-        });
-      }
-
+    async (
+      { body: { id: conversationId, messages }, user, organizationId },
+      reply,
+    ) => {
       // Get conversation
       const conversation = await ConversationModel.findById(
         conversationId,
         user.id,
-        user.organizationId,
+        organizationId,
       );
 
       if (!conversation) {
@@ -452,7 +430,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           conversationId,
           userId: user.id,
-          orgId: user.organizationId,
+          orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
         },
@@ -462,7 +440,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create Anthropic client (call directly to Anthropic API)
       const anthropic = createAnthropic({
         apiKey: config.chat.anthropic.apiKey,
-        baseURL: "https://api.anthropic.com/v1",
+        baseURL: config.chat.anthropic.baseUrl,
       });
 
       // Stream with AI SDK
@@ -471,12 +449,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         system: N8N_SYSTEM_PROMPT,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
-
-        providerOptions: {
-          anthropic: {
-            thinking: { type: "enabled", budgetTokens: 12000 },
-          },
-        },
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
           fastify.log.info(
@@ -572,9 +544,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // ========== Conversations CRUD ==========
-
-  // List conversations
   fastify.get(
     "/api/chat/conversations",
     {
@@ -582,32 +551,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatConversations,
         description: "List all conversations for current user",
         tags: ["Chat"],
-        response: {
-          200: z.array(SelectConversationSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const conversations = await ConversationModel.findAll(
-        user.id,
-        user.organizationId,
+      return reply.send(
+        await ConversationModel.findAll(
+          request.user.id,
+          request.organizationId,
+        ),
       );
-      return reply.send(conversations);
     },
   );
 
-  // Get conversation with messages
   fastify.get(
     "/api/chat/conversations/:id",
     {
@@ -616,28 +572,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get conversation with messages",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: SelectConversationWithMessagesSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationWithMessagesSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async ({ params: { id }, user, organizationId }, reply) => {
       const conversation = await ConversationModel.findByIdWithMessages(
-        request.params.id,
+        id,
         user.id,
-        user.organizationId,
+        organizationId,
       );
 
       if (!conversation) {
@@ -653,7 +595,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Create conversation
   fastify.post(
     "/api/chat/conversations",
     {
@@ -665,35 +606,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           selectedModel: true,
         }).partial(),
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const conversation = await ConversationModel.create({
-        userId: user.id,
-        organizationId: user.organizationId,
-        title: request.body.title,
-        selectedModel: request.body.selectedModel || config.chat.defaultModel,
-      });
-
-      return reply.send(conversation);
+    async ({ body: { title, selectedModel }, user, organizationId }, reply) => {
+      return reply.send(
+        await ConversationModel.create({
+          userId: user.id,
+          organizationId,
+          title,
+          selectedModel: selectedModel || config.chat.defaultModel,
+        }),
+      );
     },
   );
 
-  // Update conversation
   fastify.patch(
     "/api/chat/conversations/:id",
     {
@@ -703,29 +630,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
-        response: {
-          200: SelectConversationSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const conversation = await ConversationModel.update(
-        request.params.id,
+        id,
         user.id,
-        user.organizationId,
-        request.body,
+        organizationId,
+        body,
       );
 
       if (!conversation) {
@@ -741,7 +654,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Delete conversation
   fastify.delete(
     "/api/chat/conversations/:id",
     {
@@ -750,36 +662,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a conversation",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      await ConversationModel.delete(
-        request.params.id,
-        user.id,
-        user.organizationId,
-      );
-
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },
   );
 
-  // ========== MCP Tools ==========
-
-  // List available MCP tools
   fastify.get(
     "/api/chat/mcp-tools",
     {
@@ -787,29 +678,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatMcpTools,
         description: "List available MCP tools for chat",
         tags: ["Chat"],
-        response: {
-          200: z.array(
+        response: constructResponseSchema(
+          z.array(
             z.object({
               name: z.string(),
               description: z.string().optional(),
               inputSchema: z.any(),
             }),
           ),
-          401: ErrorResponseSchema,
-        },
+        ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
+    async (_request, reply) => {
       const client = await getChatMcpClient();
       if (!client) {
         return reply.send([]);

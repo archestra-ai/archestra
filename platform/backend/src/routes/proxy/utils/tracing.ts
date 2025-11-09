@@ -1,5 +1,4 @@
-import { context, trace } from "@opentelemetry/api";
-import logger from "@/logging";
+import { type Span, trace } from "@opentelemetry/api";
 import type { Agent } from "@/types";
 import type { SupportedProvider } from "@/types/llm-providers";
 
@@ -13,40 +12,53 @@ export enum RouteCategory {
 }
 
 /**
- * Sprinkles trace attributes on the current active span.
- * This centralizes the logic for adding consistent attributes across all LLM proxy routes.
+ * Starts an active LLM span with consistent attributes across all LLM proxy routes.
+ * This is a wrapper around tracer.startActiveSpan that encapsulates tracer creation
+ * and adds standardized LLM-specific attributes.
  *
+ * @param spanName - The name of the span (e.g., "openai.chat.completions")
  * @param provider - The LLM provider (openai, gemini, or anthropic)
- * @param category - The route category (defaults to llm-proxy)
+ * @param llmModel - The LLM model being used
+ * @param stream - Whether this is a streaming request
  * @param agent - The agent object (optional, if provided will add agent.id, agent.name and agent labels)
+ * @param callback - The callback function to execute within the span context
+ * @returns The result of the callback function
  */
-export function sprinkleTraceAttributes(
+export async function startActiveLlmSpan<T>(
+  spanName: string,
   provider: SupportedProvider,
-  category: RouteCategory = RouteCategory.LLM_PROXY,
-  agent?: Agent,
-): void {
-  // Get the active span from the current context
-  const span = trace.getSpan(context.active());
+  llmModel: string,
+  stream: boolean,
+  agent: Agent | undefined,
+  callback: (span: Span) => Promise<T>,
+): Promise<T> {
+  const tracer = trace.getTracer("archestra");
 
-  if (!span) {
-    logger.warn("[tracing] No active span found when trying to set attributes");
-    return;
-  }
+  return tracer.startActiveSpan(
+    spanName,
+    {
+      attributes: {
+        "route.category": RouteCategory.LLM_PROXY,
+        "llm.provider": provider,
+        "llm.model": llmModel,
+        "llm.stream": stream,
+      },
+    },
+    async (span) => {
+      // Set agent attributes if agent is provided
+      if (agent) {
+        span.setAttribute("agent.id", agent.id);
+        span.setAttribute("agent.name", agent.name);
 
-  // Set basic route attributes
-  span.setAttribute("route.category", category);
-  span.setAttribute("llm.provider", provider);
-
-  // Set agent attributes if agent is provided
-  if (agent) {
-    span.setAttribute("agent.id", agent.id);
-    span.setAttribute("agent.name", agent.name);
-
-    // Add all agent labels as attributes with agent.<key>=<value> format
-    if (agent.labels && agent.labels.length > 0) {
-      for (const label of agent.labels) {
-        span.setAttribute(`agent.${label.key}`, label.value);
+        // Add all agent labels as attributes with agent.<key>=<value> format
+        if (agent.labels && agent.labels.length > 0) {
+          for (const label of agent.labels) {
+            span.setAttribute(`agent.${label.key}`, label.value);
+          }
+        }
       }
-    }
-  }
+
+      return await callback(span);
+    },
+  );
 }

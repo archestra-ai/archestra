@@ -22,36 +22,6 @@ class McpToolCallModel {
     return mcpToolCall;
   }
 
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<McpToolCall[]> {
-    let query = db
-      .select()
-      .from(schema.mcpToolCallsTable)
-      .orderBy(desc(schema.mcpToolCallsTable.createdAt))
-      .$dynamic();
-
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.mcpToolCallsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    const rows = await query;
-    return rows as McpToolCall[];
-  }
-
   /**
    * Find all MCP tool calls with pagination and sorting support
    */
@@ -59,14 +29,14 @@ class McpToolCallModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     userId?: string,
-    isAdmin?: boolean,
+    isMcpServerAdmin?: boolean,
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = McpToolCallModel.getOrderByClause(sorting);
 
     // Build where clause for access control
     let whereClause: SQL | undefined;
-    if (userId && !isAdmin) {
+    if (userId && !isMcpServerAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -127,7 +97,7 @@ class McpToolCallModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isMcpServerAdmin?: boolean,
   ): Promise<McpToolCall | null> {
     const [mcpToolCall] = await db
       .select()
@@ -138,8 +108,8 @@ class McpToolCallModel {
       return null;
     }
 
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
+    // Check access control for non-MCP server admins
+    if (userId && !isMcpServerAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         mcpToolCall.agentId,
@@ -150,7 +120,7 @@ class McpToolCallModel {
       }
     }
 
-    return mcpToolCall as McpToolCall;
+    return mcpToolCall;
   }
 
   static async getAllMcpToolCallsForAgent(

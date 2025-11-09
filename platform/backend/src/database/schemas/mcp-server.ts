@@ -1,5 +1,8 @@
 import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { LocalMcpServerInstallationStatus } from "@/types/mcp-server";
+import type {
+  InternalMcpCatalogServerType,
+  LocalMcpServerInstallationStatus,
+} from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 import usersTable from "./user";
@@ -11,6 +14,9 @@ const mcpServerTable = pgTable("mcp_server", {
     .references(() => mcpCatalogTable.id, {
       onDelete: "set null",
     })
+    .notNull(),
+  serverType: text("server_type")
+    .$type<InternalMcpCatalogServerType>()
     .notNull(),
   secretId: uuid("secret_id").references(() => secretTable.id, {
     onDelete: "set null",

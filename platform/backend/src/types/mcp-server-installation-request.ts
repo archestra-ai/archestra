@@ -50,14 +50,14 @@ const McpServerInstallationRequestNoteSchema = z.object({
 });
 
 export const SelectMcpServerInstallationRequestSchema = createSelectSchema(
-  schema.mcpServerInstallationRequestTable,
+  schema.mcpServerInstallationRequestsTable,
 ).extend({
   notes: z.array(McpServerInstallationRequestNoteSchema).nullable(),
   customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
 });
 
 export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
-  schema.mcpServerInstallationRequestTable,
+  schema.mcpServerInstallationRequestsTable,
 ).extend({
   notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
   status: McpServerInstallationRequestStatusSchema.optional(),
@@ -65,7 +65,7 @@ export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
 });
 
 export const UpdateMcpServerInstallationRequestSchema = createUpdateSchema(
-  schema.mcpServerInstallationRequestTable,
+  schema.mcpServerInstallationRequestsTable,
 ).extend({
   notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
   status: McpServerInstallationRequestStatusSchema.optional(),

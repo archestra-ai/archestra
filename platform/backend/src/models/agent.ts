@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import ToolModel from "./tool";
 
 type AgentWithToolsRow = {
   agents: typeof schema.agentsTable.$inferSelect;
@@ -53,6 +54,9 @@ class AgentModel {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
+    // Assign Archestra built-in tools to the agent
+    await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
+
     return {
       ...createdAgent,
       tools: [],
@@ -61,7 +65,10 @@ class AgentModel {
     };
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean): Promise<Agent[]> {
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<Agent[]> {
     let query = db
       .select()
       .from(schema.agentsTable)
@@ -75,8 +82,8 @@ class AgentModel {
       )
       .$dynamic();
 
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -132,7 +139,7 @@ class AgentModel {
     sorting?: SortingQuery,
     filters?: { name?: string },
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Agent>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
@@ -145,8 +152,8 @@ class AgentModel {
       whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
     }
 
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
@@ -200,15 +207,15 @@ class AgentModel {
         // Create a subquery to get the first team name (alphabetically) per agent
         const teamNameSubquery = db
           .select({
-            agentId: schema.agentTeamTable.agentId,
-            teamName: min(schema.team.name).as("teamName"),
+            agentId: schema.agentTeamsTable.agentId,
+            teamName: min(schema.teamsTable.name).as("teamName"),
           })
-          .from(schema.agentTeamTable)
+          .from(schema.agentTeamsTable)
           .leftJoin(
-            schema.team,
-            eq(schema.agentTeamTable.teamId, schema.team.id),
+            schema.teamsTable,
+            eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
           )
-          .groupBy(schema.agentTeamTable.agentId)
+          .groupBy(schema.agentTeamsTable.agentId)
           .as("teamNames");
 
         // Use COALESCE to treat NULL as empty string when sorting
@@ -347,10 +354,10 @@ class AgentModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<Agent | null> {
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
+    // Check access control for non-agent admins
+    if (userId && !isAgentAdmin) {
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         id,

@@ -1,3 +1,4 @@
+import { MEMBER_ROLE_NAME } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,13 +7,15 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export const SelectTeamMemberSchema = createSelectSchema(schema.teamMember);
-export const SelectTeamSchema = createSelectSchema(schema.team).extend({
+export const SelectTeamMemberSchema = createSelectSchema(
+  schema.teamMembersTable,
+);
+export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   members: z.array(SelectTeamMemberSchema).optional(),
 });
 
-export const InsertTeamSchema = createInsertSchema(schema.team);
-export const UpdateTeamSchema = createUpdateSchema(schema.team);
+export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
+export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
 
 export const CreateTeamBodySchema = z.object({
   name: z.string().min(1, "Team name is required"),
@@ -26,7 +29,7 @@ export const UpdateTeamBodySchema = z.object({
 
 export const AddTeamMemberBodySchema = z.object({
   userId: z.string(),
-  role: z.string().default("member"),
+  role: z.string().default(MEMBER_ROLE_NAME),
 });
 
 export type Team = z.infer<typeof SelectTeamSchema>;

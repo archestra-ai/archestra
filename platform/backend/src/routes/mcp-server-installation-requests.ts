@@ -1,19 +1,17 @@
-import { eq } from "drizzle-orm";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
+import { hasPermission } from "@/auth";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   InsertMcpServerInstallationRequestSchema,
   type McpServerInstallationRequest,
   McpServerInstallationRequestStatusSchema,
-  RouteId,
   SelectMcpServerInstallationRequestSchema,
   UpdateMcpServerInstallationRequestSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
   fastify,
@@ -31,31 +29,21 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
               "Filter by status",
             ),
         }),
-        response: {
-          200: z.array(SelectMcpServerInstallationRequestSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          z.array(SelectMcpServerInstallationRequestSchema),
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ query: { status }, user, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
 
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { status } = request.query;
-
-        // Admins can see all requests, non-admins can only see their own requests
         let requests: McpServerInstallationRequest[];
-        if (user.isAdmin) {
+        if (isMcpServerAdmin) {
+          // MCP server admins can see all requests
           requests = status
             ? await McpServerInstallationRequestModel.findByStatus(status)
             : await McpServerInstallationRequestModel.findAll();
@@ -100,35 +88,21 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           adminResponse: true,
           notes: true,
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         // Check if there's already a pending request for this external catalog item
-        if (request.body.externalCatalogId) {
+        if (body.externalCatalogId) {
           const existingExternalRequests =
             await McpServerInstallationRequestModel.findAll();
           const duplicateRequest = existingExternalRequests.find(
             (req) =>
               req.status === "pending" &&
-              req.externalCatalogId === request.body.externalCatalogId,
+              req.externalCatalogId === body.externalCatalogId,
           );
 
           if (duplicateRequest) {
@@ -143,7 +117,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const newRequest = await McpServerInstallationRequestModel.create({
-          ...request.body,
+          ...body,
           requestedBy: user.id,
         });
 
@@ -171,30 +145,15 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, user, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -205,8 +164,13 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Non-admins can only view their own requests
-        if (!user.isAdmin && installationRequest.requestedBy !== user.id) {
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
+
+        // MCP server admins can view all requests, non-MCP server admins can only view their own requests
+        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
           return reply.status(403).send({
             error: {
               message: "Forbidden",
@@ -234,8 +198,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.UpdateMcpServerInstallationRequest,
-        description:
-          "Update an MCP server installation request (admin only for approval/decline)",
+        description: "Update an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -247,30 +210,15 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           externalCatalogId: true,
           requestedBy: true,
         }).partial(),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -281,14 +229,19 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Only admins can update status
+        // MCP server admins can update status, non-MCP server admins can only update their own requests
         if (
-          request.body.status ||
-          request.body.adminResponse ||
-          request.body.reviewedBy ||
-          request.body.reviewedAt
+          body.status ||
+          body.adminResponse ||
+          body.reviewedBy ||
+          body.reviewedAt
         ) {
-          if (!user.isAdmin) {
+          const { success: isMcpServerAdmin } = await hasPermission(
+            { mcpServer: ["admin"] },
+            headers,
+          );
+
+          if (!isMcpServerAdmin) {
             return reply.status(403).send({
               error: {
                 message: "Only admins can approve or decline requests",
@@ -299,8 +252,8 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.update(
-          request.params.id,
-          request.body,
+          id,
+          body,
         );
 
         if (!updatedRequest) {
@@ -331,7 +284,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.ApproveMcpServerInstallationRequest,
-        description: "Approve an MCP server installation request (admin only)",
+        description: "Approve an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -339,39 +292,15 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           adminResponse: z.string().optional(),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can approve requests",
-              type: "forbidden",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -383,9 +312,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.approve(
-          request.params.id,
+          id,
           user.id,
-          request.body.adminResponse,
+          body.adminResponse,
         );
 
         if (!updatedRequest) {
@@ -416,7 +345,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.DeclineMcpServerInstallationRequest,
-        description: "Decline an MCP server installation request (admin only)",
+        description: "Decline an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
@@ -424,39 +353,15 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           adminResponse: z.string().optional(),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can decline requests",
-              type: "forbidden",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -468,9 +373,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const updatedRequest = await McpServerInstallationRequestModel.decline(
-          request.params.id,
+          id,
           user.id,
-          request.body.adminResponse,
+          body.adminResponse,
         );
 
         if (!updatedRequest) {
@@ -509,30 +414,15 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         body: z.object({
           content: z.string().min(1),
         }),
-        response: {
-          200: SelectMcpServerInstallationRequestSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          SelectMcpServerInstallationRequestSchema,
+        ),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body, user, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const installationRequest =
-          await McpServerInstallationRequestModel.findById(request.params.id);
+          await McpServerInstallationRequestModel.findById(id);
 
         if (!installationRequest) {
           return reply.status(404).send({
@@ -543,8 +433,13 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Non-admins can only add notes to their own requests
-        if (!user.isAdmin && installationRequest.requestedBy !== user.id) {
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
+        );
+
+        // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
+        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
           return reply.status(403).send({
             error: {
               message: "Forbidden",
@@ -553,17 +448,11 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Get user name from database
-        const [userData] = await db
-          .select()
-          .from(schema.usersTable)
-          .where(eq(schema.usersTable.id, user.id));
-
         const updatedRequest = await McpServerInstallationRequestModel.addNote(
-          request.params.id,
+          id,
           user.id,
-          userData.name,
-          request.body.content,
+          user.name,
+          body.content,
         );
 
         if (!updatedRequest) {
@@ -594,45 +483,17 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.DeleteMcpServerInstallationRequest,
-        description: "Delete an MCP server installation request (admin only)",
+        description: "Delete an MCP server installation request",
         tags: ["MCP Server Installation Requests"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id } }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        if (!user.isAdmin) {
-          return reply.status(403).send({
-            error: {
-              message: "Only admins can delete requests",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const success = await McpServerInstallationRequestModel.delete(
-          request.params.id,
-        );
+        const success = await McpServerInstallationRequestModel.delete(id);
 
         if (!success) {
           return reply.status(404).send({

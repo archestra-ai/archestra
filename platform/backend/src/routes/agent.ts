@@ -1,19 +1,20 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
+import { initializeMetrics } from "@/llm-metrics";
 import { AgentModel } from "@/models";
 import AgentLabelModel from "@/models/agent-label";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   InsertAgentSchema,
   PaginationQuerySchema,
-  RouteId,
   SelectAgentSchema,
   UpdateAgentSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -36,39 +37,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "team",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectAgentSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectAgentSchema),
+        ),
       },
     },
-    async (request, reply) => {
+    async (
+      { query: { name, limit, offset, sortBy, sortDirection }, user, headers },
+      reply,
+    ) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const { name, limit, offset, sortBy, sortDirection } = request.query;
-        const pagination = { limit, offset };
-        const sorting = { sortBy, sortDirection };
-        const filters = { name };
-
-        const result = await AgentModel.findAllPaginated(
-          pagination,
-          sorting,
-          filters,
-          user.id,
-          user.isAdmin,
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
         );
-        return reply.send(result);
+        return reply.send(
+          await AgentModel.findAllPaginated(
+            { limit, offset },
+            { sortBy, sortDirection },
+            { name },
+            user.id,
+            isAgentAdmin,
+          ),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -89,28 +80,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgents,
         description: "Get all agents without pagination",
         tags: ["Agents"],
-        response: {
-          200: z.array(SelectAgentSchema),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const agents = await AgentModel.findAll(user.id, user.isAdmin);
-        return reply.send(agents);
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
+        return reply.send(
+          await AgentModel.findAll(request.user.id, isAgentAdmin),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -131,26 +112,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetDefaultAgent,
         description: "Get or create default agent",
         tags: ["Agents"],
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const agent = await AgentModel.getAgentOrCreateDefault();
         return reply.send(agent);
       } catch (error) {
@@ -178,27 +144,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
+        const agent = await AgentModel.create(request.body);
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
 
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        return reply.send(await AgentModel.create(request.body));
+        return reply.send(agent);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -222,31 +179,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectAgentSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async (request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          request.headers,
+        );
 
         const agent = await AgentModel.findById(
           request.params.id,
-          user.id,
-          user.isAdmin,
+          request.user.id,
+          isAgentAdmin,
         );
 
         if (!agent) {
@@ -287,11 +233,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: SelectAgentSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
@@ -306,6 +248,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+
+        const labelKeys = await AgentLabelModel.getAllKeys();
+        // We need to re-init metrics with the new label keys in case label keys changed.
+        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+        initializeMetrics(labelKeys);
 
         return reply.send(agent);
       } catch (error) {
@@ -331,11 +278,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -372,26 +315,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelKeys,
         description: "Get all available label keys",
         tags: ["Agents"],
-        response: {
-          200: z.array(z.string()),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
         const keys = await AgentLabelModel.getAllKeys();
         return reply.send(keys);
       } catch (error) {
@@ -414,28 +342,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLabelValues,
         description: "Get all available label values",
         tags: ["Agents"],
-        response: {
-          200: z.array(z.string()),
-          401: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
       },
     },
-    async (request, reply) => {
+    async ({ query: { key } }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
-
-        const values = await AgentLabelModel.getAllValues();
-        return reply.send(values);
+        return reply.send(
+          key
+            ? await AgentLabelModel.getValuesByKey(key)
+            : await AgentLabelModel.getAllValues(),
+        );
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

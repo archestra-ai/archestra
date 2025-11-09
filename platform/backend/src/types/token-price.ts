@@ -1,15 +1,16 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
+import type { z } from "zod";
 import { schema } from "@/database";
+import { UuidIdSchema } from "./api";
 
 /**
  * Base database schema derived from Drizzle
  */
 export const SelectTokenPriceSchema = createSelectSchema(
-  schema.tokenPriceTable,
+  schema.tokenPricesTable,
 );
 export const InsertTokenPriceSchema = createInsertSchema(
-  schema.tokenPriceTable,
+  schema.tokenPricesTable,
 );
 
 /**
@@ -32,7 +33,7 @@ export const CreateTokenPriceSchema = InsertTokenPriceSchema.omit({
 );
 
 export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial().extend({
-  id: z.string().uuid(),
+  id: UuidIdSchema,
 });
 
 /**

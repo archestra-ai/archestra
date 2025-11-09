@@ -4,14 +4,14 @@ import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
-    return await db.select().from(schema.tokenPriceTable);
+    return await db.select().from(schema.tokenPricesTable);
   }
 
   static async findById(id: string): Promise<TokenPrice | null> {
     const [tokenPrice] = await db
       .select()
-      .from(schema.tokenPriceTable)
-      .where(eq(schema.tokenPriceTable.id, id));
+      .from(schema.tokenPricesTable)
+      .where(eq(schema.tokenPricesTable.id, id));
 
     return tokenPrice || null;
   }
@@ -19,15 +19,15 @@ class TokenPriceModel {
   static async findByModel(model: string): Promise<TokenPrice | null> {
     const [tokenPrice] = await db
       .select()
-      .from(schema.tokenPriceTable)
-      .where(eq(schema.tokenPriceTable.model, model));
+      .from(schema.tokenPricesTable)
+      .where(eq(schema.tokenPricesTable.model, model));
 
     return tokenPrice || null;
   }
 
   static async create(data: CreateTokenPrice): Promise<TokenPrice> {
     const [tokenPrice] = await db
-      .insert(schema.tokenPriceTable)
+      .insert(schema.tokenPricesTable)
       .values(data)
       .returning();
 
@@ -39,9 +39,9 @@ class TokenPriceModel {
     data: Partial<CreateTokenPrice>,
   ): Promise<TokenPrice | null> {
     const [tokenPrice] = await db
-      .update(schema.tokenPriceTable)
+      .update(schema.tokenPricesTable)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.tokenPriceTable.id, id))
+      .where(eq(schema.tokenPricesTable.id, id))
       .returning();
 
     return tokenPrice || null;
@@ -52,10 +52,10 @@ class TokenPriceModel {
     data: Omit<CreateTokenPrice, "model">,
   ): Promise<TokenPrice> {
     const [tokenPrice] = await db
-      .insert(schema.tokenPriceTable)
+      .insert(schema.tokenPricesTable)
       .values({ model, ...data })
       .onConflictDoUpdate({
-        target: schema.tokenPriceTable.model,
+        target: schema.tokenPricesTable.model,
         set: {
           pricePerMillionInput: data.pricePerMillionInput,
           pricePerMillionOutput: data.pricePerMillionOutput,
@@ -69,8 +69,8 @@ class TokenPriceModel {
 
   static async delete(id: string): Promise<boolean> {
     const result = await db
-      .delete(schema.tokenPriceTable)
-      .where(eq(schema.tokenPriceTable.id, id));
+      .delete(schema.tokenPricesTable)
+      .where(eq(schema.tokenPricesTable.id, id));
 
     return (result.rowCount ?? 0) > 0;
   }
@@ -108,7 +108,7 @@ class TokenPriceModel {
         pricePerMillionOutput: "50.00", // Default $50 per million tokens
       }));
 
-      await db.insert(schema.tokenPriceTable).values(defaultPrices);
+      await db.insert(schema.tokenPricesTable).values(defaultPrices);
     }
   }
 }

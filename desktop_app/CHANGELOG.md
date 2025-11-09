@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.15](https://github.com/archestra-ai/archestra/compare/v0.0.14...v0.0.15) (2025-11-04)
+
+
+### Dependencies
+
+* **frontend:** bump vite from 7.1.5 to 7.1.11 in /desktop_app ([#757](https://github.com/archestra-ai/archestra/issues/757)) ([58cb6e3](https://github.com/archestra-ai/archestra/commit/58cb6e30eb6fa70f80e30a320290c6d19e8051d6))
+
 ## [0.0.14](https://github.com/archestra-ai/archestra/compare/v0.0.13...v0.0.14) (2025-10-06)
 
 

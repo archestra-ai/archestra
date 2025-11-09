@@ -13,6 +13,26 @@ export const ErrorResponseSchema = z.object({
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
+export const ErrorResponsesSchema: Record<
+  400 | 401 | 403 | 404 | 500,
+  typeof ErrorResponseSchema
+> = {
+  400: ErrorResponseSchema,
+  401: ErrorResponseSchema,
+  403: ErrorResponseSchema,
+  404: ErrorResponseSchema,
+  500: ErrorResponseSchema,
+};
+
+export const constructResponseSchema = <T extends z.ZodTypeAny>(
+  schema: T,
+): typeof ErrorResponsesSchema & {
+  200: T;
+} => ({
+  200: schema,
+  ...ErrorResponsesSchema,
+});
+
 /**
  * Pagination query parameters schema
  * Supports offset-based pagination
@@ -91,6 +111,7 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
   sortDirection?: "asc" | "desc";
 };
+<<<<<<< HEAD
 
 export const RouteId = {
   // Agent Routes
@@ -251,3 +272,5 @@ export const RouteId = {
   CompleteOnboarding: "completeOnboarding",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
+=======
+>>>>>>> main

@@ -14,7 +14,7 @@ local_resource(
   serve_env={
     'DANGEROUSLY_OMIT_AUTH': 'true'
   },
-  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
+  serve_cmd='npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:9000/v1/mcp',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,

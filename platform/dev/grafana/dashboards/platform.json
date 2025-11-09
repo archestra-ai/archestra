@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 0,
   "links": [],
   "panels": [
     {
@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -105,9 +105,7 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -118,16 +116,18 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "rate(process_cpu_seconds_total[1m])",
+          "hide": false,
+          "instant": false,
           "legendFormat": "CPU Usage",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         }
@@ -138,7 +138,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -206,9 +206,7 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -219,16 +217,18 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "process_resident_memory_bytes",
+          "hide": false,
+          "instant": false,
           "legendFormat": "Resident Memory",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         }
@@ -252,7 +252,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -347,10 +347,7 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "sum"
-          ],
+          "calcs": ["lastNotNull", "sum"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -361,27 +358,31 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "rate(llm_tokens_total{type=\"input\"}[1m])",
+          "hide": false,
+          "instant": false,
           "legendFormat": "{{agent_name}} (input)",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "rate(llm_tokens_total{type=\"output\"}[1m])",
+          "hide": false,
+          "instant": false,
           "legendFormat": "{{agent_name}} (output)",
+          "queryType": "range",
           "range": true,
           "refId": "B"
         }
@@ -405,7 +406,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -469,10 +470,7 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean"
-          ],
+          "calcs": ["lastNotNull", "mean"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -483,16 +481,18 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "sum by(route) (rate(http_request_duration_seconds_count{route=~\"$route\"}[1m]))",
+          "hide": false,
+          "instant": false,
           "legendFormat": "{{route}}",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         }
@@ -503,7 +503,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -575,11 +575,7 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "mean",
-            "max"
-          ],
+          "calcs": ["lastNotNull", "mean", "max"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -590,27 +586,31 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[1m])) by (le))",
+          "hide": false,
+          "instant": false,
           "legendFormat": "p95",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{route=~\"$route\"}[1m])) by (le))",
+          "hide": false,
+          "instant": false,
           "legendFormat": "p50",
+          "queryType": "range",
           "range": true,
           "refId": "B"
         }
@@ -621,7 +621,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "$metrics_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -724,10 +724,7 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull",
-            "sum"
-          ],
+          "calcs": ["lastNotNull", "sum"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -738,16 +735,18 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "$metrics_datasource"
           },
-          "editorMode": "code",
           "expr": "sum by(route, status_code) (rate(http_request_duration_seconds_count{status_code=~\"4..|5..\",route=~\"$route\"}[1m]))",
+          "hide": false,
+          "instant": false,
           "legendFormat": "{{route}} ({{status_code}})",
+          "queryType": "range",
           "range": true,
           "refId": "A"
         }
@@ -771,7 +770,7 @@
     {
       "datasource": {
         "type": "tempo",
-        "uid": "P214B5B846CF3925F"
+        "uid": "$traces_datasource"
       },
       "fieldConfig": {
         "defaults": {
@@ -841,12 +840,12 @@
           }
         ]
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
           "datasource": {
             "type": "tempo",
-            "uid": "tempo"
+            "uid": "$traces_datasource"
           },
           "filters": [
             {
@@ -855,10 +854,13 @@
               "scope": "span"
             }
           ],
+          "hide": false,
+          "instant": false,
           "limit": 100,
           "metricsQueryType": "range",
           "query": "{resource.service.name=\"Archestra Platform API\"}",
-          "queryType": "traceql",
+          "queryType": "traceqlSearch",
+          "range": true,
           "refId": "A",
           "serviceMapUseNativeHistograms": false,
           "tableType": "traces"
@@ -870,7 +872,7 @@
     {
       "datasource": {
         "type": "tempo",
-        "uid": "P214B5B846CF3925F"
+        "uid": "$traces_datasource"
       },
       "description": "Click on any trace ID in the \"All Traces\" table above to automatically load detailed trace information.",
       "fieldConfig": {
@@ -898,13 +900,27 @@
           ]
         }
       },
-      "pluginVersion": "12.2.1",
+      "pluginVersion": "12.3.0-18940657299.patch2",
       "targets": [
         {
+          "datasource": {
+            "type": "tempo",
+            "uid": "$traces_datasource"
+          },
+          "filters": [
+            {
+              "id": "e12a1615",
+              "operator": "=",
+              "scope": "span"
+            }
+          ],
+          "hide": false,
+          "instant": false,
           "limit": 20,
           "metricsQueryType": "range",
           "query": "${traceId}",
           "queryType": "traceql",
+          "range": true,
           "refId": "A",
           "serviceMapUseNativeHistograms": false,
           "tableType": "traces"
@@ -915,26 +931,72 @@
     }
   ],
   "preload": false,
-  "refresh": "5s",
+  "refresh": "10s",
   "schemaVersion": 42,
-  "tags": [
-    "platform",
-    "archestra"
-  ],
+  "tags": ["platform", "archestra"],
   "templating": {
     "list": [
       {
+        "allowCustomValue": false,
         "current": {
-          "text": "All",
-          "value": "$__all"
+          "text": "grafanacloud-archestra-prom",
+          "value": "grafanacloud-prom"
+        },
+        "description": "Select the Prometheus datasource for metrics",
+        "includeAll": false,
+        "label": "Metrics Datasource",
+        "name": "metrics_datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": "grafanacloud-archestra-traces",
+          "value": "grafanacloud-traces"
+        },
+        "description": "Select the Tempo datasource for traces",
+        "includeAll": false,
+        "label": "Traces Datasource",
+        "name": "traces_datasource",
+        "options": [],
+        "query": "tempo",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
+          "value": "1e0a78bfcd28788eb8efd0d7c6eb9f66"
+        },
+        "description": "Select a trace ID from the All Traces table above",
+        "label": "Trace ID",
+        "name": "traceId",
+        "options": [
+          {
+            "selected": true,
+            "text": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
+            "value": "1e0a78bfcd28788eb8efd0d7c6eb9f66"
+          }
+        ],
+        "query": "1e0a78bfcd28788eb8efd0d7c6eb9f66",
+        "type": "textbox"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": "/metrics",
+          "value": "/metrics"
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "Prometheus"
+          "uid": "${metrics_datasource}"
         },
         "definition": "label_values(http_request_duration_seconds_count, route)",
         "description": "Filter for Application Metrics only",
-        "includeAll": true,
+        "includeAll": false,
         "label": "Route (App Metrics)",
         "name": "route",
         "options": [],
@@ -946,34 +1008,16 @@
         "regex": "",
         "sort": 1,
         "type": "query"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "description": "Select a trace ID from the All Traces table above",
-        "label": "Trace ID",
-        "name": "traceId",
-        "options": [
-          {
-            "selected": true,
-            "text": "",
-            "value": ""
-          }
-        ],
-        "query": "",
-        "type": "textbox"
       }
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Archestra Platform",
   "uid": "archestra-platform",
-  "version": 102
+  "version": 8
 }

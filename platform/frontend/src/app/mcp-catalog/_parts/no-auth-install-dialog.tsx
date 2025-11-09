@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2, Info, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
@@ -33,7 +34,6 @@ interface NoAuthInstallDialogProps {
   onInstall: (teams: string[]) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
-  isAdmin: boolean;
 }
 
 export function NoAuthInstallDialog({
@@ -42,43 +42,54 @@ export function NoAuthInstallDialog({
   onInstall,
   catalogItem,
   isInstalling,
-  isAdmin,
 }: NoAuthInstallDialogProps) {
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
 
   const { data: teams } = useTeams();
 
-  const handleAddTeam = (teamId: string) => {
-    if (teamId && !assignedTeamIds.includes(teamId)) {
-      setAssignedTeamIds([...assignedTeamIds, teamId]);
-      setSelectedTeamId("");
-    }
-  };
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
+      }
+    },
+    [assignedTeamIds],
+  );
 
-  const handleRemoveTeam = (teamId: string) => {
-    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-  };
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
+    },
+    [assignedTeamIds],
+  );
 
   const unassignedTeams = !teams
     ? []
     : teams.filter((team) => !assignedTeamIds.includes(team.id));
 
-  const getTeamById = (teamId: string) => {
-    return teams?.find((team) => team.id === teamId);
-  };
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
+    },
+    [teams],
+  );
 
-  const handleInstall = async () => {
+  const handleInstall = useCallback(async () => {
     await onInstall(assignedTeamIds);
     setAssignedTeamIds([]);
     setSelectedTeamId("");
-  };
+  }, [onInstall, assignedTeamIds]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setAssignedTeamIds([]);
     setSelectedTeamId("");
     onClose();
-  };
+  }, [onClose]);
 
   if (!catalogItem) {
     return null;
@@ -94,13 +105,13 @@ export function NoAuthInstallDialog({
           </DialogTitle>
           <DialogDescription>
             This MCP server doesn't require authentication.
-            {isAdmin
+            {userIsMcpServerAdmin
               ? " You can optionally assign it to specific teams."
               : " Click Install to proceed."}
           </DialogDescription>
         </DialogHeader>
 
-        {isAdmin && (
+        {userIsMcpServerAdmin && (
           <div className="grid gap-4 py-4">
             <Alert>
               <Info className="h-4 w-4" />

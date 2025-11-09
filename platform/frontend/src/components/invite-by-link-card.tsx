@@ -1,8 +1,9 @@
 "use client";
 
+import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateInvitation } from "@/lib/organization.query";
+import { useRoles } from "@/lib/role.query";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
@@ -35,16 +37,17 @@ function InviteByLinkCardContent({
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<AnyRoleName>(MEMBER_ROLE_NAME);
   const [invitationLink, setInvitationLink] = useState("");
   const [isCopied, setIsCopied] = useState(false);
 
   const createMutation = useCreateInvitation(organizationId);
+  const { data: roles } = useRoles();
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const handleGenerateLink = async () => {
+  const handleGenerateLink = useCallback(async () => {
     const data = await createMutation.mutateAsync({ email, role });
 
     if (data) {
@@ -52,9 +55,9 @@ function InviteByLinkCardContent({
       setInvitationLink(link);
       onInvitationCreated?.();
     }
-  };
+  }, [email, role, createMutation, onInvitationCreated]);
 
-  const handleCopyLink = async () => {
+  const handleCopyLink = useCallback(async () => {
     if (!invitationLink) return;
 
     await navigator.clipboard.writeText(invitationLink);
@@ -64,14 +67,14 @@ function InviteByLinkCardContent({
     });
 
     setTimeout(() => setIsCopied(false), 2000);
-  };
+  }, [invitationLink]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setEmail("");
-    setRole("member");
+    setRole(MEMBER_ROLE_NAME);
     setInvitationLink("");
     setIsCopied(false);
-  };
+  }, []);
 
   return (
     <Card className="w-full">
@@ -107,15 +110,22 @@ function InviteByLinkCardContent({
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(value: "member" | "admin") => setRole(value)}
+                onValueChange={(value: AnyRoleName) => setRole(value)}
                 disabled={createMutation.isPending}
               >
                 <SelectTrigger id="role">
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                  <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
+                  {roles
+                    ?.filter((r) => !r.predefined)
+                    .map((r) => (
+                      <SelectItem key={r.id} value={r.name}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

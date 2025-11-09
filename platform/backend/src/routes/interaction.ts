@@ -1,16 +1,16 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { InteractionModel } from "@/models";
 import {
+  constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
-  ErrorResponseSchema,
   PaginationQuerySchema,
-  RouteId,
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -32,45 +32,45 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "model",
             ] as const),
           ),
-        response: {
-          200: createPaginatedResponseSchema(SelectInteractionSchema),
-          401: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectInteractionSchema),
+        ),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
+    async (
+      {
+        query: { agentId, limit, offset, sortBy, sortDirection },
+        user,
+        headers,
+      },
+      reply,
+    ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
       if (agentId) {
-        const result =
+        return reply.send(
           await InteractionModel.getAllInteractionsForAgentPaginated(
             agentId,
             pagination,
             sorting,
-          );
-        return reply.send(result);
+          ),
+        );
       }
 
-      const result = await InteractionModel.findAllPaginated(
-        pagination,
-        sorting,
-        user.id,
-        user.isAdmin,
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
       );
-      return reply.send(result);
+
+      return reply.send(
+        await InteractionModel.findAllPaginated(
+          pagination,
+          sorting,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -84,29 +84,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           interactionId: UuidIdSchema,
         }),
-        response: {
-          200: SelectInteractionSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectInteractionSchema),
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
+    async ({ params: { interactionId }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
 
       const interaction = await InteractionModel.findById(
-        request.params.interactionId,
+        interactionId,
         user.id,
-        user.isAdmin,
+        isAgentAdmin,
       );
 
       if (!interaction) {

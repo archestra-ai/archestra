@@ -1,10 +1,12 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
-import { authMiddleware } from "./auth";
+import { describe, expect, test, vi } from "@/test";
+import { Authnz } from "./middleware";
 
-describe("AuthMiddleware", () => {
+describe("Authnz", () => {
+  const authnz = new Authnz();
+
   describe("shouldSkipAuthCheck", () => {
-    it("should skip auth for ACME challenge paths", async () => {
+    test("should skip auth for ACME challenge paths", async () => {
       const mockRequest = {
         url: "/.well-known/acme-challenge/test-token",
         method: "GET",
@@ -17,13 +19,13 @@ describe("AuthMiddleware", () => {
       } as unknown as FastifyReply;
 
       // The middleware should not call reply.status() for ACME challenge paths
-      await authMiddleware.handle(mockRequest, mockReply);
+      await authnz.handle(mockRequest, mockReply);
 
       expect(mockReply.status).not.toHaveBeenCalled();
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
-    it("should skip auth for various ACME challenge token formats", async () => {
+    test("should skip auth for various ACME challenge token formats", async () => {
       const acmeUrls = [
         "/.well-known/acme-challenge/",
         "/.well-known/acme-challenge/simple-token",
@@ -43,14 +45,14 @@ describe("AuthMiddleware", () => {
           send: vi.fn(),
         } as unknown as FastifyReply;
 
-        await authMiddleware.handle(mockRequest, mockReply);
+        await authnz.handle(mockRequest, mockReply);
 
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
       }
     });
 
-    it("should skip auth for OPTIONS and HEAD requests", async () => {
+    test("should skip auth for OPTIONS and HEAD requests", async () => {
       const methods = ["OPTIONS", "HEAD"];
 
       for (const method of methods) {
@@ -65,23 +67,21 @@ describe("AuthMiddleware", () => {
           send: vi.fn(),
         } as unknown as FastifyReply;
 
-        await authMiddleware.handle(mockRequest, mockReply);
+        await authnz.handle(mockRequest, mockReply);
 
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
       }
     });
 
-    it("should skip auth for existing whitelisted paths", async () => {
+    test("should skip auth for existing whitelisted paths", async () => {
       const whitelistedPaths = [
         "/api/auth/session",
         "/v1/openai/completions",
         "/v1/anthropic/messages",
         "/v1/gemini/generate",
-        "/json",
         "/openapi.json",
         "/health",
-        "/metrics",
         "/api/features",
       ];
 
@@ -97,19 +97,20 @@ describe("AuthMiddleware", () => {
           send: vi.fn(),
         } as unknown as FastifyReply;
 
-        await authMiddleware.handle(mockRequest, mockReply);
+        await authnz.handle(mockRequest, mockReply);
 
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
       }
     });
 
-    it("should NOT skip auth for similar but different paths", async () => {
+    test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",
         "/.well-known-acme-challenge/test", // missing slash
         "/well-known/acme-challenge/test", // missing leading dot
         "/api/protected-endpoint",
+        "/metrics",
       ];
 
       for (const url of protectedPaths) {
@@ -129,7 +130,7 @@ describe("AuthMiddleware", () => {
           send: vi.fn(),
         } as unknown as FastifyReply;
 
-        await authMiddleware.handle(mockRequest, mockReply);
+        await authnz.handle(mockRequest, mockReply);
 
         // Should return 401 for unauthenticated requests to protected paths
         expect(mockReply.status).toHaveBeenCalledWith(401);

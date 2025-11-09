@@ -29,7 +29,6 @@ export function useMcpRegistryServersInfinite(
       const response = await archestraCatalogSdk.searchMcpServerCatalog({
         query: {
           q: search?.trim(),
-          worksInArchestra: true,
           category: categoryParam,
           limit,
           offset: pageParam,

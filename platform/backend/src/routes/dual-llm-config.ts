@@ -1,16 +1,15 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { DualLlmConfigModel } from "@/models";
 import {
-  ErrorResponseSchema,
+  constructResponseSchema,
   InsertDualLlmConfigSchema,
-  RouteId,
   SelectDualLlmConfigSchema,
   UuidIdSchema,
 } from "@/types";
 
 const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Get default configuration (or create if none exists)
   fastify.get(
     "/api/dual-llm-config/default",
     {
@@ -18,10 +17,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetDefaultDualLlmConfig,
         description: "Get default dual LLM configuration",
         tags: ["Dual LLM Config"],
-        response: {
-          200: SelectDualLlmConfigSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmConfigSchema),
       },
     },
     async (_, reply) => {
@@ -41,7 +37,6 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get all configurations
   fastify.get(
     "/api/dual-llm-config",
     {
@@ -49,10 +44,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetDualLlmConfigs,
         description: "Get all dual LLM configurations",
         tags: ["Dual LLM Config"],
-        response: {
-          200: z.array(SelectDualLlmConfigSchema),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectDualLlmConfigSchema)),
       },
     },
     async (_, reply) => {
@@ -72,7 +64,6 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Create a new configuration
   fastify.post(
     "/api/dual-llm-config",
     {
@@ -85,10 +76,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }),
-        response: {
-          200: SelectDualLlmConfigSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmConfigSchema),
       },
     },
     async (request, reply) => {
@@ -108,7 +96,6 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get configuration by ID
   fastify.get(
     "/api/dual-llm-config/:id",
     {
@@ -119,11 +106,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: SelectDualLlmConfigSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmConfigSchema),
       },
     },
     async ({ params: { id } }, reply) => {
@@ -153,7 +136,6 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Update configuration
   fastify.put(
     "/api/dual-llm-config/:id",
     {
@@ -169,11 +151,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdAt: true,
           updatedAt: true,
         }).partial(),
-        response: {
-          200: SelectDualLlmConfigSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmConfigSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
@@ -203,7 +181,6 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Delete configuration
   fastify.delete(
     "/api/dual-llm-config/:id",
     {
@@ -214,11 +191,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: {
-          200: z.object({ success: z.boolean() }),
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
     async ({ params: { id } }, reply) => {

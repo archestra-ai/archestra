@@ -5,13 +5,20 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import {
+  executeArchestraTool,
+  getArchestraMcpTools,
+  MCP_SERVER_NAME,
+} from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { McpToolCallModel, ToolModel } from "@/models";
+import { McpToolCallModel, AgentModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -73,12 +80,27 @@ async function createAgentServer(
     },
   );
 
-  const tools = await ToolModel.getToolsByAgent(agentId);
+  // Get agent information
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
+    throw new Error(`Agent not found: ${agentId}`);
+  }
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const toolsList = tools.map(({ name, description, parameters }) => ({
+  // Get MCP tools (from connected MCP servers + Archestra built-in tools)
+  // Excludes proxy-discovered tools
+  const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
+  // Create a map of Archestra tool names to their titles
+  // This is needed because the database schema doesn't include a title field
+  const archestraTools = getArchestraMcpTools();
+  const archestraToolTitles = new Map(
+    archestraTools.map((tool: Tool) => [tool.name, tool.title]),
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: mcpTools.map(({ name, description, parameters }) => ({
       name,
-      title: name,
+      title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},
@@ -110,6 +132,33 @@ async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
+        // Check if this is an Archestra tool
+        const archestraToolPrefix = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+        if (name.startsWith(archestraToolPrefix)) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+            },
+            "Archestra MCP tool call received",
+          );
+
+          // Handle Archestra tools directly
+          const archestraResponse = await executeArchestraTool(name, args, {
+            agent,
+          });
+
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+            },
+            "Archestra MCP tool call completed",
+          );
+
+          return archestraResponse;
+        }
+
         logger.info(
           {
             agentId,
@@ -131,16 +180,7 @@ async function createAgentServer(
         };
 
         // Execute the tool call via McpClient
-        const results = await mcpClient.executeToolCalls([toolCall], agentId);
-
-        if (results.length === 0) {
-          throw {
-            code: -32603, // Internal error
-            message: `Tool '${name}' not found or not assigned to agent`,
-          };
-        }
-
-        const result = results[0];
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         if (result.isError) {
           logger.info(

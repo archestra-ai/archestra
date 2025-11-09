@@ -14,6 +14,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
 import { ResponseModifierEditor } from "./response-modifier-editor";
 import { ToolCallPolicies } from "./tool-call-policies";
@@ -31,6 +33,7 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
   if (!agentTool) return null;
 
   return (
@@ -62,7 +65,7 @@ export function ToolDetailsDialog({
                   Origin
                 </div>
                 <div className="mt-0.5">
-                  {agentTool.tool.mcpServerName ? (
+                  {isMcpTool(agentTool.tool) ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -71,7 +74,13 @@ export function ToolDetailsDialog({
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{agentTool.tool.mcpServerName}</p>
+                          <p>
+                            {
+                              internalMcpCatalogItems?.find(
+                                (item) => item.id === agentTool.tool.catalogId,
+                              )?.name
+                            }
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

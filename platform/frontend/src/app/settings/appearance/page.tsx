@@ -1,12 +1,12 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
-  useUpdateOrganizationAppearance,
+  useUpdateOrganization,
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { FontSelector } from "./_components/font-selector";
@@ -14,10 +14,14 @@ import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function AppearanceSettingsPage() {
-  const updateMutation = useUpdateOrganizationAppearance();
+  const updateAppearanceSettingsMutation = useUpdateOrganization(
+    "Appearance settings updated",
+    "Failed to update appearance settings",
+  );
   const [hasChanges, setHasChanges] = useState(false);
   const queryClient = useQueryClient();
 
+  const orgTheme = useOrgTheme();
   const {
     currentUITheme,
     currentUIFont,
@@ -30,27 +34,31 @@ export default function AppearanceSettingsPage() {
     saveTheme,
     saveFont,
     logo,
-    logoType,
     DEFAULT_THEME,
     DEFAULT_FONT,
     isLoadingAppearance,
-  } = useOrgTheme();
+  } = orgTheme ?? {
+    currentUITheme: "modern-minimal" as const,
+    currentUIFont: "lato" as const,
+    DEFAULT_THEME: "modern-minimal" as const,
+    DEFAULT_FONT: "lato" as const,
+  };
 
   useOnUnmount(() => {
     if (themeFromBackend) {
-      applyThemeOnUI(themeFromBackend);
-      setPreviewTheme(themeFromBackend);
+      applyThemeOnUI?.(themeFromBackend);
+      setPreviewTheme?.(themeFromBackend);
     }
     if (fontFromBackend) {
-      applyFontOnUI(fontFromBackend);
-      setPreviewFont(fontFromBackend);
+      applyFontOnUI?.(fontFromBackend);
+      setPreviewFont?.(fontFromBackend);
     }
   });
 
-  const handleLogoChange = () => {
-    // Invalidate appearance query to refresh the logo
-    queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
-  };
+  const handleLogoChange = useCallback(() => {
+    // Invalidate organization details query to refresh the logo
+    queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+  }, [queryClient]);
 
   if (isLoadingAppearance) {
     return (
@@ -65,24 +73,20 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
-        <LogoUpload
-          currentLogo={logo}
-          logoType={logoType}
-          onLogoChange={handleLogoChange}
-        />
+        <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
         <ThemeSelector
           selectedTheme={currentUITheme}
           onThemeSelect={(themeId) => {
-            setPreviewTheme(themeId);
+            setPreviewTheme?.(themeId);
             setHasChanges(
               themeId !== themeFromBackend || currentUIFont !== fontFromBackend,
             );
           }}
         />
         <FontSelector
-          selectedFont={currentUIFont}
+          selectedFont={currentUIFont || DEFAULT_FONT}
           onFontSelect={(fontId) => {
-            setPreviewFont(fontId);
+            setPreviewFont?.(fontId);
             setHasChanges(
               currentUITheme !== themeFromBackend || fontId !== fontFromBackend,
             );
@@ -92,22 +96,22 @@ export default function AppearanceSettingsPage() {
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
             <Button
               onClick={() => {
-                saveTheme(currentUITheme);
-                saveFont(currentUIFont);
+                saveTheme?.(currentUITheme || DEFAULT_THEME);
+                saveFont?.(currentUIFont || DEFAULT_FONT);
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Save
             </Button>
             <Button
               variant="outline"
               onClick={() => {
-                setPreviewTheme(themeFromBackend || DEFAULT_THEME);
-                setPreviewFont(fontFromBackend || DEFAULT_FONT);
+                setPreviewTheme?.(themeFromBackend || DEFAULT_THEME);
+                setPreviewFont?.(fontFromBackend || DEFAULT_FONT);
                 setHasChanges(false);
               }}
-              disabled={updateMutation.isPending}
+              disabled={updateAppearanceSettingsMutation.isPending}
             >
               Cancel
             </Button>

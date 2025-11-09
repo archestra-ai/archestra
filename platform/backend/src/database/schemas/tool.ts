@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
+import mcpCatalogTable from "./internal-mcp-catalog";
 import mcpServerTable from "./mcp-server";
 
 const toolsTable = pgTable(
@@ -18,9 +19,15 @@ const toolsTable = pgTable(
     agentId: uuid("agent_id").references(() => agentsTable.id, {
       onDelete: "cascade",
     }),
-    // mcpServerId is set for MCP tools, null for proxy-sniffed tools
-    mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
+    // catalogId links MCP tools to their catalog item (shared across installations)
+    // null for proxy-sniffed tools
+    catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
       onDelete: "cascade",
+    }),
+    // mcpServerId indicates which MCP server discovered this tool (metadata)
+    // null for proxy-sniffed tools or if the discovering server was deleted
+    mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
+      onDelete: "set null",
     }),
     name: text("name").notNull(),
     parameters: jsonb("parameters")
@@ -34,7 +41,12 @@ const toolsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [unique().on(table.agentId, table.name)],
+  (table) => [
+    // Unique constraint ensures:
+    // - For MCP tools: one tool per (catalogId, name) combination
+    // - For proxy-sniffed tools: one tool per (agentId, name) combination
+    unique().on(table.catalogId, table.name, table.agentId),
+  ],
 );
 
 export default toolsTable;

@@ -1,8 +1,9 @@
+import { describe, expect, test } from "@/test";
 import { calculatePaginationMeta, createPaginatedResult } from "./pagination";
 
 describe("Pagination Utilities", () => {
   describe("calculatePaginationMeta", () => {
-    it("should calculate metadata for first page", () => {
+    test("should calculate metadata for first page", () => {
       const meta = calculatePaginationMeta(100, { limit: 20, offset: 0 });
 
       expect(meta).toEqual({
@@ -15,7 +16,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should calculate metadata for middle page", () => {
+    test("should calculate metadata for middle page", () => {
       const meta = calculatePaginationMeta(100, { limit: 20, offset: 40 });
 
       expect(meta).toEqual({
@@ -28,7 +29,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should calculate metadata for last page", () => {
+    test("should calculate metadata for last page", () => {
       const meta = calculatePaginationMeta(100, { limit: 20, offset: 80 });
 
       expect(meta).toEqual({
@@ -41,7 +42,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should handle partial last page", () => {
+    test("should handle partial last page", () => {
       const meta = calculatePaginationMeta(95, { limit: 20, offset: 80 });
 
       expect(meta).toEqual({
@@ -54,7 +55,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should handle empty result set", () => {
+    test("should handle empty result set", () => {
       const meta = calculatePaginationMeta(0, { limit: 20, offset: 0 });
 
       expect(meta).toEqual({
@@ -67,7 +68,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should handle single page", () => {
+    test("should handle single page", () => {
       const meta = calculatePaginationMeta(10, { limit: 20, offset: 0 });
 
       expect(meta).toEqual({
@@ -80,7 +81,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should handle custom limit", () => {
+    test("should handle custom limit", () => {
       const meta = calculatePaginationMeta(250, { limit: 50, offset: 100 });
 
       expect(meta).toEqual({
@@ -95,7 +96,7 @@ describe("Pagination Utilities", () => {
   });
 
   describe("createPaginatedResult", () => {
-    it("should create paginated result with data and metadata", () => {
+    test("should create paginated result with data and metadata", () => {
       const data = [
         { id: "1", name: "Item 1" },
         { id: "2", name: "Item 2" },
@@ -118,7 +119,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should work with empty data array", () => {
+    test("should work with empty data array", () => {
       const result = createPaginatedResult([], 0, { limit: 20, offset: 0 });
 
       expect(result).toEqual({
@@ -134,7 +135,7 @@ describe("Pagination Utilities", () => {
       });
     });
 
-    it("should maintain data type", () => {
+    test("should maintain data type", () => {
       interface TestItem {
         id: string;
         value: number;

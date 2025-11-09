@@ -1,16 +1,15 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
-  ErrorResponseSchema,
-  RouteId,
+  constructResponseSchema,
   SelectDualLlmResultSchema,
   UuidIdSchema,
 } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Get dual LLM result by tool call ID
   fastify.get(
     "/api/dual-llm-results/by-tool-call-id/:toolCallId",
     {
@@ -21,10 +20,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           toolCallId: z.string(),
         }),
-        response: {
-          200: SelectDualLlmResultSchema.nullable(),
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectDualLlmResultSchema.nullable()),
       },
     },
     async ({ params: { toolCallId } }, reply) => {
@@ -44,7 +40,6 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get all dual LLM results for an interaction
   fastify.get(
     "/api/dual-llm-results/by-interaction/:interactionId",
     {
@@ -55,32 +50,21 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           interactionId: UuidIdSchema,
         }),
-        response: {
-          200: z.array(SelectDualLlmResultSchema),
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(z.array(SelectDualLlmResultSchema)),
       },
     },
-    async (request, reply) => {
+    async ({ params: { interactionId }, user, headers }, reply) => {
       try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-        }
+        const { success: isAgentAdmin } = await hasPermission(
+          { agent: ["admin"] },
+          headers,
+        );
 
         // Get the interaction with access control
         const interaction = await InteractionModel.findById(
-          request.params.interactionId,
+          interactionId,
           user.id,
-          user.isAdmin,
+          isAgentAdmin,
         );
         if (!interaction) {
           return reply.status(404).send({

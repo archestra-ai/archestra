@@ -49,7 +49,7 @@ pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
-pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox) (chromium, webkit, firefox)
+pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -61,6 +61,10 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
+
+# E2E Testing in CI
+# CI uses Kubernetes (kind) + Helm instead of docker-compose
+# See .github/kind.yaml and .github/values-ci.yaml for configuration
 
 # Observability
 tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)

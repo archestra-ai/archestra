@@ -3,6 +3,9 @@ export const E2eTestId = {
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
   DeleteAgentButton: "delete-agent-button",
+  OnboardingNextButton: "onboarding-next-button",
+  OnboardingFinishButton: "onboarding-finish-button",
+  OnboardingSkipButton: "onboarding-skip-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

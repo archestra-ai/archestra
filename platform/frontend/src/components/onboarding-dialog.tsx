@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
@@ -74,8 +75,20 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 
         <div className="px-6 py-4 border-t">
           {step === 1 ? (
-            <div className="w-full flex justify-end">
-              <Button onClick={handleNext} size="lg">
+            <div className="w-full flex justify-between">
+              <Button
+                onClick={handleFinishOnboarding}
+                variant="ghost"
+                size="lg"
+                data-testid={E2eTestId.OnboardingSkipButton}
+              >
+                Skip Onboarding
+              </Button>
+              <Button
+                onClick={handleNext}
+                size="lg"
+                data-testid={E2eTestId.OnboardingNextButton}
+              >
                 Next: Connect Agent
               </Button>
             </div>
@@ -154,6 +167,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                     completeOnboardingMutation.isPending || !hasAnyConnection
                   }
                   size="lg"
+                  data-testid={E2eTestId.OnboardingFinishButton}
                 >
                   {completeOnboardingMutation.isPending ? (
                     <>

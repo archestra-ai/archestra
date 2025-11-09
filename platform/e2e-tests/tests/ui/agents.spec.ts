@@ -6,6 +6,14 @@ test("can create and delete an agent", async ({
   makeRandomString,
   goToPage,
 }) => {
+  // Skip onboarding if dialog is present
+  const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
+  if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await skipButton.click();
+    // Wait for dialog to close
+    await page.waitForTimeout(500);
+  }
+
   const AGENT_NAME = makeRandomString(10, "Test Agent");
   await goToPage(page, "/agents");
   await page.getByTestId(E2eTestId.CreateAgentButton).click();

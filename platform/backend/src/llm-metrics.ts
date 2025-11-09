@@ -7,7 +7,7 @@
 
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
-import { llmPricing, type PricingModel } from "@/llm-pricing";
+import { llmPricing } from "@/llm-pricing";
 import logger from "@/logging";
 import type { Agent, SupportedProvider } from "@/types";
 import * as utils from "./routes/proxy/utils";
@@ -149,18 +149,6 @@ function buildMetricLabels(
   return labels;
 }
 
-function getCost(
-  model: PricingModel,
-  usage: { input?: number; output?: number },
-): number {
-  const pricing = llmPricing.openai[model];
-  return (
-    ((usage.input ?? 0) * pricing.input +
-      (usage.output ?? 0) * pricing.output) /
-    1000000
-  );
-}
-
 /**
  * Reports LLM token usage and costs
  */
@@ -192,7 +180,7 @@ export function reportUsage(
   if (provider === "openai" && model && usage.input > 0 && usage.output > 0) {
     const normalizedModel = utils.adapters.openai.normalizeModel(model);
     if (normalizedModel in llmPricing.openai) {
-      const cost = getCost(normalizedModel, usage);
+      const cost = utils.adapters.openai.getUsageCost(normalizedModel, usage);
       llmCostCounter.inc(
         buildMetricLabels(agent, { provider, model: normalizedModel }),
         cost,
@@ -203,7 +191,7 @@ export function reportUsage(
       const normalizedBaselineModel =
         utils.adapters.openai.normalizeModel(baselineModel);
       if (normalizedBaselineModel in llmPricing.openai) {
-        const baselineCost = getCost(normalizedBaselineModel, usage);
+        const baselineCost = utils.adapters.openai.getUsageCost(normalizedBaselineModel, usage);
         llmBaselineCostCounter.inc(
           buildMetricLabels(agent, { provider, model: normalizedBaselineModel }),
           baselineCost,

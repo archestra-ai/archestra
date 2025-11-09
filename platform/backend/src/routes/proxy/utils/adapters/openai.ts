@@ -1,8 +1,7 @@
 import type { z } from "zod";
-import type { PricingModel } from "@/llm-pricing";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
-import { llmPricing } from '@/llm-pricing';
+import { llmPricing, type PricingModel } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 type OpenAiModel = OpenAi.Types.ChatCompletionsRequest["model"];
@@ -189,6 +188,15 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
     input: usage.prompt_tokens,
     output: usage.completion_tokens,
   };
+}
+
+/** Returns the usage cost in USD */
+export function getUsageCost(
+  model: PricingModel,
+  { input = 0, output = 0 }: { input?: number; output?: number },
+): number {
+  const pricing = llmPricing.openai[model];
+  return (input * pricing.input + output * pricing.output) / 1000000;
 }
 
 /**

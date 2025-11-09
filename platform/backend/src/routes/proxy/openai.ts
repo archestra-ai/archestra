@@ -17,6 +17,7 @@ import {
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
+import { llmPricing } from '@/llm-pricing';
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -562,6 +563,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           } as const;
           reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
         }
+        const cost = model in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(model, tokenUsage) : null
+        const baselineCost = baselineModel in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(baselineModel, tokenUsage) : null
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -585,6 +588,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage?.input || null,
           outputTokens: tokenUsage?.output || null,
+          cost,
+          baselineCost,
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -654,7 +659,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Extract token usage from response
         const tokenUsage = response.usage
           ? utils.adapters.openai.getUsageTokens(response.usage)
-          : { input: null, output: null };
+          : {input: null, output: null};
+
+        let cost = null, baselineCost = null;
+        if (tokenUsage.input && tokenUsage.output) {
+          cost = model in llmPricing.openai ? utils.adapters.openai.getUsageCost(model, tokenUsage) : null
+          baselineCost = baselineModel in llmPricing.openai ? utils.adapters.openai.getUsageCost(baselineModel, tokenUsage) : null
+        }
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -665,6 +676,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost,
+          baselineCost,
         });
 
         return reply.send(response);

@@ -18,64 +18,6 @@ import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
 /**
- * Inject assigned MCP tools into Gemini tools object
- * Assigned tools take priority and override tools with the same name from the request
- */
-const _injectTools = async (
-  requestTools: Gemini.Types.Tool[] | undefined,
-  agentId: string,
-): Promise<Gemini.Types.Tool[] | undefined> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to Gemini format (function declarations)
-  const assignedGeminiFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = assignedTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || "",
-    parameters: tool.parameters,
-  }));
-
-  if (assignedGeminiFunctions.length === 0 && !requestTools) {
-    return undefined;
-  }
-
-  // Handle case where requestTools is undefined or empty
-  const requestFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = [];
-  if (requestTools && requestTools.length > 0) {
-    for (const tool of requestTools) {
-      if (tool.functionDeclarations) {
-        requestFunctions.push(...tool.functionDeclarations);
-      }
-    }
-  }
-
-  // Create a map of request functions by name
-  const functionMap = new Map<
-    string,
-    z.infer<typeof Gemini.Tools.FunctionDeclarationSchema>
-  >();
-  for (const func of requestFunctions) {
-    functionMap.set(func.name, func);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  for (const assignedFunc of assignedGeminiFunctions) {
-    functionMap.set(assignedFunc.name, assignedFunc);
-  }
-
-  // Return as Gemini.Types.Tool array format
-  const mergedFunctions = Array.from(functionMap.values());
-  if (mergedFunctions.length === 0) {
-    return undefined;
-  }
-
-  return [{ functionDeclarations: mergedFunctions }];
-};
-
-/**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
  * the route
  */

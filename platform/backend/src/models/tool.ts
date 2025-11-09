@@ -10,6 +10,7 @@ import {
   or,
 } from "drizzle-orm";
 
+import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -44,6 +45,25 @@ class ToolModel {
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
+    // For Archestra built-in tools (both agentId and catalogId are null), check if tool already exists
+    // This prevents duplicate Archestra tools since NULL != NULL in unique constraints
+    if (!tool.agentId && !tool.catalogId) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            isNull(schema.toolsTable.agentId),
+            isNull(schema.toolsTable.catalogId),
+            eq(schema.toolsTable.name, tool.name),
+          ),
+        );
+
+      if (existingTool) {
+        return existingTool;
+      }
+    }
+
     // For proxy-sniffed tools (agentId is set, catalogId is null), check if tool already exists
     // This prevents duplicate proxy-sniffed tools for the same agent
     if (tool.agentId && !tool.catalogId) {
@@ -107,6 +127,7 @@ class ToolModel {
                 )
               : and(
                   isNull(schema.toolsTable.agentId),
+                  isNull(schema.toolsTable.catalogId),
                   eq(schema.toolsTable.name, tool.name),
                 ),
         );
@@ -263,6 +284,71 @@ class ToolModel {
       .orderBy(desc(schema.toolsTable.createdAt));
 
     return tools;
+  }
+
+  /**
+   * Get only MCP tools assigned to an agent (those from connected MCP servers)
+   * Includes: MCP server tools (catalogId set) and Archestra built-in tools (both null)
+   * Excludes: proxy-discovered tools (agentId set, catalogId null)
+   *
+   * Automatically assigns Archestra built-in tools to the agent if not already assigned.
+   */
+  static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
+    // Ensure Archestra built-in tools are assigned to this agent
+    // This auto-migrates existing agents that were created before auto-assignment was added
+    await ToolModel.assignArchestraToolsToAgent(agentId);
+
+    // Get tool IDs assigned via junction table (MCP tools)
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+
+    if (assignedToolIds.length === 0) {
+      return [];
+    }
+
+    // Return tools that are assigned via junction table AND:
+    // 1. Have catalogId set (regular MCP server tools), OR
+    // 2. Have both catalogId AND agentId null (Archestra built-in tools)
+    // This excludes proxy-discovered tools which have agentId set and catalogId null
+    const tools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, assignedToolIds),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            and(
+              isNull(schema.toolsTable.catalogId),
+              isNull(schema.toolsTable.agentId),
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    return tools;
+  }
+
+  /**
+   * Assign Archestra built-in tools to an agent
+   * Creates the tools globally if they don't exist, then assigns them via junction table
+   */
+  static async assignArchestraToolsToAgent(agentId: string): Promise<void> {
+    const archestraTools = getArchestraMcpTools();
+
+    for (const archestraTool of archestraTools) {
+      // Create or get the tool (stored globally with catalogId and agentId both null)
+      const tool = await ToolModel.createToolIfNotExists({
+        name: archestraTool.name,
+        description: archestraTool.description || null,
+        parameters: archestraTool.inputSchema,
+        catalogId: null,
+        agentId: null,
+      });
+
+      // Assign tool to agent via junction table
+      await AgentToolModel.createIfNotExists(agentId, tool.id);
+    }
   }
 
   /**

@@ -127,6 +127,159 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
 
+## Client-Side Tool Execution Pattern
+
+The LLM proxy returns tool calls to clients for execution (standard OpenAI/Anthropic API behavior). Clients are responsible for:
+
+1. Calling the LLM proxy endpoint
+2. Detecting tool_use/tool_calls in the response
+3. Executing tools via the MCP Gateway
+4. Sending tool results back to the LLM proxy
+5. Receiving the final answer
+
+**Architecture Flow**:
+```
+Client → LLM Proxy → LLM → [tool_use response] → Client
+Client executes tools via MCP Gateway
+Client → LLM Proxy (with tool results) → LLM → Final answer → Client
+```
+
+**Example: Anthropic Client Implementation**:
+```typescript
+async function chat(message: string, agentId: string, apiKey: string) {
+  let messages = [{ role: 'user', content: message }];
+
+  while (true) {
+    // Call LLM proxy
+    const response = await fetch('http://localhost:9000/v1/anthropic/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        messages,
+      }),
+    });
+
+    const data = await response.json();
+
+    // Check if LLM wants to use tools
+    const toolCalls = data.content.filter(c => c.type === 'tool_use');
+
+    if (toolCalls.length === 0) {
+      // No tool calls - return final answer
+      return data.content.find(c => c.type === 'text')?.text || '';
+    }
+
+    // Execute tools via MCP Gateway
+    const toolResults = [];
+    for (const toolCall of toolCalls) {
+      const result = await fetch('http://localhost:9000/v1/mcp', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${agentId}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: toolCall.name,
+            arguments: toolCall.input,
+          },
+        }),
+      });
+
+      const toolData = await result.json();
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: toolCall.id,
+        content: toolData.result.content,
+      });
+    }
+
+    // Add assistant response and tool results to conversation
+    messages.push(
+      { role: 'assistant', content: data.content },
+      { role: 'user', content: toolResults }
+    );
+  }
+}
+```
+
+**Example: OpenAI Client Implementation**:
+```typescript
+async function chat(message: string, agentId: string, apiKey: string) {
+  let messages = [{ role: 'user', content: message }];
+
+  while (true) {
+    // Call LLM proxy
+    const response = await fetch('http://localhost:9000/v1/openai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages,
+      }),
+    });
+
+    const data = await response.json();
+    const assistantMessage = data.choices[0].message;
+
+    // Check if LLM wants to use tools
+    if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      // No tool calls - return final answer
+      return assistantMessage.content;
+    }
+
+    // Execute tools via MCP Gateway
+    const toolMessages = [];
+    for (const toolCall of assistantMessage.tool_calls) {
+      const result = await fetch('http://localhost:9000/v1/mcp', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${agentId}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments),
+          },
+        }),
+      });
+
+      const toolData = await result.json();
+      toolMessages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(toolData.result.content),
+      });
+    }
+
+    // Add assistant response and tool results to conversation
+    messages.push(assistantMessage, ...toolMessages);
+  }
+}
+```
+
+**Benefits**:
+- ✅ Standard API behavior matching OpenAI/Anthropic
+- ✅ Client has full control over tool execution flow
+- ✅ Clear separation: LLM Proxy = LLM routing, MCP Gateway = tool execution
+- ✅ Tool invocation policies still enforced (returns refusal if denied)
+- ✅ Clients can log, audit, or modify tool calls before execution
+
 ## Authentication
 
 - **Better-Auth**: Session management with dynamic RBAC

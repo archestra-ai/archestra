@@ -9,11 +9,7 @@ import {
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  executeArchestraTool,
-  getArchestraMcpTools,
-  MCP_SERVER_NAME,
-} from "@/archestra-mcp-server";
+import { executeArchestraTool, MCP_SERVER_NAME } from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -85,21 +81,19 @@ async function createAgentServer(
     throw new Error(`Agent not found: ${agentId}`);
   }
 
-  const tools = await ToolModel.getToolsByAgent(agentId);
-  const archestraTools = getArchestraMcpTools();
+  // Get MCP tools (from connected MCP servers + Archestra built-in tools)
+  // Excludes proxy-discovered tools
+  const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      ...tools.map(({ name, description, parameters }) => ({
-        name,
-        title: name,
-        description,
-        inputSchema: parameters,
-        annotations: {},
-        _meta: {},
-      })),
-      ...archestraTools,
-    ],
+    tools: mcpTools.map(({ name, description, parameters }) => ({
+      name,
+      title: name,
+      description,
+      inputSchema: parameters,
+      annotations: {},
+      _meta: {},
+    })),
   }));
 
   server.setRequestHandler(

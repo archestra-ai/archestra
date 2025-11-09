@@ -1,6 +1,5 @@
 import type { CreateClientConfig } from "./client.gen";
 
-
 export const createClientConfig: CreateClientConfig = (config) => {
   const isBrowser = typeof window !== "undefined";
   return {

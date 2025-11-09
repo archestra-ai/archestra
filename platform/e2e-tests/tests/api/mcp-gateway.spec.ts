@@ -1,47 +1,52 @@
-import { APIRequestContext, expect, test } from "@playwright/test";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { API_BASE_URL } from "../../consts";
-import utils from "../../utils";
+import {
+  MCP_GATEWAY_URL_SUFFIX,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "../../consts";
+import { expect, test } from "./fixtures";
 
 test.describe("MCP Gateway - Archestra Tools", () => {
   let agentId: string;
 
-  test.beforeAll(async ({ request }) => {
-    const agent = await utils.agent.createAgent(request, "MCP Gateway Test Agent");
+  test.beforeAll(async ({ request, createAgent }) => {
+    const createResponse = await createAgent(request, "MCP Gateway Test Agent");
+    const agent = await createResponse.json();
     agentId = agent.id;
   });
 
-  test.afterAll(async ({ request }) => {
-    await utils.agent.deleteAgent(request, agentId);
+  test.afterAll(async ({ request, deleteAgent }) => {
+    await deleteAgent(request, agentId);
   });
 
-  const makeMcpGatewayRequest = (request: APIRequestContext, data: any, sessionId?: string) =>
-    request.post(`${API_BASE_URL}/v1/mcp`, {
-      headers: {
-        Authorization: `Bearer ${agentId}`,
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-        ...(sessionId && { "mcp-session-id": sessionId }),
-      },
-      data,
-    });
+  const makeMcpGatewayRequestHeaders = (sessionId?: string) => ({
+    Authorization: `Bearer ${agentId}`,
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    ...(sessionId && { "mcp-session-id": sessionId }),
+  });
 
   test("should include Archestra MCP tools in list tools response", async ({
     request,
+    makeApiRequest,
   }) => {
     // Initialize MCP session
-    const initResponse = await makeMcpGatewayRequest(request, {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: {
-          tools: {},
-        },
-        clientInfo: {
-          name: "test-client",
-          version: "1.0.0",
+    const initResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: MCP_GATEWAY_URL_SUFFIX,
+      headers: makeMcpGatewayRequestHeaders(),
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {
+            tools: {},
+          },
+          clientInfo: {
+            name: "test-client",
+            version: "1.0.0",
+          },
         },
       },
     });
@@ -53,12 +58,18 @@ test.describe("MCP Gateway - Archestra Tools", () => {
     const sessionId = initResponse.headers()["mcp-session-id"];
 
     // Call tools/list
-    const listToolsResponse = await makeMcpGatewayRequest(request, {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/list",
-      params: {},
-    }, sessionId);
+    const listToolsResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: MCP_GATEWAY_URL_SUFFIX,
+      headers: makeMcpGatewayRequestHeaders(sessionId),
+      data: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      },
+    });
 
     expect(listToolsResponse.status()).toBe(200);
     const listResult = await listToolsResponse.json();
@@ -70,20 +81,21 @@ test.describe("MCP Gateway - Archestra Tools", () => {
 
     // Find Archestra tools
     const archestraWhoami = tools.find(
-      (t: any) =>
-        t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      (t: any) => t.name === `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
     );
     const archestraSearch = tools.find(
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
       (t: any) =>
         t.name ===
-        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`
+        `archestra${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
     );
 
     // Verify whoami tool
     expect(archestraWhoami).toBeDefined();
     expect(archestraWhoami.title).toBe("Who Am I");
     expect(archestraWhoami.description).toContain(
-      "name and ID of the current agent"
+      "name and ID of the current agent",
     );
 
     // Verify search_private_mcp_registry tool

@@ -317,7 +317,22 @@ async function makeMcpServer(
  */
 async function makeInternalMcpCatalog(
   overrides: Partial<
-    Pick<InsertInternalMcpCatalog, "name" | "serverType" | "serverUrl">
+    Pick<
+      InsertInternalMcpCatalog,
+      | "name"
+      | "serverType"
+      | "serverUrl"
+      | "description"
+      | "version"
+      | "repository"
+      | "installationCommand"
+      | "requiresAuth"
+      | "authDescription"
+      | "authFields"
+      | "localConfig"
+      | "userConfig"
+      | "oauthConfig"
+    >
   > = {},
 ) {
   return await InternalMcpCatalogModel.create({

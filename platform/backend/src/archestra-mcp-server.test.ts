@@ -1,8 +1,8 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test...
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { AgentModel, InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
-import type { Agent, InternalMcpCatalogServerType } from "@/types";
+import type { Agent } from "@/types";
 import {
   type ArchestraContext,
   executeArchestraTool,
@@ -60,8 +60,8 @@ describe("executeArchestraTool", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
 
-  beforeEach(async () => {
-    testAgent = await makeAgent("Test Agent");
+  beforeEach(async ({ makeAgent }) => {
+    testAgent = await makeAgent({ name: "Test Agent" });
     mockContext = {
       agent: testAgent,
     };
@@ -84,7 +84,9 @@ describe("executeArchestraTool", () => {
   });
 
   describe("search_private_mcp_registry tool", () => {
-    test("should return all catalog items when no query provided", async () => {
+    test("should return all catalog items when no query provided", async ({
+      makeInternalMcpCatalog,
+    }) => {
       await makeInternalMcpCatalog({
         name: "Test Server",
         version: "1.0.0",
@@ -121,7 +123,9 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain("No MCP servers found");
     });
 
-    test("should handle search with query parameter", async () => {
+    test("should handle search with query parameter", async ({
+      makeInternalMcpCatalog,
+    }) => {
       await makeInternalMcpCatalog({
         name: "Test Server",
         description: "A server for testing",

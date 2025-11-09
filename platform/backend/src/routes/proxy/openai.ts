@@ -5,7 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
+import { getObservableFetch, reportUsage } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
@@ -102,7 +102,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     fastify.log.info(
       {
         agentId,
-        originalModel: body.model,
+        model: body.model,
         stream,
         messagesCount: messages.length,
         toolsCount: tools?.length || 0,
@@ -137,15 +137,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { resolvedAgentId, wasExplicit: !!agentId },
       "Agent resolved",
     );
-
-    const { authorization: openAiApiKey } = headers;
-    const openAiClient = config.benchmark.mockMode
-      ? (new MockOpenAIClient() as unknown as OpenAIProvider)
-      : new OpenAIProvider({
-          apiKey: openAiApiKey,
-          baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgent),
-        });
 
     try {
       // Check if current usage limits are already exceeded
@@ -197,12 +188,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
-      const model = resolvedAgentId.optimizeCost ? utils.adapters.openai.getOptimizedModel(tools, messages) : body.model;
-
       fastify.log.info(
         {
           resolvedAgentId,
-          selectedModel: model,
           requestToolsCount: tools?.length || 0,
           mergedToolsCount: mergedTools.length,
           mcpToolsInjected: mergedTools.length - (tools?.length || 0),
@@ -210,6 +198,30 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         "MCP tools injected",
       );
+
+      const requestedModel = body.model;
+      const model = resolvedAgent.optimizeCost
+        ? utils.adapters.openai.getOptimizedModel(tools, messages)
+        : requestedModel;
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          optimizeCost: resolvedAgent.optimizeCost,
+          requestedModel,
+          model,
+        },
+        "Optimized model selected",
+      );
+
+      const { authorization: openAiApiKey } = headers;
+      const openAiClient = config.benchmark.mockMode
+        ? (new MockOpenAIClient() as unknown as OpenAIProvider)
+        : new OpenAIProvider({
+          apiKey: openAiApiKey,
+          baseURL: config.llm.openai.baseUrl,
+          fetch: getObservableFetch("openai", resolvedAgent, model, requestedModel),
+        });
+
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
@@ -320,14 +332,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           [];
-        let usageTokens: { input?: number; output?: number } | undefined;
+        let tokenUsage: { input?: number; output?: number } | undefined;
 
         for await (const chunk of streamingResponse) {
           chunks.push(chunk);
 
           // Capture usage information if present
           if (chunk.usage) {
-            usageTokens = utils.adapters.openai.getUsageTokens(chunk.usage);
+            tokenUsage = utils.adapters.openai.getUsageTokens(chunk.usage);
           }
           const delta = chunk.choices[0]?.delta;
           const finishReason = chunk.choices[0]?.finish_reason;
@@ -539,13 +551,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Report token usage metrics for streaming
-        if (usageTokens) {
-          reportLLMTokens(
-            "openai",
-            resolvedAgent,
-            usageTokens.input,
-            usageTokens.output,
-          );
+        if (tokenUsage) {
+          reportUsage("openai", resolvedAgent, tokenUsage);
         }
 
         // Store the complete interaction
@@ -568,8 +575,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ],
           },
           model: model,
-          inputTokens: usageTokens?.input || null,
-          outputTokens: usageTokens?.output || null,
+          inputTokens: tokenUsage?.input || null,
+          outputTokens: tokenUsage?.output || null,
         });
 
         reply.raw.write("data: [DONE]\n\n");

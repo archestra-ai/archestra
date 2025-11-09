@@ -1,7 +1,7 @@
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 import { z } from 'zod';
-import type { PricingModels } from '@/llm-pricing';
+import type { PricingModel } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -189,7 +189,6 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
   };
 }
 
-
 /**
  * Selects optimal OpenAI model in terms of cost.
  * The selection is based on context length, attachments and tool presence.
@@ -197,12 +196,11 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
 export function getOptimizedModel(
   tools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
   messages: z.infer<typeof OpenAi.Types.Message>[],
-): PricingModels['openai'] {
-
+): PricingModel["openai"] {
   let contextLength = 0;
   let hasAttachments = false;
   for (const message of messages) {
-    if (typeof message.content === 'string') {
+    if (typeof message.content === "string") {
       contextLength += message.content.length;
     } else {
       for (const part of message.content) {
@@ -228,7 +226,7 @@ export function getOptimizedModel(
 }
 
 /** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */
-function normalizeModelName(model: string): string {
+export function normalizeModel(model: string): string {
   let normalized = model;
 
   // Remove date suffix as in "gpt-4o-2024-11-20"

@@ -1,12 +1,13 @@
 /**
  * Custom observability metrics for LLMs: request metrics and token usage.
  * To instrument OpenAI or Anthropic clients, pass observable fetch to the fetch option.
- * For OpenAI or Anthropic streaming mode, proxy handlers call reportLLMTokens() after consuming the stream.
+ * For OpenAI or Anthropic streaming mode, proxy handlers call reportUsage() after consuming the stream.
  * To instrument Gemini, provide its instance to getObservableGenAI, which will wrap around its model calls.
  */
 
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
+import { llmPricing, PricingModel } from "@/llm-pricing";
 import logger from "@/logging";
 import type { Agent, SupportedProvider } from "@/types";
 import * as utils from "./routes/proxy/utils";
@@ -20,6 +21,8 @@ type Fetch = (
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
+let llmCostCounter: client.Counter<string>;
+let llmRequestedCostCounter: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -40,7 +43,13 @@ export function initializeMetrics(labelKeys: string[]): void {
   const labelKeysChanged =
     JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
 
-  if (!labelKeysChanged && llmRequestDuration && llmTokensCounter) {
+  if (
+    !labelKeysChanged &&
+    llmRequestDuration &&
+    llmTokensCounter &&
+    llmCostCounter &&
+    llmRequestedCostCounter
+  ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
     );
@@ -57,6 +66,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
     }
+    if (llmCostCounter) {
+      client.register.removeSingleMetric("llm_cost_usd");
+    }
+    if (llmRequestedCostCounter) {
+      client.register.removeSingleMetric("llm_requested_cost_usd");
+    }
   } catch (_error) {
     // Ignore errors if metrics don't exist
   }
@@ -69,6 +84,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     ...nextLabelKeys,
   ];
   const tokensLabelNames = [...baseLabelNames, "type", ...nextLabelKeys]; // type: input|output
+  const costLabelNames = [...baseLabelNames, "model", ...nextLabelKeys];
+  const requestedCostLabelNames = [
+    ...baseLabelNames,
+    "requested_model",
+    ...nextLabelKeys,
+  ];
 
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
@@ -82,6 +103,18 @@ export function initializeMetrics(labelKeys: string[]): void {
     name: "llm_tokens_total",
     help: "Total tokens used",
     labelNames: tokensLabelNames,
+  });
+
+  llmCostCounter = new client.Counter({
+    name: "llm_cost_usd",
+    help: "Actual cost of LLM requests in USD",
+    labelNames: costLabelNames,
+  });
+
+  llmRequestedCostCounter = new client.Counter({
+    name: "llm_requested_cost_usd",
+    help: "Cost of requested model (before optimization) in USD",
+    labelNames: requestedCostLabelNames,
   });
 
   logger.info(
@@ -114,31 +147,55 @@ function buildMetricLabels(
   return labels;
 }
 
+function getCost(model: PricingModel, usage: { input?: number, output?: number }): number {
+  const pricing = llmPricing.openai[model];
+  return ((usage.input ?? 0) * pricing.input + (usage.output ?? 0) * pricing.output) / 1000000;
+}
+
 /**
- * Reports LLM token usage
+ * Reports LLM token usage and costs
  */
-export function reportLLMTokens(
+export function reportUsage(
   provider: SupportedProvider,
   agent: Agent,
-  inputTokens?: number,
-  outputTokens?: number,
+  usage: { input?: number, output?: number },
+  model: string,
+  requestedModel?: string,
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
     return;
   }
 
-  if (inputTokens && inputTokens > 0) {
+  // Report token usage
+  if (usage.input && usage.input > 0) {
     llmTokensCounter.inc(
       buildMetricLabels(agent, { provider, type: "input" }),
-      inputTokens,
+      usage.input,
     );
   }
-  if (outputTokens && outputTokens > 0) {
+  if (usage.output && usage.output > 0) {
     llmTokensCounter.inc(
       buildMetricLabels(agent, { provider, type: "output" }),
-      outputTokens,
+      usage.output,
     );
+  }
+
+  // Report costs (OpenAI only for now)
+  if (provider === "openai" && model && usage.input > 0 && usage.output > 0) {
+    const normalizedModel = utils.adapters.openai.normalizeModel(model);
+    if (normalizedModel in llmPricing.openai) {
+      const cost = getCost(normalizedModel, usage);
+      llmCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), cost,);
+    }
+
+    if (requestedModel) {
+      const normalizedModel = utils.adapters.openai.normalizeModel(requestedModel);
+      if (normalizedModel in llmPricing.openai) {
+        const requestedCost = getCost(normalizedModel, usage);
+        llmRequestedCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), requestedCost,);
+      }
+    }
   }
 }
 
@@ -148,6 +205,8 @@ export function reportLLMTokens(
 export function getObservableFetch(
   provider: SupportedProvider,
   agent: Agent,
+  model: string,
+  requestedModel?: string,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -194,12 +253,12 @@ export function getObservableFetch(
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, input, output);
+          reportUsage(provider, agent, { input, output }, model, requestedModel);
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, input, output);
+          reportUsage(provider, agent, { input, output }, model, requestedModel);
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -240,7 +299,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportLLMTokens(provider, agent, input, output);
+        reportUsage(provider, agent, {input, output});
       }
 
       return result;

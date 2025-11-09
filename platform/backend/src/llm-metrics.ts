@@ -17,11 +17,11 @@ type Fetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-// originalModel is the model requested by user if the cost optimization is in effect
+// baselineModel is the model requested by user if the cost optimization is in effect
 type ProviderModel = {
   provider: SupportedProvider;
   model: string;
-  originalModel?: string;
+  baselineModel?: string;
 };
 
 // LLM-specific metrics matching fastify-metrics format for consistency.
@@ -29,7 +29,7 @@ type ProviderModel = {
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
 let llmCostCounter: client.Counter<string>;
-let llmRequestedCostCounter: client.Counter<string>;
+let llmBaselineCostCounter: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -55,7 +55,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     llmRequestDuration &&
     llmTokensCounter &&
     llmCostCounter &&
-    llmRequestedCostCounter
+    llmBaselineCostCounter
   ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
@@ -76,8 +76,8 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmCostCounter) {
       client.register.removeSingleMetric("llm_cost_usd");
     }
-    if (llmRequestedCostCounter) {
-      client.register.removeSingleMetric("llm_requested_cost_usd");
+    if (llmBaselineCostCounter) {
+      client.register.removeSingleMetric("llm_baseline_cost_usd");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -113,9 +113,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: costLabelNames,
   });
 
-  llmRequestedCostCounter = new client.Counter({
-    name: "llm_requested_cost_usd",
-    help: "Cost of requested model (before optimization) in USD",
+  llmBaselineCostCounter = new client.Counter({
+    name: "llm_baseline_cost_usd",
+    help: "Baseline cost (without optimization) in USD",
     labelNames: costLabelNames,
   });
 
@@ -166,7 +166,7 @@ function getCost(
  */
 export function reportUsage(
   agent: Agent,
-  { provider, model, originalModel }: ProviderModel,
+  { provider, model, baselineModel }: ProviderModel,
   usage: { input?: number; output?: number },
 ): void {
   if (!llmTokensCounter) {
@@ -199,14 +199,14 @@ export function reportUsage(
       );
     }
 
-    if (originalModel) {
-      const normalizedModel =
-        utils.adapters.openai.normalizeModel(originalModel);
-      if (normalizedModel in llmPricing.openai) {
-        const requestedCost = getCost(normalizedModel, usage);
-        llmRequestedCostCounter.inc(
-          buildMetricLabels(agent, { provider, model: normalizedModel }),
-          requestedCost,
+    if (baselineModel) {
+      const normalizedBaselineModel =
+        utils.adapters.openai.normalizeModel(baselineModel);
+      if (normalizedBaselineModel in llmPricing.openai) {
+        const baselineCost = getCost(normalizedBaselineModel, usage);
+        llmBaselineCostCounter.inc(
+          buildMetricLabels(agent, { provider, model: normalizedBaselineModel }),
+          baselineCost,
         );
       }
     }
@@ -218,7 +218,7 @@ export function reportUsage(
  */
 export function getObservableFetch(
   agent: Agent,
-  { provider, model, originalModel }: ProviderModel,
+  { provider, model, baselineModel }: ProviderModel,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -279,7 +279,7 @@ export function getObservableFetch(
         try {
           reportUsage(
             agent,
-            { provider, model, originalModel },
+            { provider, model, baselineModel },
             tokenUsage,
           );
         } catch (error) {

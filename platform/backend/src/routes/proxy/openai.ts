@@ -199,15 +199,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "MCP tools injected",
       );
 
-      const originalModel = body.model;
+      const baselineModel = body.model;
       const model = resolvedAgent.optimizeCost
-        ? utils.adapters.openai.getOptimizedModel(originalModel, tools, messages)
-        : originalModel;
+        ? utils.adapters.openai.getOptimizedModel(baselineModel, tools, messages)
+        : baselineModel;
       fastify.log.info(
         {
           resolvedAgentId,
           optimizeCost: resolvedAgent.optimizeCost,
-          requestedModel: originalModel,
+          baselineModel,
           model,
         },
         "Optimized model selected",
@@ -222,7 +222,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             fetch: getObservableFetch(resolvedAgent, {
               provider: "openai",
               model,
-              originalModel,
+              baselineModel,
             }),
           });
 
@@ -558,7 +558,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const modelIdentifier = {
             provider: "openai",
             model,
-            originalModel,
+            baselineModel,
           } as const;
           reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
         }

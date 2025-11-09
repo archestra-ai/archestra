@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import ToolModel from "./tool";
 
 type AgentWithToolsRow = {
   agents: typeof schema.agentsTable.$inferSelect;
@@ -52,6 +53,9 @@ class AgentModel {
     if (labels && labels.length > 0) {
       await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
+
+    // Assign Archestra built-in tools to the agent
+    await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
 
     return {
       ...createdAgent,

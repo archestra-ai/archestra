@@ -127,6 +127,16 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
 
+## Tool Execution Architecture
+
+**LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
+1. Call LLM proxy → receive tool_use/tool_calls
+2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
+3. Send tool results back to LLM proxy
+4. Receive final answer
+
+Tool invocation policies and trusted data policies are still enforced by the proxy.
+
 ## Authentication
 
 - **Better-Auth**: Session management with dynamic RBAC
@@ -265,10 +275,13 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 **Testing**:
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
-- **Frontend**: Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
-- **Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
+- **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
+- **E2E Test Fixtures**: 
+  - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`
+  - UI fixtures: `goToPage`, `makeRandomString`
+- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
 
-**Test Fixtures Usage**:
+**Backend Test Fixtures Usage**:
 ```typescript
 import { test, expect } from "@/test";
 
@@ -279,3 +292,16 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
   // test logic...
 });
 ```
+
+**E2E Test Fixtures Usage**:
+```typescript
+import { test } from "./fixtures";
+
+test("API example", async ({ request, createAgent, deleteAgent }) => {
+  const response = await createAgent(request, "Test Agent");
+  const agent = await response.json();
+  // test logic...
+  await deleteAgent(request, agent.id);
+});
+```
+- never amend commits

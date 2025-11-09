@@ -197,11 +197,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
-      const model = selectModel(body.model, tools, messages)
+      const model = resolvedAgentId.optimizeCost ? utils.adapters.openai.getOptimizedModel(tools, messages) : body.model;
 
       fastify.log.info(
         {
           resolvedAgentId,
+          selectedModel: model,
           requestToolsCount: tools?.length || 0,
           mergedToolsCount: mergedTools.length,
           mcpToolsInjected: mergedTools.length - (tools?.length || 0),

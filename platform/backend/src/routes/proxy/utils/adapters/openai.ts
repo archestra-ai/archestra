@@ -1,5 +1,7 @@
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
+import { z } from 'zod';
+import type { PricingModels } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -185,4 +187,59 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
     input: usage.prompt_tokens,
     output: usage.completion_tokens,
   };
+}
+
+
+/**
+ * Selects optimal OpenAI model in terms of cost.
+ * The selection is based on context length, attachments and tool presence.
+ */
+export function getOptimizedModel(
+  tools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
+  messages: z.infer<typeof OpenAi.Types.Message>[],
+): PricingModels['openai'] {
+
+  let contextLength = 0;
+  let hasAttachments = false;
+  for (const message of messages) {
+    if (typeof message.content === 'string') {
+      contextLength += message.content.length;
+    } else {
+      for (const part of message.content) {
+        if (part.type === "text") {
+          contextLength += part.length;
+        } else {
+          hasAttachments = true;
+        }
+      }
+    }
+  }
+
+  const characterCountThreshold = 10000;
+  const hasTools = tools && tools.length > 0;
+
+  if (contextLength >= characterCountThreshold || hasAttachments) {
+    return "gpt-4o"; // Long context or attachments, with or without tools
+  } else if (hasTools) {
+    return "gpt-4o-mini";
+  } else {
+    return "gpt-4o-mini";
+  }
+}
+
+/** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */
+function normalizeModelName(model: string): string {
+  let normalized = model;
+
+  // Remove date suffix as in "gpt-4o-2024-11-20"
+  normalized = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, '');
+
+  // Remove 4-digit version code as in "gpt-4-0125-preview"
+  normalized = normalized.replace(/-\d{4}(?=-|$)/g, '');
+
+  // Remove common version suffixes
+  normalized = normalized.replace(/-(latest|preview)/, '');
+  normalized = normalized.replace(/chatgpt/, 'gpt');
+
+  return normalized;
 }

@@ -5,6 +5,7 @@ const agentsTable = pgTable("agents", {
   name: text("name").notNull(),
   isDemo: boolean("is_demo").notNull().default(false),
   isDefault: boolean("is_default").notNull().default(false),
+  optimizeCost: boolean("optimize_cost").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

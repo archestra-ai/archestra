@@ -289,3 +289,4 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
   // test logic...
 });
 ```
+- never amend commits

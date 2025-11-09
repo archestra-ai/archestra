@@ -266,18 +266,16 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
 - **Frontend**: Playwright e2e tests (chromium, webkit, firefox) with WireMock for API mocking
-- **Test Data**: Always prefer fixtures from `@/test` for setting up test data. Use factory functions like `makeUser()`, `makeOrganization()`, `makeTeam()` etc. that provide reasonable defaults with override capabilities. Reuse existing fixtures when possible, add new ones only when necessary.
+- **Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
 
 **Test Fixtures Usage**:
 ```typescript
 import { test, expect } from "@/test";
 
-// Access fixtures via test context destructuring
 test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
   const user = await makeUser({ email: "custom@test.com" });
   const org = await makeOrganization();
   const team = await makeTeam(org.id, user.id, { name: "Custom Team" });
-
-  // test logic here...
+  // test logic...
 });
 ```

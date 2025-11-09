@@ -7,7 +7,7 @@
 
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
-import { llmPricing, PricingModel } from "@/llm-pricing";
+import { llmPricing, type PricingModel } from "@/llm-pricing";
 import logger from "@/logging";
 import type { Agent, SupportedProvider } from "@/types";
 import * as utils from "./routes/proxy/utils";
@@ -18,7 +18,11 @@ type Fetch = (
 ) => Promise<Response>;
 
 // originalModel is the model requested by user if the cost optimization is in effect
-type ProviderModel = { provider: SupportedProvider, model: string, originalModel?: string };
+type ProviderModel = {
+  provider: SupportedProvider;
+  model: string;
+  originalModel?: string;
+};
 
 // LLM-specific metrics matching fastify-metrics format for consistency.
 // You can monitor request count, duration and error rate with these.
@@ -150,9 +154,16 @@ function buildMetricLabels(
   return labels;
 }
 
-function getCost(model: PricingModel, usage: { input?: number, output?: number }): number {
+function getCost(
+  model: PricingModel,
+  usage: { input?: number; output?: number },
+): number {
   const pricing = llmPricing.openai[model];
-  return ((usage.input ?? 0) * pricing.input + (usage.output ?? 0) * pricing.output) / 1000000;
+  return (
+    ((usage.input ?? 0) * pricing.input +
+      (usage.output ?? 0) * pricing.output) /
+    1000000
+  );
 }
 
 /**
@@ -161,7 +172,7 @@ function getCost(model: PricingModel, usage: { input?: number, output?: number }
 export function reportUsage(
   agent: Agent,
   { provider, model, originalModel }: ProviderModel,
-  usage: { input?: number, output?: number },
+  usage: { input?: number; output?: number },
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
@@ -187,14 +198,21 @@ export function reportUsage(
     const normalizedModel = utils.adapters.openai.normalizeModel(model);
     if (normalizedModel in llmPricing.openai) {
       const cost = getCost(normalizedModel, usage);
-      llmCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), cost,);
+      llmCostCounter.inc(
+        buildMetricLabels(agent, { provider, model: normalizedModel }),
+        cost,
+      );
     }
 
     if (originalModel) {
-      const normalizedModel = utils.adapters.openai.normalizeModel(originalModel);
+      const normalizedModel =
+        utils.adapters.openai.normalizeModel(originalModel);
       if (normalizedModel in llmPricing.openai) {
         const requestedCost = getCost(normalizedModel, usage);
-        llmRequestedCostCounter.inc(buildMetricLabels(agent, { provider, model: normalizedModel }), requestedCost,);
+        llmRequestedCostCounter.inc(
+          buildMetricLabels(agent, { provider, model: normalizedModel }),
+          requestedCost,
+        );
       }
     }
   }
@@ -252,12 +270,20 @@ export function getObservableFetch(
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );
-          reportUsage(agent, {provider, model, originalModel}, { input, output });
+          reportUsage(
+            agent,
+            { provider, model, originalModel },
+            { input, output },
+          );
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
             data.usage,
           );
-          reportUsage(agent, {provider, model, originalModel}, { input, output });
+          reportUsage(
+            agent,
+            { provider, model, originalModel },
+            { input, output },
+          );
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -273,7 +299,11 @@ export function getObservableFetch(
 /**
  * Wraps observability around GenAI's LLM request methods
  */
-export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent, model: string) {
+export function getObservableGenAI(
+  genAI: GoogleGenAI,
+  agent: Agent,
+  model: string,
+) {
   const originalGenerateContent = genAI.models.generateContent;
   const provider: SupportedProvider = "gemini";
   genAI.models.generateContent = async (...args) => {
@@ -298,7 +328,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent, model: stri
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportUsage(agent, { provider, model },{input, output});
+        reportUsage(agent, { provider, model }, { input, output });
       }
 
       return result;

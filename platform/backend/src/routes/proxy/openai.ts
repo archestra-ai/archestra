@@ -217,11 +217,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const openAiClient = config.benchmark.mockMode
         ? (new MockOpenAIClient() as unknown as OpenAIProvider)
         : new OpenAIProvider({
-          apiKey: openAiApiKey,
-          baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch(resolvedAgent, {provider: "openai", model, originalModel}),
-        });
-
+            apiKey: openAiApiKey,
+            baseURL: config.llm.openai.baseUrl,
+            fetch: getObservableFetch(resolvedAgent, {
+              provider: "openai",
+              model,
+              originalModel,
+            }),
+          });
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
@@ -552,7 +555,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Report token usage metrics for streaming
         if (tokenUsage) {
-          const modelIdentifier = { provider: "openai", model, originalModel} as const;
+          const modelIdentifier = {
+            provider: "openai",
+            model,
+            originalModel,
+          } as const;
           reportUsage(resolvedAgent, modelIdentifier, tokenUsage);
         }
 

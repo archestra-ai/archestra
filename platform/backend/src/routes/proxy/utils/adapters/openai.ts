@@ -1,7 +1,7 @@
+import type { z } from "zod";
+import type { PricingModel } from "@/llm-pricing";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
-import { z } from 'zod';
-import type { PricingModel } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -230,14 +230,14 @@ export function normalizeModel(model: string): string {
   let normalized = model;
 
   // Remove date suffix as in "gpt-4o-2024-11-20"
-  normalized = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, '');
+  normalized = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, "");
 
   // Remove 4-digit version code as in "gpt-4-0125-preview"
-  normalized = normalized.replace(/-\d{4}(?=-|$)/g, '');
+  normalized = normalized.replace(/-\d{4}(?=-|$)/g, "");
 
   // Remove common version suffixes
-  normalized = normalized.replace(/-(latest|preview)/, '');
-  normalized = normalized.replace(/chatgpt/, 'gpt');
+  normalized = normalized.replace(/-(latest|preview)/, "");
+  normalized = normalized.replace(/chatgpt/, "gpt");
 
   return normalized;
 }

@@ -9547,7 +9547,7 @@ export type GetMcpToolCallsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -9612,19 +9612,15 @@ export type GetMcpToolCallsResponses = {
             id: string;
             agentId: string;
             mcpServerName: string;
+            method: string;
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
-            };
-            toolResult: {
-                id: string;
-                content: unknown;
-                isError: boolean;
-                error?: string;
-            };
+            } | null;
+            toolResult: unknown;
             createdAt: string;
         }>;
         pagination: {
@@ -9707,19 +9703,15 @@ export type GetMcpToolCallResponses = {
         id: string;
         agentId: string;
         mcpServerName: string;
+        method: string;
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
-        };
-        toolResult: {
-            id: string;
-            content: unknown;
-            isError: boolean;
-            error?: string;
-        };
+        } | null;
+        toolResult: unknown;
         createdAt: string;
     };
 };
@@ -9874,6 +9866,39 @@ export type HandleOAuthCallbackResponses = {
 };
 
 export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
+
+export type GetOnboardingLogsStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/logs-status';
+};
+
+export type GetOnboardingLogsStatusErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetOnboardingLogsStatusError = GetOnboardingLogsStatusErrors[keyof GetOnboardingLogsStatusErrors];
+
+export type GetOnboardingLogsStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasLlmProxyLogs: boolean;
+        hasMcpGatewayLogs: boolean;
+    };
+};
+
+export type GetOnboardingLogsStatusResponse = GetOnboardingLogsStatusResponses[keyof GetOnboardingLogsStatusResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
@@ -10497,6 +10522,7 @@ export type GetOrganizationResponses = {
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        onboardingComplete: boolean;
     };
 };
 

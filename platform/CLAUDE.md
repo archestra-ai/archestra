@@ -62,7 +62,7 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
-# E2E Testing  
+# E2E Testing
 pnpm test:e2e                        # Run Playwright tests
 # Local: docker-compose setup (Tiltfile.test)
 # CI: kind cluster + helm deployment

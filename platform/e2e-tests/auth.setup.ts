@@ -28,7 +28,9 @@ setup("authenticate", async ({ page }) => {
   await page.waitForTimeout(1000);
 
   // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({
+    timeout: 10000,
+  });
 
   // Save the authentication state to a file
   await page.context().storageState({ path: authFile });

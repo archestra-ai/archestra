@@ -19,6 +19,11 @@ export function PromptSuggestions({
   agentName,
   onSelectPrompt,
 }: PromptSuggestionsProps) {
+  // Fetch prompts assigned to the agent (hook must be called before any returns)
+  const { data: agentPrompts } = useAgentPrompts(agentId ?? "", {
+    initialData: [],
+  });
+
   // If no agentId, show empty state
   if (!agentId) {
     return (
@@ -34,11 +39,6 @@ export function PromptSuggestions({
       </div>
     );
   }
-
-  // Fetch prompts assigned to the agent
-  const { data: agentPrompts } = useAgentPrompts(agentId, {
-    initialData: [],
-  });
 
   // Extract system and regular prompts
   const systemPrompt = agentPrompts.find(

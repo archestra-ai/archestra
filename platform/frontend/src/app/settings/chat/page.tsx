@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Loader2, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -134,7 +135,9 @@ function ChatSettingsContent() {
     setIsPromptDialogOpen(true);
   };
 
-  const handleEditPrompt = (prompt: any) => {
+  const handleEditPrompt = (
+    prompt: archestraApiTypes.GetPromptsResponses["200"][number],
+  ) => {
     setEditingPrompt({
       id: prompt.id,
       name: prompt.name,
@@ -237,6 +240,7 @@ function ChatSettingsContent() {
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
+                  <title>Success checkmark icon</title>
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 <span className="text-sm font-medium">

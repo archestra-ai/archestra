@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { PromptType } from "@/database/schemas/prompt";
 
@@ -68,7 +68,7 @@ class PromptModel {
       agents: Array<{ id: string; name: string }>;
     })[]
   > {
-    let baseConditions = [
+    const baseConditions = [
       eq(schema.promptsTable.organizationId, organizationId),
       eq(schema.promptsTable.isActive, true),
     ];

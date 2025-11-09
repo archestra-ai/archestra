@@ -1,9 +1,8 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { InteractionModel, McpToolCallModel } from "@/models";
+import db, { schema } from "@/database";
 import { ErrorResponseSchema } from "@/types";
-import { getUserFromRequest } from "@/utils";
 
 const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Check for logs (LLM proxy and MCP gateway requests)
@@ -24,35 +23,20 @@ const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
+    async (_request, reply) => {
+      // Check for LLM proxy logs (interactions) - any records at all
+      const [interaction] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .limit(1);
+      const hasLlmProxyLogs = !!interaction;
 
-      if (!user) {
-        return reply.status(401).send({
-          error: {
-            message: "Unauthorized",
-            type: "unauthorized",
-          },
-        });
-      }
-
-      // Check for LLM proxy logs (interactions)
-      const interactions = await InteractionModel.findAllPaginated(
-        { limit: 1, offset: 0 },
-        { sortBy: "createdAt", sortDirection: "desc" },
-        user.id,
-        user.isAdmin,
-      );
-      const hasLlmProxyLogs = interactions.data.length > 0;
-
-      // Check for MCP gateway logs (mcp tool calls)
-      const mcpToolCalls = await McpToolCallModel.findAllPaginated(
-        { limit: 1, offset: 0 },
-        { sortBy: "createdAt", sortDirection: "desc" },
-        user.id,
-        user.isAdmin,
-      );
-      const hasMcpGatewayLogs = mcpToolCalls.data.length > 0;
+      // Check for MCP gateway logs (mcp tool calls) - any records at all
+      const [mcpToolCall] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .limit(1);
+      const hasMcpGatewayLogs = !!mcpToolCall;
 
       return reply.send({
         hasLlmProxyLogs,

@@ -126,10 +126,14 @@ export class Authnz {
       };
     }
 
-    return await hasPermission(
-      requiredEndpointPermissionsMap[routeId] ?? {},
-      request.headers,
-    );
+    const requiredPermissions = requiredEndpointPermissionsMap[routeId] ?? {};
+
+    // If no specific permissions are required (empty object), allow any authenticated user
+    if (Object.keys(requiredPermissions).length === 0) {
+      return { success: true, error: null };
+    }
+
+    return await hasPermission(requiredPermissions, request.headers);
   };
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {

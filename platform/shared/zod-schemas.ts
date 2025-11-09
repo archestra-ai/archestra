@@ -68,7 +68,9 @@ export const LocalConfigFormSchema = z
   .refine(
     (data) => {
       // At least one of command or dockerImage must be provided
-      return (data.command && data.command.trim().length > 0) || data.dockerImage;
+      return (
+        (data.command && data.command.trim().length > 0) || data.dockerImage
+      );
     },
     {
       message:
@@ -92,4 +94,6 @@ export const OrganizationCustomFontSchema = z.enum([
 ]);
 
 export type OrganizationTheme = z.infer<typeof OrganizationThemeSchema>;
-export type OrganizationCustomFont = z.infer<typeof OrganizationCustomFontSchema>;
+export type OrganizationCustomFont = z.infer<
+  typeof OrganizationCustomFontSchema
+>;

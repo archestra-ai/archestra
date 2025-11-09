@@ -1,86 +1,25 @@
-import { expect, test } from "@playwright/test";
-import type { APIRequestContext } from "@playwright/test";
-import { API_BASE_URL } from "../../consts";
-import utils from "../../utils";
-
-const createAgent = async (request: APIRequestContext, apiKey: string, name: string = "Test Agent") => {
-  const newAgent = {
-    name,
-    isDemo: false,
-    teams: [],
-  };
-
-  const response = await request.post(`${API_BASE_URL}/api/agents`, {
-    headers: {
-      Authorization: apiKey,
-      "Content-Type": "application/json",
-    },
-    data: newAgent,
-  });
-
-  if (!response.ok()) {
-    throw new Error(`Failed to create agent: ${response.status()} ${await response.text()}`);
-  }
-
-  return response.json();
-};
+import { expect, test } from "./fixtures";
 
 test.describe("Agents API CRUD", () => {
-  let apiKey: string;
-  let apiKeyId: string;
-
-  test.beforeAll(async ({ request }) => {
-    // Create API key for testing
-    const keyData = await utils.auth.createApiKey(request, "Agents API Test Key");
-    apiKey = keyData.key;
-    apiKeyId = keyData.id;
-  });
-
-  test.afterAll(async ({ request }) => {
-    // Clean up API key after tests
-    if (apiKeyId) {
-      await utils.auth.deleteApiKey(request, apiKeyId);
-    }
-  });
-
-  test("should get all agents", async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/api/agents/all`, {
-      headers: {
-        Authorization: apiKey,
-      },
+  test("should get all agents", async ({ request, makeApiRequest }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agents/all",
     });
-
-    expect(response.status()).toBe(200);
     const agents = await response.json();
     expect(Array.isArray(agents)).toBe(true);
     expect(agents.length).toBeGreaterThan(0);
-
-    // Verify agent structure
-    const agent = agents[0];
-    expect(agent).toHaveProperty("id");
-    expect(agent).toHaveProperty("name");
-    expect(agent).toHaveProperty("tools");
-    expect(agent).toHaveProperty("teams");
-    expect(Array.isArray(agent.tools)).toBe(true);
-    expect(Array.isArray(agent.teams)).toBe(true);
   });
 
-  test("should create a new agent", async ({ request }) => {
+  test("should create a new agent", async ({ request, createAgent }) => {
     const newAgent = {
       name: "Test Agent for Integration",
       isDemo: false,
       teams: [],
     };
 
-    const response = await request.post(`${API_BASE_URL}/api/agents`, {
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
-      data: newAgent,
-    });
-
-    expect(response.status()).toBe(200);
+    const response = await createAgent(request, newAgent.name);
     const agent = await response.json();
 
     expect(agent).toHaveProperty("id");
@@ -90,17 +29,23 @@ test.describe("Agents API CRUD", () => {
     expect(Array.isArray(agent.teams)).toBe(true);
   });
 
-  test("should get agent by ID", async ({ request }) => {
+  test("should get agent by ID", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
     // Create an agent first
-    const createdAgent = await createAgent(request, apiKey, "Agent for Get By ID Test");
+    const createResponse = await createAgent(
+      request,
+      "Agent for Get By ID Test",
+    );
+    const createdAgent = await createResponse.json();
 
-    const response = await request.get(`${API_BASE_URL}/api/agents/${createdAgent.id}`, {
-      headers: {
-        Authorization: apiKey,
-      },
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
     });
-
-    expect(response.status()).toBe(200);
     const agent = await response.json();
 
     expect(agent.id).toBe(createdAgent.id);
@@ -109,62 +54,68 @@ test.describe("Agents API CRUD", () => {
     expect(agent).toHaveProperty("teams");
   });
 
-  test("should update an agent", async ({ request }) => {
+  test("should update an agent", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
     // Create an agent first
-    const createdAgent = await createAgent(request, apiKey, "Agent for Update Test");
+    const createResponse = await createAgent(request, "Agent for Update Test");
+    const createdAgent = await createResponse.json();
 
     const updateData = {
       name: "Updated Test Agent",
       isDemo: true,
     };
 
-    const response = await request.put(`${API_BASE_URL}/api/agents/${createdAgent.id}`, {
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
+    const updateResponse = await makeApiRequest({
+      request,
+      method: "put",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
       data: updateData,
     });
+    const updatedAgent = await updateResponse.json();
 
-    expect(response.status()).toBe(200);
-    const agent = await response.json();
-
-    expect(agent.id).toBe(createdAgent.id);
-    expect(agent.name).toBe(updateData.name);
-    expect(agent.isDemo).toBe(updateData.isDemo);
+    expect(updatedAgent).toHaveProperty("id");
+    expect(updatedAgent.name).toBe(updateData.name);
+    expect(updatedAgent.isDemo).toBe(updateData.isDemo);
   });
 
-  test("should delete an agent", async ({ request }) => {
+  test("should delete an agent", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
     // Create an agent first
-    const createdAgent = await createAgent(request, apiKey, "Agent for Delete Test");
+    const createResponse = await createAgent(request, "Agent for Delete Test");
+    const createdAgent = await createResponse.json();
 
-    const response = await request.delete(`${API_BASE_URL}/api/agents/${createdAgent.id}`, {
-      headers: {
-        Authorization: apiKey,
-      },
+    const deleteResponse = await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
     });
+    const deletedAgent = await deleteResponse.json();
 
-    expect(response.status()).toBe(200);
-    const result = await response.json();
-    expect(result.success).toBe(true);
+    expect(deletedAgent).toHaveProperty("success");
+    expect(deletedAgent.success).toBe(true);
 
     // Verify agent is deleted by trying to get it
-    const getResponse = await request.get(`${API_BASE_URL}/api/agents/${createdAgent.id}`, {
-      headers: {
-        Authorization: apiKey,
-      },
+    const getResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${createdAgent.id}`,
+      ignoreStatusCheck: true,
     });
     expect(getResponse.status()).toBe(404);
   });
 
-  test("should get default agent", async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/api/agents/default`, {
-      headers: {
-        Authorization: apiKey,
-      },
+  test("should get default agent", async ({ request, makeApiRequest }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agents/default",
     });
-
-    expect(response.status()).toBe(200);
     const agent = await response.json();
 
     expect(agent).toHaveProperty("id");

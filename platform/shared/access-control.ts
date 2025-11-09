@@ -3,10 +3,19 @@ import { z } from "zod";
 
 export const ADMIN_ROLE_NAME = "admin";
 export const MEMBER_ROLE_NAME = "member";
-export const PredefinedRoleNameSchema = z.enum([ADMIN_ROLE_NAME, MEMBER_ROLE_NAME]);
+export const PredefinedRoleNameSchema = z.enum([
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+]);
 export const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
 
-export const ActionSchema = z.enum(["create", "read", "update", "delete", "admin"]);
+export const ActionSchema = z.enum([
+  "create",
+  "read",
+  "update",
+  "delete",
+  "admin",
+]);
 
 export const ResourceSchema = z.enum([
   "agent",
@@ -78,10 +87,11 @@ export const memberRole = ac.newRole({
   tokenPrice: ["read"],
 });
 
-export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> = {
-  [ADMIN_ROLE_NAME]: adminRole.statements,
-  [MEMBER_ROLE_NAME]: memberRole.statements,
-};
+export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
+  {
+    [ADMIN_ROLE_NAME]: adminRole.statements,
+    [MEMBER_ROLE_NAME]: memberRole.statements,
+  };
 
 /**
  * Available resources and actions
@@ -266,7 +276,6 @@ export const RouteId = {
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
 
-
 /**
  * Routes not configured throws 403.
  * If a route should bypass the check, it should be configured in shouldSkipAuthCheck() method.
@@ -274,7 +283,9 @@ export type RouteId = (typeof RouteId)[keyof typeof RouteId];
  * That would mean that the route (routeId) requires all the permissions to pass the check:
  * `resource1:action1` AND `resource1:action2` AND `resource2:action1`
  */
-export const requiredEndpointPermissionsMap: Partial<Record<RouteId, Permissions>> = {
+export const requiredEndpointPermissionsMap: Partial<
+  Record<RouteId, Permissions>
+> = {
   [RouteId.GetAgents]: {
     agent: ["read"],
   },

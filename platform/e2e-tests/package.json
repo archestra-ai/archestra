@@ -4,9 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "lint:fix:unsafe": "biome check --write --unsafe",
+    "type-check": "tsc --noEmit",
     "test:e2e": "pnpm exec playwright test",
     "test:e2e:ui": "pnpm exec playwright test --ui",
-    "test:e2e:report": "pnpm exec playwright show-report"
+    "test:e2e:report": "pnpm exec playwright show-report",
+    "check:ci": "pnpm type-check && biome ci"
   },
   "keywords": [],
   "author": "",

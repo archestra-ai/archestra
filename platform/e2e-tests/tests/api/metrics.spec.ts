@@ -1,16 +1,26 @@
-import { APIRequestContext, expect, test } from "@playwright/test";
-import { API_BASE_URL, METRICS_BASE_URL, METRICS_BEARER_TOKEN } from "../../consts";
+import {
+  API_BASE_URL,
+  METRICS_BASE_URL,
+  METRICS_BEARER_TOKEN,
+  METRICS_ENDPOINT,
+} from "../../consts";
+import { type APIRequestContext, expect, test } from "./fixtures";
 
-
-const fetchMetrics = async (request: APIRequestContext, baseUrl: string, bearerToken: string) =>
-  request.get(`${baseUrl}/metrics`, {
+const fetchMetrics = async (
+  request: APIRequestContext,
+  baseUrl: string,
+  bearerToken: string,
+) =>
+  request.get(`${baseUrl}${METRICS_ENDPOINT}`, {
     headers: {
       Authorization: `Bearer ${bearerToken}`,
     },
   });
 
 test.describe("Metrics API", () => {
-  test("should return health check from metrics server", async ({ request }) => {
+  test("should return health check from metrics server", async ({
+    request,
+  }) => {
     const response = await request.get(`${METRICS_BASE_URL}/health`);
 
     expect(response.ok()).toBeTruthy();
@@ -18,11 +28,17 @@ test.describe("Metrics API", () => {
     expect(data).toHaveProperty("status", "ok");
   });
 
-  test("returns metrics when authentication is provided", async ({ request }) => {
+  test("returns metrics when authentication is provided", async ({
+    request,
+  }) => {
     // First, make an API call to generate metrics data
     await request.get(`${API_BASE_URL}/openapi.json`);
 
-    const response = await fetchMetrics(request, METRICS_BASE_URL, METRICS_BEARER_TOKEN);
+    const response = await fetchMetrics(
+      request,
+      METRICS_BASE_URL,
+      METRICS_BEARER_TOKEN,
+    );
 
     expect(response.ok()).toBeTruthy();
 
@@ -38,11 +54,15 @@ test.describe("Metrics API", () => {
      * Also, ensure that the /health route is NOT present (we're filtering this out explicitly in the metrics plugin)
      */
     expect(metricsText).not.toContain('route="/health"');
-    expect(metricsText).not.toContain('route="/metrics"');
+    expect(metricsText).not.toContain(`route="${METRICS_ENDPOINT}"`);
   });
 
   test("rejects access with invalid bearer token", async ({ request }) => {
-    const response = await fetchMetrics(request, METRICS_BASE_URL, "invalid-token");
+    const response = await fetchMetrics(
+      request,
+      METRICS_BASE_URL,
+      "invalid-token",
+    );
 
     expect(response.status()).toBe(401);
 
@@ -51,8 +71,14 @@ test.describe("Metrics API", () => {
     expect(errorData.error).toContain("Invalid token");
   });
 
-  test("should not expose /metrics endpoint on main API port", async ({ request }) => {
-    const response = await fetchMetrics(request, API_BASE_URL, METRICS_BEARER_TOKEN);
+  test("should not expose /metrics endpoint on main API port", async ({
+    request,
+  }) => {
+    const response = await fetchMetrics(
+      request,
+      API_BASE_URL,
+      METRICS_BEARER_TOKEN,
+    );
     expect(response.ok()).toBeFalsy();
   });
 });

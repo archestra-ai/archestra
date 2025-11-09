@@ -13,19 +13,19 @@
       "cache": false
     },
     "lint": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "lint:fix": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "lint:fix:unsafe": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "check:ci": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "type-check": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "e2e-tests/**/*.ts", "shared/**/*.ts"]
     },
     "test": {
       "cache": false

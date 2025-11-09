@@ -1,12 +1,12 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@shared";
+import { vi } from "vitest";
 import {
   beforeEach,
   describe,
   expect,
   type MockedFunction,
   test,
-  vi,
 } from "@/test";
 import { hasPermission } from "./utils";
 

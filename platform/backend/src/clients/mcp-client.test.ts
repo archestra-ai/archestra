@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { initializeInternalJwt } from "@/auth/internal-jwt";
 import db, { schema } from "@/database";
 import {
@@ -8,7 +9,7 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
-import { beforeEach, describe, expect, test, vi } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK

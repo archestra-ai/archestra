@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertOrganizationRole } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 import UserModel from "./user";
@@ -14,40 +14,12 @@ describe("User.getUserPermissions", () => {
   let testOrgId: string;
   let testUserId: string;
 
-  beforeEach(async () => {
-    testOrgId = crypto.randomUUID();
-    testUserId = crypto.randomUUID();
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
 
-    // Create test organization
-    await db.insert(schema.organizationsTable).values({
-      id: testOrgId,
-      name: "Test Organization",
-      slug: "test-organization",
-      createdAt: new Date(),
-    });
-
-    // Create test user
-    await db.insert(schema.usersTable).values({
-      id: testUserId,
-      email: "test@example.com",
-      name: "Test User",
-    });
-  });
-
-  afterEach(async () => {
-    // Clean up in reverse order due to foreign key constraints
-    await db
-      .delete(schema.membersTable)
-      .where(eq(schema.membersTable.userId, testUserId));
-    await db
-      .delete(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.organizationId, testOrgId));
-    await db
-      .delete(schema.usersTable)
-      .where(eq(schema.usersTable.id, testUserId));
-    await db
-      .delete(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, testOrgId));
+    testOrgId = org.id;
+    testUserId = user.id;
   });
 
   test("should return empty permissions when user is not a member", async () => {

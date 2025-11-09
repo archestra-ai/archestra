@@ -1,3 +1,7 @@
+/**
+ * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
+ * see https://vitest.dev/guide/test-context.html#extend-test-context
+ */
 import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
@@ -6,6 +10,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   OrganizationRoleModel,
+  SessionModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -13,14 +18,17 @@ import {
 import type {
   Agent,
   AgentTool,
+  InsertAccount,
   InsertInternalMcpCatalog,
   InsertInvitation,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
   InsertOrganizationRole,
+  InsertSession,
   InsertTeam,
   InsertUser,
+  OrganizationRole,
   Tool,
   ToolInvocation,
   TrustedData,
@@ -49,6 +57,8 @@ interface TestFixtures {
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
   makeInvitation: typeof makeInvitation;
+  makeAccount: typeof makeAccount;
+  makeSession: typeof makeSession;
 }
 
 async function _makeUser(
@@ -252,7 +262,7 @@ async function makeTrustedDataPolicy(
 async function makeCustomRole(
   organizationId: string,
   overrides: Partial<Pick<InsertOrganizationRole, "name" | "permission">> = {},
-): Promise<InsertOrganizationRole> {
+): Promise<OrganizationRole> {
   return await OrganizationRoleModel.create({
     id: crypto.randomUUID(),
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
@@ -367,48 +377,109 @@ async function makeInvitation(
   return invitation;
 }
 
+/**
+ * Creates a test account
+ */
+async function makeAccount(
+  userId: string,
+  overrides: Partial<
+    Pick<InsertAccount, "accountId" | "providerId" | "accessToken">
+  > = {},
+) {
+  const [account] = await db
+    .insert(schema.accountsTable)
+    .values({
+      id: crypto.randomUUID(),
+      accountId: `oauth-account-${crypto.randomUUID().substring(0, 8)}`,
+      providerId: "google",
+      userId,
+      accessToken: `access-token-${crypto.randomUUID().substring(0, 8)}`,
+      refreshToken: `refresh-token-${crypto.randomUUID().substring(0, 8)}`,
+      idToken: `id-token-${crypto.randomUUID().substring(0, 8)}`,
+      accessTokenExpiresAt: new Date(Date.now() + 3600000),
+      refreshTokenExpiresAt: new Date(Date.now() + 86400000),
+      scope: "email profile",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return account;
+}
+
+async function makeSession(
+  userId: string,
+  overrides: Partial<
+    Pick<
+      InsertSession,
+      | "token"
+      | "expiresAt"
+      | "ipAddress"
+      | "userAgent"
+      | "activeOrganizationId"
+      | "impersonatedBy"
+    >
+  > = {},
+) {
+  return await SessionModel.create({
+    id: crypto.randomUUID(),
+    userId,
+    token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+    expiresAt: new Date(Date.now() + 86400000),
+    ipAddress: "192.168.1.1",
+    userAgent: "Mozilla/5.0 Test Agent",
+    ...overrides,
+  });
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
-  makeUser: async (_, use) => {
+  makeUser: async ({}, use) => {
     await use(makeUser);
   },
-  makeAdmin: async (_, use) => {
+  makeAdmin: async ({}, use) => {
     await use(makeAdmin);
   },
-  makeOrganization: async (_, use) => {
+  makeOrganization: async ({}, use) => {
     await use(makeOrganization);
   },
-  makeTeam: async (_, use) => {
+  makeTeam: async ({}, use) => {
     await use(makeTeam);
   },
-  makeAgent: async (_, use) => {
+  makeAgent: async ({}, use) => {
     await use(makeAgent);
   },
-  makeTool: async (_, use) => {
+  makeTool: async ({}, use) => {
     await use(makeTool);
   },
-  makeAgentTool: async (_, use) => {
+  makeAgentTool: async ({}, use) => {
     await use(makeAgentTool);
   },
-  makeToolPolicy: async (_, use) => {
+  makeToolPolicy: async ({}, use) => {
     await use(makeToolPolicy);
   },
-  makeTrustedDataPolicy: async (_, use) => {
+  makeTrustedDataPolicy: async ({}, use) => {
     await use(makeTrustedDataPolicy);
   },
-  makeCustomRole: async (_, use) => {
+  makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);
   },
-  makeMember: async (_, use) => {
+  makeMember: async ({}, use) => {
     await use(makeMember);
   },
-  makeMcpServer: async (_, use) => {
+  makeMcpServer: async ({}, use) => {
     await use(makeMcpServer);
   },
-  makeInternalMcpCatalog: async (_, use) => {
+  makeInternalMcpCatalog: async ({}, use) => {
     await use(makeInternalMcpCatalog);
   },
-  makeInvitation: async (_, use) => {
+  makeInvitation: async ({}, use) => {
     await use(makeInvitation);
+  },
+  makeAccount: async ({}, use) => {
+    await use(makeAccount);
+  },
+  makeSession: async ({}, use) => {
+    await use(makeSession);
   },
 });

@@ -33,12 +33,12 @@ beforeEach(async () => {
    * So decided to just run the migrations manually.
    */
   const migrationFiles = fs
-    .readdirSync(path.join(__dirname, "./database/migrations"))
+    .readdirSync(path.join(__dirname, "../database/migrations"))
     .filter((file) => file.endsWith(".sql"));
   for (const migrationFile of migrationFiles) {
     await pgliteClient.exec(
       fs.readFileSync(
-        path.join(__dirname, "./database/migrations", migrationFile),
+        path.join(__dirname, "../database/migrations", migrationFile),
         "utf8",
       ),
     );

@@ -1,13 +1,41 @@
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
+import AgentToolModel from "./agent-tool";
+import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 
 describe("ToolInvocationPolicyModel", () => {
+  const toolName = "test-tool";
+
+  let agentId: string;
+  let toolId: string;
+  let agentToolId: string;
+
+  beforeEach(async ({ makeAgent, makeTool }) => {
+    // Create test agent
+    const agent = await makeAgent();
+    agentId = agent.id;
+
+    // Create test tool
+    const tool = await makeTool({ agentId: agent.id, name: toolName });
+    toolId = tool.id;
+
+    // Create agent-tool relationship with security config
+    const agentTool = await AgentToolModel.create(agentId, toolId, {
+      allowUsageWhenUntrustedDataIsPresent: false,
+      toolResultTreatment: "untrusted",
+    });
+    agentToolId = agentTool.id;
+  });
 
   describe("evaluate", () => {
     describe("basic policy evaluation", () => {
-      test("allows tool invocation when no policies exist and context is trusted", async ({ makeAgent, makeTool, makeAgentTool }) => {
+      test("allows tool invocation when no policies exist and context is trusted", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+      }) => {
         const agent = await makeAgent();
-        const tool = await makeTool(agent.id, { name: "test-tool" });
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -21,9 +49,14 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("blocks tool invocation when block_always policy matches", async ({ makeAgent, makeTool, makeAgentTool, makeToolPolicy }) => {
+      test("blocks tool invocation when block_always policy matches", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
         const agent = await makeAgent();
-        const tool = await makeTool(agent.id, { name: "test-tool" });
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         const agentTool = await makeAgentTool(agent.id, tool.id);
 
         // Create a block policy
@@ -46,9 +79,14 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("Blocked domain");
       });
 
-      test("allows tool invocation when block_always policy doesn't match", async ({ makeAgent, makeTool, makeAgentTool, makeToolPolicy }) => {
+      test("allows tool invocation when block_always policy doesn't match", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
         const agent = await makeAgent();
-        const tool = await makeTool(agent.id, { name: "test-tool" });
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         const agentTool = await makeAgentTool(agent.id, tool.id);
 
         // Create a block policy
@@ -73,9 +111,13 @@ describe("ToolInvocationPolicyModel", () => {
     });
 
     describe("untrusted context handling", () => {
-      test("blocks tool invocation when context is untrusted and no explicit allow rule exists", async ({ makeAgent, makeTool, makeAgentTool }) => {
+      test("blocks tool invocation when context is untrusted and no explicit allow rule exists", async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+      }) => {
         const agent = await makeAgent();
-        const tool = await makeTool(agent.id, { name: "test-tool" });
+        const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         await makeAgentTool(agent.id, tool.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -133,17 +175,21 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toContain("context contains untrusted data");
       });
 
-      test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async () => {
+      test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async ({
+        makeTool,
+      }) => {
         // Create a tool that allows usage when untrusted data is present
-        await ToolModel.createToolIfNotExists({
-          agentId,
+        await makeTool({
+          agentId: agentId,
           name: "permissive-tool",
           parameters: {},
           description: "Tool that allows untrusted data",
         });
 
         const permissiveTool = await ToolModel.findByName("permissive-tool");
-        const permissiveToolId = (permissiveTool as Tool).id;
+        const permissiveToolId = (
+          permissiveTool as NonNullable<typeof permissiveTool>
+        ).id;
 
         // Create agent-tool relationship with permissive security config
         await AgentToolModel.create(agentId, permissiveToolId, {
@@ -174,7 +220,7 @@ describe("ToolInvocationPolicyModel", () => {
         const tool = await ToolModel.findByName(
           "permissive-tool-with-policies",
         );
-        const permissiveToolId = (tool as Tool).id;
+        const permissiveToolId = (tool as NonNullable<typeof tool>).id;
 
         // Create agent-tool relationship with permissive security config
         const permissiveAgentTool = await AgentToolModel.create(

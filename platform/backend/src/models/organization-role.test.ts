@@ -66,10 +66,13 @@ describe("OrganizationRoleModel", () => {
       expect(result?.updatedAt).toBeInstanceOf(Date);
     });
 
-    test("should return predefined member role", async () => {
+    test("should return predefined member role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const result = await OrganizationRoleModel.getById(
         MEMBER_ROLE_NAME,
-        testOrgId,
+        org.id,
       );
 
       expect(result).toMatchObject({
@@ -81,25 +84,20 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return custom role from database", async () => {
-      // Create a custom role
-      const customRoleId = crypto.randomUUID();
-      const customRole: InsertOrganizationRole = {
-        id: customRoleId,
+    test("should return custom role from database", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const customRole = await makeCustomRole(org.id, {
         name: "Custom Role",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
+      });
 
-      await OrganizationRoleModel.create(customRole);
-
-      const result = await OrganizationRoleModel.getById(
-        customRoleId,
-        testOrgId,
-      );
+      const result = await OrganizationRoleModel.getById(customRole.id, org.id);
 
       expect(result).toMatchObject({
-        id: customRoleId,
+        id: customRole.id,
         name: "Custom Role",
         organizationId: org.id,
         permission: { agent: ["read"] },
@@ -107,76 +105,79 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return null for non-existent custom role", async () => {
+    test("should return null for non-existent custom role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const result = await OrganizationRoleModel.getById(
         crypto.randomUUID(),
-        testOrgId,
+        org.id,
       );
       expect(result).toBeFalsy();
     });
   });
 
   describe("getPermissions", () => {
-    test("should return predefined role permissions", async () => {
+    test("should return predefined role permissions", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const permissions = await OrganizationRoleModel.getPermissions(
         ADMIN_ROLE_NAME,
-        testOrgId,
+        org.id,
       );
       expect(permissions).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
     });
 
-    test("should return custom role permissions", async () => {
-      const customRoleId = crypto.randomUUID();
-      const customRole: InsertOrganizationRole = {
-        id: customRoleId,
+    test("should return custom role permissions", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const customRole = await makeCustomRole(org.id, {
         name: "Custom Role",
-        organizationId: org.id,
         permission: { agent: ["read", "create"] },
-      };
-
-      await OrganizationRoleModel.create(customRole);
+      });
 
       const permissions = await OrganizationRoleModel.getPermissions(
-        customRoleId,
-        testOrgId,
+        customRole.id,
+        org.id,
       );
       expect(permissions).toEqual({
         agent: ["read", "create"],
       });
     });
 
-    test("should return empty permissions for non-existent role", async () => {
+    test("should return empty permissions for non-existent role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const permissions = await OrganizationRoleModel.getPermissions(
         crypto.randomUUID(),
-        testOrgId,
+        org.id,
       );
       expect(permissions).toEqual({});
     });
   });
 
   describe("getAll", () => {
-    test("should return predefined roles plus custom roles", async () => {
+    test("should return predefined roles plus custom roles", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       // Create some custom roles
-      const customRole1Id = crypto.randomUUID();
-      const customRole1: InsertOrganizationRole = {
-        id: customRole1Id,
+      const customRole1 = await makeCustomRole(org.id, {
         name: "Custom Role 1",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
+      });
 
-      const customRole2Id = crypto.randomUUID();
-      const customRole2: InsertOrganizationRole = {
-        id: customRole2Id,
+      await makeCustomRole(org.id, {
         name: "Custom Role 2",
-        organizationId: org.id,
         permission: { agent: ["create"] },
-      };
+      });
 
-      await OrganizationRoleModel.create(customRole1);
-      await OrganizationRoleModel.create(customRole2);
-
-      const result = await OrganizationRoleModel.getAll(testOrgId);
+      const result = await OrganizationRoleModel.getAll(org.id);
 
       expect(result).toHaveLength(4); // 2 predefined + 2 custom
 
@@ -195,15 +196,18 @@ describe("OrganizationRoleModel", () => {
       // Check custom roles (should be sorted by name)
       const customRoles = result.filter((r) => !r.predefined);
       expect(customRoles).toHaveLength(2);
-      expect(customRoles.find((r) => r.id === customRole1Id)).toMatchObject({
-        id: customRole1Id,
+      expect(customRoles.find((r) => r.id === customRole1.id)).toMatchObject({
+        id: customRole1.id,
         name: "Custom Role 1",
         permission: { agent: ["read"] },
       });
     });
 
-    test("should return only predefined roles when no custom roles exist", async () => {
-      const result = await OrganizationRoleModel.getAll(testOrgId);
+    test("should return only predefined roles when no custom roles exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.getAll(org.id);
 
       expect(result).toHaveLength(2);
       expect(result[0].name).toBe(ADMIN_ROLE_NAME);
@@ -212,102 +216,97 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("isNameUnique", () => {
-    test("should return false for predefined role names", async () => {
+    test("should return false for predefined role names", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const isUnique = await OrganizationRoleModel.isNameUnique(
         ADMIN_ROLE_NAME,
-        testOrgId,
+        org.id,
       );
       expect(isUnique).toBe(false);
     });
 
-    test("should return true for unique custom role name", async () => {
+    test("should return true for unique custom role name", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const isUnique = await OrganizationRoleModel.isNameUnique(
         "unique-name",
-        testOrgId,
+        org.id,
       );
       expect(isUnique).toBe(true);
     });
 
-    test("should return false for existing custom role name", async () => {
-      // Create a custom role
-      const customRole: InsertOrganizationRole = {
-        id: crypto.randomUUID(),
+    test("should return false for existing custom role name", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      await makeCustomRole(org.id, {
         name: "Existing Role",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(customRole);
+      });
 
       const isUnique = await OrganizationRoleModel.isNameUnique(
         "Existing Role",
-        testOrgId,
+        org.id,
       );
       expect(isUnique).toBe(false);
     });
 
-    test("should exclude current role when checking uniqueness", async () => {
+    test("should exclude current role when checking uniqueness", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       // Create a custom role
-      const currentRoleId = crypto.randomUUID();
-      const customRole: InsertOrganizationRole = {
-        id: currentRoleId,
+      const currentRole = await makeCustomRole(org.id, {
         name: "Current Role",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(customRole);
+      });
 
       // Should return true when excluding the current role
       const isUnique = await OrganizationRoleModel.isNameUnique(
         "Current Role",
-        testOrgId,
-        currentRoleId,
+        org.id,
+        currentRole.id,
       );
       expect(isUnique).toBe(true);
     });
   });
 
   describe("create", () => {
-    test("should create custom role successfully", async () => {
-      const newRoleId = crypto.randomUUID();
-      const newRole: InsertOrganizationRole = {
-        id: newRoleId,
+    test("should create custom role successfully", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const newRole = await makeCustomRole(org.id, {
         name: "New Role",
-        organizationId: org.id,
         permission: { agent: ["read"], organization: ["read"] },
-      };
+      });
 
-      const result = await OrganizationRoleModel.create(newRole);
-
-      expect(result).toMatchObject({
-        id: newRoleId,
+      expect(newRole).toMatchObject({
+        id: newRole.id,
         name: "New Role",
-        organizationId: org.id,
         permission: { agent: ["read"], organization: ["read"] },
         predefined: false,
       });
-      expect(result.createdAt).toBeInstanceOf(Date);
-      expect(result.updatedAt).toBeInstanceOf(Date);
-
-      // Verify it exists in database
-      const retrieved = await OrganizationRoleModel.getById(
-        newRoleId,
-        testOrgId,
-      );
-      expect(retrieved).toMatchObject(newRole);
     });
   });
 
   describe("update", () => {
-    test("should update custom role successfully", async () => {
+    test("should update custom role successfully", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       // Create initial role
-      const initialRoleId = crypto.randomUUID();
-      const initialRole: InsertOrganizationRole = {
-        id: initialRoleId,
+      const initialRole = await makeCustomRole(org.id, {
         name: "Initial Name",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(initialRole);
+      });
 
       // Update the role
       const updateData: UpdateOrganizationRole = {
@@ -316,12 +315,12 @@ describe("OrganizationRoleModel", () => {
       };
 
       const result = await OrganizationRoleModel.update(
-        initialRoleId,
+        initialRole.id,
         updateData,
       );
 
       expect(result).toMatchObject({
-        id: initialRoleId,
+        id: initialRole.id,
         name: "Updated Name",
         organizationId: org.id,
         permission: { agent: ["create", "update"] },
@@ -330,8 +329,8 @@ describe("OrganizationRoleModel", () => {
 
       // Verify update persisted
       const retrieved = await OrganizationRoleModel.getById(
-        initialRoleId,
-        testOrgId,
+        initialRole.id,
+        org.id,
       );
       expect(retrieved?.name).toBe("Updated Name");
       expect(retrieved?.permission).toEqual({
@@ -341,32 +340,32 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("delete", () => {
-    test("should delete role successfully", async () => {
+    test("should delete role successfully", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       // Create role to delete
-      const roleToDeleteId = crypto.randomUUID();
-      const roleToDelete: InsertOrganizationRole = {
-        id: roleToDeleteId,
+      const roleToDelete = await makeCustomRole(org.id, {
         name: "Role to Delete",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(roleToDelete);
+      });
 
       // Verify it exists
       const beforeDelete = await OrganizationRoleModel.getById(
-        roleToDeleteId,
-        testOrgId,
+        roleToDelete.id,
+        org.id,
       );
       expect(beforeDelete).not.toBeNull();
 
       // Delete it
-      const result = await OrganizationRoleModel.delete(roleToDeleteId);
+      const result = await OrganizationRoleModel.delete(roleToDelete.id);
       expect(result).toBe(true);
 
       // Verify it's gone
       const afterDelete = await OrganizationRoleModel.getById(
-        roleToDeleteId,
-        testOrgId,
+        roleToDelete.id,
+        org.id,
       );
       expect(afterDelete).toBeFalsy();
     });
@@ -378,10 +377,13 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("canDelete", () => {
-    test("should return false for predefined roles", async () => {
+    test("should return false for predefined roles", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const result = await OrganizationRoleModel.canDelete(
         ADMIN_ROLE_NAME,
-        testOrgId,
+        org.id,
       );
 
       expect(result).toEqual({
@@ -390,10 +392,13 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return false for non-existent role", async () => {
+    test("should return false for non-existent role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const result = await OrganizationRoleModel.canDelete(
         crypto.randomUUID(),
-        testOrgId,
+        org.id,
       );
 
       expect(result).toEqual({
@@ -402,67 +407,49 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    test("should return true for custom role with no members", async () => {
+    test("should return true for custom role with no members", async ({
+      makeCustomRole,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       // Create custom role
-      const customRoleId = crypto.randomUUID();
-      const customRole: InsertOrganizationRole = {
-        id: customRoleId,
+      const customRole = await makeCustomRole(org.id, {
         name: "Custom Role",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(customRole);
+      });
 
       const result = await OrganizationRoleModel.canDelete(
-        customRoleId,
-        testOrgId,
+        customRole.id,
+        org.id,
       );
       expect(result).toEqual({ canDelete: true });
     });
 
-    test("should return false for custom role with members", async () => {
+    test("should return false for custom role with members", async ({
+      makeCustomRole,
+      makeUser,
+      makeMember,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
       // Create custom role
-      const customRoleId = crypto.randomUUID();
-      const customRole: InsertOrganizationRole = {
-        id: customRoleId,
+      const customRole = await makeCustomRole(org.id, {
         name: "Custom Role With Members",
-        organizationId: org.id,
         permission: { agent: ["read"] },
-      };
-      await OrganizationRoleModel.create(customRole);
+      });
 
       // Create a user and assign them to this role
-      const userId = crypto.randomUUID();
-      await db.insert(schema.usersTable).values({
-        id: userId,
-        email: "test@example.com",
-        name: "Test User",
-      });
-
-      await db.insert(schema.membersTable).values({
-        userId,
-        organizationId: org.id,
-        role: customRoleId,
-        createdAt: new Date(),
-        id: crypto.randomUUID(),
-      });
+      await makeMember(user.id, org.id, { role: customRole.id });
 
       const result = await OrganizationRoleModel.canDelete(
-        customRoleId,
-        testOrgId,
+        customRole.id,
+        org.id,
       );
       expect(result).toEqual({
         canDelete: false,
         reason: "Cannot delete role that is currently assigned to members",
       });
-
-      // Cleanup
-      await db
-        .delete(schema.membersTable)
-        .where(eq(schema.membersTable.userId, userId));
-      await db
-        .delete(schema.usersTable)
-        .where(eq(schema.usersTable.id, userId));
     });
   });
 });

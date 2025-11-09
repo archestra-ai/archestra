@@ -1,6 +1,6 @@
 import type { GoogleGenAI } from "@google/genai";
-import { AgentModel } from "@/models";
-import { beforeEach, describe, expect, test, vi } from "@/test";
+import { vi } from "vitest";
+import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
@@ -260,7 +260,7 @@ describe("getObservableGenAI", () => {
 
   let testAgent: Agent;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
     testAgent = await makeAgent();
     // Initialize metrics so the observable GenAI can record metrics

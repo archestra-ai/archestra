@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
 
 // Mock the logger

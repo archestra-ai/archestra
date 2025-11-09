@@ -4,11 +4,18 @@ import MemberModel from "./member";
 
 describe("MemberModel", () => {
   describe("create", () => {
-    test("should create member with member role", async ({ makeUser, makeOrganization }) => {
+    test("should create member with member role", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
       const user = await makeUser();
       const org = await makeOrganization();
 
-      const result = await MemberModel.create(user.id, org.id, MEMBER_ROLE_NAME);
+      const result = await MemberModel.create(
+        user.id,
+        org.id,
+        MEMBER_ROLE_NAME,
+      );
 
       expect(result).toHaveLength(1);
       const member = result[0];
@@ -19,7 +26,10 @@ describe("MemberModel", () => {
       expect(member?.createdAt).toBeInstanceOf(Date);
     });
 
-    test("should create member with admin role", async ({ makeUser, makeOrganization }) => {
+    test("should create member with admin role", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
       const user = await makeUser();
       const org = await makeOrganization();
 

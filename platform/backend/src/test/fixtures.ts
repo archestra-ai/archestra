@@ -14,6 +14,7 @@ import type {
   Agent,
   AgentTool,
   InsertInternalMcpCatalog,
+  InsertInvitation,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -47,6 +48,7 @@ interface TestFixtures {
   makeMember: typeof makeMember;
   makeMcpServer: typeof makeMcpServer;
   makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
+  makeInvitation: typeof makeInvitation;
 }
 
 async function _makeUser(
@@ -326,6 +328,30 @@ async function makeInternalMcpCatalog(
   });
 }
 
+/**
+ * Creates a test invitation
+ */
+async function makeInvitation(
+  organizationId: string,
+  inviterId: string,
+  overrides: Partial<Pick<InsertInvitation, "email" | "role" | "status">> = {},
+) {
+  const [invitation] = await db
+    .insert(schema.invitationsTable)
+    .values({
+      id: crypto.randomUUID(),
+      organizationId,
+      email: `test-${crypto.randomUUID().substring(0, 8)}@example.com`,
+      role: MEMBER_ROLE_NAME,
+      status: "pending",
+      expiresAt: new Date(Date.now() + 86400000),
+      inviterId,
+      ...overrides,
+    })
+    .returning();
+  return invitation;
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async (_, use) => {
@@ -366,5 +392,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeInternalMcpCatalog: async (_, use) => {
     await use(makeInternalMcpCatalog);
+  },
+  makeInvitation: async (_, use) => {
+    await use(makeInvitation);
   },
 });

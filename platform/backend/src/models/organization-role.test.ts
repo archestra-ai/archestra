@@ -3,63 +3,42 @@ import {
   MEMBER_ROLE_NAME,
   predefinedPermissionsMap,
 } from "@shared";
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
-import type { InsertOrganizationRole, UpdateOrganizationRole } from "@/types";
+import { describe, expect, test } from "@/test";
+import type { UpdateOrganizationRole } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 
 describe("OrganizationRoleModel", () => {
-  let testOrgId: string;
-
-  beforeEach(async () => {
-    testOrgId = crypto.randomUUID();
-    // Create test organization
-    await db.insert(schema.organizationsTable).values({
-      id: testOrgId,
-      name: "Test Organization",
-      slug: "test-organization",
-      createdAt: new Date(),
-    });
-  });
-
-  afterEach(async () => {
-    // Clean up custom roles after each test
-    await db
-      .delete(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.organizationId, testOrgId));
-  });
-
   describe("isPredefinedRole", () => {
-    it("should return true for admin role", () => {
+    test("should return true for admin role", () => {
       expect(OrganizationRoleModel.isPredefinedRole(ADMIN_ROLE_NAME)).toBe(
         true,
       );
     });
 
-    it("should return true for member role", () => {
+    test("should return true for member role", () => {
       expect(OrganizationRoleModel.isPredefinedRole(MEMBER_ROLE_NAME)).toBe(
         true,
       );
     });
 
-    it("should return false for custom role names", () => {
+    test("should return false for custom role names", () => {
       expect(OrganizationRoleModel.isPredefinedRole("custom-role")).toBe(false);
       expect(OrganizationRoleModel.isPredefinedRole("uuid-123")).toBe(false);
     });
 
-    it("should return false for empty string", () => {
+    test("should return false for empty string", () => {
       expect(OrganizationRoleModel.isPredefinedRole("")).toBe(false);
     });
   });
 
   describe("getPredefinedRolePermissions", () => {
-    it("should return admin permissions", () => {
+    test("should return admin permissions", () => {
       const permissions =
         OrganizationRoleModel.getPredefinedRolePermissions(ADMIN_ROLE_NAME);
       expect(permissions).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
     });
 
-    it("should return member permissions", () => {
+    test("should return member permissions", () => {
       const permissions =
         OrganizationRoleModel.getPredefinedRolePermissions(MEMBER_ROLE_NAME);
       expect(permissions).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
@@ -67,16 +46,19 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("getById", () => {
-    it("should return predefined admin role", async () => {
+    test("should return predefined admin role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
       const result = await OrganizationRoleModel.getById(
         ADMIN_ROLE_NAME,
-        testOrgId,
+        org.id,
       );
 
       expect(result).toMatchObject({
         id: ADMIN_ROLE_NAME,
         name: ADMIN_ROLE_NAME,
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: predefinedPermissionsMap[ADMIN_ROLE_NAME],
         predefined: true,
       });
@@ -84,7 +66,7 @@ describe("OrganizationRoleModel", () => {
       expect(result?.updatedAt).toBeInstanceOf(Date);
     });
 
-    it("should return predefined member role", async () => {
+    test("should return predefined member role", async () => {
       const result = await OrganizationRoleModel.getById(
         MEMBER_ROLE_NAME,
         testOrgId,
@@ -93,19 +75,19 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: MEMBER_ROLE_NAME,
         name: MEMBER_ROLE_NAME,
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: predefinedPermissionsMap[MEMBER_ROLE_NAME],
         predefined: true,
       });
     });
 
-    it("should return custom role from database", async () => {
+    test("should return custom role from database", async () => {
       // Create a custom role
       const customRoleId = crypto.randomUUID();
       const customRole: InsertOrganizationRole = {
         id: customRoleId,
         name: "Custom Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
 
@@ -119,13 +101,13 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: customRoleId,
         name: "Custom Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
         predefined: false,
       });
     });
 
-    it("should return null for non-existent custom role", async () => {
+    test("should return null for non-existent custom role", async () => {
       const result = await OrganizationRoleModel.getById(
         crypto.randomUUID(),
         testOrgId,
@@ -135,7 +117,7 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("getPermissions", () => {
-    it("should return predefined role permissions", async () => {
+    test("should return predefined role permissions", async () => {
       const permissions = await OrganizationRoleModel.getPermissions(
         ADMIN_ROLE_NAME,
         testOrgId,
@@ -143,12 +125,12 @@ describe("OrganizationRoleModel", () => {
       expect(permissions).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
     });
 
-    it("should return custom role permissions", async () => {
+    test("should return custom role permissions", async () => {
       const customRoleId = crypto.randomUUID();
       const customRole: InsertOrganizationRole = {
         id: customRoleId,
         name: "Custom Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read", "create"] },
       };
 
@@ -163,7 +145,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    it("should return empty permissions for non-existent role", async () => {
+    test("should return empty permissions for non-existent role", async () => {
       const permissions = await OrganizationRoleModel.getPermissions(
         crypto.randomUUID(),
         testOrgId,
@@ -173,13 +155,13 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("getAll", () => {
-    it("should return predefined roles plus custom roles", async () => {
+    test("should return predefined roles plus custom roles", async () => {
       // Create some custom roles
       const customRole1Id = crypto.randomUUID();
       const customRole1: InsertOrganizationRole = {
         id: customRole1Id,
         name: "Custom Role 1",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
 
@@ -187,7 +169,7 @@ describe("OrganizationRoleModel", () => {
       const customRole2: InsertOrganizationRole = {
         id: customRole2Id,
         name: "Custom Role 2",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["create"] },
       };
 
@@ -220,7 +202,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    it("should return only predefined roles when no custom roles exist", async () => {
+    test("should return only predefined roles when no custom roles exist", async () => {
       const result = await OrganizationRoleModel.getAll(testOrgId);
 
       expect(result).toHaveLength(2);
@@ -230,7 +212,7 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("isNameUnique", () => {
-    it("should return false for predefined role names", async () => {
+    test("should return false for predefined role names", async () => {
       const isUnique = await OrganizationRoleModel.isNameUnique(
         ADMIN_ROLE_NAME,
         testOrgId,
@@ -238,7 +220,7 @@ describe("OrganizationRoleModel", () => {
       expect(isUnique).toBe(false);
     });
 
-    it("should return true for unique custom role name", async () => {
+    test("should return true for unique custom role name", async () => {
       const isUnique = await OrganizationRoleModel.isNameUnique(
         "unique-name",
         testOrgId,
@@ -246,12 +228,12 @@ describe("OrganizationRoleModel", () => {
       expect(isUnique).toBe(true);
     });
 
-    it("should return false for existing custom role name", async () => {
+    test("should return false for existing custom role name", async () => {
       // Create a custom role
       const customRole: InsertOrganizationRole = {
         id: crypto.randomUUID(),
         name: "Existing Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(customRole);
@@ -263,13 +245,13 @@ describe("OrganizationRoleModel", () => {
       expect(isUnique).toBe(false);
     });
 
-    it("should exclude current role when checking uniqueness", async () => {
+    test("should exclude current role when checking uniqueness", async () => {
       // Create a custom role
       const currentRoleId = crypto.randomUUID();
       const customRole: InsertOrganizationRole = {
         id: currentRoleId,
         name: "Current Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(customRole);
@@ -285,12 +267,12 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("create", () => {
-    it("should create custom role successfully", async () => {
+    test("should create custom role successfully", async () => {
       const newRoleId = crypto.randomUUID();
       const newRole: InsertOrganizationRole = {
         id: newRoleId,
         name: "New Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"], organization: ["read"] },
       };
 
@@ -299,7 +281,7 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: newRoleId,
         name: "New Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"], organization: ["read"] },
         predefined: false,
       });
@@ -316,13 +298,13 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("update", () => {
-    it("should update custom role successfully", async () => {
+    test("should update custom role successfully", async () => {
       // Create initial role
       const initialRoleId = crypto.randomUUID();
       const initialRole: InsertOrganizationRole = {
         id: initialRoleId,
         name: "Initial Name",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(initialRole);
@@ -341,7 +323,7 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: initialRoleId,
         name: "Updated Name",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["create", "update"] },
         predefined: false,
       });
@@ -359,13 +341,13 @@ describe("OrganizationRoleModel", () => {
   });
 
   describe("delete", () => {
-    it("should delete role successfully", async () => {
+    test("should delete role successfully", async () => {
       // Create role to delete
       const roleToDeleteId = crypto.randomUUID();
       const roleToDelete: InsertOrganizationRole = {
         id: roleToDeleteId,
         name: "Role to Delete",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(roleToDelete);
@@ -389,14 +371,14 @@ describe("OrganizationRoleModel", () => {
       expect(afterDelete).toBeFalsy();
     });
 
-    it("should return false when no role was deleted", async () => {
+    test("should return false when no role was deleted", async () => {
       const result = await OrganizationRoleModel.delete(crypto.randomUUID());
       expect(result).toBe(false);
     });
   });
 
   describe("canDelete", () => {
-    it("should return false for predefined roles", async () => {
+    test("should return false for predefined roles", async () => {
       const result = await OrganizationRoleModel.canDelete(
         ADMIN_ROLE_NAME,
         testOrgId,
@@ -408,7 +390,7 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    it("should return false for non-existent role", async () => {
+    test("should return false for non-existent role", async () => {
       const result = await OrganizationRoleModel.canDelete(
         crypto.randomUUID(),
         testOrgId,
@@ -420,13 +402,13 @@ describe("OrganizationRoleModel", () => {
       });
     });
 
-    it("should return true for custom role with no members", async () => {
+    test("should return true for custom role with no members", async () => {
       // Create custom role
       const customRoleId = crypto.randomUUID();
       const customRole: InsertOrganizationRole = {
         id: customRoleId,
         name: "Custom Role",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(customRole);
@@ -438,13 +420,13 @@ describe("OrganizationRoleModel", () => {
       expect(result).toEqual({ canDelete: true });
     });
 
-    it("should return false for custom role with members", async () => {
+    test("should return false for custom role with members", async () => {
       // Create custom role
       const customRoleId = crypto.randomUUID();
       const customRole: InsertOrganizationRole = {
         id: customRoleId,
         name: "Custom Role With Members",
-        organizationId: testOrgId,
+        organizationId: org.id,
         permission: { agent: ["read"] },
       };
       await OrganizationRoleModel.create(customRole);
@@ -459,7 +441,7 @@ describe("OrganizationRoleModel", () => {
 
       await db.insert(schema.membersTable).values({
         userId,
-        organizationId: testOrgId,
+        organizationId: org.id,
         role: customRoleId,
         createdAt: new Date(),
         id: crypto.randomUUID(),

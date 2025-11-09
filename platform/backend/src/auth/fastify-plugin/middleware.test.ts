@@ -1,12 +1,12 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import { Authnz } from "./middleware";
 
 describe("Authnz", () => {
   const authnz = new Authnz();
 
   describe("shouldSkipAuthCheck", () => {
-    it("should skip auth for ACME challenge paths", async () => {
+    test("should skip auth for ACME challenge paths", async () => {
       const mockRequest = {
         url: "/.well-known/acme-challenge/test-token",
         method: "GET",
@@ -25,7 +25,7 @@ describe("Authnz", () => {
       expect(mockReply.send).not.toHaveBeenCalled();
     });
 
-    it("should skip auth for various ACME challenge token formats", async () => {
+    test("should skip auth for various ACME challenge token formats", async () => {
       const acmeUrls = [
         "/.well-known/acme-challenge/",
         "/.well-known/acme-challenge/simple-token",
@@ -52,7 +52,7 @@ describe("Authnz", () => {
       }
     });
 
-    it("should skip auth for OPTIONS and HEAD requests", async () => {
+    test("should skip auth for OPTIONS and HEAD requests", async () => {
       const methods = ["OPTIONS", "HEAD"];
 
       for (const method of methods) {
@@ -74,7 +74,7 @@ describe("Authnz", () => {
       }
     });
 
-    it("should skip auth for existing whitelisted paths", async () => {
+    test("should skip auth for existing whitelisted paths", async () => {
       const whitelistedPaths = [
         "/api/auth/session",
         "/v1/openai/completions",
@@ -104,7 +104,7 @@ describe("Authnz", () => {
       }
     });
 
-    it("should NOT skip auth for similar but different paths", async () => {
+    test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",
         "/.well-known-acme-challenge/test", // missing slash

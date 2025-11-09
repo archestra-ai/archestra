@@ -1,5 +1,6 @@
 import type { GoogleGenAI } from "@google/genai";
 import { AgentModel } from "@/models";
+import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
@@ -36,17 +37,14 @@ import {
 describe("getObservableFetch", () => {
   let testAgent: Agent;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
-    testAgent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    testAgent = await makeAgent();
     // Initialize metrics so the observable fetch can record metrics
     initializeMetrics([]);
   });
 
-  it("records duration and tokens on successful request", async () => {
+  test("records duration and tokens on successful request", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -97,7 +95,7 @@ describe("getObservableFetch", () => {
     );
   });
 
-  it("records duration with 4xx status code", async () => {
+  test("records duration with 4xx status code", async () => {
     const mockResponse = {
       ok: false,
       status: 400,
@@ -123,7 +121,7 @@ describe("getObservableFetch", () => {
     );
   });
 
-  it("records duration with 5xx status code", async () => {
+  test("records duration with 5xx status code", async () => {
     const mockResponse = {
       ok: false,
       status: 503,
@@ -149,7 +147,7 @@ describe("getObservableFetch", () => {
     );
   });
 
-  it("records duration with status_code 0 on network error", async () => {
+  test("records duration with status_code 0 on network error", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const observableFetch = getObservableFetch("openai", testAgent);
@@ -169,7 +167,7 @@ describe("getObservableFetch", () => {
     );
   });
 
-  it("records tokens for Anthropic response format", async () => {
+  test("records tokens for Anthropic response format", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -210,7 +208,7 @@ describe("getObservableFetch", () => {
     );
   });
 
-  it("calls original fetch with correct arguments and returns response", async () => {
+  test("calls original fetch with correct arguments and returns response", async () => {
     const mockResponse = {
       ok: true,
       status: 200,
@@ -231,7 +229,7 @@ describe("getObservableFetch", () => {
     expect(result).toBe(mockResponse);
   });
 
-  it("propagates errors from original fetch", async () => {
+  test("propagates errors from original fetch", async () => {
     const testError = new Error("Fetch failed");
     globalThis.fetch = vi.fn().mockRejectedValue(testError);
 
@@ -264,15 +262,12 @@ describe("getObservableGenAI", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    testAgent = await AgentModel.create({
-      name: "Test Agent",
-      teams: [],
-    });
+    testAgent = await makeAgent();
     // Initialize metrics so the observable GenAI can record metrics
     initializeMetrics([]);
   });
 
-  it("records duration and tokens on successful Gemini request", async () => {
+  test("records duration and tokens on successful Gemini request", async () => {
     const mockGenAI = getGenAIMock({
       usageMetadata: {
         promptTokenCount: 150,
@@ -316,7 +311,7 @@ describe("getObservableGenAI", () => {
     );
   });
 
-  it("records duration with HTTP status on Gemini error", async () => {
+  test("records duration with HTTP status on Gemini error", async () => {
     const errorWithStatus = new Error("Bad request");
     Object.assign(errorWithStatus, { status: 400 });
 
@@ -339,7 +334,7 @@ describe("getObservableGenAI", () => {
     );
   });
 
-  it("records duration with status_code 0 on Gemini network error", async () => {
+  test("records duration with status_code 0 on Gemini network error", async () => {
     const mockGenAI = getGenAIMock(new Error("Network timeout"));
 
     const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
@@ -360,7 +355,7 @@ describe("getObservableGenAI", () => {
     );
   });
 
-  it("calls original generateContent with correct arguments and returns result", async () => {
+  test("calls original generateContent with correct arguments and returns result", async () => {
     const mockResult = {
       usageMetadata: {
         promptTokenCount: 100,
@@ -389,7 +384,7 @@ describe("getObservableGenAI", () => {
     expect(result).toBe(mockResult);
   });
 
-  it("propagates errors from original generateContent", async () => {
+  test("propagates errors from original generateContent", async () => {
     const testError = new Error("Gemini API failed");
     Object.assign(testError, { status: 500 });
 
@@ -417,7 +412,7 @@ describe("initializeMetrics", () => {
     vi.clearAllMocks();
   });
 
-  it("skips reinitialization when label keys haven't changed", () => {
+  test("skips reinitialization when label keys haven't changed", () => {
     initializeMetrics(["environment", "team", "region"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -426,7 +421,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
   });
 
-  it("reinitializes metrics when label keys are added", () => {
+  test("reinitializes metrics when label keys are added", () => {
     initializeMetrics(["environment", "team"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -438,7 +433,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("reinitializes metrics when label keys are removed", () => {
+  test("reinitializes metrics when label keys are removed", () => {
     initializeMetrics(["environment", "team", "region"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -450,7 +445,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("reinitializes metrics when label keys are changed", () => {
+  test("reinitializes metrics when label keys are changed", () => {
     initializeMetrics(["environment", "team"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -462,7 +457,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).toHaveBeenCalledWith("llm_tokens_total");
   });
 
-  it("doesn't reinit if keys with special characters didn't change", () => {
+  test("doesn't reinit if keys with special characters didn't change", () => {
     initializeMetrics(["env-name", "team.id", "region@aws"]);
     registerRemoveSingleMetric.mockClear();
 
@@ -471,7 +466,7 @@ describe("initializeMetrics", () => {
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
   });
 
-  it("doesn't reinit if keys are the same but in different order", () => {
+  test("doesn't reinit if keys are the same but in different order", () => {
     initializeMetrics(["team", "environment", "region"]);
     registerRemoveSingleMetric.mockClear();
 

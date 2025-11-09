@@ -4,8 +4,8 @@ import {
   beforeEach,
   describe,
   expect,
-  it,
   type MockedFunction,
+  test,
   vi,
 } from "@/test";
 import { hasPermission } from "./utils";
@@ -38,7 +38,7 @@ describe("hasPermission", () => {
   });
 
   describe("session-based authentication", () => {
-    it("should return success when user has required permissions", async () => {
+    test("should return success when user has required permissions", async () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
@@ -58,7 +58,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should return failure when user lacks required permissions", async () => {
+    test("should return failure when user lacks required permissions", async () => {
       const permissions: Permissions = { agent: ["admin"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
@@ -83,7 +83,7 @@ describe("hasPermission", () => {
   });
 
   describe("API key authentication", () => {
-    it("should allow valid API key when session check fails", async () => {
+    test("should allow valid API key when session check fails", async () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer api-key-123",
@@ -109,7 +109,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should reject invalid API key when session check fails", async () => {
+    test("should reject invalid API key when session check fails", async () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer invalid-key",
@@ -137,7 +137,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should handle API key verification errors", async () => {
+    test("should handle API key verification errors", async () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {
         authorization: "Bearer some-key",
@@ -163,7 +163,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should return error when no authorization header provided and session check fails", async () => {
+    test("should return error when no authorization header provided and session check fails", async () => {
       const permissions: Permissions = { agent: ["read"] };
       const headers: IncomingHttpHeaders = {};
 
@@ -185,7 +185,7 @@ describe("hasPermission", () => {
   });
 
   describe("edge cases", () => {
-    it("should handle empty permissions object", async () => {
+    test("should handle empty permissions object", async () => {
       const permissions: Permissions = {};
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
@@ -205,7 +205,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should handle complex permissions object", async () => {
+    test("should handle complex permissions object", async () => {
       const permissions: Permissions = {
         agent: ["read", "create", "update", "delete"],
         mcpServer: ["admin"],
@@ -234,7 +234,7 @@ describe("hasPermission", () => {
       });
     });
 
-    it("should pass through different authorization header formats", async () => {
+    test("should pass through different authorization header formats", async () => {
       const permissions: Permissions = { agent: ["read"] };
 
       // Test different header formats

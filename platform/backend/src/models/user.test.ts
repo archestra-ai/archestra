@@ -5,7 +5,7 @@ import {
 } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InsertOrganizationRole } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 import UserModel from "./user";
@@ -50,12 +50,12 @@ describe("User.getUserPermissions", () => {
       .where(eq(schema.organizationsTable.id, testOrgId));
   });
 
-  it("should return empty permissions when user is not a member", async () => {
+  test("should return empty permissions when user is not a member", async () => {
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
     expect(result).toEqual({});
   });
 
-  it("should return permissions for admin role", async () => {
+  test("should return permissions for admin role", async () => {
     // Add user as admin member
     await db.insert(schema.membersTable).values({
       userId: testUserId,
@@ -70,7 +70,7 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
   });
 
-  it("should return permissions for member role", async () => {
+  test("should return permissions for member role", async () => {
     // Add user as member
     await db.insert(schema.membersTable).values({
       userId: testUserId,
@@ -85,7 +85,7 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
   });
 
-  it("should return permissions for custom role", async () => {
+  test("should return permissions for custom role", async () => {
     // Create a custom role
     const customRoleId = crypto.randomUUID();
     const customRole: InsertOrganizationRole = {
@@ -112,8 +112,8 @@ describe("User.getUserPermissions", () => {
     });
   });
 
-  it("should handle multiple member records and return first", async () => {
-    // This scenario is unlikely in real app but tests the limit(1) behavior
+  test("should handle multiple member records and return first", async () => {
+    // This scenario is unlikely in real app but tests the limtest(1) behavior
     // Add user as admin member
     await db.insert(schema.membersTable).values({
       userId: testUserId,
@@ -129,7 +129,7 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
   });
 
-  it("should return empty permissions for non-existent user", async () => {
+  test("should return empty permissions for non-existent user", async () => {
     const nonExistentUserId = crypto.randomUUID();
 
     const result = await UserModel.getUserPermissions(
@@ -140,7 +140,7 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual({});
   });
 
-  it("should return empty permissions for user in wrong organization", async () => {
+  test("should return empty permissions for user in wrong organization", async () => {
     const wrongOrgId = crypto.randomUUID();
 
     // Create member in different organization
@@ -173,7 +173,7 @@ describe("User.getUserPermissions", () => {
       .where(eq(schema.organizationsTable.id, wrongOrgId));
   });
 
-  it("should handle custom role that no longer exists", async () => {
+  test("should handle custom role that no longer exists", async () => {
     // Add user with custom role that doesn't exist
     await db.insert(schema.membersTable).values({
       userId: testUserId,

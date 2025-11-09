@@ -1,11 +1,7 @@
-import type { Tool } from "@/types";
-
-import AgentModel from "./agent";
-import AgentToolModel from "./agent-tool";
-import ToolModel from "./tool";
+import { describe, expect, test } from "@/test";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
-describe("TrustedDataPolicyModel", async () => {
+describe("TrustedDataPolicyModel", () => {
   const toolName = "test-tool";
 
   let agentId: string;

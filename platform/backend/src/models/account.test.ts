@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import AccountModel from "./account";
 
 describe("AccountModel", () => {
@@ -48,7 +48,7 @@ describe("AccountModel", () => {
   });
 
   describe("getByUserId", () => {
-    it("should return account when user has account", async () => {
+    test("should return account when user has account", async () => {
       const account = await AccountModel.getByUserId(testUserId);
 
       expect(account).toBeDefined();
@@ -62,14 +62,14 @@ describe("AccountModel", () => {
       expect(account?.scope).toBe("email profile");
     });
 
-    it("should return undefined when user has no account", async () => {
+    test("should return undefined when user has no account", async () => {
       const nonExistentUserId = crypto.randomUUID();
       const account = await AccountModel.getByUserId(nonExistentUserId);
 
       expect(account).toBeUndefined();
     });
 
-    it("should return first account when user has multiple accounts", async () => {
+    test("should return first account when user has multiple accounts", async () => {
       // Create a second account for the same user
       await db.insert(schema.accountsTable).values({
         id: testAccount2Id,
@@ -85,10 +85,10 @@ describe("AccountModel", () => {
 
       const account = await AccountModel.getByUserId(testUserId);
 
-      // Should return the first account (using limit(1))
+      // Should return the first account (using limtest(1))
       expect(account).toBeDefined();
       expect(account?.userId).toBe(testUserId);
-      // Should be one of the two accounts (implementation uses limit(1) so returns first found)
+      // Should be one of the two accounts (implementation uses limtest(1) so returns first found)
       expect([testAccountId, testAccount2Id]).toContain(account?.id);
     });
   });

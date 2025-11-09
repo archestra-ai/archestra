@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
-import { afterEach, beforeEach, describe, expect, it } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import SessionModel from "./session";
 
 describe("SessionModel", () => {
@@ -111,7 +109,7 @@ describe("SessionModel", () => {
   });
 
   describe("patch", () => {
-    it("should update activeOrganizationId", async () => {
+    test("should update activeOrganizationId", async () => {
       await SessionModel.patch(testSessionId, {
         activeOrganizationId: testOrg2Id,
       });
@@ -126,7 +124,7 @@ describe("SessionModel", () => {
       expect(session[0]?.activeOrganizationId).toBe(testOrg2Id);
     });
 
-    it("should update multiple fields at once", async () => {
+    test("should update multiple fields at once", async () => {
       const updateData = {
         activeOrganizationId: testOrg2Id,
         ipAddress: "172.16.0.1",
@@ -151,7 +149,7 @@ describe("SessionModel", () => {
       expect(session[0]?.impersonatedBy).toBe(updateData.impersonatedBy);
     });
 
-    it("should handle null values", async () => {
+    test("should handle null values", async () => {
       await SessionModel.patch(testSessionId, {
         activeOrganizationId: null,
         impersonatedBy: null,
@@ -172,7 +170,7 @@ describe("SessionModel", () => {
       expect(session[0]?.userAgent).toBeNull();
     });
 
-    it("should handle non-existent session gracefully", async () => {
+    test("should handle non-existent session gracefully", async () => {
       const nonExistentSessionId = crypto.randomUUID();
 
       // Should not throw an error
@@ -183,7 +181,7 @@ describe("SessionModel", () => {
   });
 
   describe("deleteAllByUserId", () => {
-    it("should delete all sessions for a user", async () => {
+    test("should delete all sessions for a user", async () => {
       // Verify sessions exist before deletion
       const sessionsBefore = await db
         .select()
@@ -203,7 +201,7 @@ describe("SessionModel", () => {
       expect(sessionsAfter).toHaveLength(0);
     });
 
-    it("should not affect sessions of other users", async () => {
+    test("should not affect sessions of other users", async () => {
       await SessionModel.deleteAllByUserId(testUserId);
 
       // Verify other user's sessions are still there
@@ -216,7 +214,7 @@ describe("SessionModel", () => {
       expect(otherUserSessions[0]?.id).toBe(testSession3Id);
     });
 
-    it("should handle non-existent user gracefully", async () => {
+    test("should handle non-existent user gracefully", async () => {
       const nonExistentUserId = crypto.randomUUID();
 
       // Should not throw an error
@@ -230,7 +228,7 @@ describe("SessionModel", () => {
       expect(existingSessions).toHaveLength(3);
     });
 
-    it("should handle user with no sessions", async () => {
+    test("should handle user with no sessions", async () => {
       // First delete all sessions
       await SessionModel.deleteAllByUserId(testUserId);
 

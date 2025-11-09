@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
 
 // Mock the logger
@@ -23,7 +24,7 @@ describe("getDatabaseUrl", () => {
     process.env = originalEnv;
   });
 
-  it("should use ARCHESTRA_DATABASE_URL when both ARCHESTRA_DATABASE_URL and DATABASE_URL are set", () => {
+  test("should use ARCHESTRA_DATABASE_URL when both ARCHESTRA_DATABASE_URL and DATABASE_URL are set", () => {
     process.env.ARCHESTRA_DATABASE_URL =
       "postgresql://archestra:pass@host:5432/archestra_db";
     process.env.DATABASE_URL = "postgresql://other:pass@host:5432/other_db";
@@ -33,7 +34,7 @@ describe("getDatabaseUrl", () => {
     expect(result).toBe("postgresql://archestra:pass@host:5432/archestra_db");
   });
 
-  it("should use DATABASE_URL when only DATABASE_URL is set", () => {
+  test("should use DATABASE_URL when only DATABASE_URL is set", () => {
     delete process.env.ARCHESTRA_DATABASE_URL;
     process.env.DATABASE_URL = "postgresql://other:pass@host:5432/other_db";
 
@@ -42,7 +43,7 @@ describe("getDatabaseUrl", () => {
     expect(result).toBe("postgresql://other:pass@host:5432/other_db");
   });
 
-  it("should use ARCHESTRA_DATABASE_URL when only ARCHESTRA_DATABASE_URL is set", () => {
+  test("should use ARCHESTRA_DATABASE_URL when only ARCHESTRA_DATABASE_URL is set", () => {
     process.env.ARCHESTRA_DATABASE_URL =
       "postgresql://archestra:pass@host:5432/archestra_db";
     delete process.env.DATABASE_URL;
@@ -52,7 +53,7 @@ describe("getDatabaseUrl", () => {
     expect(result).toBe("postgresql://archestra:pass@host:5432/archestra_db");
   });
 
-  it("should throw an error when neither ARCHESTRA_DATABASE_URL nor DATABASE_URL is set", () => {
+  test("should throw an error when neither ARCHESTRA_DATABASE_URL nor DATABASE_URL is set", () => {
     delete process.env.ARCHESTRA_DATABASE_URL;
     delete process.env.DATABASE_URL;
 
@@ -61,7 +62,7 @@ describe("getDatabaseUrl", () => {
     );
   });
 
-  it("should throw an error when both are empty strings", () => {
+  test("should throw an error when both are empty strings", () => {
     process.env.ARCHESTRA_DATABASE_URL = "";
     process.env.DATABASE_URL = "";
 
@@ -70,7 +71,7 @@ describe("getDatabaseUrl", () => {
     );
   });
 
-  it("should use DATABASE_URL when ARCHESTRA_DATABASE_URL is empty string", () => {
+  test("should use DATABASE_URL when ARCHESTRA_DATABASE_URL is empty string", () => {
     process.env.ARCHESTRA_DATABASE_URL = "";
     process.env.DATABASE_URL = "postgresql://other:pass@host:5432/other_db";
 
@@ -96,7 +97,7 @@ describe("getOtlpAuthHeaders", () => {
   });
 
   describe("Bearer token authentication", () => {
-    it("should return Bearer authorization header when bearer token is provided", () => {
+    test("should return Bearer authorization header when bearer token is provided", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "my-bearer-token";
 
       const result = getOtlpAuthHeaders();
@@ -106,7 +107,7 @@ describe("getOtlpAuthHeaders", () => {
       });
     });
 
-    it("should prioritize bearer token over basic auth when both are provided", () => {
+    test("should prioritize bearer token over basic auth when both are provided", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "my-bearer-token";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "user";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "pass";
@@ -118,7 +119,7 @@ describe("getOtlpAuthHeaders", () => {
       });
     });
 
-    it("should trim whitespace from bearer token", () => {
+    test("should trim whitespace from bearer token", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER =
         "  my-bearer-token  ";
 
@@ -131,7 +132,7 @@ describe("getOtlpAuthHeaders", () => {
   });
 
   describe("Basic authentication", () => {
-    it("should return Basic authorization header when both username and password are provided", () => {
+    test("should return Basic authorization header when both username and password are provided", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
 
@@ -143,7 +144,7 @@ describe("getOtlpAuthHeaders", () => {
       });
     });
 
-    it("should trim whitespace from username and password", () => {
+    test("should trim whitespace from username and password", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "  testuser  ";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "  testpass  ";
 
@@ -154,7 +155,7 @@ describe("getOtlpAuthHeaders", () => {
       });
     });
 
-    it("should return undefined and warn when only username is provided", () => {
+    test("should return undefined and warn when only username is provided", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
 
@@ -166,7 +167,7 @@ describe("getOtlpAuthHeaders", () => {
       );
     });
 
-    it("should return undefined and warn when only password is provided", () => {
+    test("should return undefined and warn when only password is provided", () => {
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
 
@@ -178,7 +179,7 @@ describe("getOtlpAuthHeaders", () => {
       );
     });
 
-    it("should return undefined and warn when username is empty string", () => {
+    test("should return undefined and warn when username is empty string", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
 
@@ -190,7 +191,7 @@ describe("getOtlpAuthHeaders", () => {
       );
     });
 
-    it("should return undefined and warn when password is empty string", () => {
+    test("should return undefined and warn when password is empty string", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";
 
@@ -204,7 +205,7 @@ describe("getOtlpAuthHeaders", () => {
   });
 
   describe("No authentication", () => {
-    it("should return undefined when no authentication environment variables are set", () => {
+    test("should return undefined when no authentication environment variables are set", () => {
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER;
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME;
       delete process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD;
@@ -215,7 +216,7 @@ describe("getOtlpAuthHeaders", () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it("should return undefined when all authentication variables are empty strings", () => {
+    test("should return undefined when all authentication variables are empty strings", () => {
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME = "";
       process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD = "";

@@ -92,11 +92,6 @@ export function initializeMetrics(labelKeys: string[]): void {
   ];
   const tokensLabelNames = [...baseLabelNames, "type", ...nextLabelKeys]; // type: input|output
   const costLabelNames = [...baseLabelNames, "model", ...nextLabelKeys];
-  const requestedCostLabelNames = [
-    ...baseLabelNames,
-    "requested_model",
-    ...nextLabelKeys,
-  ];
 
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
@@ -121,7 +116,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmRequestedCostCounter = new client.Counter({
     name: "llm_requested_cost_usd",
     help: "Cost of requested model (before optimization) in USD",
-    labelNames: requestedCostLabelNames,
+    labelNames: costLabelNames,
   });
 
   logger.info(
@@ -261,34 +256,35 @@ export function getObservableFetch(
       response.headers.get("content-type")?.includes("application/json")
     ) {
       const cloned = response.clone();
+      let data;
       try {
-        const data = await cloned.json();
-        if (!data.usage) {
-          return response;
-        }
-        if (provider === "openai") {
-          const { input, output } = utils.adapters.openai.getUsageTokens(
-            data.usage,
-          );
-          reportUsage(
-            agent,
-            { provider, model, originalModel },
-            { input, output },
-          );
-        } else if (provider === "anthropic") {
-          const { input, output } = utils.adapters.anthropic.getUsageTokens(
-            data.usage,
-          );
-          reportUsage(
-            agent,
-            { provider, model, originalModel },
-            { input, output },
-          );
-        } else {
-          throw new Error("Unknown provider when logging usage token metrics");
-        }
+        data = await cloned.json();
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");
+      }
+      if (!data || !data.usage) {
+        return response;
+      }
+
+      let tokenUsage: { input: number, output: number } | undefined;
+      if (provider === "openai") {
+        tokenUsage = utils.adapters.openai.getUsageTokens(data.usage,);
+      } else if (provider === "anthropic") {
+        tokenUsage = utils.adapters.anthropic.getUsageTokens(data.usage,);
+      } else {
+        throw new Error("Unknown provider when logging usage token metrics");
+      }
+
+      if (tokenUsage) {
+        try {
+          reportUsage(
+            agent,
+            { provider, model, originalModel },
+            tokenUsage,
+          );
+        } catch (error) {
+          logger.error(error);
+        }
       }
     }
 

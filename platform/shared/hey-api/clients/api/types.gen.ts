@@ -9547,7 +9547,7 @@ export type GetMcpToolCallsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName' | 'method';
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/mcp-tool-calls';
@@ -9612,15 +9612,19 @@ export type GetMcpToolCallsResponses = {
             id: string;
             agentId: string;
             mcpServerName: string;
-            method: string;
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
-            } | null;
-            toolResult: unknown;
+            };
+            toolResult: {
+                id: string;
+                content: unknown;
+                isError: boolean;
+                error?: string;
+            };
             createdAt: string;
         }>;
         pagination: {
@@ -9703,15 +9707,19 @@ export type GetMcpToolCallResponses = {
         id: string;
         agentId: string;
         mcpServerName: string;
-        method: string;
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
-        } | null;
-        toolResult: unknown;
+        };
+        toolResult: {
+            id: string;
+            content: unknown;
+            isError: boolean;
+            error?: string;
+        };
         createdAt: string;
     };
 };
@@ -9866,73 +9874,6 @@ export type HandleOAuthCallbackResponses = {
 };
 
 export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
-
-export type GetOnboardingLogsStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/onboarding/logs-status';
-};
-
-export type GetOnboardingLogsStatusErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetOnboardingLogsStatusError = GetOnboardingLogsStatusErrors[keyof GetOnboardingLogsStatusErrors];
-
-export type GetOnboardingLogsStatusResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        hasLlmProxyLogs: boolean;
-        hasMcpGatewayLogs: boolean;
-    };
-};
-
-export type GetOnboardingLogsStatusResponse = GetOnboardingLogsStatusResponses[keyof GetOnboardingLogsStatusResponses];
-
-export type CompleteOnboardingData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/onboarding/complete';
-};
-
-export type CompleteOnboardingErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CompleteOnboardingError = CompleteOnboardingErrors[keyof CompleteOnboardingErrors];
-
-export type CompleteOnboardingResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type CompleteOnboardingResponse = CompleteOnboardingResponses[keyof CompleteOnboardingResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
@@ -10554,12 +10495,8 @@ export type GetOrganizationResponses = {
         createdAt: string;
         metadata: string | null;
         limitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-<<<<<<< HEAD
-        onboardingComplete: boolean;
-=======
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
->>>>>>> main
     };
 };
 

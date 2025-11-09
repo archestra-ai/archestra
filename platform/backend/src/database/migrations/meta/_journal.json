@@ -320,10 +320,6 @@
     {
       "idx": 45,
       "version": "7",
-<<<<<<< HEAD
-      "when": 1762296458406,
-      "tag": "0045_unusual_marvel_zombies",
-=======
       "when": 1762382852627,
       "tag": "0045_puzzling_crystal",
       "breakpoints": true
@@ -347,7 +343,13 @@
       "version": "7",
       "when": 1762613941751,
       "tag": "0048_demonic_power_man",
->>>>>>> main
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1762695810148,
+      "tag": "0049_round_human_fly",
       "breakpoints": true
     }
   ]

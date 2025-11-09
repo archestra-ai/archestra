@@ -148,16 +148,7 @@ async function createAgentServer(
         };
 
         // Execute the tool call via McpClient
-        const results = await mcpClient.executeToolCalls([toolCall], agentId);
-
-        if (results.length === 0) {
-          throw {
-            code: -32603, // Internal error
-            message: `Tool '${name}' not found or not assigned to agent`,
-          };
-        }
-
-        const result = results[0];
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         if (result.isError) {
           logger.info(

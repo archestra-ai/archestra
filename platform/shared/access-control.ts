@@ -272,6 +272,9 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+
+  // Onboarding Routes
+  GetOnboardingLogsStatus: "getOnboardingLogsStatus",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -595,6 +598,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     interaction: ["read"],
   },
+  // Onboarding routes - available to all authenticated users (no specific permissions required)
+  [RouteId.GetOnboardingLogsStatus]: {},
 };
 
 /**

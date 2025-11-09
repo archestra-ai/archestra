@@ -1,7 +1,8 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { RouteId } from "@shared";
 import { z } from "zod";
 import { InteractionModel, McpToolCallModel } from "@/models";
-import { ErrorResponseSchema, RouteId } from "@/types";
+import { ErrorResponseSchema } from "@/types";
 import { getUserFromRequest } from "@/utils";
 
 const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {

@@ -1024,6 +1024,27 @@ export default class K8sPod {
   }
 
   /**
+   * Get the Kubernetes Attach API client
+   */
+  get k8sAttachClient(): Attach {
+    return this.k8sAttach;
+  }
+
+  /**
+   * Get the Kubernetes namespace
+   */
+  get k8sNamespace(): string {
+    return this.namespace;
+  }
+
+  /**
+   * Get the pod name
+   */
+  get k8sPodName(): string {
+    return this.podName;
+  }
+
+  /**
    * Check if this pod uses streamable HTTP transport
    */
   async usesStreamableHttp(): Promise<boolean> {

@@ -85,10 +85,17 @@ async function createAgentServer(
   // Excludes proxy-discovered tools
   const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+  // Create a map of Archestra tool names to their titles
+  // This is needed because the database schema doesn't include a title field
+  const archestraTools = getArchestraMcpTools();
+  const archestraToolTitles = new Map(
+    archestraTools.map((tool) => [tool.name, tool.title]),
+  );
+
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: mcpTools.map(({ name, description, parameters }) => ({
       name,
-      title: name,
+      title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},

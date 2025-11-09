@@ -121,9 +121,9 @@ jobs:
       - name: Wait for services to be healthy
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          echo "Waiting for platform container to be healthy..."
-          timeout 120 sh -c 'until docker inspect --format="{{.State.Health.Status}}" archestra-platform-test | grep -q "healthy"; do sleep 2; done'
-          echo "Platform container is healthy"
+          echo "Waiting for platform pods to be ready..."
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
+          echo "Platform pods are ready"
 
           echo "Verifying services are accessible..."
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)

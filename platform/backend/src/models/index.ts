@@ -1,8 +1,10 @@
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentPromptModel } from "./agent-prompt";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
+export { default as ChatSettingsModel } from "./chat-settings";
 export { default as ConversationModel } from "./conversation";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
 export { default as DualLlmResultModel } from "./dual-llm-result";
@@ -18,6 +20,7 @@ export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export { default as PromptModel } from "./prompt";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";
 export { default as TeamModel } from "./team";

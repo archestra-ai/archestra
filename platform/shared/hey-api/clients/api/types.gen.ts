@@ -2066,6 +2066,241 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
+export type GetAgentPromptsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/prompts';
+};
+
+export type GetAgentPromptsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentPromptsError = GetAgentPromptsErrors[keyof GetAgentPromptsErrors];
+
+export type GetAgentPromptsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string;
+        promptId: string;
+        order: number;
+        createdAt: string;
+        prompt: {
+            id: string;
+            organizationId: string;
+            name: string;
+            type: 'system' | 'regular';
+            content: string;
+            version: number;
+            parentPromptId: string | null;
+            isActive: boolean;
+            createdBy: string;
+            createdAt: string;
+            updatedAt: string;
+        };
+    }>;
+};
+
+export type GetAgentPromptsResponse = GetAgentPromptsResponses[keyof GetAgentPromptsResponses];
+
+export type AssignAgentPromptsData = {
+    body?: {
+        systemPromptId?: string | null;
+        regularPromptIds?: Array<string>;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/prompts';
+};
+
+export type AssignAgentPromptsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AssignAgentPromptsError = AssignAgentPromptsErrors[keyof AssignAgentPromptsErrors];
+
+export type AssignAgentPromptsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string;
+        promptId: string;
+        order: number;
+        createdAt: string;
+    }>;
+};
+
+export type AssignAgentPromptsResponse = AssignAgentPromptsResponses[keyof AssignAgentPromptsResponses];
+
+export type DeleteAgentPromptData = {
+    body?: never;
+    path: {
+        agentId: string;
+        promptId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/prompts/{promptId}';
+};
+
+export type DeleteAgentPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteAgentPromptError = DeleteAgentPromptErrors[keyof DeleteAgentPromptErrors];
+
+export type DeleteAgentPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentPromptResponse = DeleteAgentPromptResponses[keyof DeleteAgentPromptResponses];
+
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -5041,6 +5276,152 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type GetChatSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat-settings';
+};
+
+export type GetChatSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatSettingsError = GetChatSettingsErrors[keyof GetChatSettingsErrors];
+
+export type GetChatSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        anthropicApiKeySecretId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetChatSettingsResponse = GetChatSettingsResponses[keyof GetChatSettingsResponses];
+
+export type UpdateChatSettingsData = {
+    body?: {
+        anthropicApiKey?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chat-settings';
+};
+
+export type UpdateChatSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateChatSettingsError = UpdateChatSettingsErrors[keyof UpdateChatSettingsErrors];
+
+export type UpdateChatSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        anthropicApiKeySecretId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateChatSettingsResponse = UpdateChatSettingsResponses[keyof UpdateChatSettingsResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -10662,6 +11043,481 @@ export type UpdateOrganizationResponses = {
 };
 
 export type UpdateOrganizationResponse = UpdateOrganizationResponses[keyof UpdateOrganizationResponses];
+
+export type GetPromptsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        type?: 'system' | 'regular';
+    };
+    url: '/api/prompts';
+};
+
+export type GetPromptsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetPromptsError = GetPromptsErrors[keyof GetPromptsErrors];
+
+export type GetPromptsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
+
+export type CreatePromptData = {
+    body: {
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/prompts';
+};
+
+export type CreatePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreatePromptError = CreatePromptErrors[keyof CreatePromptErrors];
+
+export type CreatePromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreatePromptResponse = CreatePromptResponses[keyof CreatePromptResponses];
+
+export type DeletePromptData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type DeletePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeletePromptError = DeletePromptErrors[keyof DeletePromptErrors];
+
+export type DeletePromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeletePromptResponse = DeletePromptResponses[keyof DeletePromptResponses];
+
+export type GetPromptData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type GetPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetPromptError = GetPromptErrors[keyof GetPromptErrors];
+
+export type GetPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
+
+export type UpdatePromptData = {
+    body?: {
+        name?: string;
+        content?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}';
+};
+
+export type UpdatePromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdatePromptError = UpdatePromptErrors[keyof UpdatePromptErrors];
+
+export type UpdatePromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdatePromptResponse = UpdatePromptResponses[keyof UpdatePromptResponses];
+
+export type GetPromptVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/versions';
+};
+
+export type GetPromptVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetPromptVersionsError = GetPromptVersionsErrors[keyof GetPromptVersionsErrors];
+
+export type GetPromptVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        type: 'system' | 'regular';
+        content: string;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

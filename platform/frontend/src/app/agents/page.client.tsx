@@ -6,6 +6,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ChevronDown,
   ChevronUp,
+  MessageCircle,
   Pencil,
   Plug,
   Plus,
@@ -63,6 +64,7 @@ import {
 import { useHasPermissions } from "@/lib/auth.query";
 import { formatDate } from "@/lib/utils";
 import { AssignToolsDialog } from "./assign-tools-dialog";
+import { ChatConfigDialog } from "./chat-config-dialog";
 
 export default function AgentsPage() {
   return (
@@ -243,6 +245,9 @@ function Agents() {
     name: string;
   } | null>(null);
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
+    (typeof agents)[number] | null
+  >(null);
+  const [chatConfigAgent, setChatConfigAgent] = useState<
     (typeof agents)[number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
@@ -453,6 +458,23 @@ function Agents() {
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setChatConfigAgent(agent);
+                    }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Configure Chat</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setEditingAgent({
                         id: agent.id,
                         name: agent.name,
@@ -589,6 +611,14 @@ function Agents() {
             agent={assigningToolsAgent}
             open={!!assigningToolsAgent}
             onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
+          />
+        )}
+
+        {chatConfigAgent && (
+          <ChatConfigDialog
+            agent={chatConfigAgent}
+            open={!!chatConfigAgent}
+            onOpenChange={(open) => !open && setChatConfigAgent(null)}
           />
         )}
 

@@ -35,6 +35,8 @@ export const ResourceSchema = z.enum([
   "conversation",
   "limit",
   "tokenPrice",
+  "chatSettings",
+  "prompt",
 ]);
 
 export const PermissionsSchema = z.partialRecord(
@@ -60,6 +62,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
+  chatSettings: ["read", "update"],
+  prompt: ["create", "read", "update", "delete"],
 };
 
 export const ac = createAccessControl(allAvailableActions);
@@ -85,6 +89,8 @@ export const memberRole = ac.newRole({
   conversation: ["create", "read", "update", "delete"],
   limit: ["read"],
   tokenPrice: ["read"],
+  chatSettings: ["read"],
+  prompt: ["create", "read", "update", "delete"],
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -249,6 +255,23 @@ export const RouteId = {
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
   GetChatMcpTools: "getChatMcpTools",
+
+  // Chat Settings Routes
+  GetChatSettings: "getChatSettings",
+  UpdateChatSettings: "updateChatSettings",
+
+  // Prompt Routes
+  GetPrompts: "getPrompts",
+  CreatePrompt: "createPrompt",
+  GetPrompt: "getPrompt",
+  GetPromptVersions: "getPromptVersions",
+  UpdatePrompt: "updatePrompt",
+  DeletePrompt: "deletePrompt",
+
+  // Agent Prompt Routes
+  GetAgentPrompts: "getAgentPrompts",
+  AssignAgentPrompts: "assignAgentPrompts",
+  DeleteAgentPrompt: "deleteAgentPrompt",
 
   // Limits Routes
   GetLimits: "getLimits",
@@ -554,6 +577,42 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
+  },
+  [RouteId.GetChatSettings]: {
+    chatSettings: ["read"],
+  },
+  [RouteId.UpdateChatSettings]: {
+    chatSettings: ["update"],
+  },
+  [RouteId.GetPrompts]: {
+    prompt: ["read"],
+  },
+  [RouteId.CreatePrompt]: {
+    prompt: ["create"],
+  },
+  [RouteId.GetPrompt]: {
+    prompt: ["read"],
+  },
+  [RouteId.GetPromptVersions]: {
+    prompt: ["read"],
+  },
+  [RouteId.UpdatePrompt]: {
+    prompt: ["update"],
+  },
+  [RouteId.DeletePrompt]: {
+    prompt: ["delete"],
+  },
+  [RouteId.GetAgentPrompts]: {
+    agent: ["read"],
+    prompt: ["read"],
+  },
+  [RouteId.AssignAgentPrompts]: {
+    agent: ["update"],
+    prompt: ["read"],
+  },
+  [RouteId.DeleteAgentPrompt]: {
+    agent: ["update"],
+    prompt: ["read"],
   },
   [RouteId.GetLimits]: {
     limit: ["read"],

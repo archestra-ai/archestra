@@ -1,8 +1,10 @@
 export { default as agentRoutes } from "./agent";
+export { default as agentPromptRoutes } from "./agent-prompts";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat";
+export { default as chatSettingsRoutes } from "./chat-settings";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
@@ -17,6 +19,7 @@ export { default as oauthRoutes } from "./oauth";
 export { default as onboardingRoutes } from "./onboarding";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
+export { default as promptRoutes } from "./prompts";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";

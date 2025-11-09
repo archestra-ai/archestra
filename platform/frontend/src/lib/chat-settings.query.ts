@@ -1,0 +1,31 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+
+const { getChatSettings, updateChatSettings } = archestraApiSdk;
+
+export function useChatSettings(params?: {
+  initialData?: archestraApiTypes.GetChatSettingsResponses["200"];
+}) {
+  return useSuspenseQuery({
+    queryKey: ["chat-settings"],
+    queryFn: async () => (await getChatSettings()).data ?? null,
+    initialData: params?.initialData,
+  });
+}
+
+export function useUpdateChatSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { anthropicApiKey?: string }) => {
+      const response = await updateChatSettings({ body: data });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chat-settings"] });
+    },
+  });
+}

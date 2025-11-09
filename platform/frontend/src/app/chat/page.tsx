@@ -223,7 +223,10 @@ export default function ChatPage() {
         ) : (
           <>
             {messages.length === 0 ? (
-              <PromptSuggestions onSelectPrompt={handleSelectPrompt} />
+              <PromptSuggestions
+                agentId={currentAgent?.id}
+                onSelectPrompt={handleSelectPrompt}
+              />
             ) : (
               <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             )}

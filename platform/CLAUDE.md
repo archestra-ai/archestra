@@ -62,9 +62,10 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
-# E2E Testing in CI
-# CI uses Kubernetes (kind) + Helm instead of docker-compose
-# See .github/kind.yaml and .github/values-ci.yaml for configuration
+# E2E Testing  
+pnpm test:e2e                        # Run locally with docker-compose
+# CI: Uses kind cluster with helm deployment
+# Config: .github/kind.yaml (port mappings), .github/values-ci.yaml (NodePort services)
 
 # Observability
 tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
@@ -253,6 +254,8 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
+- Service type: Configurable via `archestra.service.type`, NodePort support with fixed ports
+- Health probes: Startup (5min), liveness, readiness probes on frontend port
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
 - Secret-based env vars via `archestra.envFromSecrets` for sensitive data injection (e.g., API keys from K8s Secrets)
 - Bulk env var import via `archestra.envFrom` for importing all keys from Secrets/ConfigMaps at once

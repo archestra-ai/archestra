@@ -72,78 +72,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-<<<<<<< HEAD
-        // Check for LLM proxy logs (interactions)
-        const [interaction] = await db
-          .select()
-          .from(schema.interactionsTable)
-          .limit(1);
-        const hasLlmProxyLogs = !!interaction;
-
-        // Check for MCP gateway logs (mcp tool calls)
-        const [mcpToolCall] = await db
-          .select()
-          .from(schema.mcpToolCallsTable)
-          .limit(1);
-        const hasMcpGatewayLogs = !!mcpToolCall;
-
-        // Compute onboarding complete based on log existence
-        const onboardingComplete = hasLlmProxyLogs || hasMcpGatewayLogs;
-
-        return reply.send({
-          id: organization.id,
-          name: organization.name,
-          slug: organization.slug,
-          limitCleanupInterval: organization.limitCleanupInterval,
-          onboardingComplete,
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  /**
-   * Update organization appearance settings
-   */
-  fastify.put(
-    "/api/organization/appearance",
-    {
-      schema: {
-        operationId: RouteId.UpdateOrganizationAppearance,
-        description: "Update organization appearance settings",
-        tags: ["Organization"],
-        body: OrganizationAppearanceSchema,
-        response: {
-          200: OrganizationAppearanceSchema,
-          400: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        const user = await getUserFromRequest(request);
-
-        if (!user) {
-          return reply.status(401).send({
-            error: {
-              message: "Unauthorized",
-              type: "unauthorized",
-            },
-          });
-=======
         if ("logo" in body) {
->>>>>>> main
         }
 
         return reply.send(organization);

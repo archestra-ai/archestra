@@ -1,8 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { getInternalJwt } from "@/auth/internal-jwt";
-import config from "@/config";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -18,11 +16,7 @@ import type {
   CommonToolCall,
   CommonToolResult,
   InternalMcpCatalog,
-  McpServerConfig,
 } from "@/types";
-
-export const constructMcpProxyUrl = (mcpServerId: string) =>
-  `http://localhost:${config.api.port}/mcp_proxy/${mcpServerId}`;
 
 /**
  * Type for MCP tool with server metadata returned from database
@@ -456,61 +450,20 @@ class McpClient {
   /**
    * Connect to an MCP server and return available tools
    */
-  async connectAndGetTools(
-    config: McpServerConfig,
-  ): Promise<CommonMcpToolDefinition[]> {
+  async connectAndGetTools(params: {
+    catalogItem: InternalMcpCatalog;
+    mcpServerId: string;
+    secrets: Record<string, unknown>;
+  }): Promise<CommonMcpToolDefinition[]> {
+    const { catalogItem, mcpServerId, secrets } = params;
+
     try {
-      // Determine transport type based on URL
-      let transport: import("@modelcontextprotocol/sdk/shared/transport.js").Transport;
-
-      // For local servers using mcp_proxy, extract server ID and use K8s attach transport
-      if (config.url.includes("/mcp_proxy/")) {
-        // Extract server ID from URL like "/mcp_proxy/123e4567-..."
-        const match = config.url.match(/\/mcp_proxy\/([^/]+)/);
-        if (!match) {
-          throw new Error("Could not extract server ID from mcp_proxy URL");
-        }
-        const mcpServerId = match[1];
-
-        // Check if it uses streamable-http
-        const usesStreamableHttp =
-          await McpServerRuntimeManager.usesStreamableHttp(mcpServerId);
-
-        if (usesStreamableHttp) {
-          // Use HTTP transport
-          const httpUrl =
-            McpServerRuntimeManager.getHttpEndpointUrl(mcpServerId);
-          if (!httpUrl) {
-            throw new Error("No HTTP endpoint URL for streamable-http server");
-          }
-          transport = new StreamableHTTPClientTransport(new URL(httpUrl), {
-            requestInit: { headers: new Headers({}) },
-          });
-        } else {
-          // Use K8s attach transport
-          const k8sPod = McpServerRuntimeManager.getPod(mcpServerId);
-          if (!k8sPod) {
-            throw new Error("Pod not found for MCP server");
-          }
-
-          const { K8sAttachTransport } = await import(
-            "./k8s-attach-transport.js"
-          );
-          transport = new K8sAttachTransport({
-            k8sAttach: k8sPod.k8sAttachClient,
-            namespace: k8sPod.k8sNamespace,
-            podName: k8sPod.k8sPodName,
-            containerName: "mcp-server",
-          });
-        }
-      } else {
-        // Remote server - use StreamableHTTPClientTransport
-        transport = new StreamableHTTPClientTransport(new URL(config.url), {
-          requestInit: {
-            headers: new Headers(config.headers),
-          },
-        });
-      }
+      // Get the appropriate transport using the existing helper
+      const transport = await this.getTransport(
+        catalogItem,
+        mcpServerId,
+        secrets,
+      );
 
       // Create client with transport
       const client = new Client(
@@ -548,42 +501,12 @@ class McpClient {
       }));
     } catch (error) {
       throw new Error(
-        `Failed to connect to MCP server ${config.name}: ${
+        `Failed to connect to MCP server ${catalogItem.name}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
     }
   }
-
-  /**
-   * Create configuration for connecting to an MCP server
-   */
-  createServerConfig = (params: {
-    name: string;
-    url: string;
-    secrets: Record<string, unknown>;
-  }): McpServerConfig => {
-    const { name, url, secrets } = params;
-
-    // Build headers from secrets
-    const headers: Record<string, string> = {};
-
-    // For internal /mcp_proxy endpoints, add JWT auth
-    if (url.includes("/mcp_proxy/")) {
-      headers.Authorization = `Bearer ${getInternalJwt()}`;
-    }
-    // All tokens (OAuth and PAT) are stored as access_token
-    else if (secrets.access_token) {
-      headers.Authorization = `Bearer ${secrets.access_token}`;
-    }
-
-    return {
-      id: name,
-      name,
-      url,
-      headers,
-    };
-  };
 
   /**
    * Disconnect from an MCP server

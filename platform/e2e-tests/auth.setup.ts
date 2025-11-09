@@ -23,14 +23,16 @@ setup("authenticate", async ({ page }) => {
 
   // Skip onboarding dialog if it appears (for fresh environments)
   const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-  if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+  const isOnboardingVisible = await skipButton.isVisible({ timeout: 2000 }).catch(() => false);
+
+  if (isOnboardingVisible) {
     await skipButton.click();
-    // Wait for dialog to close
-    await page.waitForTimeout(500);
+    // Wait for the skip button to disappear (dialog closes after mutation completes)
+    await expect(skipButton).not.toBeVisible({ timeout: 10000 });
   }
 
   // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({ timeout: 10000 });
 
   // Save the authentication state to a file
   await page.context().storageState({ path: authFile });

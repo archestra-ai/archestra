@@ -1,15 +1,5 @@
-import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentLabelModel from "./agent-label";
-
-async function createTestAgent(): Promise<string> {
-  const agentId = crypto.randomUUID();
-  await db.insert(schema.agentsTable).values({
-    id: agentId,
-    name: `Test Agent ${agentId.substring(0, 8)}`,
-  });
-  return agentId;
-}
 
 describe("AgentLabelModel", () => {
   describe("getOrCreateKey", () => {
@@ -55,15 +45,15 @@ describe("AgentLabelModel", () => {
   });
 
   describe("syncAgentLabels", () => {
-    test("syncs labels for an agent", async () => {
-      const agentId = await createTestAgent();
+    test("syncs labels for an agent", async ({ makeAgent }) => {
+      const agent = await makeAgent();
 
-      await AgentLabelModel.syncAgentLabels(agentId, [
+      await AgentLabelModel.syncAgentLabels(agent.id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },
         { key: "region", value: "us-west-2", keyId: "", valueId: "" },
       ]);
 
-      const labels = await AgentLabelModel.getLabelsForAgent(agentId);
+      const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
 
       expect(labels).toHaveLength(2);
       expect(labels[0].key).toBe("environment");
@@ -72,19 +62,19 @@ describe("AgentLabelModel", () => {
       expect(labels[1].value).toBe("us-west-2");
     });
 
-    test("replaces existing labels when syncing", async () => {
-      const agentId = await createTestAgent();
+    test("replaces existing labels when syncing", async ({ makeAgent }) => {
+      const agent = await makeAgent();
 
-      await AgentLabelModel.syncAgentLabels(agentId, [
+      await AgentLabelModel.syncAgentLabels(agent.id, [
         { key: "environment", value: "staging", keyId: "", valueId: "" },
       ]);
 
-      await AgentLabelModel.syncAgentLabels(agentId, [
+      await AgentLabelModel.syncAgentLabels(agent.id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },
         { key: "team", value: "engineering", keyId: "", valueId: "" },
       ]);
 
-      const labels = await AgentLabelModel.getLabelsForAgent(agentId);
+      const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
 
       expect(labels).toHaveLength(2);
       expect(labels[0].key).toBe("environment");
@@ -93,26 +83,28 @@ describe("AgentLabelModel", () => {
       expect(labels[1].value).toBe("engineering");
     });
 
-    test("clears all labels when syncing with empty array", async () => {
-      const agentId = await createTestAgent();
+    test("clears all labels when syncing with empty array", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
 
-      await AgentLabelModel.syncAgentLabels(agentId, [
+      await AgentLabelModel.syncAgentLabels(agent.id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },
       ]);
 
-      await AgentLabelModel.syncAgentLabels(agentId, []);
+      await AgentLabelModel.syncAgentLabels(agent.id, []);
 
-      const labels = await AgentLabelModel.getLabelsForAgent(agentId);
+      const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
       expect(labels).toHaveLength(0);
     });
   });
 
   describe("pruneKeysAndValues", () => {
-    test("removes orphaned keys and values", async () => {
-      const agentId = await createTestAgent();
+    test("removes orphaned keys and values", async ({ makeAgent }) => {
+      const agent = await makeAgent();
 
       // Create labels
-      await AgentLabelModel.syncAgentLabels(agentId, [
+      await AgentLabelModel.syncAgentLabels(agent.id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },
         { key: "region", value: "us-west-2", keyId: "", valueId: "" },
       ]);
@@ -126,7 +118,7 @@ describe("AgentLabelModel", () => {
       expect(values).toContain("us-west-2");
 
       // Remove all labels, which should make keys and values orphaned
-      await AgentLabelModel.syncAgentLabels(agentId, []);
+      await AgentLabelModel.syncAgentLabels(agent.id, []);
 
       // Verify orphaned keys and values were pruned
       keys = await AgentLabelModel.getAllKeys();
@@ -137,9 +129,11 @@ describe("AgentLabelModel", () => {
       expect(values).not.toContain("us-west-2");
     });
 
-    test("keeps keys and values that are still in use", async () => {
-      const agent1Id = await createTestAgent();
-      const agent2Id = await createTestAgent();
+    test("keeps keys and values that are still in use", async ({
+      makeAgent,
+    }) => {
+      const { id: agent1Id } = await makeAgent();
+      const { id: agent2Id } = await makeAgent();
 
       // Create labels for two agents with shared key/value
       await AgentLabelModel.syncAgentLabels(agent1Id, [
@@ -165,9 +159,9 @@ describe("AgentLabelModel", () => {
   });
 
   describe("getAllKeys", () => {
-    test("returns all unique keys", async () => {
-      const agent1Id = await createTestAgent();
-      const agent2Id = await createTestAgent();
+    test("returns all unique keys", async ({ makeAgent }) => {
+      const { id: agent1Id } = await makeAgent();
+      const { id: agent2Id } = await makeAgent();
 
       await AgentLabelModel.syncAgentLabels(agent1Id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },
@@ -185,9 +179,9 @@ describe("AgentLabelModel", () => {
   });
 
   describe("getAllValues", () => {
-    test("returns all unique values", async () => {
-      const agent1Id = await createTestAgent();
-      const agent2Id = await createTestAgent();
+    test("returns all unique values", async ({ makeAgent }) => {
+      const { id: agent1Id } = await makeAgent();
+      const { id: agent2Id } = await makeAgent();
 
       await AgentLabelModel.syncAgentLabels(agent1Id, [
         { key: "environment", value: "production", keyId: "", valueId: "" },

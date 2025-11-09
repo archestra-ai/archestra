@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  InternalMcpCatalogModel,
   OrganizationRoleModel,
   ToolInvocationPolicyModel,
   ToolModel,
@@ -12,6 +13,7 @@ import {
 import type {
   Agent,
   AgentTool,
+  InsertInternalMcpCatalog,
   InsertMcpServer,
   InsertMember,
   InsertOrganization,
@@ -44,6 +46,7 @@ interface TestFixtures {
   makeCustomRole: typeof makeCustomRole;
   makeMember: typeof makeMember;
   makeMcpServer: typeof makeMcpServer;
+  makeInternalMcpCatalog: typeof makeInternalMcpCatalog;
 }
 
 async function _makeUser(
@@ -144,11 +147,19 @@ async function makeAgent(
  * Creates a test tool using the Tool model
  */
 async function makeTool(
-  agentId: string,
-  overrides: Partial<Pick<Tool, "name" | "description" | "parameters">> = {},
+  overrides: Partial<
+    Pick<
+      Tool,
+      | "name"
+      | "description"
+      | "parameters"
+      | "catalogId"
+      | "mcpServerId"
+      | "agentId"
+    >
+  > = {},
 ): Promise<Tool> {
   const toolData = {
-    agentId,
     name: `test-tool-${crypto.randomUUID().substring(0, 8)}`,
     description: "Test tool description",
     parameters: {},
@@ -299,6 +310,22 @@ async function makeMcpServer(
   return mcpServer;
 }
 
+/**
+ * Creates a test internal MCP catalog item
+ */
+async function makeInternalMcpCatalog(
+  overrides: Partial<
+    Pick<InsertInternalMcpCatalog, "name" | "serverType" | "serverUrl">
+  > = {},
+) {
+  return await InternalMcpCatalogModel.create({
+    name: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+    serverType: "remote",
+    serverUrl: "https://api.example.com/mcp/",
+    ...overrides,
+  });
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async (_, use) => {
@@ -336,5 +363,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeMcpServer: async (_, use) => {
     await use(makeMcpServer);
+  },
+  makeInternalMcpCatalog: async (_, use) => {
+    await use(makeInternalMcpCatalog);
   },
 });

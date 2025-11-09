@@ -1,33 +1,26 @@
 import { describe, expect, test } from "@/test";
-import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
-import InternalMcpCatalogModel from "./internal-mcp-catalog";
-import McpServerModel from "./mcp-server";
 import TeamModel from "./team";
 import ToolModel from "./tool";
 
 describe("ToolModel", () => {
   describe("Access Control", () => {
-    test("admin can see all tools", async ({ makeAdmin }) => {
+    test("admin can see all tools", async ({
+      makeAdmin,
+      makeAgent,
+      makeTool,
+    }) => {
       const admin = await makeAdmin();
+      const agent1 = await makeAgent({ name: "Agent1" });
+      const agent2 = await makeAgent({ name: "Agent2" });
 
-      const agent1 = await AgentModel.create({
-        name: "Agent1",
-        teams: [],
-      });
-      const agent2 = await AgentModel.create({
-        name: "Agent2",
-        teams: [],
-      });
-
-      await ToolModel.create({
+      await makeTool({
         agentId: agent1.id,
         name: "tool1",
         description: "Tool 1",
-        parameters: {},
       });
 
-      await ToolModel.create({
+      await makeTool({
         agentId: agent2.id,
         name: "tool2",
         description: "Tool 2",
@@ -38,7 +31,14 @@ describe("ToolModel", () => {
       expect(tools).toHaveLength(2);
     });
 
-    test("member only sees tools for accessible agents", async ({ makeUser, makeAdmin, makeOrganization, makeTeam }) => {
+    test("member only sees tools for accessible agents", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+      makeAgent,
+      makeTool,
+    }) => {
       const user1 = await makeUser();
       const user2 = await makeUser();
       const admin = await makeAdmin();
@@ -52,23 +52,17 @@ describe("ToolModel", () => {
       await TeamModel.addMember(team2.id, user2.id);
 
       // Create agents with team assignments
-      const agent1 = await AgentModel.create({
-        name: "Agent1",
-        teams: [team1.id],
-      });
-      const agent2 = await AgentModel.create({
-        name: "Agent2",
-        teams: [team2.id],
-      });
+      const agent1 = await makeAgent({ name: "Agent1", teams: [team1.id] });
+      const agent2 = await makeAgent({ name: "Agent2", teams: [team2.id] });
 
-      const tool1 = await ToolModel.create({
+      const tool1 = await makeTool({
         agentId: agent1.id,
         name: "tool1",
         description: "Tool 1",
         parameters: {},
       });
 
-      await ToolModel.create({
+      await makeTool({
         agentId: agent2.id,
         name: "tool2",
         description: "Tool 2",
@@ -80,156 +74,152 @@ describe("ToolModel", () => {
       expect(tools[0].id).toBe(tool1.id);
     });
 
-    test("member with no access sees no tools", async ({ makeUser }) => {
+    test("member with no access sees no tools", async ({
+      makeUser,
+      makeAgent,
+      makeTool,
+    }) => {
       const user = await makeUser();
+      const agent1 = await makeAgent({ name: "Agent1" });
 
-      const agent1 = await AgentModel.create({
-        name: "Agent1",
-        teams: [],
-      });
-
-      await ToolModel.create({
+      await makeTool({
         agentId: agent1.id,
         name: "tool1",
         description: "Tool 1",
-        parameters: {},
       });
 
       const tools = await ToolModel.findAll(user.id, false);
       expect(tools).toHaveLength(0);
     });
 
-    test("findById returns tool for admin", async () => {
-      const _user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
+    test("findById returns tool for admin", async ({
+      makeAdmin,
+      makeAgent,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent();
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
-
-      const tool = await ToolModel.create({
+      const tool = await makeTool({
         agentId: agent.id,
         name: "test-tool",
         description: "Test Tool",
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, adminId, true);
+      const found = await ToolModel.findById(tool.id, admin.id, true);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
 
-    test("findById returns tool for user with agent access", async () => {
-      const user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("findById returns tool for user with agent access", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+      makeAgent,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create team and add user
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [team.id],
-      });
+      const agent = await makeAgent({ teams: [team.id] });
 
-      const tool = await ToolModel.create({
+      const tool = await makeTool({
         agentId: agent.id,
         name: "test-tool",
         description: "Test Tool",
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, user1Id, false);
+      const found = await ToolModel.findById(tool.id, user.id, false);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
 
-    test("findById returns null for user without agent access", async () => {
-      const _user1Id = await createTestUser();
-      const user2Id = await createTestUser();
+    test("findById returns null for user without agent access", async ({
+      makeUser,
+      makeAgent,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
-
-      const tool = await ToolModel.create({
+      const tool = await makeTool({
         agentId: agent.id,
         name: "test-tool",
         description: "Test Tool",
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, user2Id, false);
+      const found = await ToolModel.findById(tool.id, user.id, false);
       expect(found).toBeNull();
     });
 
-    test("findByName returns tool for admin", async () => {
-      const _user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
+    test("findByName returns tool for admin", async ({
+      makeAdmin,
+      makeAgent,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent();
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
-
-      await ToolModel.create({
+      await makeTool({
         agentId: agent.id,
         name: "unique-tool",
         description: "Unique Tool",
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("unique-tool", adminId, true);
+      const found = await ToolModel.findByName("unique-tool", admin.id, true);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("unique-tool");
     });
 
-    test("findByName returns tool for user with agent access", async () => {
-      const user1Id = await createTestUser();
-      const adminId = await createTestAdmin();
-      const orgId = await createTestOrganization();
+    test("findByName returns tool for user with agent access", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+      makeAgent,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
 
       // Create team and add user
-      const team = await TeamModel.create({
-        name: "Test Team",
-        organizationId: orgId,
-        createdBy: adminId,
-      });
-      await TeamModel.addMember(team.id, user1Id);
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [team.id],
-      });
+      const agent = await makeAgent({ teams: [team.id] });
 
-      await ToolModel.create({
+      await makeTool({
         agentId: agent.id,
         name: "user-tool",
         description: "User Tool",
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("user-tool", user1Id, false);
+      const found = await ToolModel.findByName("user-tool", user.id, false);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("user-tool");
     });
 
-    test("findByName returns null for user without agent access", async () => {
-      const userId = await createTestUser();
+    test("findByName returns null for user without agent access", async ({
+      makeUser,
+      makeAgent,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
-
-      await ToolModel.create({
+      await makeTool({
         agentId: agent.id,
         name: "restricted-tool",
         description: "Restricted Tool",
@@ -238,7 +228,7 @@ describe("ToolModel", () => {
 
       const found = await ToolModel.findByName(
         "restricted-tool",
-        userId,
+        user.id,
         false,
       );
       expect(found).toBeNull();
@@ -246,26 +236,27 @@ describe("ToolModel", () => {
   });
 
   describe("getMcpToolsAssignedToAgent", () => {
-    test("returns empty array when no tools provided", async () => {
-      const _userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("returns empty array when no tools provided", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const _user = await makeUser();
+      const agent = await makeAgent();
 
       const result = await ToolModel.getMcpToolsAssignedToAgent([], agent.id);
       expect(result).toEqual([]);
     });
 
-    test("returns empty array when no MCP tools assigned to agent", async () => {
-      const _userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("returns empty array when no MCP tools assigned to agent", async ({
+      makeAgent,
+      makeUser,
+      makeTool,
+    }) => {
+      const _user = await makeUser();
+      const agent = await makeAgent();
 
       // Create a proxy-sniffed tool (no mcpServerId)
-      await ToolModel.create({
+      await makeTool({
         agentId: agent.id,
         name: "proxy_tool",
         description: "Proxy Tool",
@@ -279,29 +270,30 @@ describe("ToolModel", () => {
       expect(result).toEqual([]);
     });
 
-    test("returns MCP tools with server metadata for assigned tools", async () => {
-      const userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("returns MCP tools with server metadata for assigned tools", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
-      const catalogItem = await InternalMcpCatalogModel.create({
+      const catalogItem = await makeInternalMcpCatalog({
         name: "github-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
 
       // Create an MCP server with GitHub metadata
-      const mcpServer = await McpServerModel.create({
+      const mcpServer = await makeMcpServer({
         name: "test-github-server",
         catalogId: catalogItem.id,
-        serverType: "remote",
-        userId,
+        ownerId: user.id,
       });
 
       // Create an MCP tool
-      const mcpTool = await ToolModel.create({
+      const mcpTool = await makeTool({
         name: "github_mcp_server__list_issues",
         description: "List GitHub issues",
         parameters: {
@@ -338,29 +330,30 @@ describe("ToolModel", () => {
       });
     });
 
-    test("filters to only requested tool names", async () => {
-      const userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("filters to only requested tool names", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
-      const catalogItem = await InternalMcpCatalogModel.create({
+      const catalogItem = await makeInternalMcpCatalog({
         name: "github-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
 
       // Create an MCP server
-      const mcpServer = await McpServerModel.create({
+      const mcpServer = await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
-        serverType: "remote",
-        userId,
+        ownerId: user.id,
       });
 
       // Create multiple MCP tools
-      const tool1 = await ToolModel.create({
+      const tool1 = await makeTool({
         name: "tool_one",
         description: "First tool",
         parameters: {},
@@ -368,7 +361,7 @@ describe("ToolModel", () => {
         mcpServerId: mcpServer.id,
       });
 
-      const tool2 = await ToolModel.create({
+      const tool2 = await makeTool({
         name: "tool_two",
         description: "Second tool",
         parameters: {},
@@ -390,33 +383,29 @@ describe("ToolModel", () => {
       expect(result[0].toolName).toBe("tool_one");
     });
 
-    test("returns empty array when tools exist but not assigned to agent", async () => {
-      const userId = await createTestUser();
-
-      const agent1 = await AgentModel.create({
-        name: "Agent1",
-        teams: [],
-      });
-
-      const agent2 = await AgentModel.create({
-        name: "Agent2",
-        teams: [],
-      });
+    test("returns empty array when tools exist but not assigned to agent", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent1 = await makeAgent({ name: "Agent1" });
+      const agent2 = await makeAgent({ name: "Agent2" });
 
       // Create an MCP server and tool
-      const catalogItem = await InternalMcpCatalogModel.create({
+      const catalogItem = await makeInternalMcpCatalog({
         name: "github-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await McpServerModel.create({
+      const mcpServer = await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
-        serverType: "remote",
-        userId,
+        ownerId: user.id,
       });
 
-      const mcpTool = await ToolModel.create({
+      const mcpTool = await makeTool({
         name: "exclusive_tool",
         description: "Exclusive tool",
         parameters: {},
@@ -435,28 +424,29 @@ describe("ToolModel", () => {
       expect(result).toEqual([]);
     });
 
-    test("excludes proxy-sniffed tools (tools with agentId set)", async () => {
-      const userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("excludes proxy-sniffed tools (tools with agentId set)", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
       // Create an MCP server
-      const catalogItem = await InternalMcpCatalogModel.create({
+      const catalogItem = await makeInternalMcpCatalog({
         name: "github-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const mcpServer = await McpServerModel.create({
+      const mcpServer = await makeMcpServer({
         name: "test-server",
         catalogId: catalogItem.id,
-        serverType: "remote",
-        userId,
+        ownerId: user.id,
       });
 
       // Create a proxy-sniffed tool (with agentId)
-      await ToolModel.create({
+      await makeTool({
         agentId: agent.id,
         name: "proxy_tool",
         description: "Proxy Tool",
@@ -464,7 +454,7 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP tool (no agentId, linked via mcpServerId)
-      const mcpTool = await ToolModel.create({
+      const mcpTool = await makeTool({
         name: "mcp_tool",
         description: "MCP Tool",
         parameters: {},
@@ -485,39 +475,38 @@ describe("ToolModel", () => {
       expect(result[0].toolName).toBe("mcp_tool");
     });
 
-    test("handles multiple MCP tools with different servers", async () => {
-      const userId = await createTestUser();
-      const agent = await AgentModel.create({
-        name: "Test Agent",
-        teams: [],
-      });
+    test("handles multiple MCP tools with different servers", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
 
       // Create two MCP servers
-      const catalogItem = await InternalMcpCatalogModel.create({
+      const catalogItem = await makeInternalMcpCatalog({
         name: "github-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.githubcopilot.com/mcp/",
       });
-      const server1 = await McpServerModel.create({
+      const server1 = await makeMcpServer({
         name: "github-server",
         catalogId: catalogItem.id,
-        serverType: "remote",
-        userId,
+        ownerId: user.id,
       });
 
-      const catalogItem2 = await InternalMcpCatalogModel.create({
+      const catalogItem2 = await makeInternalMcpCatalog({
         name: "other-mcp-server",
-        serverType: "remote",
         serverUrl: "https://api.othercopilot.com/mcp/",
       });
-      const server2 = await McpServerModel.create({
+      const server2 = await makeMcpServer({
         name: "other-server",
         catalogId: catalogItem2.id,
-        serverType: "remote",
       });
 
       // Create tools for each server
-      const githubTool = await ToolModel.create({
+      const githubTool = await makeTool({
         name: "github_list_issues",
         description: "List GitHub issues",
         parameters: {},
@@ -525,7 +514,7 @@ describe("ToolModel", () => {
         mcpServerId: server1.id,
       });
 
-      const otherTool = await ToolModel.create({
+      const otherTool = await makeTool({
         name: "other_tool",
         description: "Other tool",
         parameters: {},

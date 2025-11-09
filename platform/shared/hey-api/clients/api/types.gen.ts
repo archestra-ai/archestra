@@ -4968,6 +4968,80 @@ export type UpdateChatConversationResponses = {
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
 
+export type GetChatAgentMcpToolsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/chat/agents/{agentId}/mcp-tools';
+};
+
+export type GetChatAgentMcpToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatAgentMcpToolsError = GetChatAgentMcpToolsErrors[keyof GetChatAgentMcpToolsErrors];
+
+export type GetChatAgentMcpToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        name: string;
+        description: string;
+        parameters: {
+            [key: string]: unknown;
+        } | null;
+    }>;
+};
+
+export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
 export type GetDefaultDualLlmConfigData = {
     body?: never;
     path?: never;

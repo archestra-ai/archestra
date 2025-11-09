@@ -1,8 +1,12 @@
 import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-const { getChatConversations, createChatConversation, deleteChatConversation } =
-  archestraApiSdk;
+const {
+  getChatConversations,
+  getChatAgentMcpTools,
+  createChatConversation,
+  deleteChatConversation,
+} = archestraApiSdk;
 
 export interface ConversationWithAgent {
   id: string;
@@ -65,5 +69,28 @@ export function useDeleteConversation() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
     },
+  });
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown> | null;
+}
+
+export function useChatAgentMcpTools(agentId: string | undefined) {
+  return useQuery<McpTool[]>({
+    queryKey: ["chat", "agents", agentId, "mcp-tools"],
+    queryFn: async () => {
+      if (!agentId) return [];
+      const response = await getChatAgentMcpTools({
+        path: { agentId },
+      });
+      if (response.error) throw new Error("Failed to fetch MCP tools");
+      return response.data as McpTool[];
+    },
+    enabled: !!agentId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
   });
 }

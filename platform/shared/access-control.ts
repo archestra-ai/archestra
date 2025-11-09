@@ -244,6 +244,7 @@ export const RouteId = {
   StreamChat: "streamChat",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
@@ -538,6 +539,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatConversation]: {
     conversation: ["read"],
+  },
+  [RouteId.GetChatAgentMcpTools]: {
+    agent: ["read"],
   },
   [RouteId.CreateChatConversation]: {
     conversation: ["create"],

@@ -15,7 +15,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
-import { N8nConnectionDialog } from "@/components/chat/n8n-connection-dialog";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import {
   Tooltip,
@@ -25,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   type ConversationWithAgent,
+  useChatAgentMcpTools,
   useConversations,
   useCreateConversation,
   useDeleteConversation,
@@ -32,13 +32,6 @@ import {
 
 interface ConversationWithMessages extends ConversationWithAgent {
   messages: UIMessage[];
-}
-
-interface McpTool {
-  name: string;
-  description?: string;
-  // biome-ignore lint/suspicious/noExplicitAny: MCP tool schemas are dynamic and come from server
-  inputSchema: any;
 }
 
 export default function ChatPage() {
@@ -86,28 +79,27 @@ export default function ChatPage() {
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
   });
 
-  // Get tools from current conversation's agent
+  // Get current agent info
   const currentAgent =
     conversation?.agent ||
     conversations.find((c) => c.id === conversationId)?.agent;
-  const { data: agentTools = [] } = useQuery<
-    { name: string; description?: string }[]
-  >({
-    queryKey: ["agent-tools", currentAgent?.id],
-    queryFn: async () => {
-      if (!currentAgent?.id) return [];
-      const res = await fetch(`/api/agents/${currentAgent.id}`);
-      if (!res.ok) return [];
-      const agent = await res.json();
-      return agent.tools || [];
-    },
-    enabled: !!currentAgent?.id,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
 
-  const mcpTools = agentTools;
+  // Fetch MCP tools from gateway (same as used in chat backend)
+  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgent?.id);
+
+  // Group tools by MCP server prefix
+  const groupedTools = mcpTools.reduce(
+    (acc, tool) => {
+      const parts = tool.name.split("__");
+      const serverName = parts.length > 1 ? parts[0] : "default";
+      if (!acc[serverName]) {
+        acc[serverName] = [];
+      }
+      acc[serverName].push(tool);
+      return acc;
+    },
+    {} as Record<string, typeof mcpTools>,
+  );
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -202,22 +194,6 @@ export default function ChatPage() {
     });
   };
 
-  // Group tools by MCP server (prefix before "__")
-  const mcpServerGroups = mcpTools.reduce(
-    (acc, tool) => {
-      const prefix = tool.name.includes("__")
-        ? tool.name.split("__")[0]
-        : "other";
-
-      if (!acc[prefix]) {
-        acc[prefix] = [];
-      }
-      acc[prefix].push(tool);
-      return acc;
-    },
-    {} as Record<string, McpTool[]>,
-  );
-
   return (
     <div className="flex h-screen">
       {/* Sidebar - Conversation List */}
@@ -248,60 +224,51 @@ export default function ChatPage() {
             )}
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
-                {mcpTools.length > 0 && (
+                {currentAgent && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(mcpServerGroups).map(
-                            ([serverName, tools]) => (
-                              <Tooltip key={serverName}>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                    <span className="font-medium">
-                                      {serverName}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      ({tools.length}{" "}
-                                      {tools.length === 1 ? "tool" : "tools"})
-                                    </span>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="max-w-sm max-h-64 overflow-y-auto"
-                                >
-                                  <div className="space-y-1">
-                                    {tools.map((tool) => (
-                                      <div
-                                        key={tool.name}
-                                        className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                      >
-                                        <div className="font-mono font-medium">
-                                          {tool.name.split("__")[1] ||
-                                            tool.name}
-                                        </div>
-                                        {tool.description && (
-                                          <div className="text-muted-foreground mt-0.5">
-                                            {tool.description}
-                                          </div>
-                                        )}
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(groupedTools).map(
+                          ([serverName, tools]) => (
+                            <Tooltip key={serverName}>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                                  <span className="font-medium">
+                                    {serverName}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    ({tools.length}{" "}
+                                    {tools.length === 1 ? "tool" : "tools"})
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="max-w-sm max-h-64 overflow-y-auto"
+                              >
+                                <div className="space-y-1">
+                                  {tools.map((tool) => (
+                                    <div
+                                      key={tool.name}
+                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                    >
+                                      <div className="font-mono font-medium">
+                                        {tool.name.split("__")[1] || tool.name}
                                       </div>
-                                    ))}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            ),
-                          )}
-                        </div>
-                        <N8nConnectionDialog />
+                                      {tool.description && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {tool.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ),
+                        )}
                       </div>
                     </TooltipProvider>
-                  </div>
-                )}
-                {mcpTools.length === 0 && (
-                  <div className="flex justify-end">
-                    <N8nConnectionDialog />
                   </div>
                 )}
                 <PromptInput onSubmit={handleSubmit}>

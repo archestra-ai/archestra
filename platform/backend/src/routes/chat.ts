@@ -601,6 +601,54 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/chat/agents/:agentId/mcp-tools",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentMcpTools,
+        description: "Get MCP tools available for an agent via MCP Gateway",
+        tags: ["Chat"],
+        params: z.object({ agentId: UuidIdSchema }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              name: z.string(),
+              description: z.string(),
+              parameters: z.record(z.string(), z.any()).nullable(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { agentId }, user }, reply) => {
+      // Verify agent exists and user has access
+      const agent = await AgentModel.findById(agentId, user.id);
+
+      if (!agent) {
+        return reply.status(404).send({
+          error: {
+            message: "Agent not found",
+            type: "not_found",
+          },
+        });
+      }
+
+      // Fetch MCP tools from gateway (same as used in chat)
+      const mcpTools = await getChatMcpTools(agentId);
+
+      // Convert AI SDK Tool format to simple array for frontend
+      const tools = Object.entries(mcpTools).map(([name, tool]) => ({
+        name,
+        description: tool.description || "",
+        parameters:
+          (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
+            ?.jsonSchema || null,
+      }));
+
+      return reply.send(tools);
+    },
+  );
+
   fastify.post(
     "/api/chat/conversations",
     {

@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -93,7 +94,7 @@ async function createAgentServer(
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
   const archestraToolTitles = new Map(
-    archestraTools.map((tool) => [tool.name, tool.title]),
+    archestraTools.map((tool: Tool) => [tool.name, tool.title]),
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -159,16 +160,7 @@ async function createAgentServer(
         };
 
         // Execute the tool call via McpClient
-        const results = await mcpClient.executeToolCalls([toolCall], agentId);
-
-        if (results.length === 0) {
-          throw {
-            code: -32603, // Internal error
-            message: `Tool '${name}' not found or not assigned to agent`,
-          };
-        }
-
-        const result = results[0];
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         if (result.isError) {
           logger.info(

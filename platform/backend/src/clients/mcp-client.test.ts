@@ -86,51 +86,20 @@ describe("McpClient", () => {
     mockGetHttpEndpointUrl.mockReset();
   });
 
-  describe("executeToolCalls", () => {
-    test("returns empty array when no tool calls provided", async () => {
-      const result = await mcpClient.executeToolCalls([], agentId);
-      expect(result).toEqual([]);
-    });
+  describe("executeToolCall", () => {
+    test("returns error when tool not found for agent", async () => {
+      const toolCall = {
+        id: "call_123",
+        name: "non_mcp_tool",
+        arguments: { param: "value" },
+      };
 
-    test("returns empty array when no MCP tools found for agent", async () => {
-      const toolCalls = [
-        {
-          id: "call_123",
-          name: "non_mcp_tool",
-          arguments: { param: "value" },
-        },
-      ];
-
-      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
-      expect(result).toEqual([]);
-    });
-
-    test("skips non-MCP tools and only executes MCP tools", async () => {
-      // Create a proxy-sniffed tool (no mcpServerId)
-      await ToolModel.createToolIfNotExists({
-        name: "proxy_tool",
-        description: "Proxy tool",
-        parameters: {},
+      const result = await mcpClient.executeToolCall(toolCall, agentId);
+      expect(result).toMatchObject({
+        id: "call_123",
+        isError: true,
+        error: expect.stringContaining("Tool not found"),
       });
-
-      // Create an MCP tool but don't set it up properly for this test
-      const toolCalls = [
-        {
-          id: "call_1",
-          name: "proxy_tool",
-          arguments: { param: "value" },
-        },
-        {
-          id: "call_2",
-          name: "mcp_tool",
-          arguments: { param: "value" },
-        },
-      ];
-
-      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
-
-      // Should return empty since no MCP tools with GitHub tokens exist
-      expect(result).toEqual([]);
     });
 
     describe("Response Modifier Templates", () => {
@@ -161,18 +130,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__test_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__test_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: [
             {
@@ -204,18 +170,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__json_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__json_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: { formatted: true, data: "test data" },
           isError: false,
@@ -233,7 +196,7 @@ describe("McpClient", () => {
 
         await AgentToolModel.create(agentId, tool.id, {
           responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
-{
+  {
   {{#each this.issues}}
     "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
   {{/each}}
@@ -252,18 +215,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__github_issues",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__github_issues",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: {
             "3550499726": "Add authentication for MCP gateways",
@@ -294,18 +254,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__content_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__content_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]?.content).toEqual([
+        expect(result?.content).toEqual([
           { type: "text", text: "Line 1" },
           { type: "text", text: "Line 2" },
         ]);
@@ -331,19 +288,17 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__bad_template",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__bad_template",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Should fall back to original content when template fails
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: originalContent,
           isError: false,
@@ -370,18 +325,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__image_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__image_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]?.content).toEqual([
+        expect(result?.content).toEqual([
           { type: "text", text: "Type: image" },
         ]);
       });
@@ -406,18 +358,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__no_template",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "github-mcp-server__no_template",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+        expect(result).toEqual({
           id: "call_1",
           content: originalContent,
           isError: false,
@@ -462,28 +411,27 @@ describe("McpClient", () => {
             isError: false,
           });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "github-mcp-server__tool1",
-            arguments: {},
-          },
-          {
-            id: "call_2",
-            name: "github-mcp-server__tool2",
-            arguments: {},
-          },
-        ];
+        const toolCall1 = {
+          id: "call_1",
+          name: "github-mcp-server__tool1",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const toolCall2 = {
+          id: "call_2",
+          name: "github-mcp-server__tool2",
+          arguments: {},
+        };
 
-        expect(results).toHaveLength(2);
-        expect(results[0]).toEqual({
+        const result1 = await mcpClient.executeToolCall(toolCall1, agentId);
+        const result2 = await mcpClient.executeToolCall(toolCall2, agentId);
+
+        expect(result1).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Template 1: Response 1" }],
           isError: false,
         });
-        expect(results[1]).toEqual({
+        expect(result2).toEqual({
           id: "call_2",
           content: [{ type: "text", text: "Template 2: Response 2" }],
           isError: false,
@@ -563,15 +511,13 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__test_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__test_tool",
+          arguments: { input: "test" },
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify HTTP transport was detected
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -584,8 +530,8 @@ describe("McpClient", () => {
         });
 
         // Verify result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Success from HTTP transport" }],
           isError: false,
@@ -608,19 +554,17 @@ describe("McpClient", () => {
         mockUsesStreamableHttp.mockResolvedValue(true);
         mockGetHttpEndpointUrl.mockReturnValue(undefined);
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__test_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__test_tool",
+          arguments: { input: "test" },
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify error result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: null,
           isError: true,
@@ -653,19 +597,17 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__formatted_tool",
-            arguments: {},
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__formatted_tool",
+          arguments: {},
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify template was applied
-        expect(results).toHaveLength(1);
-        expect(results[0]).toEqual({
+
+        expect(result).toEqual({
           id: "call_1",
           content: [{ type: "text", text: "Result: Original content" }],
           isError: false,
@@ -698,15 +640,13 @@ describe("McpClient", () => {
           }),
         });
 
-        const toolCalls = [
-          {
-            id: "call_1",
-            name: "local-streamable-http-server__stdio_tool",
-            arguments: { input: "test" },
-          },
-        ];
+        const toolCall = {
+          id: "call_1",
+          name: "local-streamable-http-server__stdio_tool",
+          arguments: { input: "test" },
+        };
 
-        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+        const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         // Verify stdio proxy was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -720,8 +660,8 @@ describe("McpClient", () => {
         );
 
         // Verify result
-        expect(results).toHaveLength(1);
-        expect(results[0]).toMatchObject({
+
+        expect(result).toMatchObject({
           id: "call_1",
           isError: false,
         });

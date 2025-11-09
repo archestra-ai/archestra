@@ -61,13 +61,14 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
-# CI: WireMock deployed as K8s deployment (helm install wiremock ./platform/helm/wiremock)
 
 # E2E Testing  
 pnpm test:e2e                        # Run locally or CI (detects environment)
-# Local: Uses existing docker-compose setup
+# Local: Uses existing dev/Tiltfile.test setup
 # CI: Uses kind cluster with helm deployment
-# Config: .github/kind.yaml (port mappings), .github/values-ci.yaml (NodePort services)
+#   - Deploy: helm install wiremock ./platform/helm/wiremock
+#   - Config: .github/kind.yaml (port mappings), .github/values-ci.yaml (NodePort services)
+#   - Verify: kubectl get pods, kubectl logs
 
 # Observability
 tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)

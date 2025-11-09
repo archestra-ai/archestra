@@ -10,5 +10,6 @@ export const MCP_GATEWAY_URL_SUFFIX = "/v1/mcp";
 export {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
+  E2eTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@shared";

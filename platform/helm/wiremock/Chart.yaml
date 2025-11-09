@@ -1,0 +1,6 @@
+apiVersion: v2
+name: wiremock
+description: WireMock for Archestra e2e testing
+type: application
+version: 0.1.0
+appVersion: "3.13.1"

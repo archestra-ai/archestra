@@ -11,7 +11,7 @@ local_resource(
 
 local_resource(
   'helm-tests',
-  cmd='helm unittest helm',
+  cmd='helm unittest helm/archestra',
   dir='../',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
@@ -37,10 +37,14 @@ local_resource(
   resource_deps=['pnpm-install', 'pnpm-dev']
 )
 
-local_resource(
+k8s_yaml(helm(
+  '../helm/wiremock',
+  name='wiremock',
+  namespace='default'
+))
+
+k8s_resource(
   'wiremock',
-  serve_cmd='docker compose -f e2e-tests/docker-compose-platform.yml up wiremock',
-  serve_dir='../',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False

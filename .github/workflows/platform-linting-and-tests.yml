@@ -81,66 +81,12 @@ jobs:
       - name: Deploy WireMock to Kubernetes
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # Create ConfigMap for WireMock mappings
-          kubectl create configmap wiremock-mappings --from-file=platform/e2e-tests/wiremock-mappings
-
-          # Deploy WireMock
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: wiremock
-          spec:
-            type: NodePort
-            ports:
-              - port: 8080
-                targetPort: 8080
-                nodePort: 30080
-                protocol: TCP
-                name: http
-            selector:
-              app: wiremock
-          ---
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: wiremock
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: wiremock
-            template:
-              metadata:
-                labels:
-                  app: wiremock
-              spec:
-                containers:
-                  - name: wiremock
-                    image: wiremock/wiremock:3.13.1
-                    args:
-                      - --global-response-templating
-                      - --disable-gzip
-                      - --verbose
-                    ports:
-                      - containerPort: 8080
-                        name: http
-                    volumeMounts:
-                      - name: mappings
-                        mountPath: /home/wiremock/mappings
-                volumes:
-                  - name: mappings
-                    configMap:
-                      name: wiremock-mappings
-          EOF
-
-          # Wait for WireMock to be ready
-          kubectl rollout status deployment/wiremock --timeout=2m
+          helm install wiremock ./platform/helm/wiremock --wait --timeout=2m
 
       - name: Deploy Archestra Platform with Helm
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm install archestra-platform ./platform/helm \
+          helm install archestra-platform ./platform/helm/archestra \
             --values .github/values-ci.yaml \
             --set archestra.image=archestra/platform:ci-test \
             --wait --timeout=5m

@@ -95,8 +95,6 @@ ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-genera
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
-ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp  # Optional, for MCP tool integration
-ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer token"}  # Optional JSON headers
 
 # Kubernetes (for MCP server runtime)
 ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
@@ -118,7 +116,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), n8n automation chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), agent-based chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
 
 **Workspaces**:
 
@@ -260,6 +258,19 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - Real-time theme and font preview in settings
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logo
+
+**Chat Feature**:
+
+- Agent-based conversations: Each conversation is tied to a specific agent
+- Agent selection via dropdown: Users select an agent when creating a new conversation
+- MCP tool integration: Chat automatically uses the agent's assigned MCP tools via MCP Gateway
+- LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
+- Agent authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
+- Database schema: Conversations table includes `agentId` foreign key to agents table
+- UI components: `AgentSelector` dropdown, `ConversationList` with agent badges
+- Tool execution: Routes through MCP Gateway, includes response modifiers and logging
+- No manual configuration: Deprecated `ARCHESTRA_CHAT_MCP_SERVER_URL` and `ARCHESTRA_CHAT_MCP_SERVER_HEADERS`
+- Required env var: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` (used by LLM Proxy for Anthropic calls)
 
 **Archestra MCP Server**:
 

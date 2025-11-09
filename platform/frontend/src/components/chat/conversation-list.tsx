@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AgentSelector } from "./agent-selector";
 
 interface Conversation {
   id: string;
@@ -8,6 +9,11 @@ interface Conversation {
   selectedModel: string;
   userId: string;
   organizationId: string;
+  agentId: string;
+  agent: {
+    id: string;
+    name: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -16,7 +22,7 @@ interface ConversationListProps {
   conversations: Conversation[];
   selectedConversationId?: string;
   onSelectConversation: (id: string) => void;
-  onCreateConversation: () => void;
+  onSelectAgent: (agentId: string) => void;
   onDeleteConversation: (id: string) => void;
   isCreatingConversation?: boolean;
 }
@@ -25,20 +31,17 @@ export function ConversationList({
   conversations,
   selectedConversationId,
   onSelectConversation,
-  onCreateConversation,
+  onSelectAgent,
   onDeleteConversation,
   isCreatingConversation = false,
 }: ConversationListProps) {
   return (
     <div className="w-64 border-r bg-muted/10 flex flex-col h-full">
       <div className="p-4 border-b">
-        <Button
-          onClick={onCreateConversation}
+        <AgentSelector
+          onSelectAgent={onSelectAgent}
           disabled={isCreatingConversation}
-          className="w-full"
-        >
-          New Chat
-        </Button>
+        />
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
@@ -52,9 +55,16 @@ export function ConversationList({
               <button
                 type="button"
                 onClick={() => onSelectConversation(conv.id)}
-                className="flex-1 text-left truncate"
+                className="flex-1 text-left min-w-0"
               >
-                {conv.title || "New conversation"}
+                <div className="truncate">
+                  {conv.title || "New conversation"}
+                </div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Badge variant="outline" className="text-xs py-0 px-1">
+                    {conv.agent.name}
+                  </Badge>
+                </div>
               </button>
               <button
                 type="button"
@@ -62,7 +72,7 @@ export function ConversationList({
                   e.stopPropagation();
                   onDeleteConversation(conv.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded shrink-0"
                 title="Delete conversation"
               >
                 <Trash2 className="h-4 w-4 text-destructive" />

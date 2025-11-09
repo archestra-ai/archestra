@@ -1,7 +1,7 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -23,18 +23,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type ConversationWithAgent,
+  useConversations,
+  useCreateConversation,
+  useDeleteConversation,
+} from "@/lib/chat.query";
 
-interface Conversation {
-  id: string;
-  title: string | null;
-  selectedModel: string;
-  userId: string;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ConversationWithMessages extends Conversation {
+interface ConversationWithMessages extends ConversationWithAgent {
   messages: UIMessage[];
 }
 
@@ -72,18 +68,8 @@ export default function ChatPage() {
     }
   };
 
-  // Fetch conversations
-  const { data: conversations = [] } = useQuery<Conversation[]>({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const res = await fetch("/api/chat/conversations");
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes - don't refetch unless explicitly invalidated
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-  });
+  // Fetch conversations with agent details
+  const { data: conversations = [] } = useConversations();
 
   // Fetch conversation with messages
   const { data: conversation } = useQuery<ConversationWithMessages>({
@@ -100,57 +86,51 @@ export default function ChatPage() {
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
   });
 
-  // Fetch available MCP tools
-  const { data: mcpTools = [] } = useQuery<McpTool[]>({
-    queryKey: ["mcp-tools"],
+  // Get tools from current conversation's agent
+  const currentAgent =
+    conversation?.agent ||
+    conversations.find((c) => c.id === conversationId)?.agent;
+  const { data: agentTools = [] } = useQuery<
+    { name: string; description?: string }[]
+  >({
+    queryKey: ["agent-tools", currentAgent?.id],
     queryFn: async () => {
-      const res = await fetch("/api/chat/mcp-tools");
-      if (!res.ok) throw new Error("Failed to fetch MCP tools");
-      return res.json();
+      if (!currentAgent?.id) return [];
+      const res = await fetch(`/api/agents/${currentAgent.id}`);
+      if (!res.ok) return [];
+      const agent = await res.json();
+      return agent.tools || [];
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes - tools don't change often
+    enabled: !!currentAgent?.id,
+    staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Create conversation mutation
-  const createConversation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/chat/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error("Failed to create conversation");
-      return res.json();
-    },
-    onSuccess: (newConversation) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  const mcpTools = agentTools;
+
+  // Create conversation mutation (requires agentId)
+  const createConversationMutation = useCreateConversation();
+  const handleSelectAgent = async (agentId: string) => {
+    const newConversation =
+      await createConversationMutation.mutateAsync(agentId);
+    if (newConversation) {
       selectConversation(newConversation.id);
-    },
-  });
+    }
+  };
 
   // Delete conversation mutation
-  const deleteConversation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/chat/conversations/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete conversation");
-      return res.json();
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+  const deleteConversationMutation = useDeleteConversation();
+  const handleDeleteConversation = async (id: string) => {
+    await deleteConversationMutation.mutateAsync(id);
 
-      // If we deleted the selected conversation, clear the selection
-      if (conversationId === deletedId) {
-        setConversationId(undefined);
-        setMessages([]);
-        router.push(pathname);
-      }
-    },
-  });
+    // If we deleted the selected conversation, clear the selection
+    if (conversationId === id) {
+      setConversationId(undefined);
+      setMessages([]);
+      router.push(pathname);
+    }
+  };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
   const { messages, sendMessage, status, setMessages } = useChat({
@@ -245,9 +225,9 @@ export default function ChatPage() {
         conversations={conversations}
         selectedConversationId={conversationId}
         onSelectConversation={selectConversation}
-        onCreateConversation={() => createConversation.mutate()}
-        onDeleteConversation={(id) => deleteConversation.mutate(id)}
-        isCreatingConversation={createConversation.isPending}
+        onSelectAgent={handleSelectAgent}
+        onDeleteConversation={handleDeleteConversation}
+        isCreatingConversation={createConversationMutation.isPending}
       />
 
       {/* Main Chat Area */}

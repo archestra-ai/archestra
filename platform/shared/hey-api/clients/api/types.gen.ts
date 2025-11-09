@@ -4647,17 +4647,23 @@ export type GetChatConversationsResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
     }>;
 };
 
 export type GetChatConversationsResponse = GetChatConversationsResponses[keyof GetChatConversationsResponses];
 
 export type CreateChatConversationData = {
-    body?: {
+    body: {
+        agentId: string;
         title?: string | null;
         selectedModel?: string;
     };
@@ -4724,6 +4730,7 @@ export type CreateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4870,6 +4877,7 @@ export type GetChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4950,6 +4958,7 @@ export type UpdateChatConversationResponses = {
         id: string;
         userId: string;
         organizationId: string;
+        agentId: string;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -4958,76 +4967,6 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
-
-export type GetChatMcpToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/chat/mcp-tools';
-};
-
-export type GetChatMcpToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetChatMcpToolsError = GetChatMcpToolsErrors[keyof GetChatMcpToolsErrors];
-
-export type GetChatMcpToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        name: string;
-        description?: string;
-        inputSchema: unknown;
-    }>;
-};
-
-export type GetChatMcpToolsResponse = GetChatMcpToolsResponses[keyof GetChatMcpToolsResponses];
 
 export type GetDefaultDualLlmConfigData = {
     body?: never;
@@ -9900,14 +9839,14 @@ export type GetOnboardingLogsStatusResponses = {
 
 export type GetOnboardingLogsStatusResponse = GetOnboardingLogsStatusResponses[keyof GetOnboardingLogsStatusResponses];
 
-export type PostApiOnboardingCompleteData = {
+export type CompleteOnboardingData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/onboarding/complete';
 };
 
-export type PostApiOnboardingCompleteErrors = {
+export type CompleteOnboardingErrors = {
     /**
      * Default Response
      */
@@ -9917,11 +9856,20 @@ export type PostApiOnboardingCompleteErrors = {
             type: string;
         };
     };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
-export type PostApiOnboardingCompleteError = PostApiOnboardingCompleteErrors[keyof PostApiOnboardingCompleteErrors];
+export type CompleteOnboardingError = CompleteOnboardingErrors[keyof CompleteOnboardingErrors];
 
-export type PostApiOnboardingCompleteResponses = {
+export type CompleteOnboardingResponses = {
     /**
      * Default Response
      */
@@ -9930,7 +9878,7 @@ export type PostApiOnboardingCompleteResponses = {
     };
 };
 
-export type PostApiOnboardingCompleteResponse = PostApiOnboardingCompleteResponses[keyof PostApiOnboardingCompleteResponses];
+export type CompleteOnboardingResponse = CompleteOnboardingResponses[keyof CompleteOnboardingResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;

@@ -9,7 +9,11 @@ import {
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { executeArchestraTool, MCP_SERVER_NAME } from "@/archestra-mcp-server";
+import {
+  executeArchestraTool,
+  getArchestraMcpTools,
+  MCP_SERVER_NAME,
+} from "@/archestra-mcp-server";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -85,10 +89,17 @@ async function createAgentServer(
   // Excludes proxy-discovered tools
   const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+  // Create a map of Archestra tool names to their titles
+  // This is needed because the database schema doesn't include a title field
+  const archestraTools = getArchestraMcpTools();
+  const archestraToolTitles = new Map(
+    archestraTools.map((tool) => [tool.name, tool.title]),
+  );
+
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: mcpTools.map(({ name, description, parameters }) => ({
       name,
-      title: name,
+      title: archestraToolTitles.get(name) || name,
       description,
       inputSchema: parameters,
       annotations: {},

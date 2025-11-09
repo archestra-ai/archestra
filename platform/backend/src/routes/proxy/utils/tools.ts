@@ -1,10 +1,10 @@
-import mcpClient from "@/clients/mcp-client";
+import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { AgentToolModel, ToolModel } from "@/models";
-import type { CommonToolCall, CommonToolResult, Tool } from "@/types";
 
 /**
  * Persist tools if present in the request
  * Skips tools that are already connected to the agent via MCP servers
+ * Also skips Archestra built-in tools
  */
 export const persistTools = async (
   tools: Array<{
@@ -18,9 +18,16 @@ export const persistTools = async (
   const mcpToolNames = await ToolModel.getMcpToolNamesByAgent(agentId);
   const mcpToolNamesSet = new Set(mcpToolNames);
 
-  // Filter out tools that are already available via MCP servers
+  // Get Archestra built-in tool names
+  const archestraTools = getArchestraMcpTools();
+  const archestraToolNamesSet = new Set(
+    archestraTools.map((tool) => tool.name),
+  );
+
+  // Filter out tools that are already available via MCP servers or are Archestra built-in tools
   const toolsToAutoDiscover = tools.filter(
-    ({ toolName }) => !mcpToolNamesSet.has(toolName),
+    ({ toolName }) =>
+      !mcpToolNamesSet.has(toolName) && !archestraToolNamesSet.has(toolName),
   );
 
   // Persist only the tools that are not already available via MCP
@@ -41,23 +48,3 @@ export const persistTools = async (
     await AgentToolModel.createIfNotExists(agentId, tool.id);
   }
 };
-
-/**
- * Get tools assigned to an agent via the agent_tools junction table
- */
-export const getAssignedMCPTools = async (agentId: string): Promise<Tool[]> => {
-  const toolIds = await AgentToolModel.findToolIdsByAgent(agentId);
-
-  if (toolIds.length === 0) {
-    return [];
-  }
-
-  // Fetch full tool details
-  return await ToolModel.getByIds(toolIds);
-};
-
-export const executeMcpToolCalls = async (
-  toolCalls: CommonToolCall[],
-  agentId: string,
-): Promise<CommonToolResult[]> =>
-  mcpClient.executeToolCalls(toolCalls, agentId);

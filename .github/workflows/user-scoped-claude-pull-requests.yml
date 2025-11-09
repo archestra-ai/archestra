@@ -38,17 +38,3 @@ jobs:
     uses: ./.github/workflows/claude-pull-requests.yml
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEYORLANDO_CLAUDE_CODE_OAUTH_TOKEN }}
-
-  ildar-claude-pull-requests:
-    name: Claude Pull Requests for Ildar
-    if: |
-      github.event.pull_request.user.login == 'iskhakov'
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-pull-requests.yml
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.ILDAR_CLAUDE_CODE_OAUTH_TOKEN }}

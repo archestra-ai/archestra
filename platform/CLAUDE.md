@@ -127,6 +127,16 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
 
+## Tool Execution Architecture
+
+**LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
+1. Call LLM proxy → receive tool_use/tool_calls
+2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
+3. Send tool results back to LLM proxy
+4. Receive final answer
+
+Tool invocation policies and trusted data policies are still enforced by the proxy.
+
 ## Authentication
 
 - **Better-Auth**: Session management with dynamic RBAC
@@ -279,3 +289,4 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
   // test logic...
 });
 ```
+- never amend commits

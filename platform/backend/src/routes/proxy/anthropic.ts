@@ -17,47 +17,6 @@ import {
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
-/**
- * Inject assigned MCP tools into Anthropic tools array
- * Assigned tools take priority and override tools with the same name from the request
- */
-export const injectTools = async (
-  requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] | undefined,
-  agentId: string,
-): Promise<z.infer<typeof Anthropic.Tools.ToolSchema>[]> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to Anthropic format (CustomTool)
-  const assignedAnthropicTools: z.infer<
-    typeof Anthropic.Tools.CustomToolSchema
-  >[] = assignedTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || undefined,
-    input_schema: tool.parameters || {},
-    type: "custom" as const,
-  }));
-
-  // Create a map of request tools by name
-  const requestToolMap = new Map<
-    string,
-    z.infer<typeof Anthropic.Tools.ToolSchema>
-  >();
-  for (const tool of requestTools || []) {
-    requestToolMap.set(tool.name, tool);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  const mergedToolMap = new Map<
-    string,
-    z.infer<typeof Anthropic.Tools.ToolSchema>
-  >(requestToolMap);
-  for (const assignedTool of assignedAnthropicTools) {
-    mergedToolMap.set(assignedTool.name, assignedTool);
-  }
-
-  return Array.from(mergedToolMap.values());
-};
-
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
@@ -226,12 +185,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Persist non-MCP tools declared by client for tracking
       if (tools) {
         const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
           [];
 
         for (const tool of tools) {
-          // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
+          // null/undefined/type === custom essentially all mean the same thing for Anthropic tools...
           if (
             tool.type === undefined ||
             tool.type === null ||
@@ -248,19 +208,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
 
-      // TODO: Injection is disabled as we connect only with mcp serverInject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(tools, resolvedAgentId);
-      // const mergedTools = tools || [];
-
-      fastify.log.info(
-        {
-          resolvedAgentId,
-          requestToolsCount: tools?.length || 0,
-          mergedToolsCount: mergedTools.length,
-          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
-        },
-        "MCP tools injected",
-      );
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -674,7 +624,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       } else {
         // Non-streaming response with span to measure LLM call duration
-        let response = await utils.tracing.startActiveLlmSpan(
+        const response = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
           "anthropic",
           body.model,
@@ -734,88 +684,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return reply.send(response);
-          } else if (toolCalls.length > 0) {
-            // Tool calls are allowed - execute MCP tools
-            const commonToolCalls = utils.adapters.anthropic.toolCallsToCommon(
-              toolCalls as Array<{
-                id: string;
-                name: string;
-                input: Record<string, unknown>;
-              }>,
-            );
-
-            fastify.log.info(
-              {
-                resolvedAgentId,
-                toolCalls: commonToolCalls.map((tc) => ({
-                  id: tc.id,
-                  name: tc.name,
-                  argumentKeys: Object.keys(tc.arguments),
-                })),
-              },
-              "Executing MCP tool calls (non-streaming)",
-            );
-
-            const mcpResults = await utils.tools.executeMcpToolCalls(
-              commonToolCalls,
-              resolvedAgentId,
-            );
-
-            fastify.log.info(
-              {
-                resolvedAgentId,
-                results: mcpResults.map((r) => ({
-                  id: r.id,
-                  isError: r.isError,
-                  contentLength:
-                    typeof r.content === "string"
-                      ? r.content.length
-                      : JSON.stringify(r.content).length,
-                })),
-              },
-              "MCP tool calls completed (non-streaming)",
-            );
-
-            if (mcpResults.length > 0) {
-              // Convert MCP results to Anthropic tool result messages
-              const toolResultMessages =
-                utils.adapters.anthropic.toolResultsToMessages(mcpResults);
-
-              // Make another call with the tool results
-              const updatedMessages = [
-                ...filteredMessages,
-                {
-                  role: "assistant" as const,
-                  content: response.content,
-                },
-                ...toolResultMessages,
-              ];
-
-              // Make final call with tool results
-              const finalResponse = await utils.tracing.startActiveLlmSpan(
-                "anthropic.messages.continuation",
-                "anthropic",
-                body.model,
-                false,
-                resolvedAgent,
-                async (continuationSpan) => {
-                  continuationSpan.setAttribute("llm.continuation", true);
-                  const response = await anthropicClient.messages.create({
-                    // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                    ...(body as any),
-                    messages: updatedMessages,
-                    tools: mergedTools.length > 0 ? mergedTools : undefined,
-                    stream: false,
-                  });
-                  continuationSpan.end();
-                  return response;
-                },
-              );
-
-              // Update the response with the final LLM response
-              response = finalResponse;
-            }
           }
+          // Tool calls are allowed - return response with tool_use blocks to client
+          // Client is responsible for executing tools via MCP Gateway and sending results back
         }
 
         // Extract token usage and store the complete interaction

@@ -2,8 +2,10 @@ import type { z } from "zod";
 import type { PricingModel } from "@/llm-pricing";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
+import { llmPricing } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
+type OpenAiModel = OpenAi.Types.ChatCompletionsRequest["model"];
 
 /**
  * Convert OpenAI messages to common format for trusted data evaluation
@@ -194,9 +196,21 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
  * The selection is based on context length, attachments and tool presence.
  */
 export function getOptimizedModel(
+  model: OpenAiModel,
   tools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
   messages: z.infer<typeof OpenAi.Types.Message>[],
-): PricingModel["openai"] {
+): OpenAiModel {
+  const normalizedModel = normalizeModel(model);
+  if (!(normalizedModel in llmPricing.openai)) {
+    return model;
+  }
+
+  const mini = "gpt-4o-mini" as const;
+  const originalPricing = llmPricing.openai[normalizedModel];
+  const optimizedPricing = llmPricing.openai[mini];
+  if (originalPricing.input <= optimizedPricing.input || originalPricing.output <= optimizedPricing.input) {
+    return model;
+  }
   let contextLength = 0;
   let hasAttachments = false;
   for (const message of messages) {
@@ -213,15 +227,12 @@ export function getOptimizedModel(
     }
   }
 
-  const characterCountThreshold = 10000;
   const hasTools = tools && tools.length > 0;
-
-  if (contextLength >= characterCountThreshold || hasAttachments) {
-    return "gpt-4o"; // Long context or attachments, with or without tools
-  } else if (hasTools) {
-    return "gpt-4o-mini";
+  const shortContext = contextLength < 10000;
+  if (shortContext && !hasAttachments && !hasTools) {
+    return mini;
   } else {
-    return "gpt-4o-mini";
+    return model;
   }
 }
 

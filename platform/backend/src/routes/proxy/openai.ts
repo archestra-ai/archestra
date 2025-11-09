@@ -201,7 +201,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const originalModel = body.model;
       const model = resolvedAgent.optimizeCost
-        ? utils.adapters.openai.getOptimizedModel(tools, messages)
+        ? utils.adapters.openai.getOptimizedModel(originalModel, tools, messages)
         : originalModel;
       fastify.log.info(
         {

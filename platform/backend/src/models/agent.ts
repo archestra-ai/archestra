@@ -85,9 +85,6 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [];
 
-    // Exclude default agents by default
-    whereConditions.push(eq(schema.agentsTable.isDefault, false));
-
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -157,9 +154,6 @@ class AgentModel {
 
     // Build where clause for filters and access control
     const whereConditions: SQL[] = [];
-
-    // Exclude default agents by default
-    whereConditions.push(eq(schema.agentsTable.isDefault, false));
 
     // Add name filter if provided
     if (filters?.name) {

@@ -18,7 +18,7 @@ import {
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { McpToolCallModel, AgentModel, ToolModel } from "@/models";
+import { AgentModel, McpToolCallModel, ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -97,8 +97,8 @@ async function createAgentServer(
     archestraTools.map((tool: Tool) => [tool.name, tool.title]),
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: mcpTools.map(({ name, description, parameters }) => ({
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
       description,

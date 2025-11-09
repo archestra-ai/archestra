@@ -3,6 +3,7 @@ import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import { AgentModel, ConversationModel, MessageModel } from "@/models";
@@ -620,9 +621,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ params: { agentId }, user }, reply) => {
+    async ({ params: { agentId }, user, headers }, reply) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       // Verify agent exists and user has access
-      const agent = await AgentModel.findById(agentId, user.id);
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
         return reply.status(404).send({
@@ -667,11 +674,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { agentId, title, selectedModel }, user, organizationId },
+      {
+        body: { agentId, title, selectedModel },
+        user,
+        organizationId,
+        headers,
+      },
       reply,
     ) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        headers,
+      );
+
       // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId);
+      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
         return reply.status(404).send({

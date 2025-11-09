@@ -1,6 +1,8 @@
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { AgentSelector } from "./agent-selector";
 
 interface Conversation {
@@ -25,6 +27,8 @@ interface ConversationListProps {
   onSelectAgent: (agentId: string) => void;
   onDeleteConversation: (id: string) => void;
   isCreatingConversation?: boolean;
+  hideToolCalls: boolean;
+  onToggleHideToolCalls: (hide: boolean) => void;
 }
 
 export function ConversationList({
@@ -34,6 +38,8 @@ export function ConversationList({
   onSelectAgent,
   onDeleteConversation,
   isCreatingConversation = false,
+  hideToolCalls,
+  onToggleHideToolCalls,
 }: ConversationListProps) {
   return (
     <div className="w-64 border-r bg-muted/10 flex flex-col h-full">
@@ -81,6 +87,18 @@ export function ConversationList({
           ))}
         </div>
       </ScrollArea>
+      <div className="p-4 border-t">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="hide-tool-calls" className="text-sm cursor-pointer">
+            Hide tool calls
+          </Label>
+          <Switch
+            id="hide-tool-calls"
+            checked={hideToolCalls}
+            onCheckedChange={onToggleHideToolCalls}
+          />
+        </div>
+      </div>
     </div>
   );
 }

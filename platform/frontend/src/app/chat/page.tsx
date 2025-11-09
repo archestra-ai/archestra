@@ -41,6 +41,7 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
+  const [hideToolCalls, setHideToolCalls] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
 
   // Initialize conversation ID from URL on mount
@@ -87,11 +88,13 @@ export default function ChatPage() {
   // Fetch MCP tools from gateway (same as used in chat backend)
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgent?.id);
 
-  // Group tools by MCP server prefix
+  // Group tools by MCP server name (everything before the last __)
   const groupedTools = mcpTools.reduce(
     (acc, tool) => {
       const parts = tool.name.split("__");
-      const serverName = parts.length > 1 ? parts[0] : "default";
+      // Last part is tool name, everything else is server name
+      const serverName =
+        parts.length > 1 ? parts.slice(0, -1).join("__") : "default";
       if (!acc[serverName]) {
         acc[serverName] = [];
       }
@@ -204,6 +207,8 @@ export default function ChatPage() {
         onSelectAgent={handleSelectAgent}
         onDeleteConversation={handleDeleteConversation}
         isCreatingConversation={createConversationMutation.isPending}
+        hideToolCalls={hideToolCalls}
+        onToggleHideToolCalls={setHideToolCalls}
       />
 
       {/* Main Chat Area */}
@@ -220,7 +225,7 @@ export default function ChatPage() {
             {messages.length === 0 ? (
               <PromptSuggestions onSelectPrompt={handleSelectPrompt} />
             ) : (
-              <ChatMessages messages={messages} />
+              <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             )}
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
@@ -247,21 +252,28 @@ export default function ChatPage() {
                                 className="max-w-sm max-h-64 overflow-y-auto"
                               >
                                 <div className="space-y-1">
-                                  {tools.map((tool) => (
-                                    <div
-                                      key={tool.name}
-                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                    >
-                                      <div className="font-mono font-medium">
-                                        {tool.name.split("__")[1] || tool.name}
-                                      </div>
-                                      {tool.description && (
-                                        <div className="text-muted-foreground mt-0.5">
-                                          {tool.description}
+                                  {tools.map((tool) => {
+                                    const parts = tool.name.split("__");
+                                    const toolName =
+                                      parts.length > 1
+                                        ? parts[parts.length - 1]
+                                        : tool.name;
+                                    return (
+                                      <div
+                                        key={tool.name}
+                                        className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                      >
+                                        <div className="font-mono font-medium">
+                                          {toolName}
                                         </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                        {tool.description && (
+                                          <div className="text-muted-foreground mt-0.5">
+                                            {tool.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </TooltipContent>
                             </Tooltip>

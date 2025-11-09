@@ -2377,6 +2377,7 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
+            optimizeCost: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2430,6 +2431,7 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        optimizeCost?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2502,6 +2504,7 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2607,6 +2610,7 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2712,6 +2716,7 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2889,6 +2894,7 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2933,6 +2939,7 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        optimizeCost?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3007,6 +3014,7 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{

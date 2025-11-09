@@ -57,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -264,6 +265,7 @@ function Agents() {
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    optimizeCost?: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -483,6 +485,7 @@ function Agents() {
                         name: agent.name,
                         teams: agent.teams || [],
                         labels: agent.labels || [],
+                        optimizeCost: agent.optimizeCost,
                       });
                     }}
                   >
@@ -652,6 +655,7 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<AgentLabel[]>([]);
+  const [optimizeCost, setOptimizeCost] = useState<boolean>(false);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -714,6 +718,7 @@ function CreateAgentDialog({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
+          optimizeCost,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -724,13 +729,14 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedTeamIds, labels, createAgent],
+    [name, assignedTeamIds, labels, optimizeCost, createAgent],
   );
 
   const handleClose = useCallback(() => {
     setName("");
     setAssignedTeamIds([]);
     setLabels([]);
+    setOptimizeCost(false);
     setSelectedTeamId("");
     setCreatedAgent(null);
     onOpenChange(false);
@@ -828,6 +834,25 @@ function CreateAgentDialog({
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
                 />
+
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="create-optimize-cost">
+                        Cost Optimization
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically select cheaper models when appropriate
+                        (e.g., gpt-4o-mini for short contexts)
+                      </p>
+                    </div>
+                    <Switch
+                      id="create-optimize-cost"
+                      checked={optimizeCost}
+                      onCheckedChange={setOptimizeCost}
+                    />
+                  </div>
+                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -875,6 +900,7 @@ function EditAgentDialog({
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    optimizeCost?: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -884,6 +910,9 @@ function EditAgentDialog({
     agent.teams || [],
   );
   const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
+  const [optimizeCost, setOptimizeCost] = useState<boolean>(
+    agent.optimizeCost || false,
+  );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -932,6 +961,7 @@ function EditAgentDialog({
             name: name.trim(),
             teams: assignedTeamIds,
             labels: updatedLabels,
+            optimizeCost,
           },
         });
         toast.success("Agent updated successfully");
@@ -940,7 +970,15 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedTeamIds, labels, updateAgent, onOpenChange],
+    [
+      agent.id,
+      name,
+      assignedTeamIds,
+      labels,
+      optimizeCost,
+      updateAgent,
+      onOpenChange,
+    ],
   );
 
   const getUnassignedTeams = useCallback(() => {
@@ -1045,6 +1083,23 @@ function EditAgentDialog({
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
             />
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="optimize-cost">Cost Optimization</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically select cheaper models when appropriate (e.g.,
+                    gpt-4o-mini for short contexts)
+                  </p>
+                </div>
+                <Switch
+                  id="optimize-cost"
+                  checked={optimizeCost}
+                  onCheckedChange={setOptimizeCost}
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter className="mt-4">
             <Button

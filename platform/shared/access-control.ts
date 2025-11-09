@@ -275,6 +275,7 @@ export const RouteId = {
 
   // Onboarding Routes
   GetOnboardingLogsStatus: "getOnboardingLogsStatus",
+  CompleteOnboarding: "completeOnboarding",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -600,6 +601,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Onboarding routes - available to all authenticated users (no specific permissions required)
   [RouteId.GetOnboardingLogsStatus]: {},
+  [RouteId.CompleteOnboarding]: {},
 };
 
 /**

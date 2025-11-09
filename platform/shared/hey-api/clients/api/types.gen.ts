@@ -9900,6 +9900,38 @@ export type GetOnboardingLogsStatusResponses = {
 
 export type GetOnboardingLogsStatusResponse = GetOnboardingLogsStatusResponses[keyof GetOnboardingLogsStatusResponses];
 
+export type PostApiOnboardingCompleteData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/complete';
+};
+
+export type PostApiOnboardingCompleteErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiOnboardingCompleteError = PostApiOnboardingCompleteErrors[keyof PostApiOnboardingCompleteErrors];
+
+export type PostApiOnboardingCompleteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type PostApiOnboardingCompleteResponse = PostApiOnboardingCompleteResponses[keyof PostApiOnboardingCompleteResponses];
+
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
     headers: {

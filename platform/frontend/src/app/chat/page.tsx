@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
@@ -16,6 +17,8 @@ import {
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -29,6 +32,7 @@ import {
   useCreateConversation,
   useDeleteConversation,
 } from "@/lib/chat.query";
+import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
 interface ConversationWithMessages extends ConversationWithAgent {
   messages: UIMessage[];
@@ -43,6 +47,9 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string>();
   const [hideToolCalls, setHideToolCalls] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
+
+  // Check if API key is configured
+  const { data: chatSettings } = useChatSettingsOptional();
 
   // Initialize conversation ID from URL on mount
   useEffect(() => {
@@ -71,13 +78,21 @@ export default function ChatPage() {
     queryFn: async () => {
       if (!conversationId) return null;
       const res = await fetch(`/api/chat/conversations/${conversationId}`);
-      if (!res.ok) throw new Error("Failed to fetch conversation");
+      if (!res.ok) {
+        // If conversation was deleted (404), clear the selection gracefully
+        if (res.status === 404) {
+          selectConversation(undefined);
+          return null;
+        }
+        throw new Error("Failed to fetch conversation");
+      }
       return res.json();
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    retry: false, // Don't retry on error to avoid multiple 404s
   });
 
   // Get current agent info
@@ -117,14 +132,15 @@ export default function ChatPage() {
   // Delete conversation mutation
   const deleteConversationMutation = useDeleteConversation();
   const handleDeleteConversation = async (id: string) => {
-    await deleteConversationMutation.mutateAsync(id);
-
-    // If we deleted the selected conversation, clear the selection
+    // If we're deleting the selected conversation, clear the selection first
+    // to prevent the query from trying to refetch a deleted conversation
     if (conversationId === id) {
       setConversationId(undefined);
       setMessages([]);
       router.push(pathname);
     }
+
+    await deleteConversationMutation.mutateAsync(id);
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
@@ -196,6 +212,30 @@ export default function ChatPage() {
       parts: [{ type: "text", text: prompt }],
     });
   };
+
+  // If API key is not configured, show setup message
+  if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
+    return (
+      <div className="flex h-screen items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Anthropic API Key Required</CardTitle>
+            <CardDescription>
+              The chat feature requires an Anthropic API key to function.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please configure your Anthropic API key in Chat Settings to start using the chat feature.
+            </p>
+            <Button asChild>
+              <Link href="/settings/chat">Go to Chat Settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen">

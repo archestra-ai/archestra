@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -14,6 +15,13 @@ export function useChatSettings(params?: {
     queryKey: ["chat-settings"],
     queryFn: async () => (await getChatSettings()).data ?? null,
     initialData: params?.initialData,
+  });
+}
+
+export function useChatSettingsOptional() {
+  return useQuery({
+    queryKey: ["chat-settings"],
+    queryFn: async () => (await getChatSettings()).data ?? null,
   });
 }
 

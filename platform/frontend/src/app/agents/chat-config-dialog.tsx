@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -96,15 +97,14 @@ function ChatConfigDialogContent({
         <DialogHeader>
           <DialogTitle>Configure Chat Prompts</DialogTitle>
           <DialogDescription>
-            Assign prompts to {agent.name}. System prompts replace the default
-            chat behavior, while regular prompts provide additional context.
+            Assign prompts to {agent.name}.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
           {/* System Prompt Selection */}
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">
-              System Prompt (Optional, replaces default)
+              System Prompt (Optional)
             </Label>
             <Select
               value={selectedSystemPromptId || "none"}
@@ -116,7 +116,7 @@ function ChatConfigDialogContent({
                 <SelectValue placeholder="Select system prompt" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None (use default)</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {systemPrompts?.map((prompt) => (
                   <SelectItem key={prompt.id} value={prompt.id}>
                     {prompt.name} (v{prompt.version})
@@ -128,7 +128,7 @@ function ChatConfigDialogContent({
 
           {/* Regular Prompts Selection */}
           <div className="space-y-2">
-            <Label>Regular Prompts (Optional, add context)</Label>
+            <Label>Regular Prompts (Optional)</Label>
             {regularPrompts && regularPrompts.length > 0 ? (
               <div className="space-y-2 border rounded-md p-4 max-h-[300px] overflow-y-auto">
                 {regularPrompts.map((prompt) => (
@@ -155,26 +155,12 @@ function ChatConfigDialogContent({
                 No regular prompts available. Create some in Chat Settings.
               </p>
             )}
-          </div>
-
-          {/* Selected Prompts Summary */}
-          <div className="space-y-2 pt-4 border-t">
-            <Label>Summary</Label>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p>
-                System Prompt:{" "}
-                {selectedSystemPromptId
-                  ? systemPrompts?.find((p) => p.id === selectedSystemPromptId)
-                      ?.name
-                  : "Default n8n prompt"}
-              </p>
-              <p>
-                Regular Prompts:{" "}
-                {selectedRegularPromptIds.length > 0
-                  ? `${selectedRegularPromptIds.length} selected`
-                  : "None"}
-              </p>
-            </div>
+            <Link
+              href="/settings/chat"
+              className="text-sm text-primary hover:underline inline-block"
+            >
+              Manage prompts in Chat Settings →
+            </Link>
           </div>
         </div>
         <DialogFooter>

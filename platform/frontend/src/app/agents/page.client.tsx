@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Plug,
   Plus,
@@ -39,6 +40,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -412,7 +421,7 @@ function Agents() {
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0 border rounded-md overflow-hidden w-fit">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -426,6 +435,7 @@ function Agents() {
                         name: agent.name,
                       });
                     }}
+                    className="rounded-none border-r h-8 w-8"
                   >
                     <Plug className="h-4 w-4" />
                   </Button>
@@ -433,46 +443,39 @@ function Agents() {
                 <TooltipContent>Connect</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="More Options"
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-none h-8 w-8"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
                       setAssigningToolsAgent(agent);
                     }}
                   >
                     <Wrench className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Assign Tools</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                    Assign Tools
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
                       setChatConfigAgent(agent);
                     }}
                   >
                     <MessageCircle className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Configure Chat</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                    Configure Chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingAgent({
@@ -484,32 +487,29 @@ function Agents() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Edit</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {userCanDeleteAgents && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingAgentId(agent.id);
-                      }}
-                      className="hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+                    Edit
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                {userCanDeleteAgents && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingAgentId(agent.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         );
       },

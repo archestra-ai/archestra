@@ -1,11 +1,11 @@
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { AgentSelector } from "./agent-selector";
 
 interface Conversation {
   id: string;
@@ -26,10 +26,9 @@ interface ConversationListProps {
   conversations: Conversation[];
   selectedConversationId?: string;
   onSelectConversation: (id: string) => void;
-  onSelectAgent: (agentId: string) => void;
+  onNewChat: () => void;
   onUpdateConversation: (id: string, title: string) => void;
   onDeleteConversation: (id: string) => void;
-  isCreatingConversation?: boolean;
   hideToolCalls: boolean;
   onToggleHideToolCalls: (hide: boolean) => void;
 }
@@ -38,10 +37,9 @@ export function ConversationList({
   conversations,
   selectedConversationId,
   onSelectConversation,
-  onSelectAgent,
+  onNewChat,
   onUpdateConversation,
   onDeleteConversation,
-  isCreatingConversation = false,
   hideToolCalls,
   onToggleHideToolCalls,
 }: ConversationListProps) {
@@ -77,10 +75,10 @@ export function ConversationList({
   return (
     <div className="w-64 border-r bg-muted/10 flex flex-col h-full">
       <div className="p-4 border-b">
-        <AgentSelector
-          onSelectAgent={onSelectAgent}
-          disabled={isCreatingConversation}
-        />
+        <Button onClick={onNewChat} className="w-full">
+          <Plus className="h-4 w-4" />
+          New Chat
+        </Button>
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">

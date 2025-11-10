@@ -59,6 +59,8 @@ const resourceLabels: Record<Resource, string> = {
   conversation: "Conversations",
   limit: "Limits",
   tokenPrice: "Token Prices",
+  chatSettings: "Chat Settings",
+  prompt: "Prompts",
 };
 
 // Human-readable labels for actions

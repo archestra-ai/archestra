@@ -125,7 +125,9 @@ async function seedN8NSystemPrompt(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   const user = await UserModel.createOrGetExistingDefaultAdminUser();
   if (!user) {
-    logger.error("Failed to get or create default admin user, skipping n8n prompt seeding");
+    logger.error(
+      "Failed to get or create default admin user, skipping n8n prompt seeding",
+    );
     return;
   }
 
@@ -335,7 +337,9 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   const user = await UserModel.createOrGetExistingDefaultAdminUser();
   if (!user) {
-    logger.error("Failed to get or create default admin user, skipping regular prompts seeding");
+    logger.error(
+      "Failed to get or create default admin user, skipping regular prompts seeding",
+    );
     return;
   }
 

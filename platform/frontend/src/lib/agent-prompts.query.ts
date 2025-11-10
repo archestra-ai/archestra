@@ -19,7 +19,6 @@ export function useAgentPrompts(
     queryFn: async () =>
       (await getAgentPrompts({ path: { agentId } })).data ?? [],
     initialData: params?.initialData,
-    enabled: !!agentId,
   });
 }
 

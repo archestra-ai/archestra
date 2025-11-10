@@ -22,10 +22,12 @@ export function Savings({
   const costNum = Number.parseFloat(cost);
   const baselineCostNum = Number.parseFloat(baselineCost);
   const savings = baselineCostNum - costNum;
+  const savingsPercentNum =
+    baselineCostNum > 0 ? (savings / baselineCostNum) * 100 : 0;
   const savingsPercent =
-    baselineCostNum > 0
-      ? ((savings / baselineCostNum) * 100).toFixed(1)
-      : "0.0";
+    savingsPercentNum % 1 === 0
+      ? savingsPercentNum.toFixed(0)
+      : savingsPercentNum.toFixed(1);
 
   const colorClass =
     savings === 0

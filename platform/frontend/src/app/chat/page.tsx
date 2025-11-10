@@ -158,7 +158,7 @@ export default function ChatPage() {
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat", // Must match backend route
       credentials: "include", // Send cookies for authentication

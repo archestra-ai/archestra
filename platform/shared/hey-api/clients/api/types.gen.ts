@@ -5352,6 +5352,7 @@ export type GetChatSettingsResponse = GetChatSettingsResponses[keyof GetChatSett
 export type UpdateChatSettingsData = {
     body?: {
         anthropicApiKey?: string;
+        resetApiKey?: boolean;
     };
     path?: never;
     query?: never;

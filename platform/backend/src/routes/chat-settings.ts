@@ -14,6 +14,7 @@ const ChatSettingsSchema = z.object({
 
 const UpdateChatSettingsSchema = z.object({
   anthropicApiKey: z.string().optional(),
+  resetApiKey: z.boolean().optional(),
 });
 
 const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -63,8 +64,12 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         let secretId = settings.anthropicApiKeySecretId;
 
+        // Handle reset API key request
+        if (body.resetApiKey === true) {
+          secretId = null;
+        }
         // If API key is provided, create or update secret
-        if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
+        else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
           if (secretId) {
             // Update existing secret
             await SecretModel.update(secretId, {

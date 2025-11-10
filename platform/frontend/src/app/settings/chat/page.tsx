@@ -1,7 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Loader2, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +134,27 @@ function ChatSettingsContent() {
     setHasApiKeyChanged(false);
   };
 
+  const handleResetApiKey = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to reset the Anthropic API key? Chat functionality will stop working until a new key is configured.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await updateChatSettings.mutateAsync({
+        resetApiKey: true,
+      });
+      toast.success("API key reset successfully");
+      setApiKey("");
+      setHasApiKeyChanged(false);
+    } catch (_error) {
+      toast.error("Failed to reset API key");
+    }
+  };
+
   const handleCreatePrompt = () => {
     setEditingPrompt({
       name: "",
@@ -199,13 +228,23 @@ function ChatSettingsContent() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="apiKey">API Key</Label>
-            <Input
-              id="apiKey"
-              type="password"
-              placeholder="sk-ant-..."
-              value={apiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="apiKey"
+                type="password"
+                placeholder="sk-ant-..."
+                value={apiKey}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                className={
+                  chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged
+                    ? "border-green-500 pr-10"
+                    : ""
+                }
+              />
+              {chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged && (
+                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+              )}
+            </div>
           </div>
           {hasApiKeyChanged ? (
             <div className="flex gap-2">
@@ -230,23 +269,17 @@ function ChatSettingsContent() {
             </div>
           ) : (
             chatSettings?.anthropicApiKeySecretId && (
-              <div className="flex items-center gap-2 p-3 bg-green-50 text-green-800 rounded-md border border-green-200">
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <title>Success checkmark icon</title>
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span className="text-sm font-medium">
-                  API key is configured
-                </span>
-              </div>
+              <Button
+                variant="destructive"
+                onClick={handleResetApiKey}
+                disabled={updateChatSettings.isPending}
+              >
+                {updateChatSettings.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset API Key
+              </Button>
             )
           )}
         </CardContent>

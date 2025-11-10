@@ -282,7 +282,7 @@ export function AssignToolsDialog({
                             {isLocalServer ? (
                               <>
                                 <span className="text-xs text-muted-foreground">
-                                  Credential to use: *
+                                  Credential to use:
                                 </span>
                                 <InstallationSelect
                                   catalogId={catalogId}
@@ -302,7 +302,7 @@ export function AssignToolsDialog({
                             ) : (
                               <>
                                 <span className="text-xs text-muted-foreground">
-                                  Credential to use: *
+                                  Credential to use:
                                 </span>
                                 <TokenSelect
                                   catalogId={catalogId}

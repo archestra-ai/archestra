@@ -178,7 +178,7 @@ export function McpServerCard({
   const localInstalllingLabel =
     installationStatus === "discovering-tools"
       ? "Discovering tools..."
-      : "Installing...";
+      : "Connecting...";
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
       ? installedServer.users.includes(currentUserId)
@@ -410,11 +410,11 @@ export function McpServerCard({
                 className="w-full"
               >
                 <User className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Auth for myself"}
+                {isInstalling ? "Connecting..." : "Connect"}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Authenticate to create a token for my personal usage</p>
+              <p>Provide your credentials to connect this server</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -456,7 +456,7 @@ export function McpServerCard({
                   className="w-full"
                 >
                   <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Adding..." : "Auth for teams"}
+                  {isInstalling ? "Connecting..." : "Auth for teams"}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -512,11 +512,11 @@ export function McpServerCard({
                 className="w-full"
               >
                 <User className="mr-2 h-4 w-4" />
-                Install for myself
+                Connect
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Install this server for my personal usage</p>
+              <p>Provide your credentials to connect this server</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

@@ -1,0 +1,18 @@
+# WireMock image configuration
+image:
+  repository: wiremock/wiremock
+  tag: "3.13.1"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: NodePort
+  port: 8080
+  # NodePort for kind/CI environments (optional)
+  nodePort: 30080
+
+# WireMock command arguments
+args:
+  - --global-response-templating
+  - --disable-gzip
+  - --verbose

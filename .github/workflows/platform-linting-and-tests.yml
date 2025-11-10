@@ -53,6 +53,28 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Install Kind
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        with:
+          config: .github/kind.yaml
+          cluster_name: archestra-ci-cluster
+          install_only: false
+
+      - name: Debug Kind cluster
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          echo "=== Kind version ==="
+          kind version
+          echo "=== Available clusters ==="
+          kind get clusters || echo "No clusters found"
+          echo "=== Docker containers ==="
+          docker ps -a | grep kind || echo "No kind containers found"
+          echo "=== Kubectl context ==="
+          kubectl config current-context || echo "No kubectl context"
+          echo "=== Kubectl cluster info ==="
+          kubectl cluster-info || echo "Cluster info failed"
+
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
@@ -67,16 +89,41 @@ jobs:
           load: true
           tags: archestra/platform:ci-test
 
-      - name: Start platform with docker compose
+      - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
+        run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
+
+      - name: Deploy WireMock to Kubernetes
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          helm install wiremock ./platform/helm/wiremock --wait --timeout=2m
+
+      - name: Deploy Archestra Platform with Helm
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          helm install archestra-platform ./platform/helm/archestra \
+            --values .github/values-ci.yaml \
+            --set archestra.image=archestra/platform:ci-test \
+            --wait --timeout=5m
+
+      - name: Verify deployment
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide
+
+          echo "=== Kubernetes Services ==="
+          kubectl get services
+
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=50
 
       - name: Wait for services to be healthy
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          echo "Waiting for platform container to be healthy..."
-          timeout 120 sh -c 'until docker inspect --format="{{.State.Health.Status}}" archestra-platform-test | grep -q "healthy"; do sleep 2; done'
-          echo "Platform container is healthy"
+          echo "Waiting for platform pods to be ready..."
+          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=120s
+          echo "Platform pods are ready"
 
           echo "Verifying services are accessible..."
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/ || (echo "Frontend not accessible" && exit 1)
@@ -114,31 +161,36 @@ jobs:
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
 
-      - name: Show container logs on failure
+      - name: Show logs on failure
         if: failure()
         run: |
-          echo "=== Container Status ==="
-          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -o wide
 
-          echo "=== Platform Container Logs ==="
-          docker logs archestra-platform-test
+          echo "=== Kubernetes Services ==="
+          kubectl get services
 
-          echo "=== PostgreSQL Container Logs ==="
-          docker logs archestra-platform-test-postgresql
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
 
-          echo "=== WireMock Container Logs ==="
-          docker logs archestra-platform-test-wiremock
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
-          echo "=== All Container Stats ==="
+          echo "=== WireMock Logs ==="
+          kubectl logs -l app=wiremock --tail=200
 
-          docker stats --no-stream
+          echo "=== Describe Archestra Platform Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=archestra-platform
+
+          echo "=== Describe PostgreSQL Pod ==="
+          kubectl describe pod -l app.kubernetes.io/name=postgresql
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
-        working-directory: ./platform/helm
+        working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

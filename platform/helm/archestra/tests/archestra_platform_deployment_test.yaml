@@ -11,13 +11,6 @@ tests:
           path: metadata.name
           pattern: -archestra-platform$
 
-  - it: should be ClusterIP type
-    documentIndex: 0
-    asserts:
-      - equal:
-          path: spec.type
-          value: ClusterIP
-
   - it: should expose backend port 9000
     documentIndex: 0
     asserts:
@@ -815,3 +808,206 @@ tests:
           content:
             name: ARCHESTRA_AUTH_SECRET
             value: "my-custom-secret-value"
+
+  # Service type tests
+  - it: should default to ClusterIP service type
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should support NodePort service type
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+
+  - it: should support LoadBalancer service type
+    documentIndex: 0
+    set:
+      archestra.service.type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  # NodePort configuration tests
+  - it: should not have nodePort fields when service type is ClusterIP
+    documentIndex: 0
+    set:
+      archestra.service.type: ClusterIP
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+      - notExists:
+          path: spec.ports[1].nodePort
+      - notExists:
+          path: spec.ports[2].nodePort
+
+  - it: should not have nodePort fields when nodePorts values are null
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        backend: null
+        metrics: null
+        frontend: null
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+      - notExists:
+          path: spec.ports[1].nodePort
+      - notExists:
+          path: spec.ports[2].nodePort
+
+  - it: should configure backend nodePort when specified
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        backend: 30000
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30000
+      - notExists:
+          path: spec.ports[1].nodePort
+      - notExists:
+          path: spec.ports[2].nodePort
+
+  - it: should configure metrics nodePort when specified
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        metrics: 30050
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+      - equal:
+          path: spec.ports[1].nodePort
+          value: 30050
+      - notExists:
+          path: spec.ports[2].nodePort
+
+  - it: should configure frontend nodePort when specified
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        frontend: 30300
+    asserts:
+      - notExists:
+          path: spec.ports[0].nodePort
+      - notExists:
+          path: spec.ports[1].nodePort
+      - equal:
+          path: spec.ports[2].nodePort
+          value: 30300
+
+  - it: should configure all nodePorts when specified
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        backend: 30000
+        metrics: 30050
+        frontend: 30300
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30000
+      - equal:
+          path: spec.ports[1].nodePort
+          value: 30050
+      - equal:
+          path: spec.ports[2].nodePort
+          value: 30300
+
+  - it: should configure partial nodePorts when only some are specified
+    documentIndex: 0
+    set:
+      archestra.service.type: NodePort
+      archestra.service.nodePorts:
+        backend: 30000
+        frontend: 30300
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30000
+      - notExists:
+          path: spec.ports[1].nodePort
+      - equal:
+          path: spec.ports[2].nodePort
+          value: 30300
+
+  # Health probes tests
+  - it: should have startup probe configured
+    documentIndex: 1
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].startupProbe
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: frontend
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+
+  - it: should have liveness probe configured
+    documentIndex: 1
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: frontend
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
+
+  - it: should have readiness probe configured
+    documentIndex: 1
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: frontend
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3

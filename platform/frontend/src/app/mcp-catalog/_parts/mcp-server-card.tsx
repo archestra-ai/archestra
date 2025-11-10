@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config";
 import {
   useMcpServerLogs,
   useMcpServerTools,
@@ -371,7 +372,9 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: usersAuthenticated },
-            { id: "2", content: teamsAccess },
+            ...(config.features.enableTeamAuth
+              ? [{ id: "2", content: teamsAccess }]
+              : []),
             { id: "3", content: toolsAssigned },
           ].map((item) => (
             <div
@@ -426,37 +429,42 @@ export function McpServerCard({
           Revoke personal token
         </Button>
       )}
-      {userIsMcpServerAdmin && currentUserHasTeamAuth && (
-        <Button
-          onClick={handleRevokeTeamAccess}
-          size="sm"
-          variant="outline"
-          className="w-full bg-accent text-accent-foreground hover:bg-accent"
-        >
-          Revoke teams token
-        </Button>
-      )}
-      {requiresAuth && !currentUserHasTeamAuth && userIsMcpServerAdmin && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onInstallTeam}
-                disabled={isInstalling}
-                size="sm"
-                variant="outline"
-                className="w-full"
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Auth for teams"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Authenticate and allow teams to use my token</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      {config.features.enableTeamAuth &&
+        userIsMcpServerAdmin &&
+        currentUserHasTeamAuth && (
+          <Button
+            onClick={handleRevokeTeamAccess}
+            size="sm"
+            variant="outline"
+            className="w-full bg-accent text-accent-foreground hover:bg-accent"
+          >
+            Revoke teams token
+          </Button>
+        )}
+      {config.features.enableTeamAuth &&
+        requiresAuth &&
+        !currentUserHasTeamAuth &&
+        userIsMcpServerAdmin && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onInstallTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? "Adding..." : "Auth for teams"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Authenticate and allow teams to use my token</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
     </>
   );
 
@@ -466,7 +474,9 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: localServersInstalled },
-            { id: "2", content: teamsAccess },
+            ...(config.features.enableTeamAuth
+              ? [{ id: "2", content: teamsAccess }]
+              : []),
             { id: "3", content: toolsAssigned },
           ].map((item) => (
             <div
@@ -542,37 +552,41 @@ export function McpServerCard({
           {localInstalllingLabel}
         </Button>
       )}
-      {userIsMcpServerAdmin && currentUserHasLocalTeamInstallation && (
-        <Button
-          onClick={handleRevokeTeamAccess}
-          size="sm"
-          variant="outline"
-          className="w-full bg-accent text-accent-foreground hover:bg-accent"
-        >
-          Revoke teams installation
-        </Button>
-      )}
-      {userIsMcpServerAdmin && !currentUserHasLocalTeamInstallation && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onInstallLocalServerTeam}
-                disabled={isInstalling}
-                size="sm"
-                variant="outline"
-                className="w-full"
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? localInstalllingLabel : "Install for teams"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Install and allow teams to use this server</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      {config.features.enableTeamAuth &&
+        userIsMcpServerAdmin &&
+        currentUserHasLocalTeamInstallation && (
+          <Button
+            onClick={handleRevokeTeamAccess}
+            size="sm"
+            variant="outline"
+            className="w-full bg-accent text-accent-foreground hover:bg-accent"
+          >
+            Revoke teams installation
+          </Button>
+        )}
+      {config.features.enableTeamAuth &&
+        userIsMcpServerAdmin &&
+        !currentUserHasLocalTeamInstallation && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onInstallLocalServerTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? localInstalllingLabel : "Install for teams"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Install and allow teams to use this server</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
     </>
   );
 

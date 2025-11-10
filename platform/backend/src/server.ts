@@ -180,29 +180,38 @@ const start = async () => {
     );
 
     // Initialize MCP Server Runtime (K8s-based)
-    try {
-      // Set up callbacks for runtime initialization
-      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
-        fastify.log.info("MCP Server Runtime initialized successfully");
-      };
+    if (config.orchestrator.enabled) {
+      try {
+        // Set up callbacks for runtime initialization
+        McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+          fastify.log.info("MCP Server Runtime initialized successfully");
+        };
 
-      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+          fastify.log.error(
+            `MCP Server Runtime failed to initialize: ${error.message}`,
+          );
+          // Don't exit the process, allow the server to continue
+          // MCP servers can be started manually later
+        };
+
+        // Start the runtime in the background (non-blocking)
+        McpServerRuntimeManager.start().catch((error) => {
+          fastify.log.error(
+            "Failed to start MCP Server Runtime:",
+            error.message,
+          );
+        });
+      } catch (error) {
         fastify.log.error(
-          `MCP Server Runtime failed to initialize: ${error.message}`,
+          `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
-        // Don't exit the process, allow the server to continue
-        // MCP servers can be started manually later
-      };
-
-      // Start the runtime in the background (non-blocking)
-      McpServerRuntimeManager.start().catch((error) => {
-        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
-      });
-    } catch (error) {
-      fastify.log.error(
-        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+        // Continue server startup even if MCP runtime fails
+      }
+    } else {
+      fastify.log.info(
+        "MCP Server Runtime is disabled (orchestrator-k8s-runtime feature flag is off). Local MCP servers will not be available.",
       );
-      // Continue server startup even if MCP runtime fails
     }
 
     /**

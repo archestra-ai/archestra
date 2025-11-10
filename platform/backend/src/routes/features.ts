@@ -17,11 +17,16 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
              * NOTE: add feature flags here, example:
              * mcp_registry: z.boolean(),
              */
+            "orchestrator-k8s-runtime": z.boolean(),
           }),
         },
       },
     },
-    async (_request, reply) => reply.send(config.features),
+    async (_request, reply) =>
+      reply.send({
+        ...config.features,
+        "orchestrator-k8s-runtime": config.orchestrator.enabled,
+      }),
   );
 };
 

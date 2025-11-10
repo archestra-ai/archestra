@@ -72,6 +72,19 @@ export const getDatabaseUrl = (): string => {
   return databaseUrl;
 };
 
+/**
+ * Determines if orchestrator-k8s-runtime is available/configured
+ */
+export const getOrchestratorK8sEnabled = (): boolean => {
+  const kubeconfig = process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
+  const loadFromCluster =
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+    "true";
+
+  // K8s runtime is enabled if either kubeconfig is provided or we're loading from current cluster
+  return !!(kubeconfig || loadFromCluster);
+};
+
 const isProduction = ["production", "prod"].includes(
   process.env.NODE_ENV?.toLowerCase() ?? "",
 );
@@ -211,6 +224,7 @@ export default {
      */
   },
   orchestrator: {
+    enabled: getOrchestratorK8sEnabled(),
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",

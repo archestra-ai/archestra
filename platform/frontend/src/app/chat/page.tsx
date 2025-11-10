@@ -348,7 +348,7 @@ export default function ChatPage() {
                   </PromptInputBody>
                   <PromptInputToolbar>
                     <PromptInputTools />
-                    <PromptInputSubmit status={status} />
+                    <PromptInputSubmit status={status} onStop={stop} />
                   </PromptInputToolbar>
                 </PromptInput>
               </div>

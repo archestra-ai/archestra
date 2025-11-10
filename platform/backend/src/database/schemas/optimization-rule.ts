@@ -15,10 +15,7 @@ export const optimizationRuleTypeEnum = pgEnum("optimization_rule_type", [
   "tool_presence",
 ]);
 
-export const llmProviderEnum = pgEnum("llm_provider", [
-  "anthropic",
-  "openai",
-]);
+export const llmProviderEnum = pgEnum("llm_provider", ["anthropic", "openai"]);
 
 const optimizationRulesTable = pgTable("optimization_rules", {
   id: uuid("id").primaryKey().defaultRandom(),

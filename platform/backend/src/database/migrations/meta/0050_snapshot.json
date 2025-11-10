@@ -1652,7 +1652,8 @@
           "name": "server_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'local'"
         },
         "secret_id": {
           "name": "secret_id",

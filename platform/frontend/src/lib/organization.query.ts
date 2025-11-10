@@ -85,11 +85,11 @@ export function useAcceptInvitation() {
     },
     onError: (error) => {
       // Extract the error message from the error object
-      const errorMessage = 
-        error?.message || 
-        (error as any)?.error?.message || 
+      const errorMessage =
+        error?.message ||
+        (error as { error?: { message: string } })?.error?.message ||
         "Failed to accept invitation";
-      
+
       toast.error("Error", {
         description: errorMessage,
       });

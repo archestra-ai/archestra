@@ -136,38 +136,6 @@ export const auth = betterAuth({
         return ctx;
       }
 
-      // Check invitation validity for acceptInvitation endpoint
-      if (path === "/organization/accept-invitation" && method === "POST") {
-        const invitationId = body.invitationId;
-        
-        if (invitationId) {
-          const invitation = await InvitationModel.getById(invitationId);
-          
-          if (!invitation) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Invalid invitation ID",
-            });
-          }
-          
-          const { status, expiresAt } = invitation;
-          
-          if (status !== "pending") {
-            throw new APIError("BAD_REQUEST", {
-              message: `This invitation has already been ${status}`,
-            });
-          }
-          
-          // Check if invitation is expired
-          if (expiresAt && expiresAt < new Date()) {
-            throw new APIError("BAD_REQUEST", {
-              message: "The invitation link has expired, please contact your admin for a new invitation",
-            });
-          }
-        }
-        
-        return ctx;
-      }
-
       // Block direct sign-up without invitation (invitation-only registration)
       if (path.startsWith("/sign-up/email") && method === "POST") {
         const invitationId = body.callbackURL
@@ -201,7 +169,8 @@ export const auth = betterAuth({
         // Check if invitation is expired
         if (expiresAt && expiresAt < new Date()) {
           throw new APIError("BAD_REQUEST", {
-            message: "The invitation link has expired, please contact your admin for a new invitation",
+            message:
+              "The invitation link has expired, please contact your admin for a new invitation",
           });
         }
 

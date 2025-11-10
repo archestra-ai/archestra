@@ -235,7 +235,21 @@ function LogsTable({
         const { cost, baselineCost } = row.original;
 
         if (!cost || !baselineCost) {
-          return <span className="text-xs text-muted-foreground">N/A</span>;
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground cursor-default">
+                    N/A
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  Cost savings are available when "Cost Optimization" in agent
+                  settings is enabled.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
         }
 
         return (

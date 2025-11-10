@@ -9,13 +9,13 @@ import { formatCost } from "./cost";
 export function Savings({
   cost,
   baselineCost,
-  format = "both",
+  format = "percent",
   tooltip = "never",
   className,
 }: {
   cost: string;
   baselineCost: string;
-  format?: "percent" | "number" | "both";
+  format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   className?: string;
 }) {
@@ -39,14 +39,16 @@ export function Savings({
   const content = (
     <>
       {format === "percent" && (
-        <>{savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`}</>
-      )}
-      {format === "number" && <>{formatCost(savings)}</>}
-      {format === "both" && (
         <>
-          {formatCost(savings)} (
-          {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`})
+          {savings === 0
+            ? "0%"
+            : savings > 0
+              ? `+${savingsPercent}%`
+              : `${savingsPercent}%`}
         </>
+      )}
+      {format === "number" && (
+        <>{savings === 0 ? "$0" : formatCost(Math.abs(savings))}</>
       )}
     </>
   );
@@ -69,17 +71,22 @@ export function Savings({
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
             <div className="space-y-2">
-              <div className="space-y-1">
-                <div>Baseline: {formatCost(baselineCostNum)}</div>
-                <div className={colorClass}>
-                  Savings: {formatCost(savings)} (
-                  {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`})
-                </div>
-              </div>
-              <div className="text-xs text-muted-foreground pt-2">
-                Note: Costs are estimates based on standard pricing. Actual
-                costs may vary due to pricing tiers.
-              </div>
+              {savings === 0 ? (
+                <div className={colorClass}>No cost optimization possible</div>
+              ) : (
+                <>
+                  <div>Baseline: {formatCost(baselineCostNum)}</div>
+                  <div className={colorClass}>
+                    Savings: {formatCost(Math.abs(savings))} (
+                    {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`}
+                    )
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-2">
+                    Note: Costs are estimates based on standard pricing. Actual
+                    costs may vary due to pricing tiers.
+                  </div>
+                </>
+              )}
             </div>
           </TooltipContent>
         </Tooltip>

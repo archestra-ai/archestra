@@ -14,7 +14,7 @@ import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { EasterEgg } from "@/components/easter-egg";
-import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
+// import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
@@ -91,7 +91,7 @@ export default function RootLayout({
                     </main>
                     <Toaster />
                     <EasterEgg />
-                    <OnboardingDialogWrapper />
+                    {/*<OnboardingDialogWrapper />*/}
                   </SidebarProvider>
                 </WithAuthCheck>
               </ArchestraQueryClientProvider>

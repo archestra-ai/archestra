@@ -201,13 +201,14 @@ export default class K8sPod {
         "Deleted K8s Secret for MCP server",
       );
     } catch (error: unknown) {
-      // If secret doesn't exist (404), that's okay
-      if (
+      // If secret doesn't exist (404), that's okay - it may have been deleted already or never created
+      const is404 =
         error &&
         typeof error === "object" &&
-        "statusCode" in error &&
-        error.statusCode === 404
-      ) {
+        (("statusCode" in error && error.statusCode === 404) ||
+          ("code" in error && error.code === 404));
+
+      if (is404) {
         logger.debug(
           {
             mcpServerId: this.mcpServer.id,

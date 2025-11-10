@@ -55,6 +55,7 @@ type AttachmentsContext = {
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  textareaKey: number;
 };
 
 const AttachmentsContext = createContext<AttachmentsContext | null>(null);
@@ -231,6 +232,7 @@ export const PromptInput = ({
   ...props
 }: PromptInputProps) => {
   const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [textareaKey, setTextareaKey] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -417,6 +419,10 @@ export const PromptInput = ({
 
     const formData = new FormData(event.currentTarget);
     const text = (formData.get("message") as string) || "";
+    const form = event.currentTarget;
+
+    // Clear the form immediately to provide instant feedback
+    form.reset();
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
@@ -432,6 +438,8 @@ export const PromptInput = ({
     ).then((files: FileUIPart[]) => {
       onSubmit({ text, files }, event);
       clear();
+      // Force textarea remount to ensure it's cleared
+      setTextareaKey((prev) => prev + 1);
     });
   };
 
@@ -443,8 +451,9 @@ export const PromptInput = ({
       clear,
       openFileDialog,
       fileInputRef: inputRef,
+      textareaKey,
     }),
-    [items, add, remove, clear, openFileDialog],
+    [items, add, remove, clear, openFileDialog, textareaKey],
   );
 
   return (
@@ -538,6 +547,7 @@ export const PromptInputTextarea = ({
 
   return (
     <Textarea
+      key={attachments.textareaKey}
       className={cn(
         "w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0",
         "field-sizing-content bg-transparent dark:bg-transparent",
@@ -657,6 +667,7 @@ export const PromptInputActionMenuItem = ({
 
 export type PromptInputSubmitProps = ComponentProps<typeof Button> & {
   status?: ChatStatus;
+  onStop?: () => void;
 };
 
 export const PromptInputSubmit = ({
@@ -664,6 +675,7 @@ export const PromptInputSubmit = ({
   variant = "default",
   size = "icon",
   status,
+  onStop,
   children,
   ...props
 }: PromptInputSubmitProps) => {
@@ -677,12 +689,20 @@ export const PromptInputSubmit = ({
     Icon = <XIcon className="size-4" />;
   }
 
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (status === "streaming" && onStop) {
+      e.preventDefault();
+      onStop();
+    }
+  };
+
   return (
     <Button
-      aria-label="Submit"
+      aria-label={status === "streaming" ? "Stop" : "Submit"}
       className={cn("gap-1.5 rounded-lg", className)}
+      onClick={handleClick}
       size={size}
-      type="submit"
+      type={status === "streaming" ? "button" : "submit"}
       variant={variant}
       {...props}
     >

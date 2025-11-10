@@ -25,12 +25,7 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@/auth/internal-jwt", () => ({
-  verifyInternalJwt: vi.fn(),
-}));
-
 import { betterAuth, hasPermission } from "@/auth";
-import { verifyInternalJwt } from "@/auth/internal-jwt";
 import { UserModel } from "@/models";
 
 // Type the mocked functions
@@ -46,10 +41,6 @@ const mockHasPermission = hasPermission as MockedFunction<typeof hasPermission>;
 const mockUserModel = UserModel as unknown as {
   getById: MockedFunction<typeof UserModel.getById>;
 };
-
-const mockVerifyInternalJwt = verifyInternalJwt as MockedFunction<
-  typeof verifyInternalJwt
->;
 
 import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
@@ -369,54 +360,6 @@ describe("authPlugin integration", () => {
       expect(mockUserModel.getById).toHaveBeenCalledWith("user1");
       expect(mockRequest.user).toEqual({ id: "user1", name: "Test User" });
       expect(mockRequest.organizationId).toBe("org2");
-    });
-  });
-
-  describe("MCP proxy authentication", () => {
-    test("should allow valid internal JWT for MCP proxy endpoints", async () => {
-      mockVerifyInternalJwt.mockResolvedValue({ userId: "system" });
-
-      const mockRequest = {
-        url: "/mcp_proxy/server1",
-        method: "POST",
-        headers: { authorization: "Bearer internal-jwt-token" },
-        routeOptions: {
-          schema: { operationId: "mcpProxy" },
-        },
-      } as unknown as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(verifyInternalJwt).toHaveBeenCalledWith("internal-jwt-token");
-      expect(mockReply.status).not.toHaveBeenCalled();
-    });
-
-    test("should reject invalid internal JWT for MCP proxy endpoints", async () => {
-      mockVerifyInternalJwt.mockResolvedValue(null);
-      mockBetterAuth.api.getSession.mockResolvedValue(null);
-
-      const mockRequest = {
-        url: "/mcp_proxy/server1",
-        method: "POST",
-        headers: { authorization: "Bearer invalid-jwt" },
-        routeOptions: {
-          schema: { operationId: "mcpProxy" },
-        },
-      } as unknown as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
     });
   });
 

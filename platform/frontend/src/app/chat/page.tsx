@@ -14,6 +14,7 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
@@ -157,7 +158,7 @@ export default function ChatPage() {
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat", // Must match backend route
       credentials: "include", // Send cookies for authentication
@@ -269,11 +270,10 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {!conversationId ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <p className="text-lg mb-2">No conversation selected</p>
-              <p className="text-sm">Create a new chat to get started</p>
-            </div>
+          <div className="flex-1 flex items-center justify-center">
+            <Shimmer as="h1" className="text-2xl" duration={3} spread={3}>
+              Create a new chat to get started
+            </Shimmer>
           </div>
         ) : (
           <>
@@ -348,7 +348,7 @@ export default function ChatPage() {
                   </PromptInputBody>
                   <PromptInputToolbar>
                     <PromptInputTools />
-                    <PromptInputSubmit status={status} />
+                    <PromptInputSubmit status={status} onStop={stop} />
                   </PromptInputToolbar>
                 </PromptInput>
               </div>

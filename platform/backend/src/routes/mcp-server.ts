@@ -311,8 +311,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     localInstallationError: null,
                   });
 
-                  // Wait a bit for the pod to be fully ready
-                  await new Promise((resolve) => setTimeout(resolve, 3000));
+                  // Wait for the pod to be fully ready (MCP server process needs time to initialize)
+                  await new Promise((resolve) => setTimeout(resolve, 10000));
                   fastify.log.info(
                     `Attempting to fetch tools from local server: ${mcpServer.name}`,
                   );

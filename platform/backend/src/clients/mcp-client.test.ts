@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import { initializeInternalJwt } from "@/auth/internal-jwt";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -456,9 +455,6 @@ describe("McpClient", () => {
           email: "test@example.com",
           emailVerified: true,
         });
-
-        // Initialize internal JWT for stdio transport tests
-        await initializeInternalJwt();
 
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({

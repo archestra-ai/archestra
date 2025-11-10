@@ -14,7 +14,6 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { fastifyAuthPlugin } from "@/auth";
-import { initializeInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
@@ -179,10 +178,6 @@ const start = async () => {
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
-
-    // Initialize internal JWT for backend-to-backend auth
-    await initializeInternalJwt();
-    logger.info("Internal JWT initialized for /mcp_proxy authentication");
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

@@ -4,7 +4,6 @@ import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
 import type { ErrorResponse } from "@/types";
-import { verifyInternalJwt } from "../internal-jwt";
 
 const prepareErrorResponse = (
   error: ErrorResponse["error"],
@@ -45,25 +44,11 @@ export class Authnz {
   private shouldSkipAuthCheck = async ({
     url,
     method,
-    headers,
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
     }
-
-    // For /mcp_proxy endpoints, verify internal JWT token
-    if (url.startsWith("/mcp_proxy/")) {
-      const authHeader = headers.authorization;
-      if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.slice(7);
-        const payload = await verifyInternalJwt(token);
-        if (payload) {
-          return true; // Valid internal JWT, skip normal auth
-        }
-      }
-    }
-
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/v1/openai") ||

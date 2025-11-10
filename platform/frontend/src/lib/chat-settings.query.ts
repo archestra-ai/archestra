@@ -28,7 +28,10 @@ export function useChatSettingsOptional() {
 export function useUpdateChatSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { anthropicApiKey?: string }) => {
+    mutationFn: async (data: {
+      anthropicApiKey?: string;
+      resetApiKey?: boolean;
+    }) => {
       const response = await updateChatSettings({ body: data });
       return response.data;
     },

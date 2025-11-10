@@ -9,7 +9,7 @@ import { API_BASE_URL, UI_BASE_URL } from "../../consts";
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
  */
-interface TestFixtures {
+export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
   deleteAgent: typeof deleteAgent;
@@ -50,7 +50,9 @@ const makeApiRequest = async ({
 
   if (!ignoreStatusCheck && !response.ok()) {
     throw new Error(
-      `Failed to ${method} ${urlSuffix} with data ${JSON.stringify(data)}: ${response.status()} ${await response.text()}`,
+      `Failed to ${method} ${urlSuffix} with data ${JSON.stringify(
+        data,
+      )}: ${response.status()} ${await response.text()}`,
     );
   }
 
@@ -205,6 +207,7 @@ const createMcpCatalogItem = async (
     description: string;
     serverType: "local" | "remote";
     localConfig?: unknown;
+    serverUrl?: string;
     authFields?: unknown;
   },
 ) =>

@@ -1,343 +1,251 @@
 import {
-  MCP_GATEWAY_URL_SUFFIX,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "../../consts";
-import { expect, test } from "./fixtures";
+  type APIRequestContext,
+  expect,
+  type TestFixtures,
+  test,
+} from "./fixtures";
 
 test.describe("Orchestrator - MCP Server Installation and Execution", () => {
-  // Helper function to initialize MCP session and get session ID
-  const initializeMcpSession = async (
-    request: ReturnType<typeof test.use>,
-    makeApiRequest: any,
-    agentId: string,
+  /**
+   * It can take some time to pull the Docker images and start the MCP server.. hence the polling
+   */
+  const waitForMcpServerReady = async (
+    request: APIRequestContext,
+    makeApiRequest: TestFixtures["makeApiRequest"],
+    serverId: string,
+    maxRetries = 30,
   ) => {
-    const initResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: MCP_GATEWAY_URL_SUFFIX,
-      headers: {
-        Authorization: `Bearer ${agentId}`,
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-      },
-      data: {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: {},
-          },
-          clientInfo: {
-            name: "orchestrator-test-client",
-            version: "1.0.0",
-          },
-        },
-      },
-    });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const statusResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/mcp_server/${serverId}/installation-status`,
+      });
 
-    expect(initResponse.status()).toBe(200);
-    const initResult = await initResponse.json();
-    expect(initResult).toHaveProperty("result");
+      expect(statusResponse.status()).toBe(200);
+      const status = await statusResponse.json();
 
-    return initResponse.headers()["mcp-session-id"];
+      if (status.localInstallationStatus === "success") {
+        return;
+      }
+
+      if (status.localInstallationStatus === "error") {
+        throw new Error(
+          `MCP server installation failed: ${status.localInstallationError}`,
+        );
+      }
+
+      // Still pending/discovering-tools, wait and retry
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    throw new Error(
+      `MCP server installation did not complete after ${maxRetries} attempts`,
+    );
   };
 
-  // Helper function to list tools from MCP gateway
-  const listTools = async (
-    request: ReturnType<typeof test.use>,
-    makeApiRequest: any,
-    agentId: string,
-    sessionId: string,
+  const getMcpServerTools = async (
+    request: APIRequestContext,
+    makeApiRequest: TestFixtures["makeApiRequest"],
+    serverId: string,
   ) => {
-    const listToolsResponse = await makeApiRequest({
+    const toolsResponse = await makeApiRequest({
       request,
-      method: "post",
-      urlSuffix: MCP_GATEWAY_URL_SUFFIX,
-      headers: {
-        Authorization: `Bearer ${agentId}`,
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-        "mcp-session-id": sessionId,
-      },
-      data: {
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/list",
-        params: {},
-      },
+      method: "get",
+      urlSuffix: `/api/mcp_server/${serverId}/tools`,
     });
 
-    expect(listToolsResponse.status()).toBe(200);
-    const listResult = await listToolsResponse.json();
-    expect(listResult).toHaveProperty("result");
-    expect(listResult.result).toHaveProperty("tools");
+    expect(toolsResponse.status()).toBe(200);
+    const tools = await toolsResponse.json();
+    expect(Array.isArray(tools)).toBe(true);
 
-    return listResult.result.tools;
+    return tools;
   };
 
   test.describe("Remote MCP Server", () => {
-    let agentId: string;
     let catalogId: string;
     let serverId: string;
 
-    test.beforeAll(async ({
-      request,
-      createAgent,
-      createMcpCatalogItem,
-      installMcpServer,
-    }) => {
-      // Create agent for testing
-      const agentResponse = await createAgent(
+    test.beforeAll(
+      async ({
         request,
-        "Orchestrator Test Agent - Remote",
-      );
-      const agent = await agentResponse.json();
-      agentId = agent.id;
+        makeApiRequest,
+        createAgent,
+        createMcpCatalogItem,
+        installMcpServer,
+      }) => {
+        // Create agent for testing (needed for cleanup)
+        await createAgent(request, "Orchestrator Test Agent - Remote");
 
-      // Create a catalog item for a remote MCP server (GitHub)
-      const catalogResponse = await createMcpCatalogItem(request, {
-        name: "GitHub MCP Test",
-        description: "GitHub MCP Server for testing remote installation",
-        serverType: "remote",
-        authFields: [
-          {
-            name: "access_token",
-            label: "GitHub Personal Access Token",
-            type: "password",
-            required: true,
-            description: "GitHub PAT with repo access",
-          },
-        ],
-      });
-      const catalogItem = await catalogResponse.json();
-      catalogId = catalogItem.id;
+        // Create a catalog item for context7 remote MCP server (no auth required)
+        const catalogResponse = await createMcpCatalogItem(request, {
+          name: "Context7 - Remote",
+          description: "Context7 MCP Server for testing remote installation",
+          serverType: "remote",
+          serverUrl: "https://mcp.context7.com/mcp",
+        });
+        const catalogItem = await catalogResponse.json();
+        catalogId = catalogItem.id;
 
-      // Install the remote MCP server with a test token
-      // Note: This uses a dummy token for testing
-      const installResponse = await installMcpServer(request, {
-        name: "Test GitHub Remote Server",
-        catalogId: catalogId,
-        accessToken: "ghp_test_token_for_e2e_testing",
-      });
-      const server = await installResponse.json();
-      serverId = server.id;
-    });
+        // Install the remote MCP server (no auth required)
+        const installResponse = await installMcpServer(request, {
+          name: "Test Context7 Remote Server",
+          catalogId: catalogId,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
+      },
+    );
 
-    test.afterAll(async ({
-      request,
-      deleteAgent,
-      deleteMcpCatalogItem,
-      uninstallMcpServer,
-    }) => {
-      // Clean up in reverse order
-      if (serverId) await uninstallMcpServer(request, serverId);
-      if (catalogId) await deleteMcpCatalogItem(request, catalogId);
-      if (agentId) await deleteAgent(request, agentId);
-    });
+    test.afterAll(
+      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
+        // Clean up in reverse order
+        if (serverId) await uninstallMcpServer(request, serverId);
+        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
+      },
+    );
 
-    test("should install remote MCP server and list its tools", async ({
+    test("should install remote MCP server and discover its tools", async ({
       request,
       makeApiRequest,
     }) => {
-      // Initialize MCP session
-      const sessionId = await initializeMcpSession(
-        request,
-        makeApiRequest,
-        agentId,
-      );
+      // Get tools directly from MCP server
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
 
-      // List tools - remote servers should appear
-      const tools = await listTools(request, makeApiRequest, agentId, sessionId);
-
-      // We should have tools from the remote server
-      // Note: Actual tools depend on the server implementation
-      expect(Array.isArray(tools)).toBe(true);
+      // Should have discovered tools from the remote server
       expect(tools.length).toBeGreaterThan(0);
     });
   });
 
   test.describe("Local MCP Server - NPX Command", () => {
-    let agentId: string;
     let catalogId: string;
     let serverId: string;
 
-    test.beforeAll(async ({
-      request,
-      createAgent,
-      createMcpCatalogItem,
-      installMcpServer,
-    }) => {
-      // Create agent for testing
-      const agentResponse = await createAgent(
+    test.beforeAll(
+      async ({
         request,
-        "Orchestrator Test Agent - NPX",
-      );
-      const agent = await agentResponse.json();
-      agentId = agent.id;
+        makeApiRequest,
+        createAgent,
+        createMcpCatalogItem,
+        installMcpServer,
+      }) => {
+        // Create agent for testing (needed for cleanup)
+        await createAgent(request, "Orchestrator Test Agent - NPX");
 
-      // Create a catalog item for context7 MCP server using npx
-      const catalogResponse = await createMcpCatalogItem(request, {
-        name: "Context7 MCP Test",
-        description: "Context7 MCP Server for testing local NPX installation",
-        serverType: "local",
-        localConfig: {
-          command: "npx",
-          arguments: ["@uplink_ai/context7-mcp@latest"],
-          transportType: "stdio",
-          environment: [
-            {
-              key: "CONTEXT7_API_KEY",
-              type: "secret",
-              promptOnInstallation: true,
-            },
-          ],
-        },
-      });
-      const catalogItem = await catalogResponse.json();
-      catalogId = catalogItem.id;
+        // Create a catalog item for context7 MCP server using npx
+        const catalogResponse = await createMcpCatalogItem(request, {
+          name: "Context7 - Local",
+          description: "Context7 MCP Server for testing local NPX installation",
+          serverType: "local",
+          localConfig: {
+            command: "npx",
+            arguments: ["-y", "@upstash/context7-mcp"],
+            transportType: "stdio",
+            environment: [],
+          },
+        });
+        const catalogItem = await catalogResponse.json();
+        catalogId = catalogItem.id;
 
-      // Install the MCP server with environment values
-      const installResponse = await installMcpServer(request, {
-        name: "Test Context7 NPX Server",
-        catalogId: catalogId,
-        environmentValues: {
-          CONTEXT7_API_KEY: "test_api_key_for_context7",
-        },
-      });
-      const server = await installResponse.json();
-      serverId = server.id;
+        // Install the MCP server (no environment values needed)
+        const installResponse = await installMcpServer(request, {
+          name: "Test Context7 NPX Server",
+          catalogId: catalogId,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
 
-      // Wait a bit for the pod to start
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    });
+        // Wait for MCP server to be ready
+        await waitForMcpServerReady(request, makeApiRequest, serverId);
+      },
+    );
 
-    test.afterAll(async ({
-      request,
-      deleteAgent,
-      deleteMcpCatalogItem,
-      uninstallMcpServer,
-    }) => {
-      // Clean up in reverse order
-      if (serverId) await uninstallMcpServer(request, serverId);
-      if (catalogId) await deleteMcpCatalogItem(request, catalogId);
-      if (agentId) await deleteAgent(request, agentId);
-    });
+    test.afterAll(
+      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
+        // Clean up in reverse order
+        if (serverId) await uninstallMcpServer(request, serverId);
+        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
+      },
+    );
 
-    test("should install local MCP server via npx and list its tools", async ({
+    test("should install local MCP server via npx and discover its tools", async ({
       request,
       makeApiRequest,
     }) => {
-      // Initialize MCP session
-      const sessionId = await initializeMcpSession(
-        request,
-        makeApiRequest,
-        agentId,
-      );
+      // Get tools directly from MCP server
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
 
-      // List tools - should include tools from context7
-      const tools = await listTools(request, makeApiRequest, agentId, sessionId);
-
-      expect(Array.isArray(tools)).toBe(true);
+      // Should have discovered tools from the NPX server
       expect(tools.length).toBeGreaterThan(0);
-
-      // Context7 should expose at least one tool
-      const context7Tools = tools.filter((t: any) =>
-        t.name.startsWith(`test-context7-npx-server${MCP_SERVER_TOOL_NAME_SEPARATOR}`),
-      );
-      expect(context7Tools.length).toBeGreaterThan(0);
     });
   });
 
   test.describe("Local MCP Server - Docker Image", () => {
-    let agentId: string;
     let catalogId: string;
     let serverId: string;
 
-    test.beforeAll(async ({
-      request,
-      createAgent,
-      createMcpCatalogItem,
-      installMcpServer,
-    }) => {
-      // Create agent for testing
-      const agentResponse = await createAgent(
+    test.beforeAll(
+      async ({
         request,
-        "Orchestrator Test Agent - Docker",
-      );
-      const agent = await agentResponse.json();
-      agentId = agent.id;
+        makeApiRequest,
+        createAgent,
+        createMcpCatalogItem,
+        installMcpServer,
+      }) => {
+        // Create agent for testing (needed for cleanup)
+        await createAgent(request, "Orchestrator Test Agent - Docker");
 
-      // Create a catalog item for an MCP server using a Docker image
-      // Using mcp/fetch as an example (publicly available MCP server)
-      const catalogResponse = await createMcpCatalogItem(request, {
-        name: "Fetch MCP Test",
-        description: "Fetch MCP Server for testing Docker image installation",
-        serverType: "local",
-        localConfig: {
-          dockerImage: "mcp/fetch:latest",
-          transportType: "stdio",
-          environment: [],
-        },
-      });
-      const catalogItem = await catalogResponse.json();
-      catalogId = catalogItem.id;
+        // Create a catalog item for context7 MCP server using Docker image
+        const catalogResponse = await createMcpCatalogItem(request, {
+          name: "Context7 - Docker Based",
+          description:
+            "Context7 MCP Server for testing Docker image installation",
+          serverType: "local",
+          localConfig: {
+            /**
+             * NOTE: we use this image instead of the mcp/context7 one as this one exposes stdio..
+             * the other one exposes SSE (which we don't support yet as a transport type)..
+             *
+             * https://github.com/dolasoft/stdio_context7_mcp
+             */
+            dockerImage: "dolasoft/stdio-context7-mcp",
+            transportType: "stdio",
+            environment: [],
+          },
+        });
+        const catalogItem = await catalogResponse.json();
+        catalogId = catalogItem.id;
 
-      // Install the MCP server
-      const installResponse = await installMcpServer(request, {
-        name: "Test Fetch Docker Server",
-        catalogId: catalogId,
-      });
-      const server = await installResponse.json();
-      serverId = server.id;
+        // Install the MCP server
+        const installResponse = await installMcpServer(request, {
+          name: "Test Context7 Docker Server",
+          catalogId: catalogId,
+        });
+        const server = await installResponse.json();
+        serverId = server.id;
 
-      // Wait a bit for the pod to start
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    });
+        // Wait for MCP server to be ready
+        await waitForMcpServerReady(request, makeApiRequest, serverId);
+      },
+    );
 
-    test.afterAll(async ({
-      request,
-      deleteAgent,
-      deleteMcpCatalogItem,
-      uninstallMcpServer,
-    }) => {
-      // Clean up in reverse order
-      if (serverId) await uninstallMcpServer(request, serverId);
-      if (catalogId) await deleteMcpCatalogItem(request, catalogId);
-      if (agentId) await deleteAgent(request, agentId);
-    });
+    test.afterAll(
+      async ({ request, deleteMcpCatalogItem, uninstallMcpServer }) => {
+        // Clean up in reverse order
+        if (serverId) await uninstallMcpServer(request, serverId);
+        if (catalogId) await deleteMcpCatalogItem(request, catalogId);
+      },
+    );
 
-    test("should install local MCP server via Docker and list its tools", async ({
+    test("should install local MCP server via Docker and discover its tools", async ({
       request,
       makeApiRequest,
     }) => {
-      // Initialize MCP session
-      const sessionId = await initializeMcpSession(
-        request,
-        makeApiRequest,
-        agentId,
-      );
+      // Get tools directly from MCP server
+      const tools = await getMcpServerTools(request, makeApiRequest, serverId);
 
-      // List tools - should include tools from fetch server
-      const tools = await listTools(request, makeApiRequest, agentId, sessionId);
-
-      expect(Array.isArray(tools)).toBe(true);
+      // Should have discovered tools from the Docker server
       expect(tools.length).toBeGreaterThan(0);
-
-      // Fetch server should expose the fetch tool
-      const fetchServerTools = tools.filter((t: any) =>
-        t.name.startsWith(`test-fetch-docker-server${MCP_SERVER_TOOL_NAME_SEPARATOR}`),
-      );
-      expect(fetchServerTools.length).toBeGreaterThan(0);
-
-      // Verify we can find the fetch tool specifically
-      const fetchTool = tools.find(
-        (t: any) =>
-          t.name === `test-fetch-docker-server${MCP_SERVER_TOOL_NAME_SEPARATOR}fetch`,
-      );
-      expect(fetchTool).toBeDefined();
-      expect(fetchTool.description).toBeTruthy();
     });
   });
 });

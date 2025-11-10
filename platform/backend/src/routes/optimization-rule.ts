@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OptimizationRuleModel } from "@/models";
+import { RouteId } from "@/types";
 
 const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get all optimization rules for an agent
@@ -8,6 +9,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents/:agentId/optimization-rules",
     {
       schema: {
+        operationId: RouteId.GetOptimizationRules,
+        description: "Get all optimization rules for an agent",
+        tags: ["Optimization Rules"],
         params: z.object({
           agentId: z.string().uuid(),
         }),
@@ -43,6 +47,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents/:agentId/optimization-rules",
     {
       schema: {
+        operationId: RouteId.CreateOptimizationRule,
+        description: "Create a new optimization rule for an agent",
+        tags: ["Optimization Rules"],
         params: z.object({
           agentId: z.string().uuid(),
         }),
@@ -97,6 +104,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/optimization-rules/:id",
     {
       schema: {
+        operationId: RouteId.UpdateOptimizationRule,
+        description: "Update an optimization rule",
+        tags: ["Optimization Rules"],
         params: z.object({
           id: z.string().uuid(),
         }),
@@ -139,7 +149,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const rule = await OptimizationRuleModel.update(id, updates);
 
       if (!rule) {
-        return reply.status(404).send({ message: "Optimization rule not found" });
+        return reply
+          .status(404)
+          .send({ message: "Optimization rule not found" });
       }
 
       return reply.status(200).send(rule);
@@ -151,6 +163,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/optimization-rules/:id",
     {
       schema: {
+        operationId: RouteId.DeleteOptimizationRule,
+        description: "Delete an optimization rule",
+        tags: ["Optimization Rules"],
         params: z.object({
           id: z.string().uuid(),
         }),
@@ -168,7 +183,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const deleted = await OptimizationRuleModel.delete(id);
 
       if (!deleted) {
-        return reply.status(404).send({ message: "Optimization rule not found" });
+        return reply
+          .status(404)
+          .send({ message: "Optimization rule not found" });
       }
 
       return reply.status(204).send();

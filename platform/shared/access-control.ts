@@ -298,6 +298,12 @@ export const RouteId = {
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
 
+  // Optimization Rule Routes
+  GetOptimizationRules: "getOptimizationRules",
+  CreateOptimizationRule: "createOptimizationRule",
+  UpdateOptimizationRule: "updateOptimizationRule",
+  DeleteOptimizationRule: "deleteOptimizationRule",
+
   // Onboarding Routes
   GetOnboardingLogsStatus: "getOnboardingLogsStatus",
   CompleteOnboarding: "completeOnboarding",
@@ -665,6 +671,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetOverviewStatistics]: {
     interaction: ["read"],
+  },
+  [RouteId.GetOptimizationRules]: {
+    agent: ["read"],
+  },
+  [RouteId.CreateOptimizationRule]: {
+    agent: ["create"],
+  },
+  [RouteId.UpdateOptimizationRule]: {
+    agent: ["update"],
+  },
+  [RouteId.DeleteOptimizationRule]: {
+    agent: ["delete"],
   },
   // Onboarding routes - available to all authenticated users (no specific permissions required)
   [RouteId.GetOnboardingLogsStatus]: {},

@@ -169,7 +169,8 @@ export const auth = betterAuth({
         // Check if invitation is expired
         if (expiresAt && expiresAt < new Date()) {
           throw new APIError("BAD_REQUEST", {
-            message: "This invitation has expired",
+            message:
+              "The invitation link has expired, please contact your admin for a new invitation",
           });
         }
 

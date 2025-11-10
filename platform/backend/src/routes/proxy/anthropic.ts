@@ -6,6 +6,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
+import { isAnthropicPricingModel } from "@/llm-pricing";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
@@ -569,6 +570,27 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
+        // Calculate costs
+        const normalizedModel = utils.adapters.anthropic.normalizeModel(
+          body.model,
+        );
+        const cost =
+          isAnthropicPricingModel(normalizedModel) &&
+          tokenUsage.input &&
+          tokenUsage.output
+            ? utils.adapters.anthropic
+                .getUsageCost(normalizedModel, tokenUsage)
+                .toString()
+            : null;
+        const baselineCost =
+          isAnthropicPricingModel(normalizedModel) &&
+          tokenUsage.input &&
+          tokenUsage.output
+            ? utils.adapters.anthropic
+                .getUsageCost(normalizedModel, tokenUsage)
+                .toString()
+            : null;
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
@@ -587,6 +609,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: body.model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost,
+          baselineCost,
         });
 
         // Send message_delta with stop_reason and usage
@@ -668,6 +692,27 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
+            // Calculate costs
+            const normalizedModel = utils.adapters.anthropic.normalizeModel(
+              body.model,
+            );
+            const cost =
+              isAnthropicPricingModel(normalizedModel) &&
+              tokenUsage.input &&
+              tokenUsage.output
+                ? utils.adapters.anthropic
+                    .getUsageCost(normalizedModel, tokenUsage)
+                    .toString()
+                : null;
+            const baselineCost =
+              isAnthropicPricingModel(normalizedModel) &&
+              tokenUsage.input &&
+              tokenUsage.output
+                ? utils.adapters.anthropic
+                    .getUsageCost(normalizedModel, tokenUsage)
+                    .toString()
+                : null;
+
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
@@ -676,6 +721,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               model: body.model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
+              cost,
+              baselineCost,
             });
 
             return reply.send(response);
@@ -689,6 +736,27 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
+        // Calculate costs
+        const normalizedModel = utils.adapters.anthropic.normalizeModel(
+          body.model,
+        );
+        const cost =
+          isAnthropicPricingModel(normalizedModel) &&
+          tokenUsage.input &&
+          tokenUsage.output
+            ? utils.adapters.anthropic
+                .getUsageCost(normalizedModel, tokenUsage)
+                .toString()
+            : null;
+        const baselineCost =
+          isAnthropicPricingModel(normalizedModel) &&
+          tokenUsage.input &&
+          tokenUsage.output
+            ? utils.adapters.anthropic
+                .getUsageCost(normalizedModel, tokenUsage)
+                .toString()
+            : null;
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
@@ -697,6 +765,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: body.model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost,
+          baselineCost,
         });
 
         return reply.send(response);

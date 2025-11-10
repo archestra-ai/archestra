@@ -6,6 +6,7 @@ import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
+import { isOpenAIPricingModel } from "@/llm-pricing";
 import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
@@ -17,7 +18,6 @@ import {
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
-import { llmPricing } from '@/llm-pricing';
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -202,7 +202,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const baselineModel = body.model;
       const model = resolvedAgent.optimizeCost
-        ? utils.adapters.openai.getOptimizedModel(baselineModel, tools, messages)
+        ? utils.adapters.openai.getOptimizedModel(
+            baselineModel,
+            tools,
+            messages,
+          )
         : baselineModel;
       fastify.log.info(
         {
@@ -550,12 +554,25 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        let cost = null;
+        let baselineCost = null;
+
         // Report token usage metrics for streaming
         if (tokenUsage) {
           reportLLMTokens("openai", resolvedAgent, tokenUsage);
+          const normalizedModel = utils.adapters.openai.normalizeModel(model);
+          const normalizedBaselineModel =
+            utils.adapters.openai.normalizeModel(baselineModel);
+          cost = isOpenAIPricingModel(normalizedModel)
+            ? utils.adapters.openai.getUsageCost(normalizedModel, tokenUsage)
+            : null;
+          baselineCost = isOpenAIPricingModel(normalizedBaselineModel)
+            ? utils.adapters.openai.getUsageCost(
+                normalizedBaselineModel,
+                tokenUsage,
+              )
+            : null;
         }
-        const cost = model in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(model, tokenUsage) : null
-        const baselineCost = baselineModel in llmPricing.openai && tokenUsage ? utils.adapters.openai.getUsageCost(baselineModel, tokenUsage) : null
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -579,8 +596,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage?.input || null,
           outputTokens: tokenUsage?.output || null,
-          cost,
-          baselineCost,
+          cost: cost?.toString(),
+          baselineCost: baselineCost?.toString(),
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -650,12 +667,24 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Extract token usage from response
         const tokenUsage = response.usage
           ? utils.adapters.openai.getUsageTokens(response.usage)
-          : {input: null, output: null};
+          : { input: null, output: null };
 
-        let cost = null, baselineCost = null;
+        let cost = null,
+          baselineCost = null;
         if (tokenUsage.input && tokenUsage.output) {
-          cost = model in llmPricing.openai ? utils.adapters.openai.getUsageCost(model, tokenUsage) : null
-          baselineCost = baselineModel in llmPricing.openai ? utils.adapters.openai.getUsageCost(baselineModel, tokenUsage) : null
+          const normalizedModel = utils.adapters.openai.normalizeModel(model);
+          const normalizedBaselineModel =
+            utils.adapters.openai.normalizeModel(baselineModel);
+          cost = isOpenAIPricingModel(normalizedModel)
+            ? utils.adapters.openai
+                .getUsageCost(normalizedModel, tokenUsage)
+                .toString()
+            : null;
+          baselineCost = isOpenAIPricingModel(normalizedBaselineModel)
+            ? utils.adapters.openai
+                .getUsageCost(normalizedBaselineModel, tokenUsage)
+                .toString()
+            : null;
         }
 
         // Store the complete interaction

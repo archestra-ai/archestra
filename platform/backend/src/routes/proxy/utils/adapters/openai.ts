@@ -1,7 +1,7 @@
 import type { z } from "zod";
+import { isOpenAIPricingModel, llmPricing } from "@/llm-pricing";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
-import { llmPricing, type PricingModel } from '@/llm-pricing';
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 type OpenAiModel = OpenAi.Types.ChatCompletionsRequest["model"];
@@ -192,7 +192,7 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
 
 /** Returns the usage cost in USD */
 export function getUsageCost(
-  model: PricingModel,
+  model: keyof typeof llmPricing.openai,
   { input = 0, output = 0 }: { input?: number; output?: number },
 ): number {
   const pricing = llmPricing.openai[model];
@@ -204,19 +204,22 @@ export function getUsageCost(
  * The selection is based on context length, attachments and tool presence.
  */
 export function getOptimizedModel(
-  model: OpenAiModel,
+  model: string,
   tools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
-  messages: z.infer<typeof OpenAi.Types.Message>[],
-): OpenAiModel {
+  messages: OpenAiMessages,
+): string {
   const normalizedModel = normalizeModel(model);
-  if (!(normalizedModel in llmPricing.openai)) {
+  if (!isOpenAIPricingModel(normalizedModel)) {
     return model;
   }
 
   const mini = "gpt-4o-mini" as const;
   const originalPricing = llmPricing.openai[normalizedModel];
   const optimizedPricing = llmPricing.openai[mini];
-  if (originalPricing.input <= optimizedPricing.input || originalPricing.output <= optimizedPricing.input) {
+  if (
+    originalPricing.input <= optimizedPricing.input ||
+    originalPricing.output <= optimizedPricing.input
+  ) {
     return model;
   }
   let contextLength = 0;
@@ -224,10 +227,10 @@ export function getOptimizedModel(
   for (const message of messages) {
     if (typeof message.content === "string") {
       contextLength += message.content.length;
-    } else {
+    } else if (Array.isArray(message.content)) {
       for (const part of message.content) {
         if (part.type === "text") {
-          contextLength += part.length;
+          contextLength += part.text.length;
         } else {
           hasAttachments = true;
         }

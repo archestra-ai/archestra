@@ -37,8 +37,34 @@ export const llmPricing = {
     "o4-mini-deep-research": { input: 2, output: 8, cachedInput: 0.5 },
     "o4-mini-high": { input: 1.1, output: 4.4, cachedInput: 0.28 },
   },
+  anthropic: {
+    // Claude 4.1
+    "claude-opus-4.1": { input: 15, output: 75, cachedInput: 18.75 },
+    // Claude 4.5
+    "claude-sonnet-4.5": { input: 3, output: 15, cachedInput: 3.75 },
+    "claude-haiku-4.5": { input: 1, output: 5, cachedInput: 1.25 },
+    // Claude 4 (legacy)
+    "claude-opus-4": { input: 15, output: 75, cachedInput: 18.75 },
+    "claude-sonnet-4": { input: 3, output: 15, cachedInput: 3.75 },
+    // Claude 3.7
+    "claude-sonnet-3.7": { input: 3, output: 15, cachedInput: 3.75 },
+    // Claude 3.5
+    "claude-3.5-sonnet": { input: 3, output: 15, cachedInput: 3.75 },
+    "claude-3.5-haiku": { input: 0.8, output: 4, cachedInput: 1 },
+    // Claude 3
+    "claude-3-opus": { input: 15, output: 75, cachedInput: 18.75 },
+    "claude-3-sonnet": { input: 3, output: 15, cachedInput: 3.75 },
+    "claude-3-haiku": { input: 0.25, output: 1.25, cachedInput: 0.3 },
+  },
 } as const;
 
-export type PricingModel = {
-  openai: keyof typeof llmPricing.openai;
-};
+export function isOpenAIPricingModel(
+  model: string,
+): model is keyof typeof llmPricing.openai {
+  return model in llmPricing.openai;
+}
+export function isAnthropicPricingModel(
+  model: string,
+): model is keyof typeof llmPricing.anthropic {
+  return model in llmPricing.anthropic;
+}

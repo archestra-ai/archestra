@@ -1,4 +1,4 @@
-import { llmPricing } from "@/llm-pricing";
+import { isAnthropicPricingModel, llmPricing } from "@/llm-pricing";
 import type { Anthropic, CommonToolCall, CommonToolResult } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
@@ -219,6 +219,63 @@ export function getUsageCost(
 ): number {
   const pricing = llmPricing.anthropic[model];
   return (input * pricing.input + output * pricing.output) / 1000000;
+}
+
+/**
+ * Selects optimal Anthropic model in terms of cost.
+ * The selection is based on context length, attachments and tool presence.
+ */
+export function getOptimizedModel(
+  model: string,
+  tools:
+    | Array<{ name: string; type: string; description?: string }>
+    | undefined,
+  messages: Anthropic.Types.MessagesRequest["messages"],
+): string {
+  const normalizedModel = normalizeModel(model);
+  if (!isAnthropicPricingModel(normalizedModel)) {
+    return model;
+  }
+
+  const haiku = "claude-3-haiku" as const;
+  const originalPricing = llmPricing.anthropic[normalizedModel];
+  const optimizedPricing = llmPricing.anthropic[haiku];
+
+  // If the original model is already cheap, don't optimize
+  if (
+    originalPricing.input <= optimizedPricing.input ||
+    originalPricing.output <= optimizedPricing.output
+  ) {
+    return model;
+  }
+
+  let contextLength = 0;
+  let hasAttachments = false;
+
+  for (const message of messages) {
+    if (typeof message.content === "string") {
+      contextLength += message.content.length;
+    } else if (Array.isArray(message.content)) {
+      for (const block of message.content) {
+        if (block.type === "text") {
+          contextLength += block.text.length;
+        } else {
+          // Any non-text content (images, documents, etc.) counts as attachment
+          hasAttachments = true;
+        }
+      }
+    }
+  }
+
+  const hasTools = tools && tools.length > 0;
+  const shortContext = contextLength < 10000;
+
+  // Use Haiku for simple, short requests without attachments or tools
+  if (shortContext && !hasAttachments && !hasTools) {
+    return haiku;
+  }
+
+  return model;
 }
 
 /** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */

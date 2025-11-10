@@ -216,6 +216,34 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      // Optimize model selection for cost if enabled
+      const baselineModel = body.model;
+      const optimizedModel = resolvedAgent.optimizeCost
+        ? utils.adapters.anthropic.getOptimizedModel(
+            baselineModel,
+            // Cast to simple tool format for optimization check
+            mergedTools as Array<{
+              name: string;
+              type: string;
+              description?: string;
+            }>,
+            body.messages,
+          )
+        : baselineModel;
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          baselineModel,
+          optimizedModel,
+          optimizationEnabled: resolvedAgent.optimizeCost,
+        },
+        "Model optimization applied",
+      );
+
+      // Update body with optimized model
+      body.model = optimizedModel;
+
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
         body.messages,
@@ -577,6 +605,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const normalizedModel = utils.adapters.anthropic.normalizeModel(
           body.model,
         );
+        const normalizedBaselineModel =
+          utils.adapters.anthropic.normalizeModel(baselineModel);
         const cost =
           isAnthropicPricingModel(normalizedModel) &&
           tokenUsage.input &&
@@ -586,11 +616,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 .toString()
             : null;
         const baselineCost =
-          isAnthropicPricingModel(normalizedModel) &&
+          isAnthropicPricingModel(normalizedBaselineModel) &&
           tokenUsage.input &&
           tokenUsage.output
             ? utils.adapters.anthropic
-                .getUsageCost(normalizedModel, tokenUsage)
+                .getUsageCost(normalizedBaselineModel, tokenUsage)
                 .toString()
             : null;
 
@@ -743,6 +773,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const normalizedModel = utils.adapters.anthropic.normalizeModel(
           body.model,
         );
+        const normalizedBaselineModel =
+          utils.adapters.anthropic.normalizeModel(baselineModel);
         const cost =
           isAnthropicPricingModel(normalizedModel) &&
           tokenUsage.input &&
@@ -752,11 +784,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 .toString()
             : null;
         const baselineCost =
-          isAnthropicPricingModel(normalizedModel) &&
+          isAnthropicPricingModel(normalizedBaselineModel) &&
           tokenUsage.input &&
           tokenUsage.output
             ? utils.adapters.anthropic
-                .getUsageCost(normalizedModel, tokenUsage)
+                .getUsageCost(normalizedBaselineModel, tokenUsage)
                 .toString()
             : null;
 

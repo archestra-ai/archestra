@@ -15,7 +15,8 @@ const MOCK_RESPONSE: Anthropic.Message = {
     {
       type: "text",
       text: "Hello! How can I help you today?",
-    },
+      citations: [],
+    } as Anthropic.Messages.TextBlock,
   ],
   model: "claude-3-5-sonnet-20241022",
   stop_reason: "end_turn",
@@ -23,7 +24,9 @@ const MOCK_RESPONSE: Anthropic.Message = {
   usage: {
     input_tokens: 12,
     output_tokens: 10,
-  },
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  } as Anthropic.Messages.Usage,
 };
 
 /**
@@ -51,13 +54,22 @@ export class MockAnthropicClient {
                   model: params.model,
                   stop_reason: null,
                   stop_sequence: null,
-                  usage: { input_tokens: 12, output_tokens: 0 },
+                  usage: {
+                    input_tokens: 12,
+                    output_tokens: 0,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                  } as Anthropic.Messages.Usage,
                 },
               },
               {
                 type: "content_block_start",
                 index: 0,
-                content_block: { type: "text", text: "" },
+                content_block: {
+                  type: "text",
+                  text: "",
+                  citations: [],
+                } as Anthropic.Messages.TextBlock,
               },
               {
                 type: "content_block_delta",
@@ -79,7 +91,11 @@ export class MockAnthropicClient {
               {
                 type: "message_delta",
                 delta: { stop_reason: "end_turn", stop_sequence: null },
-                usage: { output_tokens: 10 },
+                usage: {
+                  output_tokens: 10,
+                  cache_creation_input_tokens: 0,
+                  cache_read_input_tokens: 0,
+                } as Anthropic.Messages.MessageDeltaUsage,
               },
               {
                 type: "message_stop",

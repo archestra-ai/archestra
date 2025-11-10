@@ -5,6 +5,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronRightIcon, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -224,6 +225,28 @@ function LogsTable({
           <Badge variant="secondary" className="text-xs whitespace-normal">
             {interaction.provider} ({interaction.modelName})
           </Badge>
+        );
+      },
+    },
+    {
+      id: "costSavings",
+      header: "Cost Savings",
+      cell: ({ row }) => {
+        const { cost, baselineCost } = row.original;
+
+        if (!cost || !baselineCost) {
+          return <span className="text-xs text-muted-foreground">N/A</span>;
+        }
+
+        return (
+          <div className="text-xs">
+            <Savings
+              cost={cost}
+              baselineCost={baselineCost}
+              format="percent"
+              tooltip="hover"
+            />
+          </div>
         );
       },
     },

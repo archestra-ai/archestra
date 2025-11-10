@@ -163,7 +163,7 @@ function LogDetail({
                       cost={dynamicInteraction.cost}
                       baselineCost={dynamicInteraction.baselineCost}
                       format="percent"
-                      showTooltip
+                      tooltip="always"
                     />
                   </div>
                 </div>

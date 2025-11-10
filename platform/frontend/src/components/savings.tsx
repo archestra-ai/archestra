@@ -10,13 +10,13 @@ export function Savings({
   cost,
   baselineCost,
   format = "both",
-  showTooltip = false,
+  tooltip = "never",
   className,
 }: {
   cost: string;
   baselineCost: string;
   format?: "percent" | "number" | "both";
-  showTooltip?: boolean;
+  tooltip?: "never" | "always" | "hover";
   className?: string;
 }) {
   const costNum = Number.parseFloat(cost);
@@ -51,13 +51,21 @@ export function Savings({
     </>
   );
 
-  if (showTooltip) {
+  if (tooltip !== "never") {
     return (
-      <div className={`${className || ""} inline-flex items-center gap-1`}>
+      <div
+        className={`${className || ""} inline-flex items-center gap-1 group`}
+      >
         <span className={colorClass}>{content}</span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Info className="h-4 w-4 text-muted-foreground/50" />
+            <Info
+              className={`h-4 w-4 text-muted-foreground/50 ${
+                tooltip === "hover"
+                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
+                  : ""
+              }`}
+            />
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
             <div className="space-y-2">

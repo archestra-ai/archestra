@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
+import { Cost, formatCost } from "@/components/cost";
 import { LoadingSpinner } from "@/components/loading";
+import { Savings } from "@/components/savings";
 import {
   Accordion,
   AccordionContent,
@@ -151,6 +153,21 @@ function LogDetail({
                   <div className="text-muted-foreground">None</div>
                 )}
               </div>
+              {dynamicInteraction.cost && dynamicInteraction.baselineCost && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">Cost</div>
+                  <div className="flex gap-3">
+                    <Cost cost={dynamicInteraction.cost} />
+                    {"  "}
+                    <Savings
+                      cost={dynamicInteraction.cost}
+                      baselineCost={dynamicInteraction.baselineCost}
+                      format="percent"
+                      showTooltip
+                    />
+                  </div>
+                </div>
+              )}
               {isDualLlmRelevant && (
                 <div>
                   <div className="text-sm text-muted-foreground mb-2">

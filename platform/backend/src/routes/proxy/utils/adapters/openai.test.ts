@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@/test";
-import { toolCallsToCommon, toolResultsToMessages } from "./openai";
+import { getOptimizedModel, toolCallsToCommon, toolResultsToMessages } from "./openai";
 
 describe("OpenAI MCP Adapters", () => {
   describe("toolCallsToCommon", () => {
@@ -162,6 +162,53 @@ describe("OpenAI MCP Adapters", () => {
         tool_call_id: "call_2",
         content: "Error: Network timeout",
       });
+    });
+  });
+
+  describe("getOptimizedModel", () => {
+    test("returns original model when it's already cheap", () => {
+      const result = getOptimizedModel("gpt-4o-mini", undefined, [
+        { role: "user", content: "hi" },
+      ]);
+      expect(result).toBe("gpt-4o-mini");
+    });
+
+    test("returns mini for expensive models with short context", () => {
+      const result = getOptimizedModel("gpt-4o", undefined, [
+        { role: "user", content: "hi" },
+      ]);
+      expect(result).toBe("gpt-4o-mini");
+    });
+
+    test("returns original model when it has long context", () => {
+      const longContent = "word ".repeat(50000);
+      const result = getOptimizedModel("gpt-4o", undefined, [
+        { role: "user", content: longContent },
+      ]);
+      expect(result).toBe("gpt-4o");
+    });
+
+    test("returns original model when it has attachments", () => {
+      const result = getOptimizedModel("gpt-4o", undefined, [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "hi" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,...", detail: "auto" },
+            },
+          ],
+        },
+      ]);
+      expect(result).toBe("gpt-4o");
+    });
+
+    test("returns original model when unknown model", () => {
+      const result = getOptimizedModel("gpt-unknown", undefined, [
+        { role: "user", content: "hi" },
+      ]);
+      expect(result).toBe("gpt-unknown");
     });
   });
 });

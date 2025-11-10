@@ -7,7 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { isAnthropicPricingModel } from "@/llm-pricing";
-import { AgentModel, InteractionModel } from "@/models";
+import { AgentModel, InteractionModel, OptimizationRuleModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
@@ -216,20 +216,46 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
-      // Optimize model selection for cost if enabled
+      // Optimize model selection for cost if enabled using dynamic rules
       const baselineModel = body.model;
-      const optimizedModel = resolvedAgent.optimizeCost
-        ? utils.adapters.anthropic.getOptimizedModel(
-            baselineModel,
-            // Cast to simple tool format for optimization check
-            mergedTools as Array<{
-              name: string;
-              type: string;
-              description?: string;
-            }>,
-            body.messages,
-          )
-        : baselineModel;
+      let optimizedModel = baselineModel;
+
+      if (resolvedAgent.optimizeCost) {
+        const rules =
+          await OptimizationRuleModel.findEnabledByAgentIdAndProvider(
+            resolvedAgentId,
+            "anthropic",
+          );
+
+        if (rules.length > 0) {
+          // Calculate content length from messages
+          let contentLength = 0;
+          for (const message of body.messages) {
+            if (typeof message.content === "string") {
+              contentLength += message.content.length;
+            } else if (Array.isArray(message.content)) {
+              for (const block of message.content) {
+                if (block.type === "text") {
+                  contentLength += block.text.length;
+                }
+              }
+            }
+          }
+
+          // Check if tools are present
+          const hasTools = mergedTools.length > 0;
+
+          // Evaluate rules
+          const ruleResult = OptimizationRuleModel.evaluateRules(rules, {
+            contentLength,
+            hasTools,
+          });
+
+          if (ruleResult) {
+            optimizedModel = ruleResult;
+          }
+        }
+      }
 
       fastify.log.info(
         {
@@ -238,7 +264,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           optimizedModel,
           optimizationEnabled: resolvedAgent.optimizeCost,
         },
-        "Model optimization applied",
+        "Model optimization applied (dynamic rules)",
       );
 
       // Update body with optimized model

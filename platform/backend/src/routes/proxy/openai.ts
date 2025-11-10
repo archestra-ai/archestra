@@ -7,7 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { isOpenAIPricingModel } from "@/llm-pricing";
-import { AgentModel, InteractionModel } from "@/models";
+import { AgentModel, InteractionModel, OptimizationRuleModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
@@ -201,13 +201,46 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       const baselineModel = body.model;
-      const model = resolvedAgent.optimizeCost
-        ? utils.adapters.openai.getOptimizedModel(
-            baselineModel,
-            tools,
-            messages,
-          )
-        : baselineModel;
+      let model = baselineModel;
+
+      // Apply dynamic optimization rules if cost optimization is enabled
+      if (resolvedAgent.optimizeCost) {
+        const rules =
+          await OptimizationRuleModel.findEnabledByAgentIdAndProvider(
+            resolvedAgentId,
+            "openai",
+          );
+
+        if (rules.length > 0) {
+          // Calculate content length from messages
+          let contentLength = 0;
+          for (const message of messages) {
+            if (typeof message.content === "string") {
+              contentLength += message.content.length;
+            } else if (Array.isArray(message.content)) {
+              for (const part of message.content) {
+                if (part.type === "text") {
+                  contentLength += part.text.length;
+                }
+              }
+            }
+          }
+
+          // Check if tools are present
+          const hasTools = tools !== undefined && tools.length > 0;
+
+          // Evaluate rules
+          const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
+            contentLength,
+            hasTools,
+          });
+
+          if (optimizedModel) {
+            model = optimizedModel;
+          }
+        }
+      }
+
       fastify.log.info(
         {
           resolvedAgentId,
@@ -215,7 +248,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           baselineModel,
           model,
         },
-        "Optimized model selected",
+        "Model selected (dynamic rules)",
       );
 
       const { authorization: openAiApiKey } = headers;

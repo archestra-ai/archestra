@@ -11,12 +11,14 @@ export type OptimizationRule = typeof optimizationRulesTable.$inferSelect;
 export type NewOptimizationRule = typeof optimizationRulesTable.$inferInsert;
 
 export type OptimizationRuleType = "content_length" | "tool_presence";
+export type LlmProvider = "anthropic" | "openai";
 
 class OptimizationRuleModel {
   static async create(data: {
     agentId: string;
     ruleType: OptimizationRuleType;
     conditions: RuleConditions;
+    provider: LlmProvider;
     targetModel: string;
     priority?: number;
     enabled?: boolean;
@@ -27,6 +29,7 @@ class OptimizationRuleModel {
         agentId: data.agentId,
         ruleType: data.ruleType,
         conditions: data.conditions,
+        provider: data.provider,
         targetModel: data.targetModel,
         priority: data.priority ?? 0,
         enabled: data.enabled ?? true,
@@ -60,6 +63,24 @@ class OptimizationRuleModel {
     return rules;
   }
 
+  static async findByAgentIdAndProvider(
+    agentId: string,
+    provider: LlmProvider,
+  ): Promise<OptimizationRule[]> {
+    const rules = await db
+      .select()
+      .from(optimizationRulesTable)
+      .where(
+        and(
+          eq(optimizationRulesTable.agentId, agentId),
+          eq(optimizationRulesTable.provider, provider),
+        ),
+      )
+      .orderBy(asc(optimizationRulesTable.priority));
+
+    return rules;
+  }
+
   static async findEnabledByAgentId(
     agentId: string,
   ): Promise<OptimizationRule[]> {
@@ -77,11 +98,31 @@ class OptimizationRuleModel {
     return rules;
   }
 
+  static async findEnabledByAgentIdAndProvider(
+    agentId: string,
+    provider: LlmProvider,
+  ): Promise<OptimizationRule[]> {
+    const rules = await db
+      .select()
+      .from(optimizationRulesTable)
+      .where(
+        and(
+          eq(optimizationRulesTable.agentId, agentId),
+          eq(optimizationRulesTable.provider, provider),
+          eq(optimizationRulesTable.enabled, true),
+        ),
+      )
+      .orderBy(asc(optimizationRulesTable.priority));
+
+    return rules;
+  }
+
   static async update(
     id: string,
     data: Partial<{
       ruleType: OptimizationRuleType;
       conditions: RuleConditions;
+      provider: LlmProvider;
       targetModel: string;
       priority: number;
       enabled: boolean;

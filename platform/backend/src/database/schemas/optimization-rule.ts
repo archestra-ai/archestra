@@ -15,6 +15,11 @@ export const optimizationRuleTypeEnum = pgEnum("optimization_rule_type", [
   "tool_presence",
 ]);
 
+export const llmProviderEnum = pgEnum("llm_provider", [
+  "anthropic",
+  "openai",
+]);
+
 const optimizationRulesTable = pgTable("optimization_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: uuid("agent_id")
@@ -22,6 +27,7 @@ const optimizationRulesTable = pgTable("optimization_rules", {
     .references(() => agentsTable.id, { onDelete: "cascade" }),
   ruleType: optimizationRuleTypeEnum("rule_type").notNull(),
   conditions: jsonb("conditions").notNull(),
+  provider: llmProviderEnum("provider").notNull().default("openai"),
   targetModel: text("target_model").notNull(),
   priority: integer("priority").notNull().default(0),
   enabled: boolean("enabled").notNull().default(true),

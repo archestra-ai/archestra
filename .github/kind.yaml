@@ -1,0 +1,19 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: archestra-ci-cluster
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Map ports for the Archestra platform
+      - containerPort: 30000 # Backend API
+        hostPort: 9000
+        protocol: TCP
+      - containerPort: 30050 # Metrics
+        hostPort: 9050
+        protocol: TCP
+      - containerPort: 30300 # Frontend
+        hostPort: 3000
+        protocol: TCP
+      - containerPort: 30080 # WireMock
+        hostPort: 8080
+        protocol: TCP

@@ -9,7 +9,7 @@ import { API_BASE_URL, UI_BASE_URL } from "../../consts";
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
  */
-interface TestFixtures {
+export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
   deleteAgent: typeof deleteAgent;
@@ -19,6 +19,10 @@ interface TestFixtures {
   deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
   createTrustedDataPolicy: typeof createTrustedDataPolicy;
   deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
+  createMcpCatalogItem: typeof createMcpCatalogItem;
+  deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
+  installMcpServer: typeof installMcpServer;
+  uninstallMcpServer: typeof uninstallMcpServer;
 }
 
 const makeApiRequest = async ({
@@ -46,7 +50,9 @@ const makeApiRequest = async ({
 
   if (!ignoreStatusCheck && !response.ok()) {
     throw new Error(
-      `Failed to ${method} ${urlSuffix} with data ${JSON.stringify(data)}: ${response.status()} ${await response.text()}`,
+      `Failed to ${method} ${urlSuffix} with data ${JSON.stringify(
+        data,
+      )}: ${response.status()} ${await response.text()}`,
     );
   }
 
@@ -190,6 +196,78 @@ const deleteTrustedDataPolicy = async (
     urlSuffix: `/api/trusted-data-policies/${policyId}`,
   });
 
+/**
+ * Create an MCP catalog item
+ * (authnz is handled by the authenticated session)
+ */
+const createMcpCatalogItem = async (
+  request: APIRequestContext,
+  catalogItem: {
+    name: string;
+    description: string;
+    serverType: "local" | "remote";
+    localConfig?: unknown;
+    serverUrl?: string;
+    authFields?: unknown;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/internal_mcp_catalog",
+    data: catalogItem,
+  });
+
+/**
+ * Delete an MCP catalog item
+ * (authnz is handled by the authenticated session)
+ */
+const deleteMcpCatalogItem = async (
+  request: APIRequestContext,
+  catalogId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/internal_mcp_catalog/${catalogId}`,
+  });
+
+/**
+ * Install an MCP server
+ * (authnz is handled by the authenticated session)
+ */
+const installMcpServer = async (
+  request: APIRequestContext,
+  serverData: {
+    name: string;
+    catalogId?: string;
+    teams?: string[];
+    userConfigValues?: Record<string, string>;
+    environmentValues?: Record<string, string>;
+    accessToken?: string;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/mcp_server",
+    data: serverData,
+  });
+
+/**
+ * Uninstall an MCP server
+ * (authnz is handled by the authenticated session)
+ */
+const uninstallMcpServer = async (
+  request: APIRequestContext,
+  serverId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/mcp_server/${serverId}`,
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -218,5 +296,17 @@ export const test = base.extend<TestFixtures>({
   },
   deleteTrustedDataPolicy: async ({}, use) => {
     await use(deleteTrustedDataPolicy);
+  },
+  createMcpCatalogItem: async ({}, use) => {
+    await use(createMcpCatalogItem);
+  },
+  deleteMcpCatalogItem: async ({}, use) => {
+    await use(deleteMcpCatalogItem);
+  },
+  installMcpServer: async ({}, use) => {
+    await use(installMcpServer);
+  },
+  uninstallMcpServer: async ({}, use) => {
+    await use(uninstallMcpServer);
   },
 });

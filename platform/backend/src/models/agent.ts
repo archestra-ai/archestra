@@ -27,12 +27,6 @@ import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 import ToolModel from "./tool";
 
-type AgentWithToolsRow = {
-  agents: typeof schema.agentsTable.$inferSelect;
-  agent_tools: typeof schema.agentToolsTable.$inferSelect | null;
-  tools: typeof schema.toolsTable.$inferSelect | null;
-};
-
 class AgentModel {
   static async create({
     teams,
@@ -177,85 +171,75 @@ class AgentModel {
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
-    let agentsData: AgentWithToolsRow[];
-    let totalResult: number;
+    // Step 1: Get paginated agent IDs with proper sorting
+    // This ensures LIMIT/OFFSET applies to agents, not to joined rows with tools
+    let query = db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(whereClause)
+      .$dynamic();
 
-    if (sorting?.sortBy === "toolsCount" || sorting?.sortBy === "team") {
-      const direction = sorting.sortDirection === "asc" ? asc : desc;
-      let sortedAgents: { id: string }[];
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
 
-      if (sorting.sortBy === "toolsCount") {
-        // Create a subquery to count tools per agent
-        const toolsCountSubquery = db
-          .select({
-            agentId: schema.agentToolsTable.agentId,
-            toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
-          })
-          .from(schema.agentToolsTable)
-          .groupBy(schema.agentToolsTable.agentId)
-          .as("toolsCounts");
+    // Add sorting-specific joins and order by
+    if (sorting?.sortBy === "toolsCount") {
+      const toolsCountSubquery = db
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+        })
+        .from(schema.agentToolsTable)
+        .groupBy(schema.agentToolsTable.agentId)
+        .as("toolsCounts");
 
-        // Use COALESCE to treat NULL as 0 when sorting
-        const toolsCountWithDefault = sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`;
-        sortedAgents = await db
-          .select({
-            id: schema.agentsTable.id,
-          })
-          .from(schema.agentsTable)
-          .leftJoin(
-            toolsCountSubquery,
-            eq(schema.agentsTable.id, toolsCountSubquery.agentId),
-          )
-          .where(whereClause)
-          .orderBy(direction(toolsCountWithDefault))
-          .limit(pagination.limit)
-          .offset(pagination.offset);
-      } else {
-        // sorting.sortBy === "team"
-        // Create a subquery to get the first team name (alphabetically) per agent
-        const teamNameSubquery = db
-          .select({
-            agentId: schema.agentTeamsTable.agentId,
-            teamName: min(schema.teamsTable.name).as("teamName"),
-          })
-          .from(schema.agentTeamsTable)
-          .leftJoin(
-            schema.teamsTable,
-            eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
-          )
-          .groupBy(schema.agentTeamsTable.agentId)
-          .as("teamNames");
+      query = query
+        .leftJoin(
+          toolsCountSubquery,
+          eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+        )
+        .orderBy(direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`));
+    } else if (sorting?.sortBy === "team") {
+      const teamNameSubquery = db
+        .select({
+          agentId: schema.agentTeamsTable.agentId,
+          teamName: min(schema.teamsTable.name).as("teamName"),
+        })
+        .from(schema.agentTeamsTable)
+        .leftJoin(
+          schema.teamsTable,
+          eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+        )
+        .groupBy(schema.agentTeamsTable.agentId)
+        .as("teamNames");
 
-        // Use COALESCE to treat NULL as empty string when sorting
-        const teamNameWithDefault = sql`COALESCE(${teamNameSubquery.teamName}, '')`;
-        sortedAgents = await db
-          .select({
-            id: schema.agentsTable.id,
-          })
-          .from(schema.agentsTable)
-          .leftJoin(
-            teamNameSubquery,
-            eq(schema.agentsTable.id, teamNameSubquery.agentId),
-          )
-          .where(whereClause)
-          .orderBy(direction(teamNameWithDefault))
-          .limit(pagination.limit)
-          .offset(pagination.offset);
-      }
+      query = query
+        .leftJoin(
+          teamNameSubquery,
+          eq(schema.agentsTable.id, teamNameSubquery.agentId),
+        )
+        .orderBy(direction(sql`COALESCE(${teamNameSubquery.teamName}, '')`));
+    } else {
+      query = query.orderBy(orderByClause);
+    }
 
-      const sortedAgentIds = sortedAgents.map((a) => a.id);
+    const sortedAgents = await query
+      .limit(pagination.limit)
+      .offset(pagination.offset);
 
-      // If no agents match, return early
-      if (sortedAgentIds.length === 0) {
-        const [{ total }] = await db
-          .select({ total: count() })
-          .from(schema.agentsTable)
-          .where(whereClause);
-        return createPaginatedResult([], Number(total), pagination);
-      }
+    const sortedAgentIds = sortedAgents.map((a) => a.id);
 
-      // Get full agent data with tools for sorted agents, maintaining order
-      agentsData = await db
+    // If no agents match, return early
+    if (sortedAgentIds.length === 0) {
+      const [{ total }] = await db
+        .select({ total: count() })
+        .from(schema.agentsTable)
+        .where(whereClause);
+      return createPaginatedResult([], Number(total), pagination);
+    }
+
+    // Step 2: Get full agent data with tools for the paginated agent IDs
+    const [agentsData, [{ total: totalResult }]] = await Promise.all([
+      db
         .select()
         .from(schema.agentsTable)
         .leftJoin(
@@ -266,43 +250,16 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(inArray(schema.agentsTable.id, sortedAgentIds));
+        .where(inArray(schema.agentsTable.id, sortedAgentIds)),
+      db.select({ total: count() }).from(schema.agentsTable).where(whereClause),
+    ]);
 
-      // Sort in memory to maintain the order from the sorted query
-      const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-      agentsData.sort(
-        (a, b) =>
-          (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
-      );
-
-      [{ total: totalResult }] = await db
-        .select({ total: count() })
-        .from(schema.agentsTable)
-        .where(whereClause);
-    } else {
-      // Standard query for other sorting options
-      [agentsData, [{ total: totalResult }]] = await Promise.all([
-        db
-          .select()
-          .from(schema.agentsTable)
-          .leftJoin(
-            schema.agentToolsTable,
-            eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-          )
-          .leftJoin(
-            schema.toolsTable,
-            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-          )
-          .where(whereClause)
-          .orderBy(orderByClause)
-          .limit(pagination.limit)
-          .offset(pagination.offset),
-        db
-          .select({ total: count() })
-          .from(schema.agentsTable)
-          .where(whereClause),
-      ]);
-    }
+    // Sort in memory to maintain the order from the sorted query
+    const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
+    agentsData.sort(
+      (a, b) =>
+        (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
+    );
 
     // Group the flat join results by agent
     const agentsMap = new Map<string, Agent>();

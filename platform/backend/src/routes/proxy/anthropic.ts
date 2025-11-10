@@ -16,6 +16,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
+import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -154,11 +155,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { "x-api-key": anthropicApiKey } = headers;
 
-    const anthropicClient = new AnthropicProvider({
-      apiKey: anthropicApiKey,
-      baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch("anthropic", resolvedAgent),
-    });
+    const anthropicClient = config.benchmark.mockMode
+      ? (new MockAnthropicClient() as unknown as AnthropicProvider)
+      : new AnthropicProvider({
+          apiKey: anthropicApiKey,
+          baseURL: config.llm.anthropic.baseUrl,
+          fetch: getObservableFetch("anthropic", resolvedAgent),
+        });
 
     try {
       // Check if current usage limits are already exceeded

@@ -7,7 +7,8 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent", teams: [] });
     await AgentModel.create({ name: "Test Agent 2", teams: [] });
 
-    expect(await AgentModel.findAll()).toHaveLength(2);
+    // Expecting 3: 2 created + 1 default agent from migration
+    expect(await AgentModel.findAll()).toHaveLength(3);
   });
 
   describe("Access Control", () => {
@@ -37,7 +38,8 @@ describe("AgentModel", () => {
       await AgentModel.create({ name: "Agent 3", teams: [] });
 
       const agents = await AgentModel.findAll(admin.id, true);
-      expect(agents).toHaveLength(3);
+      // Expecting 4: 3 created + 1 default agent from migration
+      expect(agents).toHaveLength(4);
     });
 
     test("member only sees agents in their teams", async ({
@@ -312,7 +314,8 @@ describe("AgentModel", () => {
 
       const agents = await AgentModel.findAll();
 
-      expect(agents).toHaveLength(2);
+      // Expecting 3: 2 created + 1 default agent from migration
+      expect(agents).toHaveLength(3);
 
       // Check first agent's labels are sorted
       const agent1 = agents.find((a) => a.name === "Agent 1");

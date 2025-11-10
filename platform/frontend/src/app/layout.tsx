@@ -91,7 +91,7 @@ export default function RootLayout({
                     </main>
                     <Toaster />
                     <EasterEgg />
-                    <OnboardingDialogWrapper />
+                    {/*<OnboardingDialogWrapper />*/}
                   </SidebarProvider>
                 </WithAuthCheck>
               </ArchestraQueryClientProvider>

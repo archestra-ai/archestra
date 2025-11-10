@@ -53,10 +53,23 @@ export class K8sAttachTransport implements Transport {
           this.readBuffer.append(chunk);
 
           // Process all complete messages in the buffer
-          let message = this.readBuffer.readMessage();
-          while (message !== null) {
-            this.onmessage?.(message);
-            message = this.readBuffer.readMessage();
+          try {
+            let message = this.readBuffer.readMessage();
+            while (message !== null) {
+              this.onmessage?.(message);
+              message = this.readBuffer.readMessage();
+            }
+          } catch (error) {
+            // Log JSON parsing errors but don't crash - the MCP server might output
+            // non-JSON lines (startup messages, debug output, etc.) before JSON-RPC messages
+            logger.debug(
+              {
+                err: error,
+                podName: this.params.podName,
+                containerName: this.params.containerName,
+              },
+              "Failed to parse message from MCP server stdout - skipping invalid line",
+            );
           }
 
           callback();

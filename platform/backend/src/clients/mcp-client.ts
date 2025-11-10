@@ -457,55 +457,82 @@ class McpClient {
   }): Promise<CommonMcpToolDefinition[]> {
     const { catalogItem, mcpServerId, secrets } = params;
 
-    try {
-      // Get the appropriate transport using the existing helper
-      const transport = await this.getTransport(
-        catalogItem,
-        mcpServerId,
-        secrets,
-      );
+    // For local servers, retry connection a few times since the MCP server process
+    // may need time to initialize even after the pod is ready
+    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    const retryDelayMs = 5000; // 5 seconds between retries
 
-      // Create client with transport
-      const client = new Client(
-        {
-          name: "archestra-platform",
-          version: "1.0.0",
-        },
-        {
-          capabilities: {
-            tools: {},
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Get the appropriate transport using the existing helper
+        const transport = await this.getTransport(
+          catalogItem,
+          mcpServerId,
+          secrets,
+        );
+
+        // Create client with transport
+        const client = new Client(
+          {
+            name: "archestra-platform",
+            version: "1.0.0",
           },
-        },
-      );
+          {
+            capabilities: {
+              tools: {},
+            },
+          },
+        );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        this.createTimeout(30000, "Connection timeout after 30 seconds"),
-      ]);
+        // Connect with timeout
+        await Promise.race([
+          client.connect(transport),
+          this.createTimeout(30000, "Connection timeout after 30 seconds"),
+        ]);
 
-      // List tools with timeout
-      const toolsResult = await Promise.race([
-        client.listTools(),
-        this.createTimeout(30000, "List tools timeout after 30 seconds"),
-      ]);
+        // List tools with timeout
+        const toolsResult = await Promise.race([
+          client.listTools(),
+          this.createTimeout(30000, "List tools timeout after 30 seconds"),
+        ]);
 
-      // Close connection (we just needed the tools)
-      await client.close();
+        // Close connection (we just needed the tools)
+        await client.close();
 
-      // Transform tools to our format
-      return toolsResult.tools.map((tool: Tool) => ({
-        name: tool.name,
-        description: tool.description || `Tool: ${tool.name}`,
-        inputSchema: tool.inputSchema as Record<string, unknown>,
-      }));
-    } catch (error) {
-      throw new Error(
-        `Failed to connect to MCP server ${catalogItem.name}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
+        // Transform tools to our format
+        return toolsResult.tools.map((tool: Tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema as Record<string, unknown>,
+        }));
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // If this is not the last attempt, log and retry
+        if (attempt < maxRetries) {
+          logger.warn(
+            { attempt, maxRetries, err: error },
+            `Failed to connect to MCP server ${catalogItem.name} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelayMs}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+
+        // Last attempt failed, throw error
+        throw new Error(
+          `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
+        );
+      }
     }
+
+    // Should never reach here, but TypeScript needs it
+    throw new Error(
+      `Failed to connect to MCP server ${catalogItem.name}: ${
+        lastError?.message || "Unknown error"
+      }`,
+    );
   }
 
   /**

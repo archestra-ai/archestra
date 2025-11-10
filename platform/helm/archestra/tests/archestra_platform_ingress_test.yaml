@@ -1,0 +1,202 @@
+suite: test archestra platform -- Ingress
+templates:
+  - ingress.yaml
+tests:
+  - it: should not create ingress when disabled
+    set:
+      archestra.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create ingress with correct metadata when enabled
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform-ingress$
+
+  - it: should apply custom annotations when provided
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.annotations:
+        kubernetes.io/ingress.class: "gce"
+        kubernetes.io/ingress.global-static-ip-name: "my-static-ip"
+        custom.annotation/key: "custom-value"
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.class"]
+          value: "gce"
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.global-static-ip-name"]
+          value: "my-static-ip"
+      - equal:
+          path: metadata.annotations["custom.annotation/key"]
+          value: "custom-value"
+
+  - it: should create rules for multiple hosts
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+        - host: backend.example.com
+          paths:
+            - path: /
+              port: 9000
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: "frontend.example.com"
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/"
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3000
+      - equal:
+          path: spec.rules[1].host
+          value: "backend.example.com"
+      - equal:
+          path: spec.rules[1].http.paths[0].path
+          value: "/"
+      - equal:
+          path: spec.rules[1].http.paths[0].backend.service.port.number
+          value: 9000
+
+  - it: should use correct service name in backend
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    release:
+      name: "test-release"
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: "test-release-archestra-platform"
+
+  - it: should default pathType to Prefix when not specified
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: "Prefix"
+
+  - it: should use custom pathType when specified
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /api
+              port: 9000
+              pathType: "Exact"
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: "Exact"
+
+  - it: should create multiple paths for same host
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: app.example.com
+          paths:
+            - path: /
+              port: 3000
+              pathType: "Prefix"
+            - path: /api
+              port: 9000
+              pathType: "Prefix"
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/"
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3000
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: "/api"
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.port.number
+          value: 9000
+
+  - it: should use custom spec when provided
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.spec:
+        ingressClassName: "custom-class"
+        rules:
+          - host: "custom.example.com"
+            http:
+              paths:
+                - path: /custom
+                  pathType: Exact
+                  backend:
+                    service:
+                      name: custom-service
+                      port:
+                        number: 8080
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: "custom-class"
+      - equal:
+          path: spec.rules[0].host
+          value: "custom.example.com"
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/custom"
+
+  - it: should configure TLS when provided
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.tls:
+        - hosts:
+            - frontend.example.com
+            - backend.example.com
+          secretName: "my-tls-secret"
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: "frontend.example.com"
+      - equal:
+          path: spec.tls[0].hosts[1]
+          value: "backend.example.com"
+      - equal:
+          path: spec.tls[0].secretName
+          value: "my-tls-secret"

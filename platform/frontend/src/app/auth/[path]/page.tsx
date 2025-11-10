@@ -1,7 +1,7 @@
-import { AuthView } from "@daveyplate/better-auth-ui";
 import { authViewPaths } from "@daveyplate/better-auth-ui/server";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingSpinner } from "@/components/loading";
 import {
@@ -77,7 +77,7 @@ export default async function AuthPage({
                 <DefaultCredentialsWarning alwaysShow />
               </div>
             )}
-            <AuthView
+            <AuthViewWithErrorHandling
               path={path}
               classNames={{
                 footer: "hidden",

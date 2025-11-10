@@ -1,43 +1,74 @@
 import { DEFAULT_AGENT_NAME } from "@shared";
-import { eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  min,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Agent, InsertAgent, UpdateAgent } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  Agent,
+  InsertAgent,
+  PaginationQuery,
+  SortingQuery,
+  UpdateAgent,
+} from "@/types";
+import AgentLabelModel from "./agent-label";
+import AgentTeamModel from "./agent-team";
+import ToolModel from "./tool";
+
+type AgentWithToolsRow = {
+  agents: typeof schema.agentsTable.$inferSelect;
+  agent_tools: typeof schema.agentToolsTable.$inferSelect | null;
+  tools: typeof schema.toolsTable.$inferSelect | null;
+};
 
 class AgentModel {
-  static async create(
-    { usersWithAccess, ...agent }: InsertAgent,
-    creatorUserId?: string,
-  ): Promise<Agent> {
+  static async create({
+    teams,
+    labels,
+    ...agent
+  }: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values(agent)
       .returning();
 
-    const userIdsToGrant: string[] = [];
-
-    if (creatorUserId) {
-      // Auto-grant creator access
-      userIdsToGrant.push(creatorUserId);
+    // Assign teams to the agent if provided
+    if (teams && teams.length > 0) {
+      await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
     }
 
-    if (usersWithAccess.length > 0) {
-      userIdsToGrant.push(...usersWithAccess);
+    // Assign labels to the agent if provided
+    if (labels && labels.length > 0) {
+      await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
     }
 
-    await AgentAccessControlModel.grantAgentAccess(
-      createdAgent.id,
-      userIdsToGrant,
-    );
+    // Assign Archestra built-in tools to the agent
+    await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
 
     return {
       ...createdAgent,
       tools: [],
-      usersWithAccess: userIdsToGrant,
+      teams: teams || [],
+      labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean): Promise<Agent[]> {
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<Agent[]> {
     let query = db
       .select()
       .from(schema.agentsTable)
@@ -51,16 +82,29 @@ class AgentModel {
       )
       .$dynamic();
 
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+    // Build where conditions
+    const whereConditions: SQL[] = [];
+
+    // Exclude default agents by default
+    whereConditions.push(eq(schema.agentsTable.isDefault, false));
+
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return [];
       }
 
-      query = query.where(inArray(schema.agentsTable.id, accessibleAgentIds));
+      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+    }
+
+    // Apply all where conditions if any exist
+    if (whereConditions.length > 0) {
+      query = query.where(and(...whereConditions));
     }
 
     const rows = await query;
@@ -76,7 +120,8 @@ class AgentModel {
         agentsMap.set(agent.id, {
           ...agent,
           tools: [],
-          usersWithAccess: [],
+          teams: [],
+          labels: [],
         });
       }
 
@@ -88,23 +133,246 @@ class AgentModel {
 
     const agents = Array.from(agentsMap.values());
 
-    // Populate usersWithAccess for each agent
+    // Populate teams and labels for each agent
     for (const agent of agents) {
-      agent.usersWithAccess =
-        await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
+      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
+      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
     }
 
     return agents;
   }
 
+  /**
+   * Find all agents with pagination, sorting, and filtering support
+   */
+  static async findAllPaginated(
+    pagination: PaginationQuery,
+    sorting?: SortingQuery,
+    filters?: { name?: string },
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<PaginatedResult<Agent>> {
+    // Determine the ORDER BY clause based on sorting params
+    const orderByClause = AgentModel.getOrderByClause(sorting);
+
+    // Build where clause for filters and access control
+    const whereConditions: SQL[] = [];
+
+    // Exclude default agents by default
+    whereConditions.push(eq(schema.agentsTable.isDefault, false));
+
+    // Add name filter if provided
+    if (filters?.name) {
+      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+
+      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+    }
+
+    const whereClause =
+      whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+    let agentsData: AgentWithToolsRow[];
+    let totalResult: number;
+
+    if (sorting?.sortBy === "toolsCount" || sorting?.sortBy === "team") {
+      const direction = sorting.sortDirection === "asc" ? asc : desc;
+      let sortedAgents: { id: string }[];
+
+      if (sorting.sortBy === "toolsCount") {
+        // Create a subquery to count tools per agent
+        const toolsCountSubquery = db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+          })
+          .from(schema.agentToolsTable)
+          .groupBy(schema.agentToolsTable.agentId)
+          .as("toolsCounts");
+
+        // Use COALESCE to treat NULL as 0 when sorting
+        const toolsCountWithDefault = sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            toolsCountSubquery,
+            eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(toolsCountWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      } else {
+        // sorting.sortBy === "team"
+        // Create a subquery to get the first team name (alphabetically) per agent
+        const teamNameSubquery = db
+          .select({
+            agentId: schema.agentTeamsTable.agentId,
+            teamName: min(schema.teamsTable.name).as("teamName"),
+          })
+          .from(schema.agentTeamsTable)
+          .leftJoin(
+            schema.teamsTable,
+            eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+          )
+          .groupBy(schema.agentTeamsTable.agentId)
+          .as("teamNames");
+
+        // Use COALESCE to treat NULL as empty string when sorting
+        const teamNameWithDefault = sql`COALESCE(${teamNameSubquery.teamName}, '')`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            teamNameSubquery,
+            eq(schema.agentsTable.id, teamNameSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(teamNameWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      }
+
+      const sortedAgentIds = sortedAgents.map((a) => a.id);
+
+      // If no agents match, return early
+      if (sortedAgentIds.length === 0) {
+        const [{ total }] = await db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause);
+        return createPaginatedResult([], Number(total), pagination);
+      }
+
+      // Get full agent data with tools for sorted agents, maintaining order
+      agentsData = await db
+        .select()
+        .from(schema.agentsTable)
+        .leftJoin(
+          schema.agentToolsTable,
+          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+        )
+        .leftJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(inArray(schema.agentsTable.id, sortedAgentIds));
+
+      // Sort in memory to maintain the order from the sorted query
+      const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
+      agentsData.sort(
+        (a, b) =>
+          (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
+      );
+
+      [{ total: totalResult }] = await db
+        .select({ total: count() })
+        .from(schema.agentsTable)
+        .where(whereClause);
+    } else {
+      // Standard query for other sorting options
+      [agentsData, [{ total: totalResult }]] = await Promise.all([
+        db
+          .select()
+          .from(schema.agentsTable)
+          .leftJoin(
+            schema.agentToolsTable,
+            eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+          )
+          .leftJoin(
+            schema.toolsTable,
+            eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+          )
+          .where(whereClause)
+          .orderBy(orderByClause)
+          .limit(pagination.limit)
+          .offset(pagination.offset),
+        db
+          .select({ total: count() })
+          .from(schema.agentsTable)
+          .where(whereClause),
+      ]);
+    }
+
+    // Group the flat join results by agent
+    const agentsMap = new Map<string, Agent>();
+
+    for (const row of agentsData) {
+      const agent = row.agents;
+      const tool = row.tools;
+
+      if (!agentsMap.has(agent.id)) {
+        agentsMap.set(agent.id, {
+          ...agent,
+          tools: [],
+          teams: [],
+          labels: [],
+        });
+      }
+
+      // Add tool if it exists (leftJoin returns null for agents with no tools)
+      if (tool) {
+        agentsMap.get(agent.id)?.tools.push(tool);
+      }
+    }
+
+    const agents = Array.from(agentsMap.values());
+
+    // Populate teams and labels for each agent
+    for (const agent of agents) {
+      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
+      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+    }
+
+    return createPaginatedResult(agents, Number(totalResult), pagination);
+  }
+
+  /**
+   * Helper to get the appropriate ORDER BY clause based on sorting params
+   */
+  private static getOrderByClause(sorting?: SortingQuery) {
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+
+    switch (sorting?.sortBy) {
+      case "name":
+        return direction(schema.agentsTable.name);
+      case "createdAt":
+        return direction(schema.agentsTable.createdAt);
+      case "toolsCount":
+      case "team":
+        // toolsCount and team sorting use a separate query path (see lines 168-267).
+        // This fallback should never be reached for these sort types.
+        return direction(schema.agentsTable.createdAt); // Fallback
+      default:
+        // Default: newest first
+        return desc(schema.agentsTable.createdAt);
+    }
+  }
+
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<Agent | null> {
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+    // Check access control for non-agent admins
+    if (userId && !isAgentAdmin) {
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         id,
         false,
@@ -130,21 +398,19 @@ class AgentModel {
     const agent = rows[0].agents;
     const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
 
-    const usersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(id);
+    const teams = await AgentTeamModel.getTeamsForAgent(id);
+    const labels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...agent,
       tools,
-      usersWithAccess,
+      teams,
+      labels,
     };
   }
 
-  static async getAgentOrCreateDefault(
-    name: string | undefined,
-  ): Promise<Agent> {
-    const agentName = name || DEFAULT_AGENT_NAME;
-
+  static async getAgentOrCreateDefault(name?: string): Promise<Agent> {
+    // First, try to find an agent with isDefault=true
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -152,30 +418,45 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
       )
-      .where(eq(schema.agentsTable.name, agentName));
+      .where(eq(schema.agentsTable.isDefault, true));
 
-    if (rows.length === 0) {
-      return AgentModel.create({ name: agentName, usersWithAccess: [] });
+    if (rows.length > 0) {
+      // Default agent exists, return it
+      const agent = rows[0].agents;
+      const tools = rows
+        .map((row) => row.tools)
+        .filter((tool) => tool !== null);
+
+      return {
+        ...agent,
+        tools,
+        teams: await AgentTeamModel.getTeamsForAgent(agent.id),
+        labels: await AgentLabelModel.getLabelsForAgent(agent.id),
+      };
     }
 
-    const agent = rows[0].agents;
-    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
-
-    const usersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
-
-    return {
-      ...agent,
-      tools,
-      usersWithAccess,
-    };
+    // No default agent exists, create one
+    return AgentModel.create({
+      name: name || DEFAULT_AGENT_NAME,
+      isDefault: true,
+      teams: [],
+      labels: [],
+    });
   }
 
   static async update(
     id: string,
-    { usersWithAccess, ...agent }: Partial<UpdateAgent>,
+    { teams, labels, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    let updatedAgent: Omit<Agent, "tools" | "usersWithAccess"> | undefined;
+    let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
+
+    // If setting isDefault to true, unset all other agents' isDefault first
+    if (agent.isDefault === true) {
+      await db
+        .update(schema.agentsTable)
+        .set({ isDefault: false })
+        .where(eq(schema.agentsTable.isDefault, true));
+    }
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
@@ -189,7 +470,7 @@ class AgentModel {
         return null;
       }
     } else {
-      // If only updating usersWithAccess, fetch the existing agent
+      // If only updating teams, fetch the existing agent
       const [existingAgent] = await db
         .select()
         .from(schema.agentsTable)
@@ -202,9 +483,14 @@ class AgentModel {
       updatedAgent = existingAgent;
     }
 
-    // Sync access control if usersWithAccess is provided
-    if (usersWithAccess) {
-      await AgentAccessControlModel.syncAgentAccess(id, usersWithAccess);
+    // Sync team assignments if teams is provided
+    if (teams !== undefined) {
+      await AgentTeamModel.syncAgentTeams(id, teams);
+    }
+
+    // Sync label assignments if labels is provided
+    if (labels !== undefined) {
+      await AgentLabelModel.syncAgentLabels(id, labels);
     }
 
     // Fetch the tools for the updated agent
@@ -213,14 +499,15 @@ class AgentModel {
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.agentId, updatedAgent.id));
 
-    // Fetch current usersWithAccess
-    const currentUsersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(id);
+    // Fetch current teams and labels
+    const currentTeams = await AgentTeamModel.getTeamsForAgent(id);
+    const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...updatedAgent,
       tools,
-      usersWithAccess: currentUsersWithAccess,
+      teams: currentTeams,
+      labels: currentLabels,
     };
   }
 

@@ -35,8 +35,10 @@ export const SelectAgentToolSchema = createSelectSchema(
       parameters: ToolParametersContentSchema,
       createdAt: z.date(),
       updatedAt: z.date(),
+      catalogId: z.string().nullable(),
       mcpServerId: z.string().nullable(),
       mcpServerName: z.string().nullable(),
+      mcpServerCatalogId: z.string().nullable(),
     }),
   });
 

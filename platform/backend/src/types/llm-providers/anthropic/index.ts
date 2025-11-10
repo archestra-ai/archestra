@@ -25,6 +25,7 @@ namespace Anthropic {
     export type MessagesResponse = z.infer<
       typeof AnthropicAPI.MessagesResponseSchema
     >;
+    export type Usage = z.infer<typeof AnthropicAPI.UsageSchema>;
 
     export type CustomTool = z.infer<typeof AnthropicTools.CustomToolSchema>;
   }

@@ -1,7 +1,7 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { RouteId } from "@/types";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -13,7 +13,10 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Features"],
         response: {
           200: z.strictObject({
-            mcp_registry: z.boolean(),
+            /**
+             * NOTE: add feature flags here, example:
+             * mcp_registry: z.boolean(),
+             */
           }),
         },
       },

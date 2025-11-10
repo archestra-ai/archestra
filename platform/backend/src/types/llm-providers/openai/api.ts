@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MessageParamSchema, ToolCallSchema } from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
-const ChatCompletionUsageSchema = z
+export const ChatCompletionUsageSchema = z
   .object({
     completion_tokens: z.number(),
     prompt_tokens: z.number(),
@@ -41,7 +41,7 @@ const ChoiceSchema = z
     message: z
       .object({
         content: z.string().nullable(),
-        refusal: z.string().nullable(),
+        refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         annotations: z.array(z.any()).optional(),
         audio: z.any().nullable().optional(),

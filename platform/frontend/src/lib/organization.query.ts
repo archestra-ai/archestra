@@ -1,4 +1,14 @@
-import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import {
+  type AnyRoleName,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,6 +24,7 @@ export const organizationKeys = {
   activeOrg: () => [...organizationKeys.all, "active"] as const,
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
+  details: () => [...organizationKeys.all, "details"] as const,
 };
 
 /**
@@ -105,10 +116,10 @@ export function useInvitationsList(organizationId: string | undefined) {
           return {
             id: inv.id,
             email: inv.email,
-            role: inv.role || "member",
+            role: inv.role,
             expiresAt,
             isExpired,
-            status: inv.status || "pending",
+            status: inv.status,
           };
         })
         .sort((a, b) => {
@@ -163,11 +174,18 @@ export function useCreateInvitation(organizationId: string | undefined) {
       role,
     }: {
       email: string;
-      role: "member" | "admin";
+      role: AnyRoleName;
     }) => {
       const response = await authClient.organization.inviteMember({
         email,
-        role,
+        /**
+         * TODO: it looks like better-auth authClient has strict typing here..
+         * and apparently, according to their docs, it can only be "owner", "admin", or "member".
+         * https://www.better-auth.com/docs/plugins/organization#send-invitation
+         */
+        role: role as NonNullable<
+          Parameters<typeof authClient.organization.inviteMember>[0]
+        >["role"],
         organizationId,
       });
 
@@ -188,6 +206,55 @@ export function useCreateInvitation(organizationId: string | undefined) {
       toast.error("Error", {
         description: error.message || "Failed to generate invitation link",
       });
+    },
+  });
+}
+
+/**
+ * Get organization
+ */
+export function useOrganization(enabled = true) {
+  const session = authClient.useSession();
+
+  return useQuery({
+    queryKey: organizationKeys.details(),
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getOrganization();
+      return data;
+    },
+    enabled: enabled && !!session.data?.user,
+    retry: false, // Don't retry on auth pages to avoid repeated 401 errors
+    throwOnError: false, // Don't throw errors to prevent crashes
+  });
+}
+
+/**
+ * Update organization
+ */
+export function useUpdateOrganization(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateOrganizationData["body"],
+    ) => {
+      const { data: updatedOrganization } =
+        await archestraApiSdk.updateOrganization({ body: data });
+
+      if (!updatedOrganization) {
+        throw new Error(onErrorMessage);
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: organizationKeys.details() });
+      toast.success(onSuccessMessage);
+    },
+    onError: (_error) => {
+      toast.error(onErrorMessage);
     },
   });
 }

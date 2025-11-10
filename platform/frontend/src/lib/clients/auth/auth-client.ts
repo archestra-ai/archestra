@@ -3,6 +3,7 @@ import {
   adminClient,
   apiKeyClient,
   organizationClient,
+  twoFactorClient,
 } from "better-auth/client/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { createAuthClient } from "better-auth/react";
@@ -13,6 +14,9 @@ export const authClient = createAuthClient({
   plugins: [
     organizationClient({
       ac,
+      dynamicAccessControl: {
+        enabled: true,
+      },
       roles: {
         admin: adminRole,
         member: memberRole,
@@ -21,6 +25,7 @@ export const authClient = createAuthClient({
     nextCookies(),
     adminClient(),
     apiKeyClient(),
+    twoFactorClient(),
   ],
   fetchOptions: {
     credentials: "include",

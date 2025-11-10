@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { CodeText } from "@/components/code-text";
@@ -17,10 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
-import type {
-  GetAllAgentToolsResponses,
-  GetTrustedDataPoliciesResponse,
-} from "@/lib/clients/api";
 import {
   useOperators,
   useToolResultPolicies,
@@ -151,7 +148,7 @@ function AttributePathExamples() {
 export function ToolResultPolicies({
   agentTool,
 }: {
-  agentTool: GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
@@ -238,7 +235,7 @@ export function ToolResultPolicies({
                 <Select
                   defaultValue={policy.operator}
                   onValueChange={(
-                    value: GetTrustedDataPoliciesResponse["200"]["operator"],
+                    value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["operator"],
                   ) =>
                     toolResultPoliciesUpdateMutation.mutate({
                       ...policy,
@@ -284,7 +281,7 @@ export function ToolResultPolicies({
               <Select
                 defaultValue={policy.action}
                 onValueChange={(
-                  value: GetTrustedDataPoliciesResponse["200"]["action"],
+                  value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["action"],
                 ) =>
                   toolResultPoliciesUpdateMutation.mutate({
                     ...policy,

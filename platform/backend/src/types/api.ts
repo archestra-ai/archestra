@@ -11,6 +11,27 @@ export const ErrorResponseSchema = z.object({
     }),
   ]),
 });
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+export const ErrorResponsesSchema: Record<
+  400 | 401 | 403 | 404 | 500,
+  typeof ErrorResponseSchema
+> = {
+  400: ErrorResponseSchema,
+  401: ErrorResponseSchema,
+  403: ErrorResponseSchema,
+  404: ErrorResponseSchema,
+  500: ErrorResponseSchema,
+};
+
+export const constructResponseSchema = <T extends z.ZodTypeAny>(
+  schema: T,
+): typeof ErrorResponsesSchema & {
+  200: T;
+} => ({
+  200: schema,
+  ...ErrorResponsesSchema,
+});
 
 /**
  * Pagination query parameters schema
@@ -90,81 +111,3 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
   sortDirection?: "asc" | "desc";
 };
-
-export const RouteId = {
-  // Agent Routes
-  GetAgents: "getAgents",
-  CreateAgent: "createAgent",
-  GetAgent: "getAgent",
-  UpdateAgent: "updateAgent",
-  DeleteAgent: "deleteAgent",
-
-  // Agent Tool Routes
-  AssignToolToAgent: "assignToolToAgent",
-  UnassignToolFromAgent: "unassignToolFromAgent",
-  GetAgentTools: "getAgentTools",
-  GetAllAgentTools: "getAllAgentTools",
-  UpdateAgentTool: "updateAgentTool",
-
-  // Features Routes
-  GetFeatures: "getFeatures",
-
-  // Auth Routes
-  GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
-
-  // MCP Catalog Routes
-  GetInternalMcpCatalog: "getInternalMcpCatalog",
-  CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
-  GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
-  UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
-  DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
-
-  // MCP Server Routes
-  GetMcpServers: "getMcpServers",
-  GetMcpServer: "getMcpServer",
-  InstallMcpServer: "installMcpServer",
-  DeleteMcpServer: "deleteMcpServer",
-
-  // Tool Routes
-  GetTools: "getTools",
-  GetUnassignedTools: "getUnassignedTools",
-
-  // Interaction Routes
-  GetInteractions: "getInteractions",
-  GetInteraction: "getInteraction",
-
-  // Autonomy Policy Routes
-  GetOperators: "getOperators",
-  GetToolInvocationPolicies: "getToolInvocationPolicies",
-  CreateToolInvocationPolicy: "createToolInvocationPolicy",
-  GetToolInvocationPolicy: "getToolInvocationPolicy",
-  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
-  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
-  GetTrustedDataPolicies: "getTrustedDataPolicies",
-  CreateTrustedDataPolicy: "createTrustedDataPolicy",
-  GetTrustedDataPolicy: "getTrustedDataPolicy",
-  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
-  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
-
-  // Dual LLM Config Routes
-  GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
-  GetDualLlmConfigs: "getDualLlmConfigs",
-  CreateDualLlmConfig: "createDualLlmConfig",
-  GetDualLlmConfig: "getDualLlmConfig",
-  UpdateDualLlmConfig: "updateDualLlmConfig",
-  DeleteDualLlmConfig: "deleteDualLlmConfig",
-
-  // Dual LLM Result Routes
-  GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
-  GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
-
-  // Proxy Routes - OpenAI
-  OpenAiChatCompletionsWithDefaultAgent:
-    "openAiChatCompletionsWithDefaultAgent",
-  OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
-
-  // Proxy Routes - Anthropic
-  AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
-  AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
-} as const;
-export type RouteId = (typeof RouteId)[keyof typeof RouteId];

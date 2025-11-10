@@ -1,8 +1,5 @@
+import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type {
-  OpenAiChatCompletionRequest,
-  OpenAiChatCompletionResponse,
-} from "@/lib/clients/api";
 import {
   type DualLlmResult,
   type Interaction,
@@ -11,13 +8,15 @@ import {
 } from "./common";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
-  private request: OpenAiChatCompletionRequest;
-  private response: OpenAiChatCompletionResponse;
+  private request: archestraApiTypes.OpenAiChatCompletionRequest;
+  private response: archestraApiTypes.OpenAiChatCompletionResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request = interaction.request as OpenAiChatCompletionRequest;
-    this.response = interaction.response as OpenAiChatCompletionResponse;
+    this.request =
+      interaction.request as archestraApiTypes.OpenAiChatCompletionRequest;
+    this.response =
+      interaction.response as archestraApiTypes.OpenAiChatCompletionResponse;
     this.modelName = this.request.model;
   }
 
@@ -168,8 +167,8 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
   private mapToUiMessage(
     message:
-      | OpenAiChatCompletionRequest["messages"][number]
-      | OpenAiChatCompletionResponse["choices"][number]["message"],
+      | archestraApiTypes.OpenAiChatCompletionRequest["messages"][number]
+      | archestraApiTypes.OpenAiChatCompletionResponse["choices"][number]["message"],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
@@ -289,7 +288,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
     // Map role to UIMessage role (only system, user, assistant are allowed)
     const openAiRoleToUIMessageRoleMap: Record<
-      OpenAiChatCompletionRequest["messages"][number]["role"],
+      archestraApiTypes.OpenAiChatCompletionRequest["messages"][number]["role"],
       PartialUIMessage["role"]
     > = {
       developer: "system",

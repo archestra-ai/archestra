@@ -1,43 +1,40 @@
 "use client";
 
-import { GITHUB_MCP_SERVER_NAME } from "@shared";
-import {
-  Download,
-  MoreVertical,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { Plus, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import type {
-  GetInternalMcpCatalogResponses,
-  GetMcpServersResponses,
-} from "@/lib/clients/api";
+import { useHasPermissions } from "@/lib/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
-import { formatDate } from "@/lib/utils";
+import {
+  useDeleteMcpServer,
+  useInstallMcpServer,
+  useMcpServerInstallationStatus,
+  useMcpServers,
+} from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
+import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
-import { GitHubInstallDialog } from "./github-install-dialog";
-import { UninstallServerDialog } from "./uninstall-server-dialog";
+import { LocalServerInstallDialog } from "./local-server-install-dialog";
+import {
+  type CatalogItem,
+  type InstalledServer,
+  McpServerCard,
+} from "./mcp-server-card";
+import { NoAuthInstallDialog } from "./no-auth-install-dialog";
+import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
+import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 
 export function InternalMCPCatalog({
   initialData,
   installedServers: initialInstalledServers,
 }: {
-  initialData?: GetInternalMcpCatalogResponses["200"];
-  installedServers?: GetMcpServersResponses["200"];
+  initialData?: CatalogItem[];
+  installedServers?: InstalledServer[];
 }) {
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
@@ -45,259 +42,606 @@ export function InternalMCPCatalog({
   });
   const installMutation = useInstallMcpServer();
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
-  const [deletingItem, setDeletingItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
-  const [uninstallingServer, setUninstallingServer] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
-  const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
-  const [selectedCatalogItem, setSelectedCatalogItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
+  const deleteMutation = useDeleteMcpServer();
+  const session = authClient.useSession();
+  const currentUserId = session.data?.user?.id;
 
-  const handleInstall = useCallback(
-    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
-      /**
-       * NOTE: THIS IS ABSOLUTELY TEMPORARY..
-       *
-       * Check if this is a GitHub MCP server that requires authentication
-       */
-      if (catalogItem.name === GITHUB_MCP_SERVER_NAME) {
-        setSelectedCatalogItem(catalogItem);
-        setIsGitHubDialogOpen(true);
-        return;
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
+    useState(false);
+  const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
+  const [installingItemId, setInstallingItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
+    useState(false);
+  const [selectedCatalogItem, setSelectedCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
+  const [showReinstallDialog, setShowReinstallDialog] = useState(false);
+  const [catalogItemForReinstall, setCatalogItemForReinstall] =
+    useState<CatalogItem | null>(null);
+  const [isTeamMode, setIsTeamMode] = useState(false);
+  const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
+  const [noAuthCatalogItem, setNoAuthCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [isLocalServerDialogOpen, setIsLocalServerDialogOpen] = useState(false);
+  const [localServerCatalogItem, setLocalServerCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
+    mcpServer: ["admin"],
+  });
+
+  // Poll installation status for the first installing server
+  const mcpServerInstallationStatus = useMcpServerInstallationStatus(
+    Array.from(installingServerIds)[0] ?? null,
+  );
+
+  // Remove server from installing set when installation completes
+  useEffect(() => {
+    const firstInstallingId = Array.from(installingServerIds)[0];
+    if (firstInstallingId && mcpServerInstallationStatus.data === "success") {
+      setInstallingServerIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(firstInstallingId);
+        return newSet;
+      });
+    }
+  }, [mcpServerInstallationStatus.data, installingServerIds]);
+
+  const handleInstall = async (catalogItem: CatalogItem, teamMode = false) => {
+    setIsTeamMode(teamMode);
+
+    // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
+    if (
+      catalogItem.serverType === "remote" &&
+      catalogItem.userConfig &&
+      Object.keys(catalogItem.userConfig).length > 0
+    ) {
+      setSelectedCatalogItem(catalogItem);
+      setIsRemoteServerDialogOpen(true);
+      return;
+    }
+
+    // Check if this server requires OAuth authentication
+    if (catalogItem.oauthConfig) {
+      setSelectedCatalogItem(catalogItem);
+      setIsOAuthDialogOpen(true);
+      return;
+    }
+
+    // For servers without configuration, install directly
+    setInstallingItemId(catalogItem.id);
+    await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      teams: [],
+    });
+    setInstallingItemId(null);
+  };
+
+  const handleInstallTeam = async (catalogItem: CatalogItem) => {
+    await handleInstall(catalogItem, true);
+  };
+
+  const handleInstallLocalServerTeam = async (catalogItem: CatalogItem) => {
+    setIsTeamMode(true);
+    setLocalServerCatalogItem(catalogItem);
+    setIsLocalServerDialogOpen(true);
+  };
+
+  const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+    setIsTeamMode(false);
+
+    // Check if we need to show configuration dialog
+    const hasUserConfig =
+      catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
+    const hasPromptedEnvVars = catalogItem.localConfig?.environment?.some(
+      (env) => env.promptOnInstallation === true,
+    );
+
+    if (hasUserConfig || hasPromptedEnvVars) {
+      // Show configuration dialog
+      setLocalServerCatalogItem(catalogItem);
+      setIsLocalServerDialogOpen(true);
+      return;
+    }
+
+    // No configuration needed, install directly
+    try {
+      setInstallingItemId(catalogItem.id);
+      const installedServer = await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        teams: [],
+        dontShowToast: true,
+      });
+      // Track the installed server for polling
+      if (installedServer?.id) {
+        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+      }
+    } finally {
+      setInstallingItemId(null);
+    }
+  };
+
+  const handleNoAuthConfirm = async (teams: string[] = []) => {
+    if (!noAuthCatalogItem) return;
+
+    setInstallingItemId(noAuthCatalogItem.id);
+    await installMutation.mutateAsync({
+      name: noAuthCatalogItem.name,
+      catalogId: noAuthCatalogItem.id,
+      teams,
+    });
+    setIsNoAuthDialogOpen(false);
+    setNoAuthCatalogItem(null);
+    setInstallingItemId(null);
+  };
+
+  const handleLocalServerInstall = async (
+    userConfigValues: Record<string, string>,
+    environmentValues: Record<string, string>,
+    teams?: string[],
+  ) => {
+    if (!localServerCatalogItem) return;
+
+    setInstallingItemId(localServerCatalogItem.id);
+    const installedServer = await installMutation.mutateAsync({
+      name: localServerCatalogItem.name,
+      catalogId: localServerCatalogItem.id,
+      teams: teams || [],
+      userConfigValues,
+      environmentValues,
+      dontShowToast: true,
+    });
+
+    // Track the installed server for polling
+    if (installedServer?.id) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    }
+
+    setIsLocalServerDialogOpen(false);
+    setLocalServerCatalogItem(null);
+    setInstallingItemId(null);
+  };
+
+  const handleRemoteServerInstall = async (
+    catalogItem: CatalogItem,
+    metadata?: Record<string, unknown>,
+    teams: string[] = [],
+  ) => {
+    setInstallingItemId(catalogItem.id);
+
+    // Extract access_token from metadata if present and pass as accessToken
+    const accessToken =
+      metadata?.access_token && typeof metadata.access_token === "string"
+        ? metadata.access_token
+        : undefined;
+
+    await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      ...(accessToken && { accessToken }),
+      teams,
+    });
+    setInstallingItemId(null);
+  };
+
+  const handleOAuthConfirm = async (teams: string[] = []) => {
+    if (!selectedCatalogItem) return;
+
+    try {
+      // Call backend to initiate OAuth flow
+      const response = await fetch("/api/oauth/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          catalogId: selectedCatalogItem.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to initiate OAuth flow");
       }
 
-      // For other servers, install directly
-      setInstallingItemId(catalogItem.id);
-      await installMutation.mutateAsync({
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-      });
-      setInstallingItemId(null);
-    },
-    [installMutation],
-  );
+      const { authorizationUrl, state } = await response.json();
 
-  const handleGitHubInstall = useCallback(
-    async (
-      catalogItem: GetInternalMcpCatalogResponses["200"][number],
-      metadata: Record<string, unknown>,
-    ) => {
-      setInstallingItemId(catalogItem.id);
-      await installMutation.mutateAsync({
-        name: catalogItem.name,
-        catalogId: catalogItem.id,
-        metadata,
-      });
-      setInstallingItemId(null);
-    },
-    [installMutation],
-  );
+      // Store state and teams in session storage for the callback
+      sessionStorage.setItem("oauth_state", state);
+      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+      sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
 
-  const getInstallationCount = useCallback(
-    (catalogId: string) => {
-      return (
-        installedServers?.filter((server) => server.catalogId === catalogId)
-          .length || 0
-      );
-    },
-    [installedServers],
-  );
+      // Redirect to OAuth provider
+      window.location.href = authorizationUrl;
+    } catch {
+      toast.error("Failed to initiate OAuth flow");
+    }
+  };
 
-  const getInstalledServer = useCallback(
-    (catalogId: string) => {
-      return installedServers?.find((server) => server.catalogId === catalogId);
-    },
-    [installedServers],
-  );
+  // Aggregate all installations of the same catalog item
+  const getAggregatedInstallation = (catalogId: string) => {
+    const servers = installedServers?.filter(
+      (server) => server.catalogId === catalogId,
+    );
 
-  const handleUninstallClick = useCallback(
-    (serverId: string, serverName: string) => {
-      setUninstallingServer({ id: serverId, name: serverName });
-    },
-    [],
-  );
+    if (!servers || servers.length === 0) return undefined;
 
-  const filteredCatalogItems = useMemo(() => {
-    const items = catalogSearchQuery.trim()
-      ? (catalogItems || []).filter((item) =>
-          item.name.toLowerCase().includes(catalogSearchQuery.toLowerCase()),
-        )
-      : catalogItems || [];
+    // If only one server, return it as-is (but check for team auth ownership)
+    if (servers.length === 1) {
+      const server = servers[0];
+      return {
+        ...server,
+        currentUserHasTeamAuth:
+          server.authType === "team" && server.ownerId === currentUserId,
+      };
+    }
 
-    // Sort: installed servers first
-    return items.sort((a, b) => {
-      const aInstalled = installedServers?.some(
-        (server) => server.catalogId === a.id,
-      );
-      const bInstalled = installedServers?.some(
-        (server) => server.catalogId === b.id,
-      );
+    // Use the first server with users as the base, or just first server
+    const baseServer =
+      servers.find((s) => s.users && s.users.length > 0) || servers[0];
 
-      if (aInstalled && !bInstalled) return -1;
-      if (!aInstalled && bInstalled) return 1;
+    // Aggregate multiple servers
+    const aggregated = { ...baseServer };
+
+    // Check if current user has a team-auth server
+    const currentUserHasTeamAuth = servers.some(
+      (s) => s.authType === "team" && s.ownerId === currentUserId,
+    );
+
+    // Combine all unique users
+    const allUsers = new Set<string>();
+    const allUserDetails: Array<{
+      userId: string;
+      email: string;
+      createdAt: string;
+      serverId: string; // Track which server this user belongs to
+    }> = [];
+
+    for (const server of servers) {
+      if (server.users) {
+        for (const userId of server.users) {
+          allUsers.add(userId);
+        }
+      }
+      if (server.userDetails) {
+        for (const userDetail of server.userDetails) {
+          // Only add if not already present
+          if (!allUserDetails.some((ud) => ud.userId === userDetail.userId)) {
+            allUserDetails.push({
+              ...userDetail,
+              serverId: server.id, // Include the actual server ID
+            });
+          }
+        }
+      }
+    }
+
+    // Combine all unique teams
+    const allTeams = new Set<string>();
+    const allTeamDetails: Array<{
+      teamId: string;
+      name: string;
+      createdAt: string;
+      serverId: string; // Track which server this team belongs to
+    }> = [];
+
+    for (const server of servers) {
+      if (server.teams) {
+        for (const teamId of server.teams) {
+          allTeams.add(teamId);
+        }
+      }
+      if (server.teamDetails) {
+        for (const teamDetail of server.teamDetails) {
+          // Only add if not already present
+          if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
+            allTeamDetails.push({
+              ...teamDetail,
+              serverId: server.id, // Include the actual server ID
+            });
+          }
+        }
+      }
+    }
+
+    aggregated.users = Array.from(allUsers);
+    aggregated.userDetails = allUserDetails;
+    aggregated.teams = Array.from(allTeams);
+    aggregated.teamDetails = allTeamDetails;
+
+    return {
+      ...aggregated,
+      currentUserHasTeamAuth,
+    };
+  };
+
+  const handleReinstallRequired = async (
+    catalogId: string,
+    updatedData?: { name?: string; serverUrl?: string },
+  ) => {
+    // Check if there's an installed server from this catalog item
+    const installedServer = installedServers?.find(
+      (server) => server.catalogId === catalogId,
+    );
+
+    // Only show reinstall dialog if the server is actually installed
+    if (!installedServer) {
+      return;
+    }
+
+    // Wait a bit for queries to refetch after mutation
+    // This ensures we have fresh catalog data
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Find the catalog item and show reinstall dialog
+    let catalogItem = catalogItems?.find((item) => item.id === catalogId);
+
+    // If we have updated data from the edit, merge it with the catalog item
+    if (catalogItem && updatedData) {
+      catalogItem = {
+        ...catalogItem,
+        ...(updatedData.name && { name: updatedData.name }),
+        ...(updatedData.serverUrl && { serverUrl: updatedData.serverUrl }),
+      };
+    }
+
+    if (catalogItem) {
+      setCatalogItemForReinstall(catalogItem);
+      setShowReinstallDialog(true);
+    }
+  };
+
+  const handleReinstall = async (catalogItem: CatalogItem) => {
+    // Get the installed server to get its ID (not catalog ID)
+    const installedServer = installedServers?.find(
+      (server) => server.catalogId === catalogItem.id,
+    );
+    if (!installedServer) {
+      toast.error("Server not found, cannot reinstall");
+      return;
+    }
+
+    // Delete the installed server using its server ID
+    await deleteMutation.mutateAsync({
+      id: installedServer.id,
+      name: catalogItem.name,
+    });
+
+    // Then reinstall
+    await handleInstall(catalogItem);
+  };
+
+  const sortInstalledFirst = (items: CatalogItem[]) =>
+    [...items].sort((a, b) => {
+      const aIsRemote = a.serverType === "remote";
+      const bIsRemote = b.serverType === "remote";
+
+      // First sort by server type (remote before local)
+      if (aIsRemote && !bIsRemote) return -1;
+      if (!aIsRemote && bIsRemote) return 1;
+
       return 0;
     });
-  }, [catalogItems, catalogSearchQuery, installedServers]);
+
+  const filterCatalogItems = (items: CatalogItem[], query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return items;
+
+    return items.filter((item) => {
+      const labelText =
+        typeof item.name === "string" ? item.name.toLowerCase() : "";
+      return (
+        item.name.toLowerCase().includes(normalizedQuery) ||
+        labelText.includes(normalizedQuery)
+      );
+    });
+  };
+
+  const filteredCatalogItems = sortInstalledFirst(
+    filterCatalogItems(catalogItems || [], searchQuery),
+  );
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Your MCP Servers</h2>
-          <p className="text-sm text-muted-foreground">
-            MCP Servers added to your internal registry
-          </p>
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search MCP servers by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
+        <Button
+          onClick={() =>
+            userIsMcpServerAdmin
+              ? setIsCreateDialogOpen(true)
+              : setIsCustomRequestDialogOpen(true)
+          }
+        >
           <Plus className="mr-2 h-4 w-4" />
-          Add custom server
+          {userIsMcpServerAdmin
+            ? "Add MCP Server"
+            : "Request to add custom MCP Server"}
         </Button>
       </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search servers by name..."
-          value={catalogSearchQuery}
-          onChange={(e) => setCatalogSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredCatalogItems?.map((item) => {
-          const installedServer = getInstalledServer(item.id);
+      <div className="space-y-4">
+        {filteredCatalogItems.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-start">
+            {filteredCatalogItems.map((item) => {
+              const installedServer = getAggregatedInstallation(item.id);
+              const isInstallInProgress =
+                installedServer && installingServerIds.has(installedServer.id);
 
-          return (
-            <div key={item.id} className="rounded-lg border p-4 flex flex-col">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-h-[3rem]">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium">{item.name}</h3>
-                    {item.version && (
-                      <Badge variant="secondary" className="text-xs">
-                        v{item.version}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Created:{" "}
-                    {formatDate({
-                      date: item.createdAt,
-                      dateFormat: "MM/dd/yyyy",
-                    })}
-                  </p>
-                  {installedServer && (
-                    <p className="text-sm text-muted-foreground">
-                      Installed:{" "}
-                      {formatDate({
-                        date: installedServer.createdAt,
-                        dateFormat: "MM/dd/yyyy",
-                      })}
-                    </p>
-                  )}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditingItem(item)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDeletingItem(item)}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="mt-auto">
-                {installedServer ? (
-                  <Button
-                    onClick={() =>
-                      handleUninstallClick(
-                        installedServer.id,
-                        installedServer.name,
-                      )
-                    }
-                    size="sm"
-                    className="w-full bg-accent text-accent-foreground hover:bg-accent"
-                  >
-                    Uninstall
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => handleInstall(item)}
-                    disabled={installingItemId === item.id}
-                    size="sm"
-                    className="w-full"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    {installingItemId === item.id ? "Installing..." : "Install"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              // For local servers, count installations and check ownership
+              const localServers =
+                installedServers?.filter(
+                  (server) =>
+                    server.serverType === "local" &&
+                    server.catalogId === item.id,
+                ) || [];
+              const currentUserLocalServerInstallation = currentUserId
+                ? localServers.find(
+                    (server) =>
+                      server.ownerId === currentUserId &&
+                      server.authType === "personal",
+                  )
+                : undefined;
+              const currentUserInstalledLocalServer = Boolean(
+                currentUserLocalServerInstallation,
+              );
+              const currentUserHasLocalTeamInstallation = Boolean(
+                localServers.some((server) => server.authType === "team"),
+              );
+
+              return (
+                <McpServerCard
+                  variant={item.serverType === "remote" ? "remote" : "local"}
+                  key={item.id}
+                  item={item}
+                  installedServer={installedServer}
+                  installingItemId={installingItemId}
+                  installationStatus={
+                    isInstallInProgress
+                      ? mcpServerInstallationStatus.data
+                      : undefined
+                  }
+                  onInstall={() => handleInstall(item, false)}
+                  onInstallTeam={() => handleInstallTeam(item)}
+                  onInstallLocalServer={() => handleInstallLocalServer(item)}
+                  onInstallLocalServerTeam={() =>
+                    handleInstallLocalServerTeam(item)
+                  }
+                  onReinstall={() => handleReinstall(item)}
+                  onEdit={() => setEditingItem(item)}
+                  onDelete={() => setDeletingItem(item)}
+                  localServerInstallationCount={localServers.length}
+                  currentUserInstalledLocalServer={
+                    currentUserInstalledLocalServer
+                  }
+                  currentUserHasLocalTeamInstallation={
+                    currentUserHasLocalTeamInstallation
+                  }
+                  currentUserLocalServerInstallation={
+                    currentUserLocalServerInstallation
+                  }
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">
+              {searchQuery.trim()
+                ? `No MCP servers match "${searchQuery}".`
+                : "No MCP servers found."}
+            </p>
+          </div>
+        )}
       </div>
-      {filteredCatalogItems?.length === 0 && catalogSearchQuery && (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">
-            No catalog items match "{catalogSearchQuery}".
-          </p>
-        </div>
-      )}
-      {catalogItems?.length === 0 && !catalogSearchQuery && (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">No catalog items found.</p>
-        </div>
-      )}
 
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
       />
 
+      <CustomServerRequestDialog
+        isOpen={isCustomRequestDialogOpen}
+        onClose={() => setIsCustomRequestDialogOpen(false)}
+      />
+
       <EditCatalogDialog
         item={editingItem}
         onClose={() => setEditingItem(null)}
+        onReinstallRequired={handleReinstallRequired}
       />
 
       <DeleteCatalogDialog
         item={deletingItem}
         onClose={() => setDeletingItem(null)}
         installationCount={
-          deletingItem ? getInstallationCount(deletingItem.id) : 0
+          deletingItem
+            ? installedServers?.filter(
+                (server) => server.catalogId === deletingItem.id,
+              ).length || 0
+            : 0
         }
       />
 
-      <GitHubInstallDialog
-        isOpen={isGitHubDialogOpen}
+      <RemoteServerInstallDialog
+        isOpen={isRemoteServerDialogOpen}
         onClose={() => {
-          setIsGitHubDialogOpen(false);
+          setIsRemoteServerDialogOpen(false);
           setSelectedCatalogItem(null);
+          setIsTeamMode(false);
         }}
-        onInstall={handleGitHubInstall}
+        onInstall={handleRemoteServerInstall}
         catalogItem={selectedCatalogItem}
+        isInstalling={installMutation.isPending}
+        isTeamMode={isTeamMode}
+      />
+
+      <OAuthConfirmationDialog
+        open={isOAuthDialogOpen}
+        onOpenChange={setIsOAuthDialogOpen}
+        serverName={selectedCatalogItem?.name || ""}
+        onConfirm={handleOAuthConfirm}
+        onCancel={() => {
+          setIsOAuthDialogOpen(false);
+          setSelectedCatalogItem(null);
+          setIsTeamMode(false);
+        }}
+        isTeamMode={isTeamMode}
+        catalogId={selectedCatalogItem?.id}
+        installedServers={installedServers}
+      />
+
+      <ReinstallConfirmationDialog
+        isOpen={showReinstallDialog}
+        onClose={() => {
+          setShowReinstallDialog(false);
+          setCatalogItemForReinstall(null);
+        }}
+        onConfirm={async () => {
+          if (catalogItemForReinstall) {
+            setShowReinstallDialog(false);
+            await handleReinstall(catalogItemForReinstall);
+            setCatalogItemForReinstall(null);
+          }
+        }}
+        serverName={catalogItemForReinstall?.name || ""}
+        isReinstalling={installMutation.isPending}
+      />
+
+      <NoAuthInstallDialog
+        isOpen={isNoAuthDialogOpen}
+        onClose={() => {
+          setIsNoAuthDialogOpen(false);
+          setNoAuthCatalogItem(null);
+        }}
+        onInstall={handleNoAuthConfirm}
+        catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
       />
 
-      <UninstallServerDialog
-        server={uninstallingServer}
-        onClose={() => setUninstallingServer(null)}
+      <LocalServerInstallDialog
+        isOpen={isLocalServerDialogOpen}
+        onClose={() => {
+          setIsLocalServerDialogOpen(false);
+          setLocalServerCatalogItem(null);
+        }}
+        onInstall={handleLocalServerInstall}
+        catalogItem={localServerCatalogItem}
+        isInstalling={installMutation.isPending}
+        authType={isTeamMode ? "team" : "personal"}
       />
     </div>
   );

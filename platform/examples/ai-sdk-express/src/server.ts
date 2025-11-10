@@ -63,7 +63,6 @@ function promptUser() {
     const message = input.trim();
 
     if (message.toLowerCase() === "exit" || message.toLowerCase() === "quit") {
-      console.log("Goodbye!");
       rl.close();
       process.exit(0);
     }
@@ -75,8 +74,4 @@ function promptUser() {
     }
   });
 }
-
-console.log(
-  'CLI Chat started. Type "exit" or "quit" to end the conversation.\n',
-);
 promptUser();

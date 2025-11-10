@@ -3,69 +3,19 @@ import { GoogleGenAI } from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getObservableGenAI } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import LimitValidationService from "@/services/limit-validation";
+
+import {
+  type Agent,
+  constructResponseSchema,
+  ErrorResponsesSchema,
+  Gemini,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
-
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into Gemini tools object
- * Assigned tools take priority and override tools with the same name from the request
- */
-const _injectTools = async (
-  requestTools: Gemini.Types.Tool[] | undefined,
-  agentId: string,
-): Promise<Gemini.Types.Tool[] | undefined> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to Gemini format (function declarations)
-  const assignedGeminiFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = assignedTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || "",
-    parameters: tool.parameters,
-  }));
-
-  if (assignedGeminiFunctions.length === 0 && !requestTools) {
-    return undefined;
-  }
-
-  // Handle case where requestTools is undefined or empty
-  const requestFunctions: z.infer<
-    typeof Gemini.Tools.FunctionDeclarationSchema
-  >[] = [];
-  if (requestTools && requestTools.length > 0) {
-    for (const tool of requestTools) {
-      if (tool.functionDeclarations) {
-        requestFunctions.push(...tool.functionDeclarations);
-      }
-    }
-  }
-
-  // Create a map of request functions by name
-  const functionMap = new Map<
-    string,
-    z.infer<typeof Gemini.Tools.FunctionDeclarationSchema>
-  >();
-  for (const func of requestFunctions) {
-    functionMap.set(func.name, func);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  for (const assignedFunc of assignedGeminiFunctions) {
-    functionMap.set(assignedFunc.name, assignedFunc);
-  }
-
-  // Return as Gemini.Types.Tool array format
-  const mergedFunctions = Array.from(functionMap.values());
-  if (mergedFunctions.length === 0) {
-    return undefined;
-  }
-
-  return [{ functionDeclarations: mergedFunctions }];
-};
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -107,7 +57,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
-    let resolvedAgentId: string;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -119,21 +69,50 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
 
+    const resolvedAgentId = resolvedAgent.id;
     const { "x-goog-api-key": geminiApiKey } = headers;
-    const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
+    const genAI = getObservableGenAI(
+      new GoogleGenAI({ apiKey: geminiApiKey }),
+      resolvedAgent,
+    );
 
     // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-2.5-pro";
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "Gemini request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       // TODO: Persist tools if present
       // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
 
@@ -287,12 +266,23 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } else {
-        // Non-streaming response
-        const response = await genAI.models.generateContent({
-          model: modelName,
-          ...processedBody,
-          // tools: mergedTools,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const response = await utils.tracing.startActiveLlmSpan(
+          "gemini.generateContent",
+          "gemini",
+          modelName,
+          false,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await genAI.models.generateContent({
+              model: modelName,
+              ...processedBody,
+              // tools: mergedTools,
+            });
+            llmSpan.end();
+            return response;
+          },
+        );
 
         // Convert to common format for policy evaluation
         // const commonResponse = transformer.responseToOpenAI(geminiResponse);
@@ -326,13 +316,20 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   }
         // }
 
-        // Store the complete interaction
+        // Extract token usage and store the complete interaction
+        const tokenUsage = response.usageMetadata
+          ? utils.adapters.gemini.getUsageTokens(response.usageMetadata)
+          : { input: null, output: null };
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "gemini:generateContent",
           request: body,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
           response: response as any,
+          model: model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);
@@ -383,19 +380,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini (default agent)",
         summary: "Generate content using Gemini",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          200: Gemini.API.GenerateContentResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          Gemini.API.GenerateContentResponseSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -419,19 +412,14 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Stream generated content using Gemini (default agent)",
         summary: "Stream generated content using Gemini",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          // Streaming responses don't have a schema
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
     async (request, reply) => {
@@ -455,20 +443,16 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini with specific agent",
         summary: "Generate content using Gemini (specific agent)",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          200: Gemini.API.GenerateContentResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          Gemini.API.GenerateContentResponseSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -493,20 +477,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Stream generated content using Gemini with specific agent",
         summary: "Stream generated content using Gemini (specific agent)",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
         headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
-        response: {
-          // Streaming responses don't have a schema
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        // Streaming responses don't have a schema
+        response: ErrorResponsesSchema,
       },
     },
     async (request, reply) => {

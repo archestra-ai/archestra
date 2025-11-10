@@ -4,13 +4,14 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import UsageTrackingService from "@/services/usage-tracking";
 import type {
   InsertInteraction,
   Interaction,
   PaginationQuery,
   SortingQuery,
 } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {
@@ -19,35 +20,15 @@ class InteractionModel {
       .values(data)
       .returning();
 
+    // Update usage tracking after interaction is created
+    // Run in background to not block the response
+    UsageTrackingService.updateUsageAfterInteraction(
+      interaction as InsertInteraction & { id: string },
+    ).catch((error) => {
+      console.error("Failed to update usage tracking:", error);
+    });
+
     return interaction;
-  }
-
-  static async findAll(
-    userId?: string,
-    isAdmin?: boolean,
-  ): Promise<Interaction[]> {
-    let query = db
-      .select()
-      .from(schema.interactionsTable)
-      .orderBy(desc(schema.interactionsTable.createdAt))
-      .$dynamic();
-
-    // Apply access control filtering for non-admins
-    if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      query = query.where(
-        inArray(schema.interactionsTable.agentId, accessibleAgentIds),
-      );
-    }
-
-    const rows = await query;
-    return rows as Interaction[];
   }
 
   /**
@@ -57,16 +38,18 @@ class InteractionModel {
     pagination: PaginationQuery,
     sorting?: SortingQuery,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
 
     // Build where clause for access control
     let whereClause: SQL | undefined;
-    if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
@@ -125,7 +108,7 @@ class InteractionModel {
   static async findById(
     id: string,
     userId?: string,
-    isAdmin?: boolean,
+    isAgentAdmin?: boolean,
   ): Promise<Interaction | null> {
     const [interaction] = await db
       .select()
@@ -136,9 +119,9 @@ class InteractionModel {
       return null;
     }
 
-    // Check access control for non-admins
-    if (userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+    // Check access control for non-agent admins
+    if (userId && !isAgentAdmin) {
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.agentId,
         false,

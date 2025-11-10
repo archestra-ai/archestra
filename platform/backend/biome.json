@@ -4,7 +4,7 @@
   "linter": {
     "rules": {
       "suspicious": {
-        "noConsole": "off"
+        "noConsole": "error"
       }
     }
   }

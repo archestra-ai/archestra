@@ -10,6 +10,8 @@
     "includes": [
       "**/src/**/*.tsx",
       "**/src/**/*.ts",
+      "e2e-tests/**/*.ts",
+      "shared/**/*.ts",
       "!node_modules",
       "!.next",
       "!**/dist",

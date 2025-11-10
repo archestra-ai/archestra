@@ -178,3 +178,11 @@ export function toolResultsToMessages(
       : JSON.stringify(result.content),
   }));
 }
+
+/** Returns input and output usage tokens */
+export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  return {
+    input: usage.prompt_tokens,
+    output: usage.completion_tokens,
+  };
+}

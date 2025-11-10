@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
@@ -7,7 +8,8 @@ import {
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
 } from "@shared";
 import dotenv from "dotenv";
-import packageJson from "../package.json";
+import logger from "@/logging";
+import packageJson from "../../package.json";
 
 /**
  * Load .env from platform root
@@ -17,9 +19,58 @@ import packageJson from "../package.json";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
+/**
+ * Determines OTLP authentication headers based on environment variables
+ * Returns undefined if authentication is not properly configured
+ */
+export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
+  const username =
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME?.trim();
+  const password =
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD?.trim();
+  const bearer = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER?.trim();
+
+  // Bearer token takes precedence
+  if (bearer) {
+    return {
+      Authorization: `Bearer ${bearer}`,
+    };
+  }
+
+  // Basic auth requires both username and password
+  if (username || password) {
+    if (!username || !password) {
+      logger.warn(
+        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+      );
+      return undefined;
+    }
+
+    const credentials = Buffer.from(`${username}:${password}`).toString(
+      "base64",
+    );
+    return {
+      Authorization: `Basic ${credentials}`,
+    };
+  }
+
+  // No authentication configured
+  return undefined;
+};
+
+/**
+ * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+ */
+export const getDatabaseUrl = (): string => {
+  const databaseUrl =
+    process.env.ARCHESTRA_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL or DATABASE_URL",
+    );
+  }
+  return databaseUrl;
+};
 
 const isProduction = ["production", "prod"].includes(
   process.env.NODE_ENV?.toLowerCase() ?? "",
@@ -101,12 +152,12 @@ export default {
     host: "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
-    version: packageJson.version,
+    version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
-    authHeaderName: "X-Archestra-API-Key",
+    apiKeyAuthorizationHeaderName: "Authorization",
   },
   mcpGateway: {
-    endpoint: "/mcp",
+    endpoint: "/v1/mcp",
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
@@ -119,10 +170,73 @@ export default {
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
   },
   database: {
-    url: process.env.DATABASE_URL,
+    url: getDatabaseUrl(),
+  },
+  llm: {
+    openai: {
+      baseUrl:
+        process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+    },
+    anthropic: {
+      baseUrl:
+        process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+    },
+  },
+  chat: {
+    openai: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_OPENAI_BASE_URL ||
+        "https://api.openai.com/v1",
+    },
+    anthropic: {
+      apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
+        "https://api.anthropic.com",
+    },
+    mcp: {
+      remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
+      remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
+        ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
+        : undefined,
+    },
+    defaultModel:
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
   },
   features: {
-    mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+    /**
+     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
+     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+     */
+  },
+  orchestrator: {
+    mcpServerBaseImage:
+      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+    kubernetes: {
+      namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+      kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+      loadKubeconfigFromCurrentCluster:
+        process.env
+          .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+        "true",
+    },
+  },
+  observability: {
+    otel: {
+      traceExporter: {
+        url:
+          process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
+          "http://localhost:4318/v1/traces",
+        headers: getOtlpAuthHeaders(),
+      } satisfies Partial<OTLPExporterNodeConfigBase>,
+    },
+    metrics: {
+      endpoint: "/metrics",
+      port: 9050,
+      secret: process.env.ARCHESTRA_METRICS_SECRET,
+    },
   },
   debug: isDevelopment,
   production: isProduction,

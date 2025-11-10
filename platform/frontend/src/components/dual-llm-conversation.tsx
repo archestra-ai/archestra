@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { ChevronDownIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -7,10 +8,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { GetDualLlmResultByToolCallIdResponses } from "@/lib/clients/api";
 import { CodeText } from "./code-text";
 
-type DualLlmResult = NonNullable<GetDualLlmResultByToolCallIdResponses["200"]>;
+type DualLlmResult = NonNullable<
+  archestraApiTypes.GetDualLlmResultByToolCallIdResponses["200"]
+>;
 
 export function DualLlmConversation({ result }: { result: DualLlmResult }) {
   // Type guard to check if conversations is an array

@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -13,14 +14,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
+import { ResponseModifierEditor } from "./response-modifier-editor";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
 
 interface ToolDetailsDialogProps {
-  agentTool: GetAllAgentToolsResponses["200"][number] | null;
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number] | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -30,6 +33,7 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
   if (!agentTool) return null;
 
   return (
@@ -61,7 +65,7 @@ export function ToolDetailsDialog({
                   Origin
                 </div>
                 <div className="mt-0.5">
-                  {agentTool.tool.mcpServerName ? (
+                  {isMcpTool(agentTool.tool) ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -70,7 +74,13 @@ export function ToolDetailsDialog({
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{agentTool.tool.mcpServerName}</p>
+                          <p>
+                            {
+                              internalMcpCatalogItems?.find(
+                                (item) => item.id === agentTool.tool.catalogId,
+                              )?.name
+                            }
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -117,6 +127,7 @@ export function ToolDetailsDialog({
               <ToolCallPolicies agentTool={agentTool} />
               <ToolResultPolicies agentTool={agentTool} />
             </div>
+            <ResponseModifierEditor agentTool={agentTool} />
           </div>
         </div>
       </DialogContent>

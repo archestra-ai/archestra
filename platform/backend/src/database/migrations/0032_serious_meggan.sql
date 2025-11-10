@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" DROP COLUMN "metadata";

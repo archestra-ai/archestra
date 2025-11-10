@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+  {{- with .Values.archestra.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.archestra.service.type | default "ClusterIP" }}
+  ports:
+    - port: 9000
+      targetPort: backend
+      protocol: TCP
+      name: backend
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.backend }}
+      nodePort: {{ .Values.archestra.service.nodePorts.backend }}
+      {{- end }}
+    - port: 9050
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.metrics }}
+      nodePort: {{ .Values.archestra.service.nodePorts.metrics }}
+      {{- end }}
+    - port: 3000
+      targetPort: frontend
+      protocol: TCP
+      name: frontend
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.frontend }}
+      nodePort: {{ .Values.archestra.service.nodePorts.frontend }}
+      {{- end }}
+  selector:
+    {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      # Init container to wait for PostgreSQL to be ready before starting the application
+      # This prevents the application from crashing when PostgreSQL is still starting up
+      # and the application tries to run database migrations (in which it assumes that the database is already ready)
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z {{ include "archestra-platform.postgresql.host" . }} {{ include "archestra-platform.postgresql.port" . }}; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 1
+              done
+              echo "PostgreSQL is up - continuing"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.archestra.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: backend
+              containerPort: 9000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9050
+              protocol: TCP
+            - name: frontend
+              containerPort: 3000
+              protocol: TCP
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}
+          {{- with .Values.archestra.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # Startup probe - gives the application time to start up
+          # Checks every 10 seconds for up to 5 minutes (30 failures * 10s)
+          startupProbe:
+            httpGet:
+              path: /
+              port: frontend
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          # Liveness probe - restarts the container if it becomes unresponsive
+          livenessProbe:
+            httpGet:
+              path: /
+              port: frontend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe - marks the container as ready to receive traffic
+          readinessProbe:
+            httpGet:
+              path: /
+              port: frontend
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
+              readOnly: true
+          {{- end }}
+      {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+      {{- end }}

@@ -1,47 +1,85 @@
-import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
+import path from "node:path";
+import { defineConfig, devices } from "@playwright/test";
 
-const authFile = path.join(__dirname, 'playwright/.auth/user.json');
+const authFile = path.join(__dirname, "playwright/.auth/user.json");
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir: "./tests",
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  workers: 3,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: process.env.CI ? "html" : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: "retain-on-failure",
+    /* Record video only when test fails */
+    video: "retain-on-failure",
+    /* Take screenshot only when test fails */
+    screenshot: "only-on-failure",
   },
 
   /* Configure projects for major browsers */
   projects: [
     // Setup project - runs authentication once before all tests
     {
-      name: 'setup',
+      name: "setup",
       testMatch: /.*\.setup\.ts/,
-      testDir: './',
+      testDir: "./",
     },
-
+    // API tests only run on chromium (browser doesn't matter for API integration tests)
     {
-      name: 'chromium',
+      name: "api",
+      testDir: "./tests/api",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         // Use the stored authentication state
         storageState: authFile,
       },
       // Run the setup project before tests
-      dependencies: ['setup'],
+      dependencies: ["setup"],
+    },
+    // UI tests run on all browsers
+    {
+      name: "chromium",
+      testDir: "./tests/ui",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ["setup"],
+    },
+    {
+      name: "firefox",
+      testDir: "./tests/ui",
+      use: {
+        ...devices["Desktop Firefox"],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ["setup"],
+    },
+    {
+      name: "webkit",
+      testDir: "./tests/ui",
+      use: {
+        ...devices["Desktop Safari"],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ["setup"],
     },
   ],
 });

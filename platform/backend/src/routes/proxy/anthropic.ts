@@ -1,81 +1,89 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import LimitValidationService from "@/services/limit-validation";
+import {
+  type Agent,
+  Anthropic,
+  constructResponseSchema,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into Anthropic tools array
- * Assigned tools take priority and override tools with the same name from the request
- */
-export const injectTools = async (
-  requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] | undefined,
-  agentId: string,
-): Promise<z.infer<typeof Anthropic.Tools.ToolSchema>[]> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to Anthropic format (CustomTool)
-  const assignedAnthropicTools: z.infer<
-    typeof Anthropic.Tools.CustomToolSchema
-  >[] = assignedTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || undefined,
-    input_schema: tool.parameters || {},
-    type: "custom" as const,
-  }));
-
-  // Create a map of request tools by name
-  const requestToolMap = new Map<
-    string,
-    z.infer<typeof Anthropic.Tools.ToolSchema>
-  >();
-  for (const tool of requestTools || []) {
-    requestToolMap.set(tool.name, tool);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  const mergedToolMap = new Map<
-    string,
-    z.infer<typeof Anthropic.Tools.ToolSchema>
-  >(requestToolMap);
-  for (const assignedTool of assignedAnthropicTools) {
-    mergedToolMap.set(assignedTool.name, assignedTool);
-  }
-
-  return Array.from(mergedToolMap.values());
-};
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
 
   /**
-   * Register HTTP proxy for all Anthropic API routes EXCEPT messages routes
-   * This will proxy routes like /v1/anthropic/models to https://api.anthropic.com/v1/models
+   * Register HTTP proxy for Anthropic routes
+   * Handles both patterns:
+   * - /v1/anthropic/:agentId/* -> https://api.anthropic.com/v1/* (agentId stripped if UUID)
+   * - /v1/anthropic/* -> https://api.anthropic.com/v1/* (direct proxy)
+   *
+   * Messages are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
-    prefix: API_PREFIX,
+    upstream: config.llm.anthropic.baseUrl,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format:
-      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
-      const isMessagesRoute =
-        request.method === "POST" &&
-        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
-
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
+      // Skip messages route (we handle it specially below with full agent support)
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "Anthropic proxy preHandler: skipping messages route",
+        );
         next(new Error("skip"));
-      } else {
-        next();
+        return;
       }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
+        const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
+
+        fastify.log.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${remainingPath}`,
+          },
+          "Anthropic proxy preHandler: URL rewritten (UUID stripped)",
+        );
+      } else {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "Anthropic proxy preHandler: proxying request",
+        );
+      }
+
+      next();
     },
   });
 
@@ -87,7 +95,36 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) => {
     const { tools, stream } = body;
 
-    let resolvedAgentId: string;
+    fastify.log.info(
+      {
+        agentId,
+        model: body.model,
+        stream,
+        messagesCount: body.messages.length,
+        toolsCount: tools?.length || 0,
+        maxTokens: body.max_tokens,
+      },
+      "Anthropic messages request received",
+    );
+
+    // Debug: Log message structure
+    if (body.messages.length > 0) {
+      fastify.log.info(
+        {
+          messages: body.messages.map((msg, idx) => ({
+            index: idx,
+            role: msg.role,
+            contentType: typeof msg.content,
+            contentBlocks: Array.isArray(msg.content)
+              ? msg.content.map((block) => block.type)
+              : null,
+          })),
+        },
+        "Message structure debug",
+      );
+    }
+
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -99,24 +136,62 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
 
+    const resolvedAgentId = resolvedAgent.id;
+
+    fastify.log.info(
+      { resolvedAgentId, wasExplicit: !!agentId },
+      "Agent resolved",
+    );
+
     const { "x-api-key": anthropicApiKey } = headers;
-    const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
+
+    const anthropicClient = new AnthropicProvider({
+      apiKey: anthropicApiKey,
+      baseURL: config.llm.anthropic.baseUrl,
+      fetch: getObservableFetch("anthropic", resolvedAgent),
+    });
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "Anthropic request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
+      // Persist non-MCP tools declared by client for tracking
       if (tools) {
         const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
           [];
 
         for (const tool of tools) {
-          // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
+          // null/undefined/type === custom essentially all mean the same thing for Anthropic tools...
           if (
             tool.type === undefined ||
             tool.type === null ||
@@ -133,8 +208,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
 
-      // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(tools, resolvedAgentId);
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -146,6 +222,21 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Content-Type", "text/event-stream");
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
+
+        // Forward Anthropic-specific rate limit headers
+        reply.header("anthropic-ratelimit-requests-limit", "1000");
+        reply.header("anthropic-ratelimit-requests-remaining", "999");
+        reply.header(
+          "anthropic-ratelimit-requests-reset",
+          new Date(Date.now() + 60000).toISOString(),
+        );
+        reply.header("anthropic-ratelimit-tokens-limit", "100000");
+        reply.header("anthropic-ratelimit-tokens-remaining", "99000");
+        reply.header(
+          "anthropic-ratelimit-tokens-reset",
+          new Date(Date.now() + 60000).toISOString(),
+        );
+        reply.header("request-id", `req-proxy-${Date.now()}`);
       }
 
       const { toolResultUpdates, contextIsTrusted } =
@@ -197,13 +288,35 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: body.messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
+      );
+
       if (stream) {
-        // Handle streaming response
-        const messageStream = anthropicClient.messages.stream({
-          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-          ...(body as any),
-          messages: filteredMessages,
-        });
+        // Handle streaming response with span to measure LLM call duration
+        const messageStream = await utils.tracing.startActiveLlmSpan(
+          "anthropic.messages",
+          "anthropic",
+          body.model,
+          true,
+          resolvedAgent,
+          async (llmSpan) => {
+            const stream = anthropicClient.messages.stream({
+              // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+              ...(body as any),
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+            });
+            llmSpan.end();
+            return stream;
+          },
+        );
 
         // Accumulate tool calls and track content for persistence
         let accumulatedText = "";
@@ -211,8 +324,36 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const events: AnthropicProvider.Messages.MessageStreamEvent[] = [];
 
+        // Track indices of tool use blocks to know which content_block_stop events to skip
+        const toolUseBlockIndices = new Set<number>();
+
         for await (const event of messageStream) {
           events.push(event);
+
+          // Stream message_start event immediately (contains message metadata)
+          if (event.type === "message_start") {
+            fastify.log.info(
+              { eventType: event.type },
+              "Streaming message_start event",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
+
+          // Stream content_block_start for text blocks immediately
+          if (
+            event.type === "content_block_start" &&
+            event.content_block.type === "text"
+          ) {
+            fastify.log.info(
+              { eventType: event.type, index: event.index },
+              "Streaming content_block_start (text)",
+            );
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+          }
 
           // Stream text content immediately
           if (
@@ -225,12 +366,35 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             accumulatedText += event.delta.text;
           }
 
+          // Stream content_block_stop for text blocks immediately (skip tool blocks)
+          if (event.type === "content_block_stop") {
+            if (!toolUseBlockIndices.has(event.index)) {
+              fastify.log.info(
+                { eventType: event.type, index: event.index },
+                "Streaming content_block_stop (text)",
+              );
+              reply.raw.write(
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              );
+            } else {
+              fastify.log.info(
+                { eventType: event.type, index: event.index },
+                "Skipping content_block_stop (tool_use)",
+              );
+            }
+          }
+
           // Accumulate tool calls (don't stream yet - need to evaluate policies first)
           if (
             event.type === "content_block_start" &&
             event.content_block.type === "tool_use"
           ) {
+            toolUseBlockIndices.add(event.index);
             accumulatedToolCalls.push(event.content_block);
+            fastify.log.info(
+              { eventType: event.type, index: event.index },
+              "Accumulating content_block_start (tool_use)",
+            );
           } else if (
             event.type === "content_block_delta" &&
             event.delta.type === "input_json_delta"
@@ -245,6 +409,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        fastify.log.info("Stream loop completed, processing final events");
+
         // Parse accumulated tool inputs
         for (const toolCall of accumulatedToolCalls) {
           try {
@@ -257,6 +423,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Evaluate tool invocation policies dynamically
         let toolInvocationRefusal: [string, string] | null = null;
         if (accumulatedToolCalls.length > 0) {
+          fastify.log.info(
+            {
+              toolCallCount: accumulatedToolCalls.length,
+              toolNames: accumulatedToolCalls.map((tc) => tc.name),
+            },
+            "Evaluating tool invocation policies",
+          );
           toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
             accumulatedToolCalls.map((toolCall) => ({
               toolCallName: toolCall.name,
@@ -264,6 +437,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })),
             resolvedAgentId,
             contextIsTrusted,
+          );
+          fastify.log.info(
+            { refused: !!toolInvocationRefusal },
+            "Tool invocation policy result",
           );
         }
 
@@ -280,7 +457,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           ];
 
-          // Stream the refusal
+          // Stream the refusal - must send content_block_start before delta
+          const startEvent = {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "text",
+              text: "",
+            },
+          };
+          reply.raw.write(
+            `event: content_block_start\ndata: ${JSON.stringify(startEvent)}\n\n`,
+          );
+
           const refusalEvent = {
             type: "content_block_delta",
             index: 0,
@@ -292,9 +481,21 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reply.raw.write(
             `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
           );
+
+          const stopEvent = {
+            type: "content_block_stop",
+            index: 0,
+          };
+          reply.raw.write(
+            `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
+          );
         } else {
           // Tool calls are allowed - stream them now
           if (accumulatedToolCalls.length > 0) {
+            fastify.log.info(
+              { toolCallCount: accumulatedToolCalls.length },
+              "Tool calls allowed, streaming them now",
+            );
             responseContent = [
               ...(accumulatedText
                 ? [
@@ -308,6 +509,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...accumulatedToolCalls,
             ];
 
+            let streamedToolEvents = 0;
             for (const event of events) {
               if (
                 event.type === "content_block_start" &&
@@ -316,6 +518,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 reply.raw.write(
                   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
                 );
+                streamedToolEvents++;
               } else if (
                 event.type === "content_block_delta" &&
                 event.delta.type === "input_json_delta"
@@ -323,8 +526,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 reply.raw.write(
                   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
                 );
+                streamedToolEvents++;
+              } else if (
+                event.type === "content_block_stop" &&
+                toolUseBlockIndices.has(event.index)
+              ) {
+                // Stream content_block_stop for tool_use blocks
+                reply.raw.write(
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                );
+                streamedToolEvents++;
               }
             }
+            fastify.log.info(
+              { streamedToolEvents },
+              "Streamed tool call events",
+            );
           } else {
             responseContent = [
               {
@@ -341,6 +558,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (e) => e.type === "message_start",
         ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
 
+        // Extract token usage and report metrics for streaming
+        const usage = messageStartEvent?.message.usage || {
+          input_tokens: 0,
+          output_tokens: 0,
+        };
+        const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
+
+        if (messageStartEvent?.message.usage) {
+          reportLLMTokens(
+            "anthropic",
+            resolvedAgent,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+        }
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
@@ -354,39 +587,61 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model: body.model,
             stop_reason: "end_turn",
             stop_sequence: null,
-            usage: messageStartEvent?.message.usage || {
-              input_tokens: 0,
-              output_tokens: 0,
-            },
+            usage,
           },
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
-        // Send message_delta with stop_reason
+        // Send message_delta with stop_reason and usage
         const messageDeltaEvent = {
           type: "message_delta",
           delta: {
             stop_reason: "end_turn",
             stop_sequence: null,
           },
+          usage: {
+            output_tokens: usage.output_tokens,
+          },
         };
+        fastify.log.info("Streaming message_delta event");
         reply.raw.write(
           `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
         );
 
         // Send message_stop event
-        reply.raw.write(`event: message_stop\ndata: {}\n\n`);
+        const messageStopEvent = {
+          type: "message_stop",
+        };
+        fastify.log.info("Streaming message_stop event");
+        reply.raw.write(
+          `event: message_stop\ndata: ${JSON.stringify(messageStopEvent)}\n\n`,
+        );
 
+        fastify.log.info("Stream complete, ending response");
         reply.raw.end();
         return reply;
       } else {
-        // Non-streaming response
-        let response = await anthropicClient.messages.create({
-          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-          ...(body as any),
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: false,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const response = await utils.tracing.startActiveLlmSpan(
+          "anthropic.messages",
+          "anthropic",
+          body.model,
+          false,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await anthropicClient.messages.create({
+              // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+              ...(body as any),
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: false,
+            });
+            llmSpan.end();
+            return response;
+          },
+        );
 
         const toolCalls = response.content.filter(
           (content) => content.type === "tool_use",
@@ -413,65 +668,40 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ];
 
-            // Store the interaction with refusal
+            // Extract token usage and store the interaction with refusal
+            const tokenUsage = response.usage
+              ? utils.adapters.anthropic.getUsageTokens(response.usage)
+              : { input: null, output: null };
+
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
               response: response,
+              model: body.model,
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
             });
 
             return reply.send(response);
-          } else if (toolCalls.length > 0) {
-            // Tool calls are allowed - execute MCP tools
-            const commonToolCalls = utils.adapters.anthropic.toolCallsToCommon(
-              toolCalls as Array<{
-                id: string;
-                name: string;
-                input: Record<string, unknown>;
-              }>,
-            );
-            const mcpResults = await utils.tools.executeMcpToolCalls(
-              commonToolCalls,
-              resolvedAgentId,
-            );
-
-            if (mcpResults.length > 0) {
-              // Convert MCP results to Anthropic tool result messages
-              const toolResultMessages =
-                utils.adapters.anthropic.toolResultsToMessages(mcpResults);
-
-              // Make another call with the tool results
-              const updatedMessages = [
-                ...filteredMessages,
-                {
-                  role: "assistant" as const,
-                  content: response.content,
-                },
-                ...toolResultMessages,
-              ];
-
-              // Make final call with tool results
-              const finalResponse = await anthropicClient.messages.create({
-                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                ...(body as any),
-                messages: updatedMessages,
-                tools: mergedTools.length > 0 ? mergedTools : undefined,
-                stream: false,
-              });
-
-              // Update the response with the final LLM response
-              response = finalResponse;
-            }
           }
+          // Tool calls are allowed - return response with tool_use blocks to client
+          // Client is responsible for executing tools via MCP Gateway and sending results back
         }
 
-        // Store the complete interaction
+        // Extract token usage and store the complete interaction
+        const tokenUsage = response.usage
+          ? utils.adapters.anthropic.getUsageTokens(response.usage)
+          : { input: null, output: null };
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
           response: response,
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);
@@ -484,6 +714,25 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
+      // Check if we're streaming (headers already sent)
+      if (stream && reply.sent) {
+        // For streaming, send error as SSE event
+        const errorEvent = {
+          type: "error",
+          error: {
+            type: "api_error",
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+          },
+        };
+        reply.raw.write(
+          `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+        );
+        reply.raw.end();
+        return reply;
+      }
+
+      // For non-streaming or if headers not sent yet, send JSON error
       return reply.status(statusCode).send({
         error: {
           message:
@@ -507,13 +756,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: {
-          200: Anthropic.API.MessagesResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
     async ({ body, headers }, reply) => {
@@ -524,26 +767,23 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   fastify.post(
-    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/:agentId/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
-        description: "Send a message to Anthropic using a specific agent",
+        description:
+          "Send a message to Anthropic using a specific agent (n8n URL format)",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: {
-          200: Anthropic.API.MessagesResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
     async ({ body, headers, params }, reply) => {

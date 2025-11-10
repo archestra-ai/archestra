@@ -208,11 +208,11 @@ const ModalityTokenCountSchema = z
     `https://ai.google.dev/api/generate-content#v1beta.ModalityTokenCount`,
   );
 
-const UsageMetadataSchema = z
+export const UsageMetadataSchema = z
   .object({
-    promptTokenCount: z.number(),
+    promptTokenCount: z.number().optional(),
     cachedContentTokenCount: z.number(),
-    candidatesTokenCount: z.number(),
+    candidatesTokenCount: z.number().optional(),
     toolUsePromptTokenCount: z.number(),
     thoughtsTokenCount: z.number(),
     totalTokenCount: z.number(),

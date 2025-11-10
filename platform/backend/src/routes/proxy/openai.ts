@@ -1,85 +1,93 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
+import LimitValidationService from "@/services/limit-validation";
+import {
+  type Agent,
+  constructResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
-
-/**
- * Inject assigned MCP tools into OpenAI tools array
- * Assigned tools take priority and override tools with the same name from the request
- */
-export const injectTools = async (
-  requestTools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
-  agentId: string,
-): Promise<z.infer<typeof OpenAi.Tools.ToolSchema>[]> => {
-  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
-
-  // Convert assigned tools to OpenAI format
-  const assignedOpenAITools: z.infer<typeof OpenAi.Tools.ToolSchema>[] =
-    assignedTools.map((tool) => ({
-      type: "function" as const,
-      function: {
-        name: tool.name,
-        description: tool.description || undefined,
-        parameters: tool.parameters,
-      },
-    }));
-
-  // Create a map of request tools by name for easy lookup
-  const requestToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >();
-  for (const tool of requestTools || []) {
-    const toolName =
-      tool.type === "function" ? tool.function.name : tool.custom.name;
-    requestToolMap.set(toolName, tool);
-  }
-
-  // Merge: assigned tools override request tools with same name
-  const mergedToolMap = new Map<
-    string,
-    z.infer<typeof OpenAi.Tools.ToolSchema>
-  >(requestToolMap);
-  for (const assignedTool of assignedOpenAITools) {
-    // All assigned tools are function type since we create them that way above
-    if (assignedTool.type === "function") {
-      mergedToolMap.set(assignedTool.function.name, assignedTool);
-    }
-  }
-
-  return Array.from(mergedToolMap.values());
-};
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
 
   /**
-   * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
-   * This will proxy routes like /v1/openai/models to https://api.openai.com/v1/models
+   * Register HTTP proxy for OpenAI routes
+   * Handles both patterns:
+   * - /v1/openai/:agentId/* -> config.llm.openai.baseUrl/* (agentId stripped if UUID)
+   *  - /v1/openai/* -> config.llm.openai.baseUrl/* (direct proxy)
+   *
+   * Chat completions are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.openai.com",
-    prefix: API_PREFIX,
-    rewritePrefix: "/v1",
-    // Exclude chat/completions route since we handle it specially below
+    upstream: config.llm.openai.baseUrl,
+    prefix: `${API_PREFIX}`,
+    rewritePrefix: "",
     preHandler: (request, _reply, next) => {
+      // Skip chat/completions (we handle it specially below with full agent support)
       if (
         request.method === "POST" &&
         request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
-        // Skip proxy for this route - we handle it below
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "OpenAI proxy preHandler: skipping chat/completions route",
+        );
         next(new Error("skip"));
-      } else {
-        next();
+        return;
       }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/openai/:uuid/path -> /v1/openai/path
+        const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
+
+        fastify.log.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.openai.baseUrl,
+            finalProxyUrl: `${config.llm.openai.baseUrl}/v1${remainingPath}`,
+          },
+          "OpenAI proxy preHandler: URL rewritten (UUID stripped)",
+        );
+      } else {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.openai.baseUrl,
+            finalProxyUrl: `${config.llm.openai.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "OpenAI proxy preHandler: proxying request",
+        );
+      }
+
+      next();
     },
   });
 
@@ -91,7 +99,19 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) => {
     const { messages, tools, stream } = body;
 
-    let resolvedAgentId: string;
+    fastify.log.info(
+      {
+        agentId,
+        model: body.model,
+        stream,
+        messagesCount: messages.length,
+        toolsCount: tools?.length || 0,
+        maxTokens: body.max_tokens,
+      },
+      "OpenAI chat completion request received",
+    );
+
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -103,20 +123,57 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
 
+    const resolvedAgentId = resolvedAgent.id;
+
+    fastify.log.info(
+      { resolvedAgentId, wasExplicit: !!agentId },
+      "Agent resolved",
+    );
+
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
       ? (new MockOpenAIClient() as unknown as OpenAIProvider)
-      : new OpenAIProvider({ apiKey: openAiApiKey });
+      : new OpenAIProvider({
+          apiKey: openAiApiKey,
+          baseURL: config.llm.openai.baseUrl,
+          fetch: getObservableFetch("openai", resolvedAgent),
+        });
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "OpenAI request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
+      // Persist non-MCP tools declared by client for tracking
       await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
@@ -136,18 +193,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resolvedAgentId,
       );
 
-      // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await injectTools(tools, resolvedAgentId);
+      // Client declares tools they want to use - no injection needed
+      // Clients handle tool execution via MCP Gateway
+      const mergedTools = tools || [];
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
-
-      // For streaming requests, set headers first
-      if (stream) {
-        reply.header("Content-Type", "text/event-stream");
-        reply.header("Cache-Control", "no-cache");
-        reply.header("Connection", "keep-alive");
-      }
 
       const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
@@ -211,13 +262,41 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
+      );
+
       if (stream) {
-        // Handle streaming response
-        const stream = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: true,
+        // Handle streaming response with span to measure LLM call duration
+        const streamingResponse = await utils.tracing.startActiveLlmSpan(
+          "openai.chat.completions",
+          "openai",
+          body.model,
+          true,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await openAiClient.chat.completions.create({
+              ...body,
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: true,
+              stream_options: { include_usage: true },
+            });
+            llmSpan.end();
+            return response;
+          },
+        );
+
+        // We are using reply.raw.writeHead because it sets headers immediately before the streaming starts
+        // unlike reply.header(key, value) which will set headers too late, after the streaming is over.
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
         });
 
         // Accumulate tool calls and track content for persistence
@@ -227,13 +306,27 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           [];
+        let usageTokens: { input?: number; output?: number } | undefined;
 
-        for await (const chunk of stream) {
+        for await (const chunk of streamingResponse) {
           chunks.push(chunk);
-          const delta = chunk.choices[0]?.delta;
 
-          // Stream text content immediately
-          if (delta?.content || delta?.refusal) {
+          // Capture usage information if present
+          if (chunk.usage) {
+            usageTokens = utils.adapters.openai.getUsageTokens(chunk.usage);
+          }
+          const delta = chunk.choices[0]?.delta;
+          const finishReason = chunk.choices[0]?.finish_reason;
+
+          // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
+          // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
+          if (
+            !delta?.tool_calls &&
+            (delta?.content !== undefined ||
+              delta?.refusal !== undefined ||
+              delta?.role ||
+              finishReason)
+          ) {
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
             // Also accumulate for persistence
@@ -350,56 +443,95 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
             reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
           } else {
-            // Tool calls are allowed - stream them now
-            for (const chunk of chunks) {
-              if (chunk.choices[0]?.delta?.tool_calls) {
-                reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-              }
+            // Tool calls are allowed
+            // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
+            for (const [index, toolCall] of accumulatedToolCalls.entries()) {
+              const baseChunk = {
+                id: chunks[0]?.id || "chatcmpl-unknown",
+                object: "chat.completion.chunk" as const,
+                created: chunks[0]?.created || Date.now() / 1000,
+                model: body.model,
+              };
+
+              // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
+              const idChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          type: "function" as const,
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
+
+              // Chunk 2: Send function name (with id so clients can use assignment)
+              const nameChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          function: { name: toolCall.function.name },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
+
+              // Chunk 3: Send function arguments (with id so clients can use assignment)
+              const argsChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          function: { arguments: toolCall.function.arguments },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
             }
-
-            // Execute MCP tools and continue streaming conversation
-            if (accumulatedToolCalls.length > 0) {
-              const commonToolCalls =
-                utils.adapters.openai.toolCallsToCommon(accumulatedToolCalls);
-              const mcpResults = await utils.tools.executeMcpToolCalls(
-                commonToolCalls,
-                resolvedAgentId,
-              );
-
-              if (mcpResults.length > 0) {
-                // Convert MCP results to OpenAI tool messages
-                const toolMessages =
-                  utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-                // Update conversation with tool results
-                const updatedMessages = [
-                  ...filteredMessages,
-                  assistantMessage,
-                  ...toolMessages,
-                ];
-
-                /**
-                 * Make another streaming call with the tool results (without tools to prevent loops)
-                 *
-                 * We also need to remove tool_choice otherwise openai complains about:
-                 * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-                 */
-                const continuationStream =
-                  await openAiClient.chat.completions.create({
-                    ...body,
-                    messages: updatedMessages,
-                    tools: undefined,
-                    tool_choice: undefined,
-                    stream: true,
-                  });
-
-                // Stream the continuation response
-                for await (const chunk of continuationStream) {
-                  reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-                }
-              }
-            }
+            // Tool calls have been streamed to client
+            // Client is responsible for executing tools via MCP Gateway and sending results back
           }
+        }
+
+        // Report token usage metrics for streaming
+        if (usageTokens) {
+          reportLLMTokens(
+            "openai",
+            resolvedAgent,
+            usageTokens.input,
+            usageTokens.output,
+          );
         }
 
         // Store the complete interaction
@@ -421,18 +553,33 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ],
           },
+          model: body.model,
+          inputTokens: usageTokens?.input || null,
+          outputTokens: usageTokens?.output || null,
         });
 
         reply.raw.write("data: [DONE]\n\n");
         reply.raw.end();
         return reply;
       } else {
-        let response = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: false,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const response = await utils.tracing.startActiveLlmSpan(
+          "openai.chat.completions",
+          "openai",
+          body.model,
+          false,
+          resolvedAgent,
+          async (llmSpan) => {
+            const response = await openAiClient.chat.completions.create({
+              ...body,
+              messages: filteredMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: false,
+            });
+            llmSpan.end();
+            return response;
+          },
+        );
 
         let assistantMessage = response.choices[0].message;
 
@@ -471,51 +618,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               logprobs: null,
             },
           ];
-        } else if (
-          assistantMessage.tool_calls &&
-          assistantMessage.tool_calls.length > 0
-        ) {
-          // Tool calls are allowed - execute MCP tools
-          const commonToolCalls = utils.adapters.openai.toolCallsToCommon(
-            assistantMessage.tool_calls,
-          );
-
-          const mcpResults = await utils.tools.executeMcpToolCalls(
-            commonToolCalls,
-            resolvedAgentId,
-          );
-
-          if (mcpResults.length > 0) {
-            // Convert MCP results to OpenAI tool messages and append to response
-            const toolMessages =
-              utils.adapters.openai.toolResultsToMessages(mcpResults);
-
-            // For non-streaming, we need to make another LLM call with the tool results
-            const updatedMessages = [
-              ...filteredMessages,
-              assistantMessage,
-              ...toolMessages,
-            ];
-
-            /**
-             * Make another call with the tool results (without tools to prevent loops)
-             *
-             * We also need to remove tool_choice otherwise openai complains about:
-             * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
-             */
-            const finalResponse = await openAiClient.chat.completions.create({
-              ...body,
-              messages: updatedMessages,
-              tools: undefined,
-              tool_choice: undefined,
-              stream: false,
-            });
-
-            // Update the response with the final LLM response
-            response = finalResponse;
-            assistantMessage = finalResponse.choices[0].message;
-          }
         }
+        // Tool calls are allowed - return response with tool_calls to client
+        // Client is responsible for executing tools via MCP Gateway and sending results back
+
+        // Extract token usage from response
+        const tokenUsage = response.usage
+          ? utils.adapters.openai.getUsageTokens(response.usage)
+          : { input: null, output: null };
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -523,6 +633,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           type: "openai:chatCompletions",
           request: body,
           response,
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);
@@ -559,13 +672,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers }, reply) => {
@@ -589,13 +698,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
-        response: {
-          200: OpenAi.API.ChatCompletionResponseSchema,
-          400: ErrorResponseSchema,
-          403: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(
+          OpenAi.API.ChatCompletionResponseSchema,
+        ),
       },
     },
     async ({ body, headers, params }, reply) => {

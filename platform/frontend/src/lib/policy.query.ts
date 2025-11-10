@@ -1,24 +1,22 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   type QueryClient,
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import {
+
+const {
   createToolInvocationPolicy,
   createTrustedDataPolicy,
   deleteToolInvocationPolicy,
   deleteTrustedDataPolicy,
-  type GetToolInvocationPoliciesResponse,
-  type GetTrustedDataPoliciesResponse,
   getOperators,
   getToolInvocationPolicies,
   getTrustedDataPolicies,
-  type UpdateToolInvocationPolicyData,
-  type UpdateTrustedDataPolicyData,
   updateToolInvocationPolicy,
   updateTrustedDataPolicy,
-} from "@/lib/clients/api";
+} = archestraApiSdk;
 
 export function useToolInvocationPolicies() {
   return useSuspenseQuery({
@@ -33,7 +31,10 @@ export function useToolInvocationPolicies() {
           ];
           return acc;
         },
-        {} as Record<string, GetToolInvocationPoliciesResponse["200"][]>,
+        {} as Record<
+          string,
+          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
+        >,
       );
       return {
         all,
@@ -85,7 +86,9 @@ export function useToolInvocationPolicyUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      updatedPolicy: UpdateToolInvocationPolicyData["body"] & { id: string },
+      updatedPolicy: archestraApiTypes.UpdateToolInvocationPolicyData["body"] & {
+        id: string;
+      },
     ) => {
       return await updateToolInvocationPolicy({
         body: updatedPolicy,
@@ -111,7 +114,10 @@ export function useToolResultPolicies() {
           ];
           return acc;
         },
-        {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
+        {} as Record<
+          string,
+          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
+        >,
       );
       return {
         all,
@@ -145,7 +151,9 @@ export function useToolResultPoliciesUpdateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      updatedPolicy: UpdateTrustedDataPolicyData["body"] & { id: string },
+      updatedPolicy: archestraApiTypes.UpdateTrustedDataPolicyData["body"] & {
+        id: string;
+      },
     ) => {
       return await updateTrustedDataPolicy({
         body: updatedPolicy,
@@ -190,7 +198,10 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
           ];
           return acc;
         },
-        {} as Record<string, GetToolInvocationPoliciesResponse["200"][]>,
+        {} as Record<
+          string,
+          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
+        >,
       );
       return {
         all,
@@ -213,7 +224,10 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
           ];
           return acc;
         },
-        {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
+        {} as Record<
+          string,
+          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
+        >,
       );
       return {
         all,

@@ -1,7 +1,7 @@
+import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import type { Action, Permission, Resource } from "../../../shared";
-import { getDefaultCredentialsStatus } from "./clients/api";
+import { hasPermission } from "./auth.utils";
 
 /**
  * Fetch current session
@@ -26,25 +26,11 @@ export function useCurrentOrgMembers() {
   });
 }
 
-export function useHasPermissions(permissionsToCheck: Permission[]) {
+export function useHasPermissions(permissionsToCheck: Permissions) {
   return useQuery({
-    queryKey: ["auth", "hasPermission", ...permissionsToCheck],
+    queryKey: ["auth", "hasPermission", JSON.stringify(permissionsToCheck)],
     queryFn: async () => {
-      const permissionsMap = permissionsToCheck.reduce(
-        (acc, permission) => {
-          const [resource, action] = permission.split(":") as [
-            Resource,
-            Action,
-          ];
-          acc[resource] = [action];
-          return acc;
-        },
-        {} as Record<Resource, Action[]>,
-      );
-      const { data } = await authClient.organization.hasPermission({
-        permissions: permissionsMap,
-      });
-      return data?.success ?? false;
+      return hasPermission(permissionsToCheck);
     },
   });
 }
@@ -53,7 +39,7 @@ export function useDefaultCredentialsEnabled() {
   return useQuery({
     queryKey: ["auth", "defaultCredentialsEnabled"],
     queryFn: async () => {
-      const { data } = await getDefaultCredentialsStatus();
+      const { data } = await archestraApiSdk.getDefaultCredentialsStatus();
       return data?.enabled ?? false;
     },
     // Refetch when window is focused to catch password changes

@@ -1,8 +1,10 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { type GetFeaturesResponses, getFeatures } from "@/lib/clients/api";
+
+const { getFeatures } = archestraApiSdk;
 
 export function useFeatures(params?: {
-  initialData?: GetFeaturesResponses["200"];
+  initialData?: archestraApiTypes.GetFeaturesResponses["200"];
 }) {
   return useQuery({
     queryKey: ["features"],

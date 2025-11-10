@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape Archestra Platform API metrics
+  - job_name: 'archestra-platform-api'
+    static_configs:
+      - targets: ['host.docker.internal:9050']
+    metrics_path: '/metrics'
+    scrape_interval: 10s

@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -12,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { SupportedProviders } from "@/lib/clients/api/types.gen";
 import config from "@/lib/config";
 
 const { displayProxyUrl: apiProxyUrl } = config.api;
@@ -26,7 +26,7 @@ export function ProxyConnectionInstructions({
 }: ProxyConnectionInstructionsProps) {
   const [copied, setCopied] = useState(false);
   const [selectedProvider, setSelectedProvider] =
-    useState<SupportedProviders>("openai");
+    useState<archestraApiTypes.SupportedProviders>("openai");
 
   const proxyUrl = agentId
     ? `${apiProxyUrl}/${selectedProvider}/${agentId}`
@@ -46,7 +46,7 @@ export function ProxyConnectionInstructions({
         <Select
           value={selectedProvider}
           onValueChange={(value) =>
-            setSelectedProvider(value as SupportedProviders)
+            setSelectedProvider(value as archestraApiTypes.SupportedProviders)
           }
         >
           <SelectTrigger className="w-32">
@@ -61,7 +61,7 @@ export function ProxyConnectionInstructions({
         </Select>
       </div>
       <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-        <CodeText className="text-sm">{proxyUrl}</CodeText>
+        <CodeText className="text-sm break-all">{proxyUrl}</CodeText>
         <Button variant="ghost" size="icon" onClick={handleCopy}>
           {copied ? (
             <Check className="h-4 w-4 text-green-500" />
@@ -72,6 +72,9 @@ export function ProxyConnectionInstructions({
       </div>
       {selectedProvider === "openai" && (
         <>
+          <p className="text-sm text-muted-foreground">
+            Default should be https://api.openai.com/v1/
+          </p>
           <p className="text-sm text-muted-foreground">
             OpenAI provides{" "}
             <CodeText className="text-xs">/chat/completions</CodeText> and{" "}

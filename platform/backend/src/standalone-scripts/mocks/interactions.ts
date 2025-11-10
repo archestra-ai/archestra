@@ -502,6 +502,12 @@ export function generateMockInteraction(
   tools: ToolInfo[],
   shouldBlock: boolean,
 ): InsertInteraction {
+  if (tools.length === 0) {
+    throw new Error(
+      `Cannot generate interaction for agent ${agentId}: agent has no tools`,
+    );
+  }
+
   const template = randomElement(CONVERSATION_TEMPLATES);
   const selectedTool =
     tools.find((t) => t.name === template.toolName) || randomElement(tools);
@@ -657,12 +663,24 @@ export function generateMockInteractions(
 ): InsertInteraction[] {
   const interactions: InsertInteraction[] = [];
 
-  for (let i = 0; i < count; i++) {
-    // Pick a random agent
-    const agentId = randomElement(agentIds);
+  // Filter to only agents that have tools
+  const agentsWithTools = agentIds.filter(
+    (agentId) => (toolsByAgent.get(agentId)?.length ?? 0) > 0,
+  );
 
-    // Get tools for this agent
-    const agentTools = toolsByAgent.get(agentId) || [];
+  if (agentsWithTools.length === 0) {
+    throw new Error(
+      "Cannot generate interactions: no agents have tools assigned",
+    );
+  }
+
+  for (let i = 0; i < count; i++) {
+    // Pick a random agent that has tools
+    const agentId = randomElement(agentsWithTools);
+
+    // Get tools for this agent (guaranteed to have at least one)
+    // biome-ignore lint/style/noNonNullAssertion: ok in seed script
+    const agentTools = toolsByAgent.get(agentId)!;
 
     // Randomly decide if this interaction should be blocked
     const shouldBlock = randomBool(blockProbability);

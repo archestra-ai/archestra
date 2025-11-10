@@ -1,0 +1,1 @@
+ALTER TABLE "agent_tools" ADD COLUMN "response_modifier_template" text;

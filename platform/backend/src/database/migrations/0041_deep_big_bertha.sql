@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "model" varchar;

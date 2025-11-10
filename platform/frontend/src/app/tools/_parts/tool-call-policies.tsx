@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -11,10 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
-import type {
-  GetAllAgentToolsResponses,
-  GetToolInvocationPoliciesResponse,
-} from "@/lib/clients/api";
 import {
   useOperators,
   useToolInvocationPolicies,
@@ -27,7 +24,7 @@ import { PolicyCard } from "./policy-card";
 export function ToolCallPolicies({
   agentTool,
 }: {
-  agentTool: GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 }) {
   const {
     data: { byAgentToolId },
@@ -104,7 +101,7 @@ export function ToolCallPolicies({
                 <Select
                   defaultValue={policy.operator}
                   onValueChange={(
-                    value: GetToolInvocationPoliciesResponse["200"]["operator"],
+                    value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["operator"],
                   ) =>
                     toolInvocationPolicyUpdateMutation.mutate({
                       ...policy,
@@ -151,7 +148,7 @@ export function ToolCallPolicies({
               <Select
                 defaultValue={policy.action}
                 onValueChange={(
-                  value: GetToolInvocationPoliciesResponse["200"]["action"],
+                  value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
                 ) =>
                   toolInvocationPolicyUpdateMutation.mutate({
                     ...policy,

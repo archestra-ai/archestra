@@ -9,9 +9,11 @@ import { cn } from "@/lib/utils";
 export function TruncatedText({
   message,
   maxLength = 50,
+  className,
 }: {
   message: string | undefined;
   maxLength?: number;
+  className?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -33,6 +35,7 @@ export function TruncatedText({
       className={cn(
         isTruncated ? "relative pr-8" : "",
         "overflow-hidden group",
+        className,
       )}
     >
       {!isTruncated && <span>{displayText}</span>}

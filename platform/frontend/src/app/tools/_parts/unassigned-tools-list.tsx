@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -13,10 +14,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GetToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
 
-type ExtendedTool = GetToolsResponses["200"][number];
+type ExtendedTool = archestraApiTypes.GetToolsResponses["200"][number];
 
 export interface UnassignedToolData {
   id: string;
@@ -29,6 +29,7 @@ export interface UnassignedToolData {
     updatedAt: string;
     mcpServerId: string | null;
     mcpServerName: string | null;
+    catalogId: string | null;
   };
   agent: null;
   createdAt: string;
@@ -88,6 +89,7 @@ export function UnassignedToolsList({
         updatedAt: String(tool.updatedAt),
         mcpServerId: tool.mcpServer?.id || null,
         mcpServerName: tool.mcpServer?.name || null,
+        catalogId: tool.catalogId,
       },
       agent: null,
       createdAt: String(tool.createdAt),

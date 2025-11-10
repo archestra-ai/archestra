@@ -1,18 +1,17 @@
+import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type {
-  GeminiGenerateContentRequest,
-  GeminiGenerateContentResponse,
-} from "@/lib/clients/api";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class GeminiGenerateContentInteraction implements InteractionUtils {
-  private request: GeminiGenerateContentRequest;
-  private response: GeminiGenerateContentResponse;
+  private request: archestraApiTypes.GeminiGenerateContentRequest;
+  private response: archestraApiTypes.GeminiGenerateContentResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request = interaction.request as GeminiGenerateContentRequest;
-    this.response = interaction.response as GeminiGenerateContentResponse;
+    this.request =
+      interaction.request as archestraApiTypes.GeminiGenerateContentRequest;
+    this.response =
+      interaction.response as archestraApiTypes.GeminiGenerateContentResponse;
     this.modelName = this.response.modelVersion as string;
   }
 
@@ -73,8 +72,8 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   // TODO: Implement this
   private mapToUiMessage(
     _content:
-      | GeminiGenerateContentRequest["contents"][number]
-      | GeminiGenerateContentResponse["candidates"][number],
+      | archestraApiTypes.GeminiGenerateContentRequest["contents"][number]
+      | archestraApiTypes.GeminiGenerateContentResponse["candidates"][number],
   ): PartialUIMessage {
     return {
       role: "assistant",

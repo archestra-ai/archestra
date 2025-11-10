@@ -53,14 +53,26 @@ export const MessagesRequestSchema = z.object({
         cache_control: z.any().nullable().optional(),
         citations: z.array(z.any()).nullable().optional(),
       }),
+      z.array(
+        z.object({
+          type: z.enum(["text"]),
+          text: z.string(),
+          cache_control: z.any().nullable().optional(),
+          citations: z.array(z.any()).nullable().optional(),
+        }),
+      ),
     ])
     .optional(),
   temperature: z.number().optional(),
-  thinking: z.any().optional(),
   tool_choice: ToolChoiceSchema.optional(),
   tools: z.array(ToolSchema).optional(),
   top_k: z.number().optional(),
   top_p: z.number().optional(),
+});
+
+export const UsageSchema = z.object({
+  input_tokens: z.number(),
+  output_tokens: z.number(),
 });
 
 export const MessagesResponseSchema = z.object({
@@ -71,7 +83,7 @@ export const MessagesResponseSchema = z.object({
   stop_reason: z.any().nullable(),
   stop_sequence: z.string().nullable(),
   type: z.enum(["message"]),
-  usage: z.any(),
+  usage: UsageSchema,
 });
 
 export const MessagesHeadersSchema = z

@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
 
 export function LoadingSkeletons({
@@ -18,8 +19,13 @@ export function LoadingSkeletons({
   );
 }
 
-export function LoadingSpinner() {
+export function LoadingSpinner({ className }: { className?: string }) {
   return (
-    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
+    <div
+      className={cn(
+        "animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto",
+        className,
+      )}
+    />
   );
 }

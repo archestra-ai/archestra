@@ -1,14 +1,10 @@
 "use client";
 
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import {
-  type GetInteractionResponses,
-  type GetInteractionsData,
-  type GetInteractionsResponses,
-  getInteraction,
-  getInteractions,
-} from "@/lib/clients/api";
 import { DEFAULT_TABLE_LIMIT } from "./utils";
+
+const { getInteraction, getInteractions } = archestraApiSdk;
 
 export function useInteractions({
   agentId,
@@ -21,9 +17,11 @@ export function useInteractions({
   agentId?: string;
   limit?: number;
   offset?: number;
-  sortBy?: NonNullable<GetInteractionsData["query"]>["sortBy"];
+  sortBy?: NonNullable<
+    archestraApiTypes.GetInteractionsData["query"]
+  >["sortBy"];
   sortDirection?: "asc" | "desc";
-  initialData?: GetInteractionsResponses["200"];
+  initialData?: archestraApiTypes.GetInteractionsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
     queryKey: ["interactions", agentId, limit, offset, sortBy, sortDirection],
@@ -57,7 +55,7 @@ export function useInteraction({
   refetchInterval = 3_000,
 }: {
   interactionId: string;
-  initialData?: GetInteractionResponses["200"];
+  initialData?: archestraApiTypes.GetInteractionResponses["200"];
   refetchInterval?: number | null;
 }) {
   return useSuspenseQuery({

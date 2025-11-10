@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
-import _ from "lodash";
+import { get } from "lodash-es";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";
@@ -132,7 +132,7 @@ class ToolInvocationPolicyModel {
       reason,
     } of applicablePoliciesForAgent) {
       // Extract the argument value using lodash
-      const argumentValue = _.get(toolInput, argumentName);
+      const argumentValue = get(toolInput, argumentName);
 
       if (argumentValue === undefined) {
         // If the argument doesn't exist and we have a block policy, that's okay

@@ -1,15 +1,15 @@
 "use client";
 
+import type { archestraCatalogTypes } from "@shared";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import type { GetMcpServerCategoriesResponse } from "@/lib/clients/archestra-catalog";
 import { useMcpServerCategories } from "@/lib/external-mcp-catalog.query";
 
 export type ServerType = "all" | "remote" | "local";
 
 export type SelectedCategory =
   | "all"
-  | GetMcpServerCategoriesResponse["categories"][number];
+  | archestraCatalogTypes.GetMcpServerCategoriesResponse["categories"][number];
 
 interface CatalogFiltersProps {
   onFiltersChange: (filters: {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@/test";
 import { toolCallsToCommon, toolResultsToMessages } from "./openai";
 
 describe("OpenAI MCP Adapters", () => {

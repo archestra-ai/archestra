@@ -41,7 +41,7 @@ export const githubTool = createTool({
     };
 
     if (process.env.GITHUB_TOKEN) {
-      headers["Authorization"] = `token ${process.env.GITHUB_TOKEN}`;
+      headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
     }
 
     try {

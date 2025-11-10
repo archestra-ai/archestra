@@ -1,0 +1,147 @@
+"use client";
+
+import { Upload, X } from "lucide-react";
+import Image from "next/image";
+import { useCallback, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useUpdateOrganization } from "@/lib/organization.query";
+
+interface LogoUploadProps {
+  currentLogo?: string | null;
+  onLogoChange?: () => void;
+}
+
+export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(currentLogo || null);
+  const uploadOrganizationLogoMutation = useUpdateOrganization(
+    "Logo uploaded successfully",
+    "Failed to upload logo",
+  );
+
+  const handleFileSelect = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Validate file type
+      if (file.type !== "image/png") {
+        alert("Please upload a PNG file");
+        return;
+      }
+
+      // Validate file size (2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File size must be less than 2MB");
+        return;
+      }
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        setPreview(base64);
+
+        try {
+          await uploadOrganizationLogoMutation.mutateAsync({
+            logo: base64,
+          });
+          onLogoChange?.();
+        } catch (error) {
+          console.error("Failed to upload logo:", error);
+          setPreview(currentLogo || null);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [currentLogo, onLogoChange, uploadOrganizationLogoMutation],
+  );
+
+  const handleRemoveLogo = useCallback(async () => {
+    try {
+      await uploadOrganizationLogoMutation.mutateAsync({
+        logo: null,
+      });
+      setPreview(null);
+      onLogoChange?.();
+    } catch (error) {
+      console.error("Failed to remove logo:", error);
+    }
+  }, [onLogoChange, uploadOrganizationLogoMutation]);
+
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const hasPreviewOrCurrentLogo = preview || currentLogo;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Organization Logo</CardTitle>
+        <CardDescription>
+          Upload a custom logo for your organization.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="relative h-16 w-48 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden">
+            {hasPreviewOrCurrentLogo ? (
+              <Image
+                src={preview || currentLogo || ""}
+                alt="Organization logo"
+                fill
+                className="object-contain p-2"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No logo</p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUploadClick}
+              disabled={uploadOrganizationLogoMutation.isPending}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
+            </Button>
+
+            {hasPreviewOrCurrentLogo && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRemoveLogo}
+                disabled={uploadOrganizationLogoMutation.isPending}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Remove
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        <p className="text-sm text-muted-foreground">
+          Recommended size: 200x60px.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}

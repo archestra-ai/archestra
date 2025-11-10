@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "reinstall_required" boolean DEFAULT false NOT NULL;

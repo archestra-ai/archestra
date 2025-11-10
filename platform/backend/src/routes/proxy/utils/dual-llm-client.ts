@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import config from "@/config";
 import type { SupportedProviders } from "./types";
 
 /**
@@ -54,7 +55,10 @@ export class OpenAiDualLlmClient implements DualLlmClient {
   private model: string;
 
   constructor(apiKey: string, model = "gpt-4o") {
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: config.llm.openai.baseUrl,
+    });
     this.model = model;
   }
 
@@ -104,7 +108,10 @@ export class AnthropicDualLlmClient implements DualLlmClient {
   private model: string;
 
   constructor(apiKey: string, model = "claude-sonnet-4-5-20250929") {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({
+      apiKey,
+      baseURL: config.llm.anthropic.baseUrl,
+    });
     this.model = model;
   }
 

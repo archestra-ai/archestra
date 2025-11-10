@@ -1,6 +1,10 @@
+// Import tracing first to ensure auto-instrumentation works properly
+import "./tracing";
+
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
+import metricsPlugin from "fastify-metrics";
 import {
   jsonSchemaTransform,
   jsonSchemaTransformObject,
@@ -9,8 +13,13 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { fastifyAuthPlugin } from "@/auth";
+import { initializeInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
-import { authMiddleware } from "@/middleware/auth";
+import { seedRequiredStartingData } from "@/database/seed";
+import { initializeMetrics } from "@/llm-metrics";
+import logger from "@/logging";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   Anthropic,
   Gemini,
@@ -18,29 +27,20 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { seedDatabase } from "./database/seed";
+import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host, corsOrigins, authHeaderName },
-} = config;
-
-const fastify = Fastify({
-  logger: {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss Z",
-        ignore: "pid,hostname",
-      },
-    },
+  api: {
+    port,
+    name,
+    version,
+    host,
+    corsOrigins,
+    apiKeyAuthorizationHeaderName,
   },
-}).withTypeProvider<ZodTypeProvider>();
-
-// Set up Zod validation and serialization
-fastify.setValidatorCompiler(validatorCompiler);
-fastify.setSerializerCompiler(serializerCompiler);
+  observability,
+} = config;
 
 // Register schemas in global registry for OpenAPI generation
 z.globalRegistry.add(SupportedProvidersSchema, {
@@ -68,10 +68,154 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
   id: "AnthropicMessagesResponse",
 });
 
+/**
+ * Sets up logging and zod type provider + request validation & response serialization
+ */
+const createFastifyInstance = () =>
+  Fastify({
+    loggerInstance: logger,
+  })
+    .withTypeProvider<ZodTypeProvider>()
+    .setValidatorCompiler(validatorCompiler)
+    .setSerializerCompiler(serializerCompiler);
+
+/**
+ * Helper function to register the metrics plugin on a fastify instance.
+ *
+ * Basically we need to ensure that we are only registering "default" and "route" metrics ONCE
+ * If we instantiate a fastify instance and start duplicating the collection of metrics, we will
+ * get a fatal error as such:
+ *
+ * Error: A metric with the name http_request_duration_seconds has already been registered.
+ * at Registry.registerMetric (/app/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/registry.js:103:10)
+ */
+const registerMetricsPlugin = async (
+  fastify: ReturnType<typeof createFastifyInstance>,
+  endpointEnabled: boolean,
+): Promise<void> => {
+  const metricsEnabled = !endpointEnabled;
+
+  await fastify.register(metricsPlugin, {
+    endpoint: endpointEnabled ? observability.metrics.endpoint : null,
+    defaultMetrics: { enabled: metricsEnabled },
+    routeMetrics: {
+      enabled: metricsEnabled,
+      methodBlacklist: ["OPTIONS", "HEAD"],
+      routeBlacklist: ["/health"],
+    },
+  });
+};
+
+/**
+ * Create separate Fastify instance for metrics on a separate port
+ *
+ * This is to avoid exposing the metrics endpoint, by default, the metrics endpoint
+ */
+const startMetricsServer = async () => {
+  const { secret: metricsSecret } = observability.metrics;
+
+  const metricsServer = createFastifyInstance();
+
+  // Add authentication hook for metrics endpoint if secret is configured
+  if (metricsSecret) {
+    metricsServer.addHook("preHandler", async (request, reply) => {
+      // Skip auth for health endpoint
+      if (request.url === "/health") {
+        return;
+      }
+
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        reply.code(401).send({ error: "Unauthorized: Bearer token required" });
+        return;
+      }
+
+      const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+      if (token !== metricsSecret) {
+        reply.code(401).send({ error: "Unauthorized: Invalid token" });
+        return;
+      }
+    });
+  }
+
+  metricsServer.get("/health", () => ({ status: "ok" }));
+
+  await registerMetricsPlugin(metricsServer, true);
+
+  // Start metrics server on dedicated port
+  await metricsServer.listen({
+    port: observability.metrics.port,
+    host,
+  });
+  metricsServer.log.info(
+    `Metrics server started on port ${observability.metrics.port}${
+      metricsSecret ? " (with authentication)" : " (no authentication)"
+    }`,
+  );
+};
+
 const start = async () => {
+  const fastify = createFastifyInstance();
+
+  /**
+   * The auth plugin is responsible for authentication and authorization checks
+   *
+   * In addition, it decorates the request object with the user and organizationId
+   * such that they can easily be handled inside route handlers
+   * by simply using the request.user and request.organizationId decorators
+   */
+  fastify.register(fastifyAuthPlugin);
+
   try {
-    // Seed database with demo data
-    await seedDatabase();
+    await seedRequiredStartingData();
+
+    // Initialize metrics with keys of custom agent labels
+    const labelKeys = await AgentLabelModel.getAllKeys();
+    initializeMetrics(labelKeys);
+
+    // Start metrics server
+    await startMetricsServer();
+
+    logger.info(
+      `Observability initialized with ${labelKeys.length} agent label keys`,
+    );
+
+    // Initialize internal JWT for backend-to-backend auth
+    await initializeInternalJwt();
+    logger.info("Internal JWT initialized for /mcp_proxy authentication");
+
+    // Initialize MCP Server Runtime (K8s-based)
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
+
+    /**
+     * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
+     * inside of this server instance. Metrics are actually exposed on a different port
+     * (9050; see above in startMetricsServer)
+     */
+    await registerMetricsPlugin(fastify, false);
 
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {
@@ -79,10 +223,9 @@ const start = async () => {
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
-        "Authorization",
         "X-Requested-With",
         "Cookie",
-        authHeaderName,
+        apiKeyAuthorizationHeaderName,
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
@@ -103,6 +246,13 @@ const start = async () => {
           version,
         },
       },
+
+      /**
+       * basically we use this hide untagged option to NOT include fastify-http-proxy routes in the OpenAPI spec
+       * (ex. we use this in several spots, as of this writing, under ./routes/proxy/)
+       */
+      hideUntagged: true,
+
       /**
        * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-use-together-with-fastifyswagger
        */
@@ -115,12 +265,26 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    fastify.get("/health", async () => ({
-      status: name,
-      version,
-    }));
-
-    fastify.addHook("preHandler", authMiddleware.handle);
+    fastify.get(
+      "/health",
+      {
+        schema: {
+          tags: ["health"],
+          response: {
+            200: z.object({
+              name: z.string(),
+              status: z.string(),
+              version: z.string(),
+            }),
+          },
+        },
+      },
+      async () => ({
+        name,
+        status: "ok",
+        version,
+      }),
+    );
 
     for (const route of Object.values(routes)) {
       fastify.register(route);

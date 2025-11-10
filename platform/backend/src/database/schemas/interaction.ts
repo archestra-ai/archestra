@@ -28,8 +28,8 @@ const interactionsTable = pgTable(
     model: varchar("model"),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
-    baselineCost: numeric("baseline_cost", { precision: 20, scale: 10 }),
-    cost: numeric("cost", { precision: 20, scale: 10 }),
+    baselineCost: numeric("baseline_cost", { precision: 15, scale: 10 }),
+    cost: numeric("cost", { precision: 15, scale: 10 }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

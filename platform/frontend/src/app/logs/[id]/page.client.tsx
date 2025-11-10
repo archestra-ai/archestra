@@ -155,10 +155,10 @@ function LogDetail({
               </div>
               {dynamicInteraction.cost && dynamicInteraction.baselineCost && (
                 <div>
-                  <div className="text-sm text-muted-foreground mb-2">Cost</div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Cost savings
+                  </div>
                   <div className="flex gap-3">
-                    <Cost cost={dynamicInteraction.cost} />
-                    {"  "}
                     <Savings
                       cost={dynamicInteraction.cost}
                       baselineCost={dynamicInteraction.baselineCost}

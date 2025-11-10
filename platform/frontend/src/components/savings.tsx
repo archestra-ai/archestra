@@ -59,12 +59,18 @@ export function Savings({
           <TooltipTrigger asChild>
             <Info className="h-4 w-4 text-muted-foreground/50" />
           </TooltipTrigger>
-          <TooltipContent>
-            <div className="space-y-1">
-              <div>Baseline: {formatCost(baselineCostNum)}</div>
-              <div className={colorClass}>
-                Savings: {formatCost(savings)} (
-                {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`})
+          <TooltipContent className="max-w-xs">
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <div>Baseline: {formatCost(baselineCostNum)}</div>
+                <div className={colorClass}>
+                  Savings: {formatCost(savings)} (
+                  {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`})
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground pt-2">
+                Note: Costs are estimates based on standard pricing. Actual
+                costs may vary due to pricing tiers.
               </div>
             </div>
           </TooltipContent>

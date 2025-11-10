@@ -1,6 +1,8 @@
 import { RouteId } from "@shared";
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import db, { schema } from "@/database";
 import type { PromptType } from "@/database/schemas/prompt";
 import { PromptModel } from "@/models";
 import { constructResponseSchema, UuidIdSchema } from "@/types";
@@ -90,7 +92,7 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           content: body.content,
           createdBy: user.id,
         });
-        return reply.send(prompt);
+        return reply.send({ ...prompt, agents: [] });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -130,7 +132,21 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(prompt);
+        // Fetch agents that use this prompt
+        const agents = await db
+          .select({
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+          })
+          .from(schema.agentPromptsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentPromptsTable.promptId, prompt.id))
+          .orderBy(schema.agentsTable.name);
+
+        return reply.send({ ...prompt, agents });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -170,7 +186,27 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(versions);
+        // Add agents to each version
+        const versionsWithAgents = await Promise.all(
+          versions.map(async (version) => {
+            const agents = await db
+              .select({
+                id: schema.agentsTable.id,
+                name: schema.agentsTable.name,
+              })
+              .from(schema.agentPromptsTable)
+              .innerJoin(
+                schema.agentsTable,
+                eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+              )
+              .where(eq(schema.agentPromptsTable.promptId, version.id))
+              .orderBy(schema.agentsTable.name);
+
+            return { ...version, agents };
+          }),
+        );
+
+        return reply.send(versionsWithAgents);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -216,7 +252,21 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(updated);
+        // Fetch agents that use this prompt (for updated version)
+        const agents = await db
+          .select({
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+          })
+          .from(schema.agentPromptsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentPromptsTable.promptId, updated.id))
+          .orderBy(schema.agentsTable.name);
+
+        return reply.send({ ...updated, agents });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

@@ -35,6 +35,8 @@ function getResourceDescription(resource: Resource): string {
     conversation: "Chat conversations with automation experts",
     limit: "Usage limits and quotas",
     tokenPrice: "Token pricing configuration",
+    chatSettings: "Chat feature configuration and settings",
+    prompt: "Reusable prompt templates and system prompts",
   };
   return descriptions[resource] || "";
 }

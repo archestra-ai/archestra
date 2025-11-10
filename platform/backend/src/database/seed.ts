@@ -124,6 +124,10 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
 async function seedN8NSystemPrompt(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  if (!user) {
+    logger.error("Failed to get or create default admin user, skipping n8n prompt seeding");
+    return;
+  }
 
   // Check if N8N system prompt already exists
   const existingPrompts = await PromptModel.findByOrganizationId(
@@ -330,6 +334,10 @@ return $input.all().map(item => ({
 async function seedDefaultRegularPrompts(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  if (!user) {
+    logger.error("Failed to get or create default admin user, skipping regular prompts seeding");
+    return;
+  }
 
   const defaultPrompts = [
     {

@@ -1,7 +1,7 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
-import { InternalMcpCatalogModel } from "@/models";
+import { AgentModel, InternalMcpCatalogModel } from "@/models";
 import type { Agent, InternalMcpCatalog } from "@/types";
 
 /**
@@ -12,11 +12,13 @@ const TOOL_WHOAMI_NAME = "whoami";
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
 const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
   "create_mcp_server_installation_request";
+const TOOL_CREATE_AGENT_NAME = "create_agent";
 
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
 const _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
+const TOOL_CREATE_AGENT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_AGENT_NAME}`;
 
 /**
  * Context for the Archestra MCP server
@@ -115,6 +117,67 @@ export async function executeArchestraTool(
           {
             type: "text",
             text: `Error searching private MCP registry: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (toolName === TOOL_CREATE_AGENT_FULL_NAME) {
+    logger.info(
+      { agentId: agent.id, createArgs: args },
+      "create_agent tool called",
+    );
+
+    try {
+      const name = args?.name as string;
+      const isDemo = (args?.is_demo as boolean) ?? false;
+      const isDefault = (args?.is_default as boolean) ?? false;
+      const teams = (args?.teams as string[]) ?? [];
+      const labels = args?.labels as Array<{
+        labelId: string;
+        value: string | null;
+      }> | undefined;
+
+      // Validate required fields
+      if (!name || name.trim() === "") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: Agent name is required and cannot be empty.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Create the agent
+      const newAgent = await AgentModel.create({
+        name,
+        isDemo,
+        isDefault,
+        teams,
+        labels,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully created agent.\n\nAgent Name: ${newAgent.name}\nAgent ID: ${newAgent.id}\nIs Demo: ${newAgent.isDemo}\nIs Default: ${newAgent.isDefault}\nTeams: ${newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"}\nLabels: ${newAgent.labels.length > 0 ? newAgent.labels.map(l => `${l.label.name}${l.value ? `: ${l.value}` : ""}`).join(", ") : "None"}`,
+          },
+        ],
+        isError: false,
+      };
+    } catch (error) {
+      logger.error({ err: error }, "Error creating agent");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error creating agent: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
         isError: true,
@@ -250,6 +313,57 @@ export function getArchestraMcpTools(): Tool[] {
           },
         },
         required: [],
+      },
+      annotations: {},
+      _meta: {},
+    },
+    {
+      name: TOOL_CREATE_AGENT_FULL_NAME,
+      title: "Create Agent",
+      description:
+        "Create a new agent with the specified name and optional configuration. The agent will be automatically assigned Archestra built-in tools.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "The name of the agent (required)",
+          },
+          is_demo: {
+            type: "boolean",
+            description: "Whether this is a demo agent (optional, defaults to false)",
+          },
+          is_default: {
+            type: "boolean",
+            description: "Whether this should be the default agent (optional, defaults to false)",
+          },
+          teams: {
+            type: "array",
+            items: {
+              type: "string",
+            },
+            description: "Array of team IDs to assign the agent to (optional)",
+          },
+          labels: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                labelId: {
+                  type: "string",
+                  description: "The ID of the label",
+                },
+                value: {
+                  type: "string",
+                  description: "The value for the label (optional)",
+                },
+              },
+              required: ["labelId"],
+            },
+            description: "Array of labels to assign to the agent (optional)",
+          },
+        },
+        required: ["name"],
       },
       annotations: {},
       _meta: {},

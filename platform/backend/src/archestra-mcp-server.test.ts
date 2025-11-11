@@ -11,10 +11,10 @@ import {
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
-  test("should return an array of 2 tools", () => {
+  test("should return an array of 3 tools", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(2);
+    expect(tools).toHaveLength(3);
     expect(tools[0]).toHaveProperty("name");
     expect(tools[0]).toHaveProperty("title");
     expect(tools[0]).toHaveProperty("description");
@@ -26,6 +26,7 @@ describe("getArchestraMcpTools", () => {
 
     expect(tools[0].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
     expect(tools[1].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    expect(tools[2].name).toContain(MCP_SERVER_TOOL_NAME_SEPARATOR);
   });
 
   test("should have whoami tool", () => {
@@ -44,6 +45,14 @@ describe("getArchestraMcpTools", () => {
 
     expect(searchTool).toBeDefined();
     expect(searchTool?.title).toBe("Search Private MCP Registry");
+  });
+
+  test("should have create_agent tool", () => {
+    const tools = getArchestraMcpTools();
+    const createAgentTool = tools.find((t) => t.name.endsWith("create_agent"));
+
+    expect(createAgentTool).toBeDefined();
+    expect(createAgentTool?.title).toBe("Create Agent");
   });
 
   test("should not have create_mcp_server_installation_request tool (disabled)", () => {
@@ -172,6 +181,100 @@ describe("executeArchestraTool", () => {
 
       // Restore the original method
       InternalMcpCatalogModel.findAll = originalFindAll;
+    });
+  });
+
+  describe("create_agent tool", () => {
+    test("should create a new agent with required fields only", async () => {
+      const result = await executeArchestraTool(
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "New Test Agent" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created agent",
+      );
+      expect((result.content[0] as any).text).toContain("New Test Agent");
+      expect((result.content[0] as any).text).toContain("Agent ID:");
+    });
+
+    test("should create a new agent with all optional fields", async ({
+      makeTeam,
+      makeLabel,
+    }) => {
+      const team = await makeTeam({ name: "Test Team" });
+      const label = await makeLabel({ name: "Environment" });
+
+      const result = await executeArchestraTool(
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        {
+          name: "Full Featured Agent",
+          is_demo: true,
+          is_default: false,
+          teams: [team.id],
+          labels: [{ labelId: label.id, value: "production" }],
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created agent",
+      );
+      expect((result.content[0] as any).text).toContain("Full Featured Agent");
+      expect((result.content[0] as any).text).toContain("Is Demo: true");
+      expect((result.content[0] as any).text).toContain(team.id);
+    });
+
+    test("should return error when name is missing", async () => {
+      const result = await executeArchestraTool(
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        {},
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Agent name is required",
+      );
+    });
+
+    test("should return error when name is empty string", async () => {
+      const result = await executeArchestraTool(
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "   " },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Agent name is required",
+      );
+    });
+
+    test("should handle errors gracefully", async () => {
+      // Mock the AgentModel.create method to throw an error
+      const { AgentModel } = await import("@/models");
+      const originalCreate = AgentModel.create;
+      AgentModel.create = vi
+        .fn()
+        .mockRejectedValue(new Error("Database error"));
+
+      const result = await executeArchestraTool(
+        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+        { name: "Test Agent" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("Error creating agent");
+      expect((result.content[0] as any).text).toContain("Database error");
+
+      // Restore the original method
+      AgentModel.create = originalCreate;
     });
   });
 

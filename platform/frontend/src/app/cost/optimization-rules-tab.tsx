@@ -42,7 +42,6 @@ import { TabsContent } from "@/components/ui/tabs";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
-  UpdateOptimizationRuleInput,
 } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
@@ -64,7 +63,7 @@ interface OptimizationRulesTabProps {
 }
 
 // Form data type for inline editing - uses strings for number inputs
-type OptimizationRuleFormData = {
+type RuleFormData = {
   id?: string;
   agentId: string;
   ruleType: OptimizationRule["ruleType"];
@@ -91,17 +90,26 @@ function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
   );
 }
 
+// Helper to convert form data to API input format
+function formDataToConditions(
+  data: RuleFormData,
+): CreateOptimizationRuleInput["conditions"] {
+  return data.ruleType === "content_length"
+    ? { maxLength: Number(data.maxLength) }
+    : { hasTools: data.hasTools ?? false };
+}
+
 // Inline Form Component for adding/editing optimization rules
 function OptimizationRuleInlineForm({
   initialData,
   onSave,
   onCancel,
 }: {
-  initialData?: OptimizationRuleFormData;
-  onSave: (data: OptimizationRuleFormData) => void;
+  initialData?: RuleFormData;
+  onSave: (data: RuleFormData) => void;
   onCancel: () => void;
 }) {
-  const [formData, setFormData] = useState<OptimizationRuleFormData>({
+  const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
     agentId: initialData?.agentId || "",
     ruleType: initialData?.ruleType || "content_length",
@@ -280,12 +288,12 @@ function OptimizationRuleRow({
   rule: OptimizationRule;
   isEditing: boolean;
   onEdit: () => void;
-  onSave: (data: OptimizationRuleFormData) => void;
+  onSave: (data: RuleFormData) => void;
   onCancel: () => void;
   onDelete: () => void;
 }) {
   if (isEditing) {
-    const formData: OptimizationRuleFormData = {
+    const formData: RuleFormData = {
       id: rule.id,
       agentId: rule.agentId,
       ruleType: rule.ruleType,
@@ -386,51 +394,34 @@ export function OptimizationRulesTab({
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  const handleCreateRule = async (data: OptimizationRuleFormData) => {
+  const handleCreateRule = async (data: RuleFormData) => {
     try {
-      const conditions =
-        data.ruleType === "content_length"
-          ? { maxLength: Number(data.maxLength) }
-          : { hasTools: data.hasTools ?? false };
-
-      const input: CreateOptimizationRuleInput = {
+      await createRule.mutateAsync({
         agentId: data.agentId,
         ruleType: data.ruleType,
-        conditions,
+        conditions: formDataToConditions(data),
         provider: data.provider,
         targetModel: data.targetModel,
         priority: Number(data.priority),
         enabled: data.enabled,
-      };
-
-      await createRule.mutateAsync(input);
+      });
       setIsAddingRule(false);
     } catch (error) {
       console.error("Failed to create optimization rule:", error);
     }
   };
 
-  const handleUpdateRule = async (
-    id: string,
-    data: OptimizationRuleFormData,
-  ) => {
+  const handleUpdateRule = async (id: string, data: RuleFormData) => {
     try {
-      const conditions =
-        data.ruleType === "content_length"
-          ? { maxLength: Number(data.maxLength) }
-          : { hasTools: data.hasTools ?? false };
-
-      const input: UpdateOptimizationRuleInput = {
+      await updateRule.mutateAsync({
         id,
         ruleType: data.ruleType,
-        conditions,
+        conditions: formDataToConditions(data),
         provider: data.provider,
         targetModel: data.targetModel,
         priority: Number(data.priority),
         enabled: data.enabled,
-      };
-
-      await updateRule.mutateAsync(input);
+      });
       setEditingRuleId(null);
     } catch (error) {
       console.error("Failed to update optimization rule:", error);

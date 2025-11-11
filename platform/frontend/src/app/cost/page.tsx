@@ -96,7 +96,7 @@ ChartJS.register(
 );
 
 import type { archestraApiTypes } from "@shared";
-import { OptimizationRulesTab } from "@/app/cost/_parts/optimization-rules-tab";
+import { OptimizationRulesTab } from "@/app/cost/optimization-rules-tab";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
   AlertDialog,

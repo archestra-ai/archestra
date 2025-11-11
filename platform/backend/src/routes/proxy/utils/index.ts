@@ -13,3 +13,4 @@ export * as toolInvocation from "./tool-invocation";
 export * as tools from "./tools";
 export * as tracing from "./tracing";
 export * as trustedData from "./trusted-data";
+export * as errorHandling from "./error-handling";

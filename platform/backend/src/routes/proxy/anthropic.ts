@@ -157,6 +157,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
       fetch: getObservableFetch("anthropic", resolvedAgent),
+      maxRetries: 2, // Retry failed requests up to 2 times
+      timeout: 60000, // 60 second timeout for requests
     });
 
     try {
@@ -222,21 +224,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Content-Type", "text/event-stream");
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
-
-        // Forward Anthropic-specific rate limit headers
-        reply.header("anthropic-ratelimit-requests-limit", "1000");
-        reply.header("anthropic-ratelimit-requests-remaining", "999");
-        reply.header(
-          "anthropic-ratelimit-requests-reset",
-          new Date(Date.now() + 60000).toISOString(),
-        );
-        reply.header("anthropic-ratelimit-tokens-limit", "100000");
-        reply.header("anthropic-ratelimit-tokens-remaining", "99000");
-        reply.header(
-          "anthropic-ratelimit-tokens-reset",
-          new Date(Date.now() + 60000).toISOString(),
-        );
-        reply.header("request-id", `req-proxy-${Date.now()}`);
+        // Note: Real rate limit headers will be forwarded from the Anthropic API response
       }
 
       const { toolResultUpdates, contextIsTrusted } =
@@ -707,39 +695,24 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(response);
       }
     } catch (error) {
-      fastify.log.error(error);
-
-      const statusCode =
-        error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
-          : 500;
-
       // Check if we're streaming (headers already sent)
       if (stream && reply.sent) {
-        // For streaming, send error as SSE event
-        const errorEvent = {
-          type: "error",
-          error: {
-            type: "api_error",
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-          },
-        };
-        reply.raw.write(
-          `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+        // For streaming, send error as SSE event with proper error handling
+        return utils.errorHandling.sendStreamingError(
+          reply,
+          error,
+          "anthropic",
+          fastify.log,
         );
-        reply.raw.end();
-        return reply;
       }
 
-      // For non-streaming or if headers not sent yet, send JSON error
-      return reply.status(statusCode).send({
-        error: {
-          message:
-            error instanceof Error ? error.message : "Internal server error",
-          type: "api_error",
-        },
-      });
+      // For non-streaming or if headers not sent yet, send JSON error with proper status codes
+      return utils.errorHandling.sendErrorResponse(
+        reply,
+        error,
+        "anthropic",
+        fastify.log,
+      );
     }
   };
 

@@ -145,6 +145,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
           fetch: getObservableFetch("openai", resolvedAgent),
+          maxRetries: 2, // Retry failed requests up to 2 times
+          timeout: 60000, // 60 second timeout for requests
         });
 
     try {
@@ -641,20 +643,24 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(response);
       }
     } catch (error) {
-      fastify.log.error(error);
+      // Check if we're streaming (headers already sent)
+      if (stream && reply.sent) {
+        // For streaming, send error with proper error handling
+        return utils.errorHandling.sendStreamingError(
+          reply,
+          error,
+          "openai",
+          fastify.log,
+        );
+      }
 
-      const statusCode =
-        error instanceof Error && "status" in error
-          ? (error.status as 200 | 400 | 404 | 403 | 500)
-          : 500;
-
-      return reply.status(statusCode).send({
-        error: {
-          message:
-            error instanceof Error ? error.message : "Internal server error",
-          type: "api_error",
-        },
-      });
+      // For non-streaming or if headers not sent yet, send JSON error with proper status codes
+      return utils.errorHandling.sendErrorResponse(
+        reply,
+        error,
+        "openai",
+        fastify.log,
+      );
     }
   };
 

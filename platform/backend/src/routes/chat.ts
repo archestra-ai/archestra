@@ -148,6 +148,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const anthropic = createAnthropic({
         apiKey: anthropicApiKey,
         baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
+        fetch: fetch, // Use native fetch with proper error handling
       });
 
       // Stream with AI SDK
@@ -178,7 +179,51 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          return JSON.stringify(error);
+          // Enhanced error handling following Vercel AI SDK best practices
+          fastify.log.error({ error, conversationId }, "Chat stream error");
+
+          // Extract structured error information
+          if (error && typeof error === "object") {
+            const errorObj = error as any;
+
+            // Handle provider-specific error structures
+            if (errorObj.type || errorObj.code) {
+              return JSON.stringify({
+                error: {
+                  message: errorObj.message || "An error occurred",
+                  type: errorObj.type || errorObj.code || "api_error",
+                  ...(errorObj.param && { param: errorObj.param }),
+                },
+              });
+            }
+
+            // Handle HTTP errors with status codes
+            if (errorObj.status) {
+              const errorType = errorObj.status === 429
+                ? "rate_limit_error"
+                : errorObj.status === 402
+                  ? "insufficient_quota"
+                  : errorObj.status === 401
+                    ? "authentication_error"
+                    : "api_error";
+
+              return JSON.stringify({
+                error: {
+                  message: errorObj.message || "An error occurred with the AI provider",
+                  type: errorType,
+                  status: errorObj.status,
+                },
+              });
+            }
+          }
+
+          // Fallback for unknown error structures
+          return JSON.stringify({
+            error: {
+              message: error instanceof Error ? error.message : "An unexpected error occurred",
+              type: "unknown_error",
+            },
+          });
         },
         onFinish: async ({ messages: finalMessages }) => {
           if (!conversationId) return;

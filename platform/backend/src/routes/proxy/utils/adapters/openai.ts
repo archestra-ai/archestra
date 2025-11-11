@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 

@@ -203,7 +203,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Optimize model selection for cost if enabled using dynamic rules
       if (resolvedAgent.optimizeCost) {
         const hasTools = (tools?.length ?? 0) > 0;
-        const optimizedModel = await utils.optimization.getOptimizedModel(
+        const optimizedModel = await utils.costOptimization.getOptimizedModel(
           resolvedAgent,
           messages,
           "openai",
@@ -567,12 +567,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (tokenUsage) {
           reportLLMTokens("openai", resolvedAgent, tokenUsage);
           // Calculate costs using database pricing (TokenPriceModel)
-          cost = await utils.optimization.calculateCost(
+          cost = await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
-          baselineCost = await utils.optimization.calculateCost(
+          baselineCost = await utils.costOptimization.calculateCost(
             body.model,
             tokenUsage.input,
             tokenUsage.output,
@@ -675,12 +675,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
-        const cost = await utils.optimization.calculateCost(
+        const cost = await utils.costOptimization.calculateCost(
           model,
           tokenUsage.input,
           tokenUsage.output,
         );
-        const baselineCost = await utils.optimization.calculateCost(
+        const baselineCost = await utils.costOptimization.calculateCost(
           body.model,
           tokenUsage.input,
           tokenUsage.output,

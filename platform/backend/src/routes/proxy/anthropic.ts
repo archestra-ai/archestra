@@ -219,7 +219,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Optimize model selection for cost if enabled using dynamic rules
       if (resolvedAgent.optimizeCost) {
         const hasTools = mergedTools.length > 0;
-        const optimizedModel = await utils.optimization.getOptimizedModel(
+        const optimizedModel = await utils.costOptimization.getOptimizedModel(
           resolvedAgent,
           body.messages,
           "anthropic",
@@ -597,12 +597,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
-        const cost = await utils.optimization.calculateCost(
+        const cost = await utils.costOptimization.calculateCost(
           model,
           tokenUsage.input,
           tokenUsage.output,
         );
-        const baselineCost = await utils.optimization.calculateCost(
+        const baselineCost = await utils.costOptimization.calculateCost(
           body.model,
           tokenUsage.input,
           tokenUsage.output,
@@ -710,12 +710,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : { input: null, output: null };
 
             // Calculate costs using database pricing (TokenPriceModel)
-            const cost = await utils.optimization.calculateCost(
+            const cost = await utils.costOptimization.calculateCost(
               model,
               tokenUsage.input,
               tokenUsage.output,
             );
-            const baselineCost = await utils.optimization.calculateCost(
+            const baselineCost = await utils.costOptimization.calculateCost(
               body.model,
               tokenUsage.input,
               tokenUsage.output,
@@ -745,12 +745,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
-        const cost = await utils.optimization.calculateCost(
+        const cost = await utils.costOptimization.calculateCost(
           model,
           tokenUsage.input,
           tokenUsage.output,
         );
-        const baselineCost = await utils.optimization.calculateCost(
+        const baselineCost = await utils.costOptimization.calculateCost(
           body.model,
           tokenUsage.input,
           tokenUsage.output,

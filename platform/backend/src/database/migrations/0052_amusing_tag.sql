@@ -14,6 +14,6 @@ CREATE TABLE "optimization_rules" (
 );
 --> statement-breakpoint
 ALTER TABLE "agents" ADD COLUMN "optimize_cost" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "interactions" ADD COLUMN "baseline_cost" numeric(13, 10);--> statement-breakpoint
-ALTER TABLE "interactions" ADD COLUMN "cost" numeric(13, 10);--> statement-breakpoint
+ALTER TABLE "interactions" ADD COLUMN "baseline_cost" numeric(15, 10);--> statement-breakpoint
+ALTER TABLE "interactions" ADD COLUMN "cost" numeric(15, 10);--> statement-breakpoint
 ALTER TABLE "optimization_rules" ADD CONSTRAINT "optimization_rules_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade ON UPDATE no action;

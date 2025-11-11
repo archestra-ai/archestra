@@ -36,19 +36,12 @@ export function Savings({
         ? "text-green-600 dark:text-green-400"
         : "text-red-600 dark:text-red-400";
 
-  const content = (
-    <>
-      {format === "percent" &&
-        (savings === 0
-          ? "0%"
-          : savings > 0
-            ? `+${savingsPercent}%`
-            : `${savingsPercent}%`)}
-      {format === "number" && savings === 0
-        ? "$0"
-        : formatCost(Math.abs(savings))}
-    </>
-  );
+  let content = null;
+  if (format === "percent") {
+    content = savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`;
+  } else if (format === 'number') {
+    content = savings === 0 ? "$0" : formatCost(Math.abs(savings));
+  }
 
   if (tooltip !== "never") {
     return (

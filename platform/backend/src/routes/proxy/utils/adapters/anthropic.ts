@@ -210,22 +210,3 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
     output: usage.output_tokens,
   };
 }
-
-/** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */
-export function normalizeModel(model: string): string {
-  let normalized = model;
-
-  // Remove date suffix as in "claude-opus-4-1-20250805"
-  normalized = normalized.replace(/-\d{8}$/, "");
-
-  // Handle "claude-3-5-sonnet" -> "claude-3.5-sonnet" (works for any model type)
-  normalized = normalized.replace(/^(claude)-(\d+)-(\d+)-(.+)/, "$1-$2.$3-$4");
-
-  // Replace underscores with periods for version numbers: "claude-opus-4_1" -> "claude-opus-4.1"
-  normalized = normalized.replace(/-(\d+)_(\d+)(?:-|$)/, "-$1.$2");
-
-  // Replace dash with period for version numbers: "claude-opus-4-1" -> "claude-opus-4.1"
-  normalized = normalized.replace(/-(\d+)-(\d+)$/, "-$1.$2");
-
-  return normalized;
-}

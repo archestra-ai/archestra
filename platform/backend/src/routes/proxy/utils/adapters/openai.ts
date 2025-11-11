@@ -187,20 +187,3 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
     output: usage.completion_tokens,
   };
 }
-
-/** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */
-export function normalizeModel(model: string): string {
-  let normalized = model;
-
-  // Remove date suffix as in "gpt-4o-2024-11-20"
-  normalized = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, "");
-
-  // Remove 4-digit version code as in "gpt-4-0125-preview"
-  normalized = normalized.replace(/-\d{4}(?=-|$)/g, "");
-
-  // Remove common version suffixes
-  normalized = normalized.replace(/-(latest|preview)/, "");
-  normalized = normalized.replace(/chatgpt/, "gpt");
-
-  return normalized;
-}

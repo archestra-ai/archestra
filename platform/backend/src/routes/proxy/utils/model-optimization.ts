@@ -1,16 +1,18 @@
-import { OptimizationRuleModel } from "@/models";
+import { OptimizationRuleModel, TokenPriceModel } from "@/models";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
 type ProviderMessages = {
-  openai: OpenAi.Types.ChatCompletionsRequest["messages"],
-  anthropic: Anthropic.Types.MessagesRequest["messages"]
-}
+  openai: OpenAi.Types.ChatCompletionsRequest["messages"];
+  anthropic: Anthropic.Types.MessagesRequest["messages"];
+};
 
 /**
  * Get optimized model based on dynamic optimization rules
  * Returns the optimized model name or null if no optimization applies
  */
-export async function getOptimizedModel<Provider extends keyof ProviderMessages>(
+export async function getOptimizedModel<
+  Provider extends keyof ProviderMessages,
+>(
   agent: Agent,
   messages: ProviderMessages[Provider],
   provider: Provider,
@@ -50,4 +52,32 @@ export async function getOptimizedModel<Provider extends keyof ProviderMessages>
     contentLength,
     hasTools,
   });
+}
+
+/**
+ * Calculate cost for token usage based on model pricing
+ * Returns null if pricing is not available for the model
+ * Returns cost as a string to match database numeric type
+ */
+export async function calculateCost(
+  model: string,
+  inputTokens: number | null | undefined,
+  outputTokens: number | null | undefined,
+): Promise<number | null> {
+  if (!inputTokens || !outputTokens) {
+    return null;
+  }
+
+  const pricing = await TokenPriceModel.findByModel(model);
+  if (!pricing) {
+    return null;
+  }
+
+  const inputCost =
+    (inputTokens / 1000000) * Number.parseFloat(pricing.pricePerMillionInput);
+  const outputCost =
+    (outputTokens / 1000000) *
+    Number.parseFloat(pricing.pricePerMillionOutput);
+
+  return inputCost + outputCost;
 }

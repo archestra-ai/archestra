@@ -229,12 +229,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (optimizedModel) {
           model = optimizedModel;
           fastify.log.info(
-            {resolvedAgentId, optimizedModel,},
+            { resolvedAgentId, optimizedModel },
             "Optimized model selected",
           );
         } else {
           fastify.log.info(
-            {resolvedAgentId, baselineModel: model,},
+            { resolvedAgentId, baselineModel: model },
             "No matching optimized model found, proceeding with baseline model",
           );
         }
@@ -597,10 +597,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
-        // Cost calculation now uses database pricing (TokenPriceModel)
-        // getUsageCost returns null since hardcoded pricing was removed
-        const cost = null;
-        const baselineCost = null;
+        const cost = await utils.optimization.calculateCost(
+          model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
+        const baselineCost = await utils.optimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -703,10 +709,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
-            // Cost calculation now uses database pricing (TokenPriceModel)
-            // getUsageCost returns null since hardcoded pricing was removed
-            const cost = null;
-            const baselineCost = null;
+            // Calculate costs using database pricing (TokenPriceModel)
+            const cost = await utils.optimization.calculateCost(
+              model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
+            const baselineCost = await utils.optimization.calculateCost(
+              body.model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
 
             await InteractionModel.create({
               agentId: resolvedAgentId,
@@ -731,10 +744,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
-        // Cost calculation now uses database pricing (TokenPriceModel)
-        // getUsageCost returns null since hardcoded pricing was removed
-        const cost = null;
-        const baselineCost = null;
+        // Calculate costs using database pricing (TokenPriceModel)
+        const cost = await utils.optimization.calculateCost(
+          model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
+        const baselineCost = await utils.optimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
 
         await InteractionModel.create({
           agentId: resolvedAgentId,

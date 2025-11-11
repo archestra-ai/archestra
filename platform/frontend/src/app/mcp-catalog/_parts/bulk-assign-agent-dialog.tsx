@@ -89,28 +89,18 @@ export function BulkAssignAgentDialog({
         return;
       }
 
-      const { succeeded, failed, duplicates } = result;
-      const totalAttempted = assignments.length;
-      const actualFailures = failed;
+      const { succeeded, failed } = result;
 
       if (succeeded > 0) {
-        if (duplicates > 0 && actualFailures === 0) {
-          toast.success(
-            `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
-          );
-        } else if (actualFailures > 0) {
+        if (failed > 0) {
           toast.warning(
-            `Assigned ${succeeded} of ${totalAttempted} tool${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+            `Assigned ${succeeded} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed} failed.`,
           );
         } else {
           toast.success(
             `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}`,
           );
         }
-      } else if (duplicates === totalAttempted) {
-        toast.info(
-          "All selected tools are already assigned to the selected agents",
-        );
       } else {
         toast.error("Failed to assign tools");
         console.error("Bulk assignment errors:", result.errors);

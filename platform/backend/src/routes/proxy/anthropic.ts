@@ -6,8 +6,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
-import { isAnthropicPricingModel } from "@/llm-pricing";
-import { AgentModel, InteractionModel, OptimizationRuleModel } from "@/models";
+import { AgentModel, InteractionModel } from "@/models";
 import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
@@ -216,59 +215,30 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      let model = body.model;
       // Optimize model selection for cost if enabled using dynamic rules
-      const baselineModel = body.model;
-      let optimizedModel = baselineModel;
-
       if (resolvedAgent.optimizeCost) {
-        const rules =
-          await OptimizationRuleModel.findEnabledByAgentIdAndProvider(
-            resolvedAgentId,
-            "anthropic",
+        const hasTools = mergedTools.length > 0;
+        const optimizedModel = await utils.optimization.getOptimizedModel(
+          resolvedAgent,
+          body.messages,
+          "anthropic",
+          hasTools,
+        );
+
+        if (optimizedModel) {
+          model = optimizedModel;
+          fastify.log.info(
+            {resolvedAgentId, optimizedModel,},
+            "Optimized model selected",
           );
-
-        if (rules.length > 0) {
-          // Calculate content length from messages
-          let contentLength = 0;
-          for (const message of body.messages) {
-            if (typeof message.content === "string") {
-              contentLength += message.content.length;
-            } else if (Array.isArray(message.content)) {
-              for (const block of message.content) {
-                if (block.type === "text") {
-                  contentLength += block.text.length;
-                }
-              }
-            }
-          }
-
-          // Check if tools are present
-          const hasTools = mergedTools.length > 0;
-
-          // Evaluate rules
-          const ruleResult = OptimizationRuleModel.evaluateRules(rules, {
-            contentLength,
-            hasTools,
-          });
-
-          if (ruleResult) {
-            optimizedModel = ruleResult;
-          }
+        } else {
+          fastify.log.info(
+            {resolvedAgentId, baselineModel: model,},
+            "No matching optimized model found, proceeding with baseline model",
+          );
         }
       }
-
-      fastify.log.info(
-        {
-          resolvedAgentId,
-          baselineModel,
-          optimizedModel,
-          optimizationEnabled: resolvedAgent.optimizeCost,
-        },
-        "Model optimization applied (dynamic rules)",
-      );
-
-      // Update body with optimized model
-      body.model = optimizedModel;
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -361,7 +331,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const messageStream = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
           "anthropic",
-          body.model,
+          model,
           true,
           resolvedAgent,
           async (llmSpan) => {
@@ -627,28 +597,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
-        // Calculate costs
-        const normalizedModel = utils.adapters.anthropic.normalizeModel(
-          body.model,
-        );
-        const normalizedBaselineModel =
-          utils.adapters.anthropic.normalizeModel(baselineModel);
-        const cost =
-          isAnthropicPricingModel(normalizedModel) &&
-          tokenUsage.input &&
-          tokenUsage.output
-            ? utils.adapters.anthropic
-                .getUsageCost(normalizedModel, tokenUsage)
-                .toString()
-            : null;
-        const baselineCost =
-          isAnthropicPricingModel(normalizedBaselineModel) &&
-          tokenUsage.input &&
-          tokenUsage.output
-            ? utils.adapters.anthropic
-                .getUsageCost(normalizedBaselineModel, tokenUsage)
-                .toString()
-            : null;
+        // Cost calculation now uses database pricing (TokenPriceModel)
+        // getUsageCost returns null since hardcoded pricing was removed
+        const cost = null;
+        const baselineCost = null;
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -660,12 +612,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             type: "message",
             role: "assistant",
             content: responseContent,
-            model: body.model,
+            model: model,
             stop_reason: "end_turn",
             stop_sequence: null,
             usage,
           },
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
           cost,
@@ -705,7 +657,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
           "anthropic",
-          body.model,
+          model,
           false,
           resolvedAgent,
           async (llmSpan) => {
@@ -751,33 +703,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
-            // Calculate costs
-            const normalizedModel = utils.adapters.anthropic.normalizeModel(
-              body.model,
-            );
-            const cost =
-              isAnthropicPricingModel(normalizedModel) &&
-              tokenUsage.input &&
-              tokenUsage.output
-                ? utils.adapters.anthropic
-                    .getUsageCost(normalizedModel, tokenUsage)
-                    .toString()
-                : null;
-            const baselineCost =
-              isAnthropicPricingModel(normalizedModel) &&
-              tokenUsage.input &&
-              tokenUsage.output
-                ? utils.adapters.anthropic
-                    .getUsageCost(normalizedModel, tokenUsage)
-                    .toString()
-                : null;
+            // Cost calculation now uses database pricing (TokenPriceModel)
+            // getUsageCost returns null since hardcoded pricing was removed
+            const cost = null;
+            const baselineCost = null;
 
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
               response: response,
-              model: body.model,
+              model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
               cost,
@@ -795,35 +731,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
-        // Calculate costs
-        const normalizedModel = utils.adapters.anthropic.normalizeModel(
-          body.model,
-        );
-        const normalizedBaselineModel =
-          utils.adapters.anthropic.normalizeModel(baselineModel);
-        const cost =
-          isAnthropicPricingModel(normalizedModel) &&
-          tokenUsage.input &&
-          tokenUsage.output
-            ? utils.adapters.anthropic
-                .getUsageCost(normalizedModel, tokenUsage)
-                .toString()
-            : null;
-        const baselineCost =
-          isAnthropicPricingModel(normalizedBaselineModel) &&
-          tokenUsage.input &&
-          tokenUsage.output
-            ? utils.adapters.anthropic
-                .getUsageCost(normalizedBaselineModel, tokenUsage)
-                .toString()
-            : null;
+        // Cost calculation now uses database pricing (TokenPriceModel)
+        // getUsageCost returns null since hardcoded pricing was removed
+        const cost = null;
+        const baselineCost = null;
 
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
           response: response,
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
           cost,

@@ -1,10 +1,8 @@
 import type { z } from "zod";
-import { isOpenAIPricingModel, llmPricing } from "@/llm-pricing";
 import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
-type OpenAiModel = OpenAi.Types.ChatCompletionsRequest["model"];
 
 /**
  * Convert OpenAI messages to common format for trusted data evaluation
@@ -188,63 +186,6 @@ export function getUsageTokens(usage: OpenAi.Types.Usage) {
     input: usage.prompt_tokens,
     output: usage.completion_tokens,
   };
-}
-
-/** Returns the usage cost in USD */
-export function getUsageCost(
-  model: keyof typeof llmPricing.openai,
-  { input = 0, output = 0 }: { input?: number; output?: number },
-): number {
-  const pricing = llmPricing.openai[model];
-  return (input * pricing.input + output * pricing.output) / 1000000;
-}
-
-/**
- * Selects optimal OpenAI model in terms of cost.
- * The selection is based on context length, attachments and tool presence.
- */
-export function getOptimizedModel(
-  model: string,
-  tools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
-  messages: OpenAiMessages,
-): string {
-  const normalizedModel = normalizeModel(model);
-  if (!isOpenAIPricingModel(normalizedModel)) {
-    return model;
-  }
-
-  const mini = "gpt-4o-mini" as const;
-  const originalPricing = llmPricing.openai[normalizedModel];
-  const optimizedPricing = llmPricing.openai[mini];
-  if (
-    originalPricing.input <= optimizedPricing.input ||
-    originalPricing.output <= optimizedPricing.input
-  ) {
-    return model;
-  }
-  let contextLength = 0;
-  let hasAttachments = false;
-  for (const message of messages) {
-    if (typeof message.content === "string") {
-      contextLength += message.content.length;
-    } else if (Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if (part.type === "text") {
-          contextLength += part.text.length;
-        } else {
-          hasAttachments = true;
-        }
-      }
-    }
-  }
-
-  const hasTools = tools && tools.length > 0;
-  const shortContext = contextLength < 10000;
-  if (shortContext && !hasAttachments && !hasTools) {
-    return mini;
-  } else {
-    return model;
-  }
 }
 
 /** Normalizes a model's name, removing snapshot and other irrelevant suffixes. */

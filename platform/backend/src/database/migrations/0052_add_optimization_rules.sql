@@ -3,12 +3,18 @@ DO $$ BEGIN
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
+DO $$ BEGIN
+ CREATE TYPE "public"."llm_provider" AS ENUM('anthropic', 'openai');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "optimization_rules" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"agent_id" uuid NOT NULL,
 	"rule_type" "optimization_rule_type" NOT NULL,
 	"conditions" jsonb NOT NULL,
+	"provider" "llm_provider" NOT NULL,
 	"target_model" text NOT NULL,
 	"priority" integer DEFAULT 0 NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,

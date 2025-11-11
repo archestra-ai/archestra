@@ -24,7 +24,7 @@ const optimizationRulesTable = pgTable("optimization_rules", {
     .references(() => agentsTable.id, { onDelete: "cascade" }),
   ruleType: optimizationRuleTypeEnum("rule_type").notNull(),
   conditions: jsonb("conditions").notNull(),
-  provider: llmProviderEnum("provider").notNull().default("openai"),
+  provider: llmProviderEnum("provider").notNull(),
   targetModel: text("target_model").notNull(),
   priority: integer("priority").notNull().default(0),
   enabled: boolean("enabled").notNull().default(true),

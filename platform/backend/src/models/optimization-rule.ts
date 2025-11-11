@@ -43,16 +43,6 @@ class OptimizationRuleModel {
     return rule;
   }
 
-  static async findById(id: string): Promise<OptimizationRule | undefined> {
-    const [rule] = await db
-      .select()
-      .from(optimizationRulesTable)
-      .where(eq(optimizationRulesTable.id, id))
-      .limit(1);
-
-    return rule;
-  }
-
   static async findByAgentId(agentId: string): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
@@ -74,23 +64,6 @@ class OptimizationRuleModel {
         and(
           eq(optimizationRulesTable.agentId, agentId),
           eq(optimizationRulesTable.provider, provider),
-        ),
-      )
-      .orderBy(asc(optimizationRulesTable.priority));
-
-    return rules;
-  }
-
-  static async findEnabledByAgentId(
-    agentId: string,
-  ): Promise<OptimizationRule[]> {
-    const rules = await db
-      .select()
-      .from(optimizationRulesTable)
-      .where(
-        and(
-          eq(optimizationRulesTable.agentId, agentId),
-          eq(optimizationRulesTable.enabled, true),
         ),
       )
       .orderBy(asc(optimizationRulesTable.priority));
@@ -143,14 +116,6 @@ class OptimizationRuleModel {
       .where(eq(optimizationRulesTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  static async deleteByAgentId(agentId: string): Promise<number> {
-    const result = await db
-      .delete(optimizationRulesTable)
-      .where(eq(optimizationRulesTable.agentId, agentId));
-
-    return result.rowCount ?? 0;
   }
 
   // Evaluate rules for a given agent and context

@@ -39,7 +39,7 @@ export function Savings({
   let content = null;
   if (format === "percent") {
     content = savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`;
-  } else if (format === 'number') {
+  } else if (format === "number") {
     content = savings === 0 ? "$0" : formatCost(Math.abs(savings));
   }
 

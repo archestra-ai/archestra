@@ -138,6 +138,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Agent resolved",
     );
 
+    const { authorization: openAiApiKey } = headers;
+    const openAiClient = config.benchmark.mockMode
+      ? (new MockOpenAIClient() as unknown as OpenAIProvider)
+      : new OpenAIProvider({
+          apiKey: openAiApiKey,
+          baseURL: config.llm.openai.baseUrl,
+          fetch: getObservableFetch("openai", resolvedAgent),
+        });
+
     try {
       // Check if current usage limits are already exceeded
       const limitViolation =
@@ -188,17 +197,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
-      fastify.log.info(
-        {
-          resolvedAgentId,
-          requestToolsCount: tools?.length || 0,
-          mergedToolsCount: mergedTools.length,
-          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
-          mergedTools: JSON.stringify(mergedTools),
-        },
-        "MCP tools injected",
-      );
-
       const baselineModel = body.model;
       let model = baselineModel;
       // Optimize model selection for cost if enabled using dynamic rules
@@ -224,15 +222,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
-
-      const { authorization: openAiApiKey } = headers;
-      const openAiClient = config.benchmark.mockMode
-        ? (new MockOpenAIClient() as unknown as OpenAIProvider)
-        : new OpenAIProvider({
-            apiKey: openAiApiKey,
-            baseURL: config.llm.openai.baseUrl,
-            fetch: getObservableFetch("openai", resolvedAgent),
-          });
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);

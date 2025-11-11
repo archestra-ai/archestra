@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import openAiProxyRoutes from "./openai";

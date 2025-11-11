@@ -86,6 +86,7 @@ export function useBulkAssignTools() {
   return useMutation({
     mutationFn: async ({
       assignments,
+      mcpServerId,
     }: {
       assignments: Array<{
         agentId: string;
@@ -93,6 +94,7 @@ export function useBulkAssignTools() {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
       }>;
+      mcpServerId?: string | null;
     }) => {
       const { data } = await bulkAssignTools({
         body: {
@@ -106,7 +108,8 @@ export function useBulkAssignTools() {
           })),
         },
       });
-      return data;
+      if (!data) return null;
+      return { ...data, mcpServerId };
     },
     onSuccess: (result) => {
       if (!result) return;
@@ -126,11 +129,18 @@ export function useBulkAssignTools() {
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
 
-      // Only invalidate the MCP servers list (not nested tools queries)
+      // Invalidate the MCP servers list
       queryClient.invalidateQueries({
         queryKey: ["mcp-servers"],
         exact: true,
       });
+
+      // Invalidate the specific MCP server's tools if we know which server
+      if (result.mcpServerId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", result.mcpServerId, "tools"],
+        });
+      }
     },
   });
 }

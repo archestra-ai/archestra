@@ -82,7 +82,10 @@ export function BulkAssignAgentDialog({
     );
 
     try {
-      const result = await bulkAssignMutation.mutateAsync({ assignments });
+      const result = await bulkAssignMutation.mutateAsync({
+        assignments,
+        mcpServerId: mcpServer?.id,
+      });
 
       if (!result) {
         toast.error("Failed to assign tools");

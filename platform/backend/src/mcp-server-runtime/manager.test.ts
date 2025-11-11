@@ -1,26 +1,24 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
 import * as k8s from "@kubernetes/client-node";
+import { vi } from "vitest";
+import type * as originalConfigModule from "@/config";
+import { beforeEach, describe, expect, test } from "@/test";
 
 // Mock the dependencies before importing the manager
-vi.mock("@/config", () => ({
-  default: {
-    orchestrator: {
-      kubernetes: {
-        namespace: "test-namespace",
-        kubeconfig: undefined,
-        loadKubeconfigFromCurrentCluster: false,
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof originalConfigModule>();
+  return {
+    default: {
+      ...actual.default,
+      orchestrator: {
+        kubernetes: {
+          namespace: "test-namespace",
+          kubeconfig: undefined,
+          loadKubeconfigFromCurrentCluster: false,
+        },
       },
     },
-  },
-}));
-
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+  };
+});
 
 vi.mock("@/models/internal-mcp-catalog", () => ({
   default: {},
@@ -51,9 +49,10 @@ describe("McpServerRuntimeManager", () => {
 
       // Dynamically import to get a fresh instance
       const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
 
       // isEnabled should be false when config fails to load
-      expect(McpServerRuntimeManager.isEnabled).toBe(false);
+      expect(manager.isEnabled).toBe(false);
 
       mockLoadFromDefault.mockRestore();
     });
@@ -68,13 +67,14 @@ describe("McpServerRuntimeManager", () => {
 
       const mockMakeApiClient = vi
         .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
-        .mockReturnValue({} as any);
+        .mockReturnValue({} as k8s.CoreV1Api);
 
       // Dynamically import to get a fresh instance
       const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
 
       // isEnabled should be true when config loads successfully
-      expect(McpServerRuntimeManager.isEnabled).toBe(true);
+      expect(manager.isEnabled).toBe(true);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
@@ -90,19 +90,20 @@ describe("McpServerRuntimeManager", () => {
 
       const mockMakeApiClient = vi
         .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
-        .mockReturnValue({} as any);
+        .mockReturnValue({} as k8s.CoreV1Api);
 
       // Dynamically import to get a fresh instance
       const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
 
       // Should be enabled initially
-      expect(McpServerRuntimeManager.isEnabled).toBe(true);
+      expect(manager.isEnabled).toBe(true);
 
       // Shutdown the runtime
-      await McpServerRuntimeManager.shutdown();
+      await manager.shutdown();
 
       // Should be disabled after shutdown
-      expect(McpServerRuntimeManager.isEnabled).toBe(false);
+      expect(manager.isEnabled).toBe(false);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
@@ -122,12 +123,13 @@ describe("McpServerRuntimeManager", () => {
 
       const mockMakeApiClient = vi
         .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
-        .mockReturnValue({} as any);
+        .mockReturnValue({} as k8s.CoreV1Api);
 
       const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
 
       // Status should be not_initialized (not error), so isEnabled should be true
-      expect(McpServerRuntimeManager.isEnabled).toBe(true);
+      expect(manager.isEnabled).toBe(true);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
@@ -141,9 +143,10 @@ describe("McpServerRuntimeManager", () => {
         });
 
       const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
 
       // Status should be error, so isEnabled should be false
-      expect(McpServerRuntimeManager.isEnabled).toBe(false);
+      expect(manager.isEnabled).toBe(false);
 
       mockLoadFromDefault.mockRestore();
     });

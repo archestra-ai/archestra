@@ -24,9 +24,9 @@ const {
  * This is analogous to McpServerSandboxManager in the desktop app,
  * but uses Kubernetes instead of Podman.
  */
-class McpServerRuntimeManager {
+export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
-  private k8sApi: k8s.CoreV1Api;
+  private k8sApi?: k8s.CoreV1Api;
   private k8sAttach: Attach;
   private k8sLog: k8s.Log;
   private namespace: string;
@@ -57,21 +57,36 @@ class McpServerRuntimeManager {
         // Load from default location (~/.kube/config)
         this.k8sConfig.loadFromDefault();
       }
+
+      // Only create API client if K8s config loaded successfully
+      this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config:");
       this.status = "error";
     }
 
-    this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     this.k8sAttach = new Attach(this.k8sConfig);
     this.k8sLog = new k8s.Log(this.k8sConfig);
     this.namespace = namespace;
   }
 
   /**
+   * Check if the orchestrator K8s runtime is enabled
+   * Returns true if the K8s config loaded successfully (constructor didn't fail)
+   * and the runtime hasn't been stopped
+   */
+  get isEnabled(): boolean {
+    return this.status !== "error" && this.status !== "stopped";
+  }
+
+  /**
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     try {
       this.status = "initializing";
       logger.info("Initializing Kubernetes MCP Server Runtime...");
@@ -140,6 +155,10 @@ class McpServerRuntimeManager {
    * Verify that we can connect to Kubernetes
    */
   private async verifyK8sConnection(): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     try {
       logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
@@ -162,6 +181,10 @@ class McpServerRuntimeManager {
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
     const { id, name } = mcpServer;
     logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
 

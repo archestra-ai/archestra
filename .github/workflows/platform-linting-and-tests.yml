@@ -137,16 +137,26 @@ jobs:
           echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
 
       - name: Cache Playwright binaries and dependencies
+        id: playwright-cache
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
 
+      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
       - name: Install Playwright browsers
+        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: ./platform/e2e-tests
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
+      # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
+      # explicitly install, just the webkit ones, each time 🥲
+      - name: Install Playwrightsystem dependencies for WebKit
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
+        run: pnpm exec playwright install-deps webkit
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

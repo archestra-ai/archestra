@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/archestra-ai/archestra/compare/platform-v0.3.0...platform-v0.3.1) (2025-11-11)
+
+
+### Bug Fixes
+
+* add secret to role in helm ([#1050](https://github.com/archestra-ai/archestra/issues/1050)) ([034ba9e](https://github.com/archestra-ai/archestra/commit/034ba9ec4a3b403caf3c7c01534a420a9dcaa333))
+* bulk assign tools 2 agent endpoint ([#1045](https://github.com/archestra-ai/archestra/issues/1045)) ([825f513](https://github.com/archestra-ai/archestra/commit/825f51302e7d1fb8b48e29fdf1e4c73d723fb3b6))
+
 ## [0.3.0](https://github.com/archestra-ai/archestra/compare/platform-v0.2.1...platform-v0.3.0) (2025-11-11)
 
 

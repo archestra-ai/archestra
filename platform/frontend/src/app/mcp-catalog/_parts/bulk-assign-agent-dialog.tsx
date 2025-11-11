@@ -134,6 +134,7 @@ export function BulkAssignAgentDialog({
     isLocalServer,
     bulkAssignMutation,
     onOpenChange,
+    mcpServer?.id,
   ]);
 
   const toggleAgent = useCallback((agentId: string) => {

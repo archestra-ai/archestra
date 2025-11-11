@@ -1,5 +1,9 @@
 import { describe, expect, test } from "@/test";
-import { getOptimizedModel, toolCallsToCommon, toolResultsToMessages } from "./openai";
+import {
+  getOptimizedModel,
+  toolCallsToCommon,
+  toolResultsToMessages,
+} from "./openai";
 
 describe("OpenAI MCP Adapters", () => {
   describe("toolCallsToCommon", () => {

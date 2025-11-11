@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
-import { Cost, formatCost } from "@/components/cost";
 import { LoadingSpinner } from "@/components/loading";
 import { Savings } from "@/components/savings";
 import {

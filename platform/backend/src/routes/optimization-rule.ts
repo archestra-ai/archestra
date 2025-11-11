@@ -1,7 +1,7 @@
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OptimizationRuleModel } from "@/models";
-import { RouteId } from "@shared";
 
 const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get all optimization rules for an agent

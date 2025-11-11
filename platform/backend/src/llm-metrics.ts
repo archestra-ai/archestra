@@ -184,32 +184,26 @@ export function getObservableFetch(
       response.headers.get("content-type")?.includes("application/json")
     ) {
       const cloned = response.clone();
-      let data;
       try {
-        data = await cloned.json();
+        const data = await cloned.json();
+        if (!data.usage) {
+          return response;
+        }
+        if (provider === "openai") {
+          const { input, output } = utils.adapters.openai.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(provider, agent, { input, output });
+        } else if (provider === "anthropic") {
+          const { input, output } = utils.adapters.anthropic.getUsageTokens(
+            data.usage,
+          );
+          reportLLMTokens(provider, agent, { input, output });
+        } else {
+          throw new Error("Unknown provider when logging usage token metrics");
+        }
       } catch (_parseError) {
         logger.error("Error parsing LLM response JSON for tokens");
-      }
-      if (!data || !data.usage) {
-        return response;
-      }
-
-      let tokenUsage: { input: number; output: number } | undefined;
-      if (provider === "openai") {
-        tokenUsage = utils.adapters.openai.getUsageTokens(data.usage);
-      } else if (provider === "anthropic") {
-        tokenUsage = utils.adapters.anthropic.getUsageTokens(data.usage);
-      } else {
-        throw new Error("Unknown provider when logging usage token metrics");
-      }
-
-      if (tokenUsage) {
-        try {
-          reportLLMTokens(provider, agent, tokenUsage);
-        } catch (error) {
-          logger.error("Error sending LLM usage metrics");
-          logger.error(error);
-        }
       }
     }
 

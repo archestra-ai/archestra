@@ -10597,6 +10597,155 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+export type GetOptimizationRulesData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/optimization-rules';
+};
+
+export type GetOptimizationRulesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string;
+        ruleType: 'content_length' | 'tool_presence';
+        conditions: unknown;
+        provider: 'anthropic' | 'openai';
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof GetOptimizationRulesResponses];
+
+export type CreateOptimizationRuleData = {
+    body: {
+        ruleType: 'content_length' | 'tool_presence';
+        conditions: {
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        };
+        provider: 'anthropic' | 'openai';
+        targetModel: string;
+        priority?: number;
+        enabled?: boolean;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/optimization-rules';
+};
+
+export type CreateOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    201: {
+        id: string;
+        agentId: string;
+        ruleType: 'content_length' | 'tool_presence';
+        conditions: unknown;
+        provider: 'anthropic' | 'openai';
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateOptimizationRuleResponse = CreateOptimizationRuleResponses[keyof CreateOptimizationRuleResponses];
+
+export type DeleteOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type DeleteOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type DeleteOptimizationRuleError = DeleteOptimizationRuleErrors[keyof DeleteOptimizationRuleErrors];
+
+export type DeleteOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    204: null;
+};
+
+export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
+
+export type UpdateOptimizationRuleData = {
+    body?: {
+        ruleType?: 'content_length' | 'tool_presence';
+        conditions?: {
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        };
+        provider?: 'anthropic' | 'openai';
+        targetModel?: string;
+        priority?: number;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type UpdateOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type UpdateOptimizationRuleError = UpdateOptimizationRuleErrors[keyof UpdateOptimizationRuleErrors];
+
+export type UpdateOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        ruleType: 'content_length' | 'tool_presence';
+        conditions: unknown;
+        provider: 'anthropic' | 'openai';
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
+
 export type GetRolesData = {
     body?: never;
     path?: never;

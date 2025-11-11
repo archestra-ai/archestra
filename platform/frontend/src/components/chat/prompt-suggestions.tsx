@@ -1,3 +1,5 @@
+import { archestraApiSdk } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -6,7 +8,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgentPrompts } from "@/lib/agent-prompts.query";
+
+const { getAgentPrompts } = archestraApiSdk;
 
 interface PromptSuggestionsProps {
   agentId?: string;
@@ -19,8 +22,15 @@ export function PromptSuggestions({
   agentName,
   onSelectPrompt,
 }: PromptSuggestionsProps) {
-  // Fetch prompts assigned to the agent (hook must be called before any returns)
-  const { data: agentPrompts } = useAgentPrompts(agentId ?? "");
+  // Fetch prompts assigned to the agent with enabled flag
+  const { data: agentPrompts = [] } = useQuery({
+    queryKey: ["agents", agentId, "prompts"],
+    queryFn: async () => {
+      if (!agentId) return [];
+      return (await getAgentPrompts({ path: { agentId } })).data ?? [];
+    },
+    enabled: !!agentId,
+  });
 
   // If no agentId, show empty state
   if (!agentId) {

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
@@ -62,6 +62,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
             title: "Chat",
             url: "/chat",
             icon: MessageCircle,
+            customIsActive: (pathname: string) => pathname.startsWith("/chat"),
           },
           {
             title: "Agents",
@@ -115,9 +116,15 @@ const userItems: MenuItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
+
+  const handleChatClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    router.push("/chat");
+  };
 
   const logoToShow = logo ? (
     <div className="relative flex justify-center">
@@ -159,16 +166,26 @@ export function AppSidebar() {
               {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
-                    asChild
+                    asChild={item.title !== "Chat"}
                     isActive={
                       item.customIsActive?.(pathname) ??
                       pathname.startsWith(item.url)
                     }
+                    onClick={
+                      item.title === "Chat" ? handleChatClick : undefined
+                    }
                   >
-                    <Link href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
+                    {item.title === "Chat" ? (
+                      <>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </>
+                    ) : (
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    )}
                   </SidebarMenuButton>
                   {item.subItems && (
                     <SidebarMenuSub>

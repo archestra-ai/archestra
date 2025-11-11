@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -14,10 +15,9 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { Shimmer } from "@/components/ai-elements/shimmer";
+import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
-import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -55,15 +55,16 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string>();
   const [hideToolCalls, setHideToolCalls] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
+  const pendingPromptRef = useRef<string | undefined>(undefined);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
 
-  // Initialize conversation ID from URL on mount
+  // Sync conversation ID with URL
   useEffect(() => {
     const conversationParam = searchParams.get("conversation");
-    if (conversationParam && conversationParam !== conversationId) {
-      setConversationId(conversationParam);
+    if (conversationParam !== conversationId) {
+      setConversationId(conversationParam || undefined);
     }
   }, [searchParams, conversationId]);
 
@@ -129,7 +130,16 @@ export default function ChatPage() {
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
-  const handleSelectAgent = async (agentId: string) => {
+
+  // Handle prompt selection from all agents view
+  const handleSelectPromptFromAllAgents = async (
+    agentId: string,
+    prompt: string,
+  ) => {
+    // Store the pending prompt to send after conversation loads
+    // Empty string means "free chat" - don't send a message
+    pendingPromptRef.current = prompt || undefined;
+    // Create conversation for the selected agent
     const newConversation =
       await createConversationMutation.mutateAsync(agentId);
     if (newConversation) {
@@ -189,11 +199,26 @@ export default function ChatPage() {
     ) {
       setMessages(conversation.messages);
       loadedConversationRef.current = conversationId;
+
+      // If there's a pending prompt and the conversation is empty, send it
+      if (
+        pendingPromptRef.current &&
+        conversation.messages.length === 0 &&
+        status !== "submitted" &&
+        status !== "streaming"
+      ) {
+        const promptToSend = pendingPromptRef.current;
+        pendingPromptRef.current = undefined;
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: promptToSend }],
+        });
+      }
     } else if (conversationId && !conversation) {
       // Clear messages when switching to a conversation that's loading
       setMessages([]);
     }
-  }, [conversationId, conversation, setMessages]);
+  }, [conversationId, conversation, setMessages, sendMessage, status]);
 
   const handleSubmit = (
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
@@ -212,18 +237,6 @@ export default function ChatPage() {
     sendMessage({
       role: "user",
       parts: [{ type: "text", text: message.text }],
-    });
-  };
-
-  const handleSelectPrompt = (prompt: string) => {
-    // Send the message directly instead of just filling the input
-    if (status === "submitted" || status === "streaming") {
-      return;
-    }
-
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: prompt }],
     });
   };
 
@@ -259,10 +272,9 @@ export default function ChatPage() {
         conversations={conversations}
         selectedConversationId={conversationId}
         onSelectConversation={selectConversation}
-        onSelectAgent={handleSelectAgent}
+        onNewChat={() => selectConversation(undefined)}
         onUpdateConversation={handleUpdateConversation}
         onDeleteConversation={handleDeleteConversation}
-        isCreatingConversation={createConversationMutation.isPending}
         hideToolCalls={hideToolCalls}
         onToggleHideToolCalls={setHideToolCalls}
       />
@@ -270,22 +282,29 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {!conversationId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Shimmer as="h1" className="text-2xl" duration={3} spread={3}>
-              Create a new chat to get started
-            </Shimmer>
-          </div>
+          <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
           <>
-            {messages.length === 0 ? (
-              <PromptSuggestions
-                agentId={currentAgent?.id}
-                agentName={currentAgent?.name}
-                onSelectPrompt={handleSelectPrompt}
-              />
-            ) : (
-              <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
-            )}
+            {/* Header with New Chat button */}
+            <div className="border-b p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {currentAgent && (
+                  <span className="text-sm font-medium">
+                    {currentAgent.name}
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => selectConversation(undefined)}
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
+              </Button>
+            </div>
+
+            <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgent && Object.keys(groupedTools).length > 0 && (

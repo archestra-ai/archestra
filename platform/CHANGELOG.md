@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/archestra-ai/archestra/compare/platform-v0.2.1...platform-v0.3.0) (2025-11-11)
+
+
+### Features
+
+* `archestra__create_agent` MCP gateway tool ([#1041](https://github.com/archestra-ai/archestra/issues/1041)) ([440013e](https://github.com/archestra-ai/archestra/commit/440013e139ce00e91714bac08a1c83a7b9299974))
+* add cost limit token-usage Archestra MCP server tools ([#1044](https://github.com/archestra-ai/archestra/issues/1044)) ([ce55edb](https://github.com/archestra-ai/archestra/commit/ce55edbab426d04775c9ead98ef12a043dcf643d))
+* add orchestrator-k8s-runtime feature flag ([#1031](https://github.com/archestra-ai/archestra/issues/1031)) ([0164614](https://github.com/archestra-ai/archestra/commit/01646149d01f175fcfde25de8c322995bc372bdd))
+
+
+### Bug Fixes
+
+* cleanup ([#1038](https://github.com/archestra-ai/archestra/issues/1038)) ([b7cb8bf](https://github.com/archestra-ai/archestra/commit/b7cb8bf62c92c83c5d155ba5042292c3a372dc84))
+* update Helm health checks to use backend `/health` endpoint ([#1042](https://github.com/archestra-ai/archestra/issues/1042)) ([3f49b68](https://github.com/archestra-ai/archestra/commit/3f49b68c823f4bf3a2a4f1342b5c310776dd818e))
+
+
+### Dependencies
+
+* **platform:** bump the platform-dependencies group in /platform with 25 updates ([#1032](https://github.com/archestra-ai/archestra/issues/1032)) ([22397c5](https://github.com/archestra-ai/archestra/commit/22397c5dc89f95b241bd9b0d8fbcf30804dfea63))
+
 ## [0.2.1](https://github.com/archestra-ai/archestra/compare/platform-v0.2.0...platform-v0.2.1) (2025-11-10)
 
 

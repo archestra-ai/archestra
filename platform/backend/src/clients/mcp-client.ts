@@ -313,13 +313,15 @@ class McpClient {
   }
 
   /**
-   * Strip server prefix from tool name
+   * Strip server prefix from tool name (case-insensitive)
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
     const serverPrefix = `${prefixName}__`;
-    return toolName.startsWith(serverPrefix)
-      ? toolName.substring(serverPrefix.length)
-      : toolName;
+    // Case-insensitive comparison
+    if (toolName.toLowerCase().startsWith(serverPrefix.toLowerCase())) {
+      return toolName.substring(serverPrefix.length);
+    }
+    return toolName;
   }
 
   /**

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/archestra-ai/archestra/compare/platform-v0.3.1...platform-v0.3.2) (2025-11-11)
+
+
+### Bug Fixes
+
+* tool calling doesn't work when server name is uppercase ([#1052](https://github.com/archestra-ai/archestra/issues/1052)) ([e19b938](https://github.com/archestra-ai/archestra/commit/e19b9386e96a897a00c5b6a61abc4ae3bf14ecc2))
+
 ## [0.3.1](https://github.com/archestra-ai/archestra/compare/platform-v0.3.0...platform-v0.3.1) (2025-11-11)
 
 

@@ -7,6 +7,7 @@ import {
 
 const {
   assignToolToAgent,
+  bulkAssignTools,
   getAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
@@ -74,6 +75,52 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+    },
+  });
+}
+
+export function useBulkAssignTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assignments,
+    }: {
+      assignments: Array<{
+        agentId: string;
+        toolId: string;
+        credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
+      }>;
+    }) => {
+      const { data } = await bulkAssignTools({
+        body: {
+          assignments: assignments.map((a) => ({
+            agentId: a.agentId,
+            toolId: a.toolId,
+            credentialSourceMcpServerId:
+              a.credentialSourceMcpServerId || undefined,
+            executionSourceMcpServerId:
+              a.executionSourceMcpServerId || undefined,
+          })),
+        },
+      });
+      return data;
+    },
+    onSuccess: (_, { assignments }) => {
+      // Invalidate specific agent tools queries
+      const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
+      for (const agentId of uniqueAgentIds) {
+        queryClient.invalidateQueries({
+          queryKey: ["agents", agentId, "tools"],
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
   });

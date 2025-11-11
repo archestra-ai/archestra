@@ -78,91 +78,130 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { credentialSourceMcpServerId, executionSourceMcpServerId } =
           request.body || {};
 
-        // Validate that agent exists
-        const agent = await AgentModel.findById(agentId);
-        if (!agent) {
-          return reply.status(404).send({
-            error: {
-              message: `Agent with ID ${agentId} not found`,
-              type: "not_found",
-            },
-          });
-        }
-
-        // Validate that tool exists
-        const tool = await ToolModel.findById(toolId);
-        if (!tool) {
-          return reply.status(404).send({
-            error: {
-              message: `Tool with ID ${toolId} not found`,
-              type: "not_found",
-            },
-          });
-        }
-
-        // Check if tool is from local server (requires executionSourceMcpServerId)
-        if (tool.catalogId) {
-          const catalogItem = await InternalMcpCatalogModel.findById(
-            tool.catalogId,
-          );
-          if (catalogItem?.serverType === "local") {
-            if (!executionSourceMcpServerId) {
-              return reply.status(400).send({
-                error: {
-                  message:
-                    "Execution source installation is required for local MCP server tools",
-                  type: "validation_error",
-                },
-              });
-            }
-          }
-          // Check if tool is from remote server (requires credentialSourceMcpServerId)
-          if (catalogItem?.serverType === "remote") {
-            if (!credentialSourceMcpServerId) {
-              return reply.status(400).send({
-                error: {
-                  message:
-                    "Credential source is required for remote MCP server tools",
-                  type: "validation_error",
-                },
-              });
-            }
-          }
-        }
-
-        // If a credential source is specified, validate it
-        if (credentialSourceMcpServerId) {
-          const validationError = await validateCredentialSource(
-            agentId,
-            credentialSourceMcpServerId,
-          );
-
-          if (validationError) {
-            return reply.status(validationError.status).send(validationError);
-          }
-        }
-
-        // If an execution source is specified, validate it
-        if (executionSourceMcpServerId) {
-          const validationError = await validateExecutionSource(
-            toolId,
-            executionSourceMcpServerId,
-          );
-
-          if (validationError) {
-            return reply.status(validationError.status).send(validationError);
-          }
-        }
-
-        // Create the assignment (no-op if already exists)
-        await AgentToolModel.createIfNotExists(
+        const error = await assignToolToAgent(
           agentId,
           toolId,
           credentialSourceMcpServerId,
           executionSourceMcpServerId,
         );
 
+        if (error) {
+          return reply.status(error.status).send(error);
+        }
+
         return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.post(
+    "/api/agents/tools/bulk-assign",
+    {
+      schema: {
+        operationId: RouteId.BulkAssignTools,
+        description: "Assign multiple tools to multiple agents in bulk",
+        tags: ["Agent Tools"],
+        body: z.object({
+          assignments: z.array(
+            z.object({
+              agentId: UuidIdSchema,
+              toolId: UuidIdSchema,
+              credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
+              executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+            }),
+          ),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            succeeded: z.number(),
+            failed: z.number(),
+            duplicates: z.number(),
+            errors: z.array(
+              z.object({
+                agentId: z.string(),
+                toolId: z.string(),
+                error: z.string(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { assignments } = request.body;
+
+        const results = await Promise.allSettled(
+          assignments.map((assignment) =>
+            assignToolToAgent(
+              assignment.agentId,
+              assignment.toolId,
+              assignment.credentialSourceMcpServerId,
+              assignment.executionSourceMcpServerId,
+            ),
+          ),
+        );
+
+        let succeeded = 0;
+        let failed = 0;
+        let duplicates = 0;
+        const errors: Array<{
+          agentId: string;
+          toolId: string;
+          error: string;
+        }> = [];
+
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled" && result.value === null) {
+            succeeded++;
+          } else if (result.status === "fulfilled" && result.value !== null) {
+            // Validation error
+            const errorMessage = result.value.error.message || "Unknown error";
+            errors.push({
+              agentId: assignments[index].agentId,
+              toolId: assignments[index].toolId,
+              error: errorMessage,
+            });
+            failed++;
+          } else if (result.status === "rejected") {
+            const errorStr = JSON.stringify(result.reason).toLowerCase();
+            const isDuplicate =
+              errorStr.includes("duplicate key") ||
+              errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
+              errorStr.includes("already assigned");
+
+            if (isDuplicate) {
+              duplicates++;
+              succeeded++; // Count duplicates as successful
+            } else {
+              errors.push({
+                agentId: assignments[index].agentId,
+                toolId: assignments[index].toolId,
+                error:
+                  result.reason instanceof Error
+                    ? result.reason.message
+                    : "Unknown error",
+              });
+              failed++;
+            }
+          }
+        });
+
+        return reply.send({
+          succeeded,
+          failed,
+          duplicates,
+          errors,
+        });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -547,6 +586,108 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Assigns a single tool to a single agent with validation.
+ * Returns null on success, or an error object if validation fails.
+ */
+async function assignToolToAgent(
+  agentId: string,
+  toolId: string,
+  credentialSourceMcpServerId: string | null | undefined,
+  executionSourceMcpServerId: string | null | undefined,
+): Promise<{
+  status: 400 | 404;
+  error: { message: string; type: string };
+} | null> {
+  // Validate that agent exists
+  const agent = await AgentModel.findById(agentId);
+  if (!agent) {
+    return {
+      status: 404,
+      error: {
+        message: `Agent with ID ${agentId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  // Validate that tool exists
+  const tool = await ToolModel.findById(toolId);
+  if (!tool) {
+    return {
+      status: 404,
+      error: {
+        message: `Tool with ID ${toolId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  // Check if tool is from local server (requires executionSourceMcpServerId)
+  if (tool.catalogId) {
+    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    if (catalogItem?.serverType === "local") {
+      if (!executionSourceMcpServerId) {
+        return {
+          status: 400,
+          error: {
+            message:
+              "Execution source installation is required for local MCP server tools",
+            type: "validation_error",
+          },
+        };
+      }
+    }
+    // Check if tool is from remote server (requires credentialSourceMcpServerId)
+    if (catalogItem?.serverType === "remote") {
+      if (!credentialSourceMcpServerId) {
+        return {
+          status: 400,
+          error: {
+            message:
+              "Credential source is required for remote MCP server tools",
+            type: "validation_error",
+          },
+        };
+      }
+    }
+  }
+
+  // If a credential source is specified, validate it
+  if (credentialSourceMcpServerId) {
+    const validationError = await validateCredentialSource(
+      agentId,
+      credentialSourceMcpServerId,
+    );
+
+    if (validationError) {
+      return validationError;
+    }
+  }
+
+  // If an execution source is specified, validate it
+  if (executionSourceMcpServerId) {
+    const validationError = await validateExecutionSource(
+      toolId,
+      executionSourceMcpServerId,
+    );
+
+    if (validationError) {
+      return validationError;
+    }
+  }
+
+  // Create the assignment (no-op if already exists)
+  await AgentToolModel.createIfNotExists(
+    agentId,
+    toolId,
+    credentialSourceMcpServerId,
+    executionSourceMcpServerId,
+  );
+
+  return null;
+}
 
 /**
  * Validates that a credentialSourceMcpServerId is valid for the given agent.

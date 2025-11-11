@@ -72,21 +72,6 @@ export const getDatabaseUrl = (): string => {
   return databaseUrl;
 };
 
-/**
- * Determines if orchestrator-k8s-runtime should attempt to start
- * This checks environment variables to decide whether to call McpServerRuntimeManager.start()
- * Note: The actual feature flag is based on McpServerRuntimeManager.isEnabled
- */
-const getOrchestratorK8sEnabled = (): boolean => {
-  const kubeconfig = process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
-  const loadFromCluster =
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
-    "true";
-
-  // K8s runtime should start if either kubeconfig is provided or we're loading from current cluster
-  return !!(kubeconfig || loadFromCluster);
-};
-
 const isProduction = ["production", "prod"].includes(
   process.env.NODE_ENV?.toLowerCase() ?? "",
 );
@@ -226,7 +211,6 @@ export default {
      */
   },
   orchestrator: {
-    enabled: getOrchestratorK8sEnabled(),
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",

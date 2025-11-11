@@ -79,8 +79,6 @@ export function ArchestraCatalogTab({
     mcpServer: ["admin"],
   });
 
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
-
   // Use server-side search and category filtering
   const {
     data,
@@ -331,7 +329,6 @@ export function ArchestraCatalogTab({
                     onOpenReadme={setReadmeServer}
                     isInCatalog={catalogServerNames.has(server.name)}
                     userIsMcpServerAdmin={userIsMcpServerAdmin}
-                    isLocalMcpEnabled={isLocalMcpEnabled}
                   />
                 ))}
               </div>
@@ -407,7 +404,6 @@ function ServerCard({
   onOpenReadme,
   isInCatalog,
   userIsMcpServerAdmin,
-  isLocalMcpEnabled,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -422,8 +418,8 @@ function ServerCard({
   ) => void;
   isInCatalog: boolean;
   userIsMcpServerAdmin: boolean;
-  isLocalMcpEnabled: boolean;
 }) {
+  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
   const isLocalServer = server.server.type === "local";
   const isDisabled =
     isAdding || isInCatalog || (isLocalServer && !isLocalMcpEnabled);

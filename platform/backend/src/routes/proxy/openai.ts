@@ -199,7 +199,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "MCP tools injected",
       );
 
-      let model = body.model;
+      const baselineModel = body.model;
+      let model = baselineModel;
       // Optimize model selection for cost if enabled using dynamic rules
       if (resolvedAgent.optimizeCost) {
         const hasTools = (tools?.length ?? 0) > 0;
@@ -218,7 +219,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         } else {
           fastify.log.info(
-            { resolvedAgentId, baselineModel: model },
+            { resolvedAgentId, baselineModel },
             "No matching optimized model found, proceeding with baseline model",
           );
         }
@@ -560,23 +561,26 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        let cost: string | null = null;
-        let baselineCost: string | null = null;
+        let cost: number | undefined;
+        let baselineCost: number | undefined;
 
         // Report token usage metrics for streaming
         if (tokenUsage) {
           reportLLMTokens("openai", resolvedAgent, tokenUsage);
-          // Calculate costs using database pricing (TokenPriceModel)
-          cost = await utils.costOptimization.calculateCost(
-            model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
+
+          // Only calculate costs if cost optimization is enabled
+          if (resolvedAgent.optimizeCost) {
+            cost = await utils.costOptimization.calculateCost(
+              model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
+            baselineCost = await utils.costOptimization.calculateCost(
+              body.model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
+          }
         }
 
         // Store the complete interaction
@@ -601,8 +605,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage?.input || null,
           outputTokens: tokenUsage?.output || null,
-          cost: cost,
-          baselineCost: baselineCost,
+          cost: cost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -674,17 +678,22 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.openai.getUsageTokens(response.usage)
           : { input: null, output: null };
 
-        // Calculate costs using database pricing (TokenPriceModel)
-        const cost = await utils.costOptimization.calculateCost(
-          model,
-          tokenUsage.input,
-          tokenUsage.output,
-        );
-        const baselineCost = await utils.costOptimization.calculateCost(
-          body.model,
-          tokenUsage.input,
-          tokenUsage.output,
-        );
+        // Only calculate costs if cost optimization is enabled
+        let cost: number | undefined;
+        let baselineCost: number | undefined;
+
+        if (resolvedAgent.optimizeCost) {
+          cost = await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+          baselineCost = await utils.costOptimization.calculateCost(
+            body.model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+        }
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -695,8 +704,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost,
-          baselineCost,
+          cost: cost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
         });
 
         return reply.send(response);

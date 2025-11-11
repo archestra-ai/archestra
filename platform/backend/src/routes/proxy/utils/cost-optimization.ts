@@ -56,27 +56,26 @@ export async function getOptimizedModel<
 
 /**
  * Calculate cost for token usage based on model pricing
- * Returns null if pricing is not available for the model
- * Returns cost as a string to match database numeric type
+ * Returns undefined if pricing is not available for the model
  */
 export async function calculateCost(
   model: string,
   inputTokens: number | null | undefined,
   outputTokens: number | null | undefined,
-): Promise<number | null> {
+): Promise<number | undefined> {
   if (!inputTokens || !outputTokens) {
-    return null;
+    return undefined;
   }
 
   const pricing = await TokenPriceModel.findByModel(model);
   if (!pricing) {
-    return null;
+    return undefined;
   }
 
   const inputCost =
-    (inputTokens / 1000000) * Number.parseFloat(pricing.pricePerMillionInput);
+    (inputTokens / 1_000_000) * Number.parseFloat(pricing.pricePerMillionInput);
   const outputCost =
-    (outputTokens / 1000000) *
+    (outputTokens / 1_000_000) *
     Number.parseFloat(pricing.pricePerMillionOutput);
 
   return inputCost + outputCost;

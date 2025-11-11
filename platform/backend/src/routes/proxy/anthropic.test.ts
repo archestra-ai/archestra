@@ -5,7 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { AgentModel } from "@/models";
+import { AgentModel, TokenPriceModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import anthropicProxyRoutes from "./anthropic";
 
@@ -18,10 +18,18 @@ describe("Anthropic cost tracking", () => {
     await app.register(anthropicProxyRoutes);
     config.benchmark.mockMode = true;
 
-    // Create a test agent
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "claude-opus-4-20250514",
+      pricePerMillionInput: "15.00",
+      pricePerMillionOutput: "75.00",
+    });
+
+    // Create a test agent with cost optimization enabled
     const agent = await AgentModel.create({
       name: "Test Cost Agent",
       teams: [],
+      optimizeCost: true,
     });
 
     const response = await app.inject({
@@ -32,6 +40,7 @@ describe("Anthropic cost tracking", () => {
         authorization: "Bearer test-key",
         "user-agent": "test-client",
         "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
       },
       payload: {
         model: "claude-opus-4-20250514",

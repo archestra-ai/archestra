@@ -5,7 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { AgentModel } from "@/models";
+import { AgentModel, TokenPriceModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import openAiProxyRoutes from "./openai";
@@ -68,10 +68,18 @@ describe("OpenAI cost tracking", () => {
     await app.register(openAiProxyRoutes);
     config.benchmark.mockMode = true;
 
-    // Create a test agent
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "gpt-4o",
+      pricePerMillionInput: "2.50",
+      pricePerMillionOutput: "10.00",
+    });
+
+    // Create a test agent with cost optimization enabled
     const agent = await AgentModel.create({
       name: "Test Cost Agent",
       teams: [],
+      optimizeCost: true,
     });
 
     const response = await app.inject({

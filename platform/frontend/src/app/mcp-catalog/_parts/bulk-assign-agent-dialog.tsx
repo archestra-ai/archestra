@@ -92,10 +92,14 @@ export function BulkAssignAgentDialog({
         return;
       }
 
-      const { succeeded, failed } = result;
+      const { succeeded, failed, duplicates } = result;
 
       if (succeeded.length > 0) {
-        if (failed.length > 0) {
+        if (duplicates.length > 0 && failed.length === 0) {
+          toast.success(
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}. ${duplicates.length} ${duplicates.length === 1 ? "was" : "were"} already assigned.`,
+          );
+        } else if (failed.length > 0) {
           toast.warning(
             `Assigned ${succeeded.length} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed.length} failed.`,
           );
@@ -104,6 +108,10 @@ export function BulkAssignAgentDialog({
             `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}`,
           );
         }
+      } else if (duplicates.length === assignments.length) {
+        toast.info(
+          "All selected tools are already assigned to the selected agents",
+        );
       } else {
         toast.error("Failed to assign tools");
         console.error("Bulk assignment errors:", failed);

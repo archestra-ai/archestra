@@ -78,17 +78,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { credentialSourceMcpServerId, executionSourceMcpServerId } =
           request.body || {};
 
-        const error = await assignToolToAgent(
+        const result = await assignToolToAgent(
           agentId,
           toolId,
           credentialSourceMcpServerId,
           executionSourceMcpServerId,
         );
 
-        if (error) {
-          return reply.status(error.status).send(error);
+        if (result && result !== "duplicate") {
+          return reply.status(result.status).send(result);
         }
 
+        // Return success for both new assignments and duplicates
         return reply.send({ success: true });
       } catch (error) {
         fastify.log.error(error);
@@ -135,6 +136,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 error: z.string(),
               }),
             ),
+            duplicates: z.array(
+              z.object({
+                agentId: z.string(),
+                toolId: z.string(),
+              }),
+            ),
           }),
         ),
       },
@@ -154,47 +161,35 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         );
 
-        const succeeded: Array<{ agentId: string; toolId: string }> = [];
-        const failed: Array<{
-          agentId: string;
-          toolId: string;
-          error: string;
-        }> = [];
+        const succeeded: { agentId: string; toolId: string }[] = [];
+        const failed: { agentId: string; toolId: string; error: string }[] = [];
+        const duplicates: { agentId: string; toolId: string }[] = [];
 
         results.forEach((result, index) => {
-          const assignment = assignments[index];
-
-          if (result.status === "fulfilled" && result.value === null) {
-            // Success
-            succeeded.push({
-              agentId: assignment.agentId,
-              toolId: assignment.toolId,
-            });
-          } else if (result.status === "fulfilled" && result.value !== null) {
-            // Validation error
-            const errorMessage = result.value.error.message || "Unknown error";
-            failed.push({
-              agentId: assignment.agentId,
-              toolId: assignment.toolId,
-              error: errorMessage,
-            });
+          const { agentId, toolId } = assignments[index];
+          if (result.status === "fulfilled") {
+            if (result.value === null) {
+              // Success
+              succeeded.push({ agentId, toolId });
+            } else if (result.value === "duplicate") {
+              // Already assigned
+              duplicates.push({ agentId, toolId });
+            } else {
+              // Validation error
+              const error = result.value.error.message || "Unknown error";
+              failed.push({ agentId, toolId, error });
+            }
           } else if (result.status === "rejected") {
             // Runtime error
-            failed.push({
-              agentId: assignment.agentId,
-              toolId: assignment.toolId,
-              error:
-                result.reason instanceof Error
-                  ? result.reason.message
-                  : "Unknown error",
-            });
+            const error =
+              result.reason instanceof Error
+                ? result.reason.message
+                : "Unknown error";
+            failed.push({ agentId, toolId, error });
           }
         });
 
-        return reply.send({
-          succeeded,
-          failed,
-        });
+        return reply.send({ succeeded, failed, duplicates });
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -582,17 +577,21 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 /**
  * Assigns a single tool to a single agent with validation.
- * Returns null on success, or an error object if validation fails.
+ * Returns null on success, "duplicate" if already exists, or an error object if validation fails.
  */
 async function assignToolToAgent(
   agentId: string,
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,
   executionSourceMcpServerId: string | null | undefined,
-): Promise<{
-  status: 400 | 404;
-  error: { message: string; type: string };
-} | null> {
+): Promise<
+  | {
+      status: 400 | 404;
+      error: { message: string; type: string };
+    }
+  | "duplicate"
+  | null
+> {
   // Validate that agent exists
   const agent = await AgentModel.findById(agentId);
   if (!agent) {
@@ -672,12 +671,17 @@ async function assignToolToAgent(
   }
 
   // Create the assignment (no-op if already exists)
-  await AgentToolModel.createIfNotExists(
+  const result = await AgentToolModel.createIfNotExists(
     agentId,
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
   );
+
+  // If result is null, it means the assignment already existed (duplicate)
+  if (result === null) {
+    return "duplicate";
+  }
 
   return null;
 }

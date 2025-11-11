@@ -3511,6 +3511,10 @@ export type BulkAssignToolsResponses = {
             toolId: string;
             error: string;
         }>;
+        duplicates: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
     };
 };
 

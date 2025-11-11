@@ -144,8 +144,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
 
+      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
       - name: Install Playwright browsers
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }} && ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
+        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: ./platform/e2e-tests
         run: pnpm exec playwright install --with-deps chromium webkit firefox
 

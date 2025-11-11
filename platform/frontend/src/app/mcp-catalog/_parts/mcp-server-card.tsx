@@ -163,6 +163,7 @@ export function McpServerCard({
     data: logsData,
     isLoading: isLoadingLogs,
     error: logsError,
+    refetch: refetchLogs,
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
   const needsReinstall = installedServer?.reinstallRequired ?? false;
@@ -625,6 +626,9 @@ export function McpServerCard({
         command={logsData?.command ?? "No command available"}
         isLoading={isLoadingLogs}
         error={logsError}
+        onRefresh={async () => {
+          await refetchLogs();
+        }}
       />
 
       <BulkAssignAgentDialog

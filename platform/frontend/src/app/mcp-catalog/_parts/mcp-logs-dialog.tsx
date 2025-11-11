@@ -29,6 +29,7 @@ interface McpLogsDialogProps {
   command: string;
   isLoading: boolean;
   error?: Error | null;
+  onRefresh?: () => void | Promise<void>;
 }
 
 export function McpLogsDialog({
@@ -40,6 +41,7 @@ export function McpLogsDialog({
   command,
   isLoading: initialIsLoading,
   error: initialError,
+  onRefresh,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
@@ -47,6 +49,7 @@ export function McpLogsDialog({
   const [streamedLogs, setStreamedLogs] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -237,12 +240,31 @@ export function McpLogsDialog({
                       Follow
                     </Button>
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => window.location.reload()}
-                      disabled={displayIsLoading}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (onRefresh) {
+                          setIsRefreshing(true);
+                          try {
+                            await onRefresh();
+                            toast.success("Logs refreshed");
+                          } catch (_error) {
+                            toast.error("Failed to refresh logs");
+                          } finally {
+                            setIsRefreshing(false);
+                          }
+                        } else {
+                          console.warn("onRefresh callback not provided");
+                        }
+                      }}
+                      disabled={displayIsLoading || isRefreshing}
                     >
-                      <RefreshCw className="mr-2 h-3 w-3" />
+                      <RefreshCw
+                        className={`mr-2 h-3 w-3 ${displayIsLoading || isRefreshing ? "animate-spin" : ""}`}
+                      />
                       Refresh
                     </Button>
                   </>

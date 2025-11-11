@@ -296,6 +296,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - Available tools:
   - `archestra__whoami`: Returns agent name and ID
   - `archestra__search_private_mcp_registry`: Search internal MCP catalog
+  - `archestra__create_agent`: Create new agents with optional teams and labels
 - Planned tool (temporarily disabled):
   - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
 - Implementation: `backend/src/archestra-mcp-server.ts`

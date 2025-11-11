@@ -21,18 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerCategories,
 } from "@/lib/external-mcp-catalog.query";
-import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
@@ -419,10 +412,6 @@ function ServerCard({
   isInCatalog: boolean;
   userIsMcpServerAdmin: boolean;
 }) {
-  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
-  const isLocalServer = server.server.type === "local";
-  const isDisabled =
-    isAdding || isInCatalog || (isLocalServer && !isLocalMcpEnabled);
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -508,33 +497,22 @@ function ServerCard({
               </Button>
             )}
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="w-full">
-                <Button
-                  onClick={() =>
-                    userIsMcpServerAdmin
-                      ? onAddToCatalog(server)
-                      : onRequestInstallation(server)
-                  }
-                  disabled={isDisabled}
-                  size="sm"
-                  className="w-full"
-                >
-                  {isInCatalog
-                    ? "Added"
-                    : userIsMcpServerAdmin
-                      ? "Add to Your Registry"
-                      : "Request to add to internal registry"}
-                </Button>
-              </div>
-            </TooltipTrigger>
-            {isLocalServer && !isLocalMcpEnabled && (
-              <TooltipContent>
-                <p className="max-w-xs">{LOCAL_MCP_DISABLED_MESSAGE}</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
+          <Button
+            onClick={() =>
+              userIsMcpServerAdmin
+                ? onAddToCatalog(server)
+                : onRequestInstallation(server)
+            }
+            disabled={isAdding || isInCatalog}
+            size="sm"
+            className="w-full"
+          >
+            {isInCatalog
+              ? "Added"
+              : userIsMcpServerAdmin
+                ? "Add to Your Registry"
+                : "Request to add to internal registry"}
+          </Button>
         </div>
       </CardContent>
     </Card>

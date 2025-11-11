@@ -285,25 +285,6 @@ export default function ChatPage() {
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
           <>
-            {/* Header with New Chat button */}
-            <div className="border-b p-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {currentAgent && (
-                  <span className="text-sm font-medium">
-                    {currentAgent.name}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => selectConversation(undefined)}
-              >
-                <Plus className="h-4 w-4" />
-                New Chat
-              </Button>
-            </div>
-
             <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">

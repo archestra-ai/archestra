@@ -802,6 +802,9 @@ export function getArchestraMcpTools(): Tool[] {
           },
         },
         required: [],
+      },
+    },
+    {
       name: TOOL_CREATE_AGENT_FULL_NAME,
       title: "Create Agent",
       description:

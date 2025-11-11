@@ -426,48 +426,45 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         } else if (isInitialize) {
           // Initialize request - create new session
-          // Use client-provided session ID if available
+          // Generate session ID upfront if not provided by client
+          // This prevents race condition where notifications/initialized arrives
+          // before session is stored
+          const effectiveSessionId =
+            sessionId || `session-${Date.now()}-${randomUUID()}`;
+
           fastify.log.info(
             {
               agentId,
-              clientProvidedSessionId: sessionId,
-              hasSessionId: !!sessionId,
-              sessionExists: sessionId ? activeSessions.has(sessionId) : false,
+              sessionId: effectiveSessionId,
+              clientProvided: !!sessionId,
+              sessionExists: activeSessions.has(effectiveSessionId),
               activeSessions: Array.from(activeSessions.keys()),
             },
             "Initialize request - creating NEW session",
           );
           server = await createAgentServer(agentId, fastify.log);
-          transport = createTransport(agentId, sessionId, fastify.log);
+          transport = createTransport(agentId, effectiveSessionId, fastify.log);
 
           // Connect server to transport (this also starts the transport)
           fastify.log.info({ agentId }, "Connecting server to transport");
           await server.connect(transport);
           fastify.log.info({ agentId }, "Server connected to transport");
 
-          // Store session using client-provided ID if available
-          // If no client ID, we'll need to get it from transport after the request
-          if (sessionId) {
-            activeSessions.set(sessionId, {
-              server,
-              transport,
-              lastAccess: Date.now(),
-            });
-            fastify.log.info(
-              {
-                agentId,
-                storedSessionId: sessionId,
-              },
-              "Session stored with client-provided ID",
-            );
-          } else {
-            // No client ID - will need to store after transport generates one
-            // We'll do this after handleRequest completes
-            fastify.log.info(
-              { agentId },
-              "No client session ID - will store after transport initializes",
-            );
-          }
+          // Store session immediately before handleRequest
+          // This ensures the session exists when notifications/initialized arrives
+          activeSessions.set(effectiveSessionId, {
+            server,
+            transport,
+            lastAccess: Date.now(),
+          });
+          fastify.log.info(
+            {
+              agentId,
+              sessionId: effectiveSessionId,
+              clientProvided: !!sessionId,
+            },
+            "Session stored before handleRequest",
+          );
         } else {
           // Non-initialize request without a valid session
           fastify.log.error(
@@ -536,22 +533,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If this was an initialize request without a client session ID,
-        // store the transport's generated session ID now
-        if (isInitialize && !sessionId) {
-          const generatedSessionId = transport.sessionId;
-          if (generatedSessionId) {
-            activeSessions.set(generatedSessionId, {
-              server,
-              transport,
-              lastAccess: Date.now(),
-            });
-            fastify.log.info(
-              { agentId, generatedSessionId },
-              "Session stored with server-generated ID",
-            );
-          }
-        }
+        // Session was already stored before handleRequest to prevent race condition
+        // No need to store again here
 
         fastify.log.info(
           { agentId, sessionId },

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1](https://github.com/archestra-ai/archestra/compare/platform-v0.2.0...platform-v0.2.1) (2025-11-10)
+
+
+### Bug Fixes
+
+* agents table pagination issue  ([#1030](https://github.com/archestra-ai/archestra/issues/1030)) ([252d76f](https://github.com/archestra-ai/archestra/commit/252d76f06000269e2e2b13bd06fe59a480e8284a))
+* comment out onboarding for now ([#1028](https://github.com/archestra-ai/archestra/issues/1028)) ([2448c03](https://github.com/archestra-ai/archestra/commit/2448c032223ec367bc5bb3fecd7c71f25b5ef5e6))
+* improve prompts ([#1034](https://github.com/archestra-ai/archestra/issues/1034)) ([fc4fb0a](https://github.com/archestra-ai/archestra/commit/fc4fb0a620547df5cf0cebef2dc5c0247d50f62c))
+* initial state of chat promt suggestions ([#1027](https://github.com/archestra-ai/archestra/issues/1027)) ([151d53a](https://github.com/archestra-ai/archestra/commit/151d53a811b25ce883f8c391b11e41d1f6115181))
+* mcp server type migration ([#1024](https://github.com/archestra-ai/archestra/issues/1024)) ([23e209b](https://github.com/archestra-ai/archestra/commit/23e209b43127a41f1f639d0294e1fb8341ca5f05))
+* mcp tools discovery fix ([#1035](https://github.com/archestra-ai/archestra/issues/1035)) ([c5d5a6f](https://github.com/archestra-ai/archestra/commit/c5d5a6f074ab0a1ba26419226785b7ae16744b34))
+* show more actionable error message for expired invitation links ([#1026](https://github.com/archestra-ai/archestra/issues/1026)) ([aa3d2c5](https://github.com/archestra-ai/archestra/commit/aa3d2c5e1c63366e71cfcbf4640b611f4b84fdf5))
+
 ## [0.2.0](https://github.com/archestra-ai/archestra/compare/platform-v0.1.0...platform-v0.2.0) (2025-11-10)
 
 

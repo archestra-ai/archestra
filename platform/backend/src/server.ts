@@ -153,6 +153,42 @@ const startMetricsServer = async () => {
   );
 };
 
+const startMcpServerRuntime = async (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  // Initialize MCP Server Runtime (K8s-based)
+  if (McpServerRuntimeManager.isEnabled) {
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
+  } else {
+    fastify.log.info(
+      "MCP Server Runtime is disabled as there is no K8s config available. Local MCP servers will not be available.",
+    );
+  }
+};
+
 const start = async () => {
   const fastify = createFastifyInstance();
 
@@ -179,31 +215,7 @@ const start = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
-    // Initialize MCP Server Runtime (K8s-based)
-    try {
-      // Set up callbacks for runtime initialization
-      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
-        fastify.log.info("MCP Server Runtime initialized successfully");
-      };
-
-      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
-        fastify.log.error(
-          `MCP Server Runtime failed to initialize: ${error.message}`,
-        );
-        // Don't exit the process, allow the server to continue
-        // MCP servers can be started manually later
-      };
-
-      // Start the runtime in the background (non-blocking)
-      McpServerRuntimeManager.start().catch((error) => {
-        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
-      });
-    } catch (error) {
-      fastify.log.error(
-        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-      // Continue server startup even if MCP runtime fails
-    }
+    startMcpServerRuntime(fastify);
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics

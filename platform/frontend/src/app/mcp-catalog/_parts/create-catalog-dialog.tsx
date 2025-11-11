@@ -11,6 +11,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+import { useFeatureFlag } from "@/lib/features.hook";
+import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
@@ -35,6 +42,7 @@ export function CreateCatalogDialog({
   const createMutation = useCreateInternalMcpCatalogItem();
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const { data: catalogItems } = useInternalMcpCatalog();
+  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   const handleClose = () => {
     setActiveTab("archestra-catalog");
@@ -63,7 +71,6 @@ export function CreateCatalogDialog({
             {[
               { value: "archestra-catalog", label: "Archestra Catalog" },
               { value: "remote", label: "Remote" },
-              { value: "local", label: "Local" },
             ].map((tab) => (
               <button
                 type="button"
@@ -82,6 +89,36 @@ export function CreateCatalogDialog({
                 )}
               </button>
             ))}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() =>
+                    isLocalMcpEnabled && setActiveTab("local" as TabType)
+                  }
+                  disabled={!isLocalMcpEnabled}
+                  className={cn(
+                    "relative pb-3 text-sm font-medium transition-colors",
+                    !isLocalMcpEnabled
+                      ? "text-muted-foreground/50 cursor-not-allowed"
+                      : "hover:text-foreground",
+                    activeTab === "local"
+                      ? "text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  Local
+                  {activeTab === "local" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              {!isLocalMcpEnabled && (
+                <TooltipContent>
+                  <p className="max-w-xs">{LOCAL_MCP_DISABLED_MESSAGE}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           </div>
         </div>
 

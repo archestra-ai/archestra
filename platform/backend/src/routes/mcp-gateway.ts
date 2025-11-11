@@ -86,10 +86,6 @@ async function createAgentServer(
     throw new Error(`Agent not found: ${agentId}`);
   }
 
-  // Get MCP tools (from connected MCP servers + Archestra built-in tools)
-  // Excludes proxy-discovered tools
-  const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
-
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
@@ -98,6 +94,11 @@ async function createAgentServer(
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Get MCP tools (from connected MCP servers + Archestra built-in tools)
+    // Excludes proxy-discovered tools
+    // Fetch fresh on every request to ensure we get newly assigned tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
     const toolsList = mcpTools.map(({ name, description, parameters }) => ({
       name,
       title: archestraToolTitles.get(name) || name,

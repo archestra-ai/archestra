@@ -84,8 +84,14 @@ export function useAcceptInvitation() {
       router.push("/");
     },
     onError: (error) => {
+      // Extract the error message from the error object
+      const errorMessage =
+        error?.message ||
+        (error as { error?: { message: string } })?.error?.message ||
+        "Failed to accept invitation";
+
       toast.error("Error", {
-        description: JSON.stringify(error) || "Failed to accept invitation",
+        description: errorMessage,
       });
     },
   });

@@ -108,6 +108,7 @@ ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct 
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
 
 # Kubernetes (for MCP server runtime)
+# Local MCP servers require either ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
 ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
@@ -231,7 +232,8 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 **MCP Server Runtime**:
 
-- Local MCP servers run in K8s pods (one pod per server)
+- Local MCP servers run in K8s pods (one pod per server) when orchestrator-k8s-runtime feature is enabled
+- Feature enabled when either ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
 - Automatic pod lifecycle management (start/restart/stop)
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`

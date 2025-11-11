@@ -132,8 +132,6 @@ export async function executeArchestraTool(
 
     try {
       const name = args?.name as string;
-      const isDemo = (args?.is_demo as boolean) ?? false;
-      const isDefault = (args?.is_default as boolean) ?? false;
       const teams = (args?.teams as string[]) ?? [];
       const labels = args?.labels as Array<{
         labelId: string;
@@ -156,8 +154,6 @@ export async function executeArchestraTool(
       // Create the agent
       const newAgent = await AgentModel.create({
         name,
-        isDemo,
-        isDefault,
         teams,
         labels,
       });
@@ -166,7 +162,7 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created agent.\n\nAgent Name: ${newAgent.name}\nAgent ID: ${newAgent.id}\nIs Demo: ${newAgent.isDemo}\nIs Default: ${newAgent.isDefault}\nTeams: ${newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"}\nLabels: ${newAgent.labels.length > 0 ? newAgent.labels.map(l => `${l.label.name}${l.value ? `: ${l.value}` : ""}`).join(", ") : "None"}`,
+            text: `Successfully created agent.\n\nAgent Name: ${newAgent.name}\nAgent ID: ${newAgent.id}\nTeams: ${newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"}\nLabels: ${newAgent.labels.length > 0 ? newAgent.labels.map(l => `${l.label.name}${l.value ? `: ${l.value}` : ""}`).join(", ") : "None"}`,
           },
         ],
         isError: false,
@@ -328,14 +324,6 @@ export function getArchestraMcpTools(): Tool[] {
           name: {
             type: "string",
             description: "The name of the agent (required)",
-          },
-          is_demo: {
-            type: "boolean",
-            description: "Whether this is a demo agent (optional, defaults to false)",
-          },
-          is_default: {
-            type: "boolean",
-            description: "Whether this should be the default agent (optional, defaults to false)",
           },
           teams: {
             type: "array",

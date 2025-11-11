@@ -212,8 +212,6 @@ describe("executeArchestraTool", () => {
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {
           name: "Full Featured Agent",
-          is_demo: true,
-          is_default: false,
           teams: [team.id],
           labels: [{ labelId: label.id, value: "production" }],
         },
@@ -225,7 +223,6 @@ describe("executeArchestraTool", () => {
         "Successfully created agent",
       );
       expect((result.content[0] as any).text).toContain("Full Featured Agent");
-      expect((result.content[0] as any).text).toContain("Is Demo: true");
       expect((result.content[0] as any).text).toContain(team.id);
     });
 

@@ -116,7 +116,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error searching private MCP registry: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error searching private MCP registry: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -133,10 +135,12 @@ export async function executeArchestraTool(
     try {
       const name = args?.name as string;
       const teams = (args?.teams as string[]) ?? [];
-      const labels = args?.labels as Array<{
-        labelId: string;
-        value: string | null;
-      }> | undefined;
+      const labels = args?.labels as
+        | Array<{
+            key: string;
+            value: string;
+          }>
+        | undefined;
 
       // Validate required fields
       if (!name || name.trim() === "") {
@@ -162,7 +166,15 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created agent.\n\nAgent Name: ${newAgent.name}\nAgent ID: ${newAgent.id}\nTeams: ${newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"}\nLabels: ${newAgent.labels.length > 0 ? newAgent.labels.map(l => `${l.label.name}${l.value ? `: ${l.value}` : ""}`).join(", ") : "None"}`,
+            text: `Successfully created agent.\n\nAgent Name: ${
+              newAgent.name
+            }\nAgent ID: ${newAgent.id}\nTeams: ${
+              newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"
+            }\nLabels: ${
+              newAgent.labels.length > 0
+                ? newAgent.labels.map((l) => `${l.key}: ${l.value}`).join(", ")
+                : "None"
+            }`,
           },
         ],
         isError: false,
@@ -173,7 +185,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating agent: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error creating agent: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -337,16 +351,16 @@ export function getArchestraMcpTools(): Tool[] {
             items: {
               type: "object",
               properties: {
-                labelId: {
+                key: {
                   type: "string",
-                  description: "The ID of the label",
+                  description: "The label key",
                 },
                 value: {
                   type: "string",
-                  description: "The value for the label (optional)",
+                  description: "The value for the label",
                 },
               },
-              required: ["labelId"],
+              required: ["key", "value"],
             },
             description: "Array of labels to assign to the agent (optional)",
           },

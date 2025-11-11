@@ -203,17 +203,21 @@ describe("executeArchestraTool", () => {
 
     test("should create a new agent with all optional fields", async ({
       makeTeam,
-      makeLabel,
+      makeUser,
+      makeOrganization,
     }) => {
-      const team = await makeTeam({ name: "Test Team" });
-      const label = await makeLabel({ name: "Environment" });
+      const user = await makeUser();
+      const organization = await makeOrganization();
+      const team = await makeTeam(organization.id, user.id, {
+        name: "Test Team",
+      });
 
       const result = await executeArchestraTool(
         `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
         {
           name: "Full Featured Agent",
           teams: [team.id],
-          labels: [{ labelId: label.id, value: "production" }],
+          labels: [{ key: "environment", value: "production" }],
         },
         mockContext,
       );

@@ -69,7 +69,6 @@ test.describe("Orchestrator - MCP Server Installation and Execution", () => {
     test.beforeAll(
       async ({
         request,
-        makeApiRequest,
         createAgent,
         createMcpCatalogItem,
         installMcpServer,

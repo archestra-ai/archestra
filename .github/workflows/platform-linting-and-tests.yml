@@ -156,7 +156,7 @@ jobs:
       - name: Install Playwrightsystem dependencies for WebKit
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install webkit
+        run: pnpm exec playwright install-deps webkit
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

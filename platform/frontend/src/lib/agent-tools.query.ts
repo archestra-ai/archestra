@@ -97,16 +97,7 @@ export function useBulkAssignTools() {
       mcpServerId?: string | null;
     }) => {
       const { data } = await bulkAssignTools({
-        body: {
-          assignments: assignments.map((a) => ({
-            agentId: a.agentId,
-            toolId: a.toolId,
-            credentialSourceMcpServerId:
-              a.credentialSourceMcpServerId || undefined,
-            executionSourceMcpServerId:
-              a.executionSourceMcpServerId || undefined,
-          })),
-        },
+        body: { assignments },
       });
       if (!data) return null;
       return { ...data, mcpServerId };
@@ -115,9 +106,8 @@ export function useBulkAssignTools() {
       if (!result) return;
 
       // Invalidate specific agent tools queries for agents that had successful assignments
-      const uniqueAgentIds = [
-        ...new Set(result.succeeded.map((a) => a.agentId)),
-      ];
+      const agentIds = result.succeeded.map((a) => a.agentId);
+      const uniqueAgentIds = new Set(agentIds);
       for (const agentId of uniqueAgentIds) {
         queryClient.invalidateQueries({
           queryKey: ["agents", agentId, "tools"],

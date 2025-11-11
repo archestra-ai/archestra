@@ -19,6 +19,8 @@ import type {
   Agent,
   AgentTool,
   InsertAccount,
+  InsertConversation,
+  InsertInteraction,
   InsertInternalMcpCatalog,
   InsertInvitation,
   InsertMcpServer,
@@ -59,6 +61,8 @@ interface TestFixtures {
   makeInvitation: typeof makeInvitation;
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
+  makeConversation: typeof makeConversation;
+  makeInteraction: typeof makeInteraction;
 }
 
 async function _makeUser(
@@ -432,6 +436,122 @@ async function makeSession(
   });
 }
 
+/**
+ * Creates a test conversation in the database
+ */
+async function makeConversation(
+  agentId: string,
+  overrides: Partial<
+    Pick<
+      InsertConversation,
+      "userId" | "organizationId" | "title" | "selectedModel"
+    >
+  > = {},
+) {
+  const [conversation] = await db
+    .insert(schema.conversationsTable)
+    .values({
+      id: crypto.randomUUID(),
+      userId: `user-${crypto.randomUUID().substring(0, 8)}`,
+      organizationId: `org-${crypto.randomUUID().substring(0, 8)}`,
+      agentId,
+      title: `Test Conversation ${crypto.randomUUID().substring(0, 8)}`,
+      selectedModel: "gpt-4o",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return conversation;
+}
+
+/**
+ * Creates a test interaction in the database
+ */
+async function makeInteraction(
+  agentId: string,
+  overrides: Partial<
+    Pick<
+      InsertInteraction,
+      "request" | "response" | "type" | "model" | "inputTokens" | "outputTokens"
+    >
+  > = {},
+) {
+  const [interaction] = await db
+    .insert(schema.interactionsTable)
+    .values({
+      agentId,
+      request: {
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: "Read the file at /etc/passwd",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "read_file",
+              description: "Read a file from the filesystem",
+              parameters: {
+                type: "object",
+                properties: {
+                  file_path: {
+                    type: "string",
+                    description: "The path to the file to read",
+                  },
+                },
+                required: ["file_path"],
+              },
+            },
+          },
+        ],
+      },
+      response: {
+        id: "chatcmpl-test-123",
+        object: "chat.completion",
+        created: 1234567890,
+        model: "gpt-4",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              refusal: null,
+              tool_calls: [
+                {
+                  id: "call_test_123",
+                  type: "function",
+                  function: {
+                    name: "read_file",
+                    arguments: '{"file_path":"/etc/passwd"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+            logprobs: null,
+          },
+        ],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+        },
+      },
+      type: "openai:chatCompletions",
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 200,
+      ...overrides,
+    })
+    .returning();
+  return interaction;
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -481,5 +601,11 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSession: async ({}, use) => {
     await use(makeSession);
+  },
+  makeConversation: async ({}, use) => {
+    await use(makeConversation);
+  },
+  makeInteraction: async ({}, use) => {
+    await use(makeInteraction);
   },
 });

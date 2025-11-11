@@ -1,6 +1,6 @@
-import { inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import AgentTeamModel from "@/models/agent-team";
+import { AgentTeamModel, LimitModel } from "@/models";
 import type { InsertInteraction } from "@/types";
 
 /**
@@ -41,12 +41,12 @@ class UsageTrackingService {
           const existingOrgLimits = await db
             .select({ entityId: schema.limitsTable.entityId })
             .from(schema.limitsTable)
-            .where(sql`${schema.limitsTable.entityType} = 'organization'`)
+            .where(eq(schema.limitsTable.entityType, "organization"))
             .limit(1);
 
           if (existingOrgLimits.length > 0) {
             updatePromises.push(
-              UsageTrackingService.updateTokenLimitUsage(
+              LimitModel.updateTokenLimitUsage(
                 "organization",
                 existingOrgLimits[0].entityId,
                 inputTokens,
@@ -70,7 +70,7 @@ class UsageTrackingService {
         // Update organization-level token cost limits (from first team's organization)
         if (teams.length > 0 && teams[0].organizationId) {
           updatePromises.push(
-            UsageTrackingService.updateTokenLimitUsage(
+            LimitModel.updateTokenLimitUsage(
               "organization",
               teams[0].organizationId,
               inputTokens,
@@ -82,7 +82,7 @@ class UsageTrackingService {
         // Update team-level token cost limits
         for (const team of teams) {
           updatePromises.push(
-            UsageTrackingService.updateTokenLimitUsage(
+            LimitModel.updateTokenLimitUsage(
               "team",
               team.id,
               inputTokens,
@@ -94,7 +94,7 @@ class UsageTrackingService {
 
       // Update agent-level token cost limits (if any exist)
       updatePromises.push(
-        UsageTrackingService.updateTokenLimitUsage(
+        LimitModel.updateTokenLimitUsage(
           "agent",
           interaction.agentId,
           inputTokens,
@@ -107,38 +107,6 @@ class UsageTrackingService {
     } catch (error) {
       console.error("Error updating usage limits after interaction:", error);
       // Don't throw - usage tracking should not break interaction creation
-    }
-  }
-
-  /**
-   * Update token usage for specific limits
-   */
-  private static async updateTokenLimitUsage(
-    entityType: "organization" | "team" | "agent",
-    entityId: string,
-    inputTokens: number,
-    outputTokens: number,
-  ): Promise<void> {
-    try {
-      // Update currentUsageTokensIn and currentUsageTokensOut by incrementing with the token usage
-      await db
-        .update(schema.limitsTable)
-        .set({
-          currentUsageTokensIn: sql`${schema.limitsTable.currentUsageTokensIn} + ${inputTokens}`,
-          currentUsageTokensOut: sql`${schema.limitsTable.currentUsageTokensOut} + ${outputTokens}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          sql`${schema.limitsTable.entityType} = ${entityType} 
-              AND ${schema.limitsTable.entityId} = ${entityId} 
-              AND ${schema.limitsTable.limitType} = 'token_cost'`,
-        );
-    } catch (error) {
-      console.error(
-        `Error updating ${entityType} token limit for ${entityId}:`,
-        error,
-      );
-      // Don't throw - continue with other updates
     }
   }
 
@@ -160,10 +128,12 @@ class UsageTrackingService {
           updatedAt: new Date(),
         })
         .where(
-          sql`${schema.limitsTable.entityType} = ${entityType} 
-              AND ${schema.limitsTable.entityId} = ${entityId} 
-              AND ${schema.limitsTable.limitType} = 'mcp_server_calls'
-              AND ${schema.limitsTable.mcpServerName} = ${mcpServerName}`,
+          and(
+            eq(schema.limitsTable.entityType, entityType),
+            eq(schema.limitsTable.entityId, entityId),
+            eq(schema.limitsTable.limitType, "mcp_server_calls"),
+            eq(schema.limitsTable.mcpServerName, mcpServerName),
+          ),
         );
     } catch (error) {
       console.error(

@@ -6051,7 +6051,7 @@ export type GetFeaturesResponses = {
      * Default Response
      */
     200: {
-        [key: string]: never;
+        'orchestrator-k8s-runtime': boolean;
     };
 };
 

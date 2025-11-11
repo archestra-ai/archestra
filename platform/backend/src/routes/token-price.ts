@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import TokenPriceModel from "@/models/token-price";
+import { TokenPriceModel } from "@/models";
 import {
   constructResponseSchema,
   ErrorResponseSchema,

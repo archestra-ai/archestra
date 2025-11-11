@@ -17,6 +17,7 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
+import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
  * Type for MCP tool with server metadata returned from database
@@ -284,7 +285,6 @@ class McpClient {
         throw new Error("Pod not found for MCP server");
       }
 
-      const { K8sAttachTransport } = await import("./k8s-attach-transport.js");
       return new K8sAttachTransport({
         k8sAttach: k8sPod.k8sAttachClient,
         namespace: k8sPod.k8sNamespace,

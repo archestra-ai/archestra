@@ -1,8 +1,7 @@
 import { inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import AgentTeamModel from "@/models/agent-team";
-import TokenPriceModel from "@/models/token-price";
+import { AgentTeamModel, LimitModel, TokenPriceModel } from "@/models";
 import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 /**
@@ -180,14 +179,11 @@ class LimitValidationService {
       logger.info(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
       );
-      const limits = await db
-        .select()
-        .from(schema.limitsTable)
-        .where(
-          sql`${schema.limitsTable.entityType} = ${entityType} 
-              AND ${schema.limitsTable.entityId} = ${entityId} 
-              AND ${schema.limitsTable.limitType} = 'token_cost'`,
-        );
+      const limits = await LimitModel.findLimitsForValidation(
+        entityType,
+        entityId,
+        "token_cost",
+      );
 
       logger.info(
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,

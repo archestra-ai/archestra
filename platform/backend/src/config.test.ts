@@ -249,7 +249,8 @@ describe("getOrchestratorK8sEnabled", () => {
 
   test("should return true when ARCHESTRA_ORCHESTRATOR_KUBECONFIG is set", () => {
     process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
-    delete process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
+    delete process.env
+      .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
 
     const result = getOrchestratorK8sEnabled();
 
@@ -278,7 +279,8 @@ describe("getOrchestratorK8sEnabled", () => {
 
   test("should return false when neither kubeconfig nor load from cluster are set", () => {
     delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
-    delete process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
+    delete process.env
+      .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
 
     const result = getOrchestratorK8sEnabled();
 

@@ -233,7 +233,9 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **MCP Server Runtime**:
 
 - Local MCP servers run in K8s pods (one pod per server) when orchestrator-k8s-runtime feature is enabled
+- Feature flag `orchestrator-k8s-runtime` returned by `/api/features` endpoint
 - Feature enabled when either ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
+- Frontend disables local MCP server functionality when feature is off (shows tooltip: "Local MCP servers are not available in this environment")
 - Automatic pod lifecycle management (start/restart/stop)
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`

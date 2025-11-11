@@ -3502,10 +3502,11 @@ export type BulkAssignToolsResponses = {
      * Default Response
      */
     200: {
-        succeeded: number;
-        failed: number;
-        duplicates: number;
-        errors: Array<{
+        succeeded: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
+        failed: Array<{
             agentId: string;
             toolId: string;
             error: string;

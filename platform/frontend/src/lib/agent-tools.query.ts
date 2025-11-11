@@ -108,20 +108,29 @@ export function useBulkAssignTools() {
       });
       return data;
     },
-    onSuccess: (_, { assignments }) => {
-      // Invalidate specific agent tools queries
-      const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
+    onSuccess: (result) => {
+      if (!result) return;
+
+      // Invalidate specific agent tools queries for agents that had successful assignments
+      const uniqueAgentIds = [
+        ...new Set(result.succeeded.map((a) => a.agentId)),
+      ];
       for (const agentId of uniqueAgentIds) {
         queryClient.invalidateQueries({
           queryKey: ["agents", agentId, "tools"],
         });
       }
 
+      // Invalidate global queries (only once, exact match to prevent nested invalidation)
       queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
 
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Only invalidate the MCP servers list (not nested tools queries)
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-servers"],
+        exact: true,
+      });
     },
   });
 }

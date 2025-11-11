@@ -122,10 +122,13 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: constructResponseSchema(
           z.object({
-            succeeded: z.number(),
-            failed: z.number(),
-            duplicates: z.number(),
-            errors: z.array(
+            succeeded: z.array(
+              z.object({
+                agentId: z.string(),
+                toolId: z.string(),
+              }),
+            ),
+            failed: z.array(
               z.object({
                 agentId: z.string(),
                 toolId: z.string(),
@@ -151,56 +154,46 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         );
 
-        let succeeded = 0;
-        let failed = 0;
-        let duplicates = 0;
-        const errors: Array<{
+        const succeeded: Array<{ agentId: string; toolId: string }> = [];
+        const failed: Array<{
           agentId: string;
           toolId: string;
           error: string;
         }> = [];
 
         results.forEach((result, index) => {
+          const assignment = assignments[index];
+
           if (result.status === "fulfilled" && result.value === null) {
-            succeeded++;
+            // Success
+            succeeded.push({
+              agentId: assignment.agentId,
+              toolId: assignment.toolId,
+            });
           } else if (result.status === "fulfilled" && result.value !== null) {
             // Validation error
             const errorMessage = result.value.error.message || "Unknown error";
-            errors.push({
-              agentId: assignments[index].agentId,
-              toolId: assignments[index].toolId,
+            failed.push({
+              agentId: assignment.agentId,
+              toolId: assignment.toolId,
               error: errorMessage,
             });
-            failed++;
           } else if (result.status === "rejected") {
-            const errorStr = JSON.stringify(result.reason).toLowerCase();
-            const isDuplicate =
-              errorStr.includes("duplicate key") ||
-              errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
-              errorStr.includes("already assigned");
-
-            if (isDuplicate) {
-              duplicates++;
-              succeeded++; // Count duplicates as successful
-            } else {
-              errors.push({
-                agentId: assignments[index].agentId,
-                toolId: assignments[index].toolId,
-                error:
-                  result.reason instanceof Error
-                    ? result.reason.message
-                    : "Unknown error",
-              });
-              failed++;
-            }
+            // Runtime error
+            failed.push({
+              agentId: assignment.agentId,
+              toolId: assignment.toolId,
+              error:
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : "Unknown error",
+            });
           }
         });
 
         return reply.send({
           succeeded,
           failed,
-          duplicates,
-          errors,
         });
       } catch (error) {
         fastify.log.error(error);

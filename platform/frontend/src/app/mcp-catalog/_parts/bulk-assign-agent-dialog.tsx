@@ -91,19 +91,19 @@ export function BulkAssignAgentDialog({
 
       const { succeeded, failed } = result;
 
-      if (succeeded > 0) {
-        if (failed > 0) {
+      if (succeeded.length > 0) {
+        if (failed.length > 0) {
           toast.warning(
-            `Assigned ${succeeded} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed} failed.`,
+            `Assigned ${succeeded.length} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed.length} failed.`,
           );
         } else {
           toast.success(
-            `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}`,
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}`,
           );
         }
       } else {
         toast.error("Failed to assign tools");
-        console.error("Bulk assignment errors:", result.errors);
+        console.error("Bulk assignment errors:", failed);
       }
 
       setSelectedAgentIds([]);

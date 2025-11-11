@@ -1,8 +1,7 @@
 import { RouteId } from "@shared";
-import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
+import LimitModel from "@/models/limit";
 import TokenPriceModel from "@/models/token-price";
 import {
   CreateLimitSchema,
@@ -44,24 +43,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Ensure all models from interactions have pricing records
         await TokenPriceModel.ensureAllModelsHavePricing();
 
-        const conditions = [];
-
-        if (entityType) {
-          conditions.push(eq(schema.limitsTable.entityType, entityType));
-        }
-
-        if (entityId) {
-          conditions.push(eq(schema.limitsTable.entityId, entityId));
-        }
-
-        if (limitType) {
-          conditions.push(eq(schema.limitsTable.limitType, limitType));
-        }
-
-        const limits = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined);
+        const limits = await LimitModel.findAll(entityType, entityId, limitType);
         return reply.send(limits);
       } catch (error) {
         fastify.log.error(error);
@@ -89,11 +71,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const [limit] = await db
-          .insert(schema.limitsTable)
-          .values(request.body)
-          .returning();
-
+        const limit = await LimitModel.create(request.body);
         return reply.send(limit);
       } catch (error) {
         fastify.log.error(error);
@@ -123,10 +101,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const [limit] = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+        const limit = await LimitModel.findById(request.params.id);
 
         if (!limit) {
           return reply.status(404).send({
@@ -167,11 +142,10 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const [limit] = await db
-          .update(schema.limitsTable)
-          .set({ ...request.body, updatedAt: new Date() })
-          .where(eq(schema.limitsTable.id, request.params.id))
-          .returning();
+        const limit = await LimitModel.update(request.params.id, {
+          ...request.body,
+          updatedAt: new Date(),
+        });
 
         if (!limit) {
           return reply.status(404).send({
@@ -211,11 +185,9 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const result = await db
-          .delete(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+        const deleted = await LimitModel.delete(request.params.id);
 
-        if (result.rowCount === 0) {
+        if (!deleted) {
           return reply.status(404).send({
             error: {
               message: "Limit not found",

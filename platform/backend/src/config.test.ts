@@ -1,10 +1,6 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import {
-  getDatabaseUrl,
-  getOrchestratorK8sEnabled,
-  getOtlpAuthHeaders,
-} from "./config";
+import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
 
 // Mock the logger
 vi.mock("./logging", () => ({
@@ -231,89 +227,5 @@ describe("getOtlpAuthHeaders", () => {
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
     });
-  });
-});
-
-describe("getOrchestratorK8sEnabled", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    // Create a fresh copy of process.env for each test
-    process.env = { ...originalEnv };
-  });
-
-  afterEach(() => {
-    // Restore the original environment
-    process.env = originalEnv;
-  });
-
-  test("should return true when ARCHESTRA_ORCHESTRATOR_KUBECONFIG is set", () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
-    delete process.env
-      .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(true);
-  });
-
-  test("should return true when ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is true", () => {
-    delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "true";
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(true);
-  });
-
-  test("should return true when both kubeconfig and load from cluster are set", () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "/path/to/kubeconfig";
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "true";
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(true);
-  });
-
-  test("should return false when neither kubeconfig nor load from cluster are set", () => {
-    delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
-    delete process.env
-      .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER;
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(false);
-  });
-
-  test("should return false when ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is not 'true'", () => {
-    delete process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "false";
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(false);
-  });
-
-  test("should return false when both are empty strings", () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "";
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "";
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(false);
-  });
-
-  test("should return false when kubeconfig is empty string and load from cluster is false", () => {
-    process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG = "";
-    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER =
-      "false";
-
-    const result = getOrchestratorK8sEnabled();
-
-    expect(result).toBe(false);
   });
 });

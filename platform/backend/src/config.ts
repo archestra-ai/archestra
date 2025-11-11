@@ -73,15 +73,17 @@ export const getDatabaseUrl = (): string => {
 };
 
 /**
- * Determines if orchestrator-k8s-runtime is available/configured
+ * Determines if orchestrator-k8s-runtime should attempt to start
+ * This checks environment variables to decide whether to call McpServerRuntimeManager.start()
+ * Note: The actual feature flag is based on McpServerRuntimeManager.isEnabled
  */
-export const getOrchestratorK8sEnabled = (): boolean => {
+const getOrchestratorK8sEnabled = (): boolean => {
   const kubeconfig = process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG;
   const loadFromCluster =
     process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
     "true";
 
-  // K8s runtime is enabled if either kubeconfig is provided or we're loading from current cluster
+  // K8s runtime should start if either kubeconfig is provided or we're loading from current cluster
   return !!(kubeconfig || loadFromCluster);
 };
 

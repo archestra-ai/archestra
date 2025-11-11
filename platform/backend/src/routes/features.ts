@@ -2,6 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 
 const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -25,7 +26,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_request, reply) =>
       reply.send({
         ...config.features,
-        "orchestrator-k8s-runtime": config.orchestrator.enabled,
+        "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
       }),
   );
 };

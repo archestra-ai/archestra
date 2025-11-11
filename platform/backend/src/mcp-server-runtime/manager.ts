@@ -397,6 +397,15 @@ class McpServerRuntimeManager {
   }
 
   /**
+   * Check if the orchestrator K8s runtime is enabled
+   * Returns true if the K8s config loaded successfully (constructor didn't fail)
+   * and the runtime hasn't been stopped
+   */
+  get isEnabled(): boolean {
+    return this.status !== "error" && this.status !== "stopped";
+  }
+
+  /**
    * Shutdown the runtime
    */
   async shutdown(): Promise<void> {

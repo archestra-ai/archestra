@@ -7,14 +7,21 @@ import { constructResponseSchema } from "@/types";
 const ChatSettingsSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
+  provider: z.enum(["anthropic", "openai"]),
+  model: z.string().nullable(),
   anthropicApiKeySecretId: z.string().nullable(),
+  openaiApiKeySecretId: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
 const UpdateChatSettingsSchema = z.object({
+  provider: z.enum(["anthropic", "openai"]).optional(),
+  model: z.string().optional(),
   anthropicApiKey: z.string().optional(),
-  resetApiKey: z.boolean().optional(),
+  openaiApiKey: z.string().optional(),
+  resetAnthropicApiKey: z.boolean().optional(),
+  resetOpenaiApiKey: z.boolean().optional(),
 });
 
 const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -51,7 +58,7 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateChatSettings,
         description:
-          "Update chat settings (Anthropic API key) for the organization",
+          "Update chat settings (provider and API keys) for the organization",
         tags: ["Chat Settings"],
         body: UpdateChatSettingsSchema,
         response: constructResponseSchema(ChatSettingsSchema),
@@ -62,17 +69,30 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Get or create settings
         const settings = await ChatSettingsModel.getOrCreate(organizationId);
 
-        let secretId = settings.anthropicApiKeySecretId;
+        let anthropicSecretId = settings.anthropicApiKeySecretId;
+        let openaiSecretId = settings.openaiApiKeySecretId;
+        let provider = settings.provider;
+        let model = settings.model;
 
-        // Handle reset API key request
-        if (body.resetApiKey === true) {
-          secretId = null;
+        // Handle provider change
+        if (body.provider) {
+          provider = body.provider;
         }
-        // If API key is provided, create or update secret
+
+        // Handle model change
+        if (body.model !== undefined) {
+          model = body.model;
+        }
+
+        // Handle Anthropic API key reset
+        if (body.resetAnthropicApiKey === true) {
+          anthropicSecretId = null;
+        }
+        // Handle Anthropic API key update/create
         else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
-          if (secretId) {
+          if (anthropicSecretId) {
             // Update existing secret
-            await SecretModel.update(secretId, {
+            await SecretModel.update(anthropicSecretId, {
               secret: { anthropicApiKey: body.anthropicApiKey },
             });
           } else {
@@ -80,13 +100,36 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const secret = await SecretModel.create({
               secret: { anthropicApiKey: body.anthropicApiKey },
             });
-            secretId = secret.id;
+            anthropicSecretId = secret.id;
           }
         }
 
-        // Update settings (only if secretId changed or was created)
+        // Handle OpenAI API key reset
+        if (body.resetOpenaiApiKey === true) {
+          openaiSecretId = null;
+        }
+        // Handle OpenAI API key update/create
+        else if (body.openaiApiKey && body.openaiApiKey.trim() !== "") {
+          if (openaiSecretId) {
+            // Update existing secret
+            await SecretModel.update(openaiSecretId, {
+              secret: { openaiApiKey: body.openaiApiKey },
+            });
+          } else {
+            // Create new secret
+            const secret = await SecretModel.create({
+              secret: { openaiApiKey: body.openaiApiKey },
+            });
+            openaiSecretId = secret.id;
+          }
+        }
+
+        // Update settings
         const updated = await ChatSettingsModel.update(organizationId, {
-          anthropicApiKeySecretId: secretId,
+          provider,
+          model,
+          anthropicApiKeySecretId: anthropicSecretId,
+          openaiApiKeySecretId: openaiSecretId,
         });
 
         if (!updated) {

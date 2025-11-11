@@ -52,6 +52,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  useChatModels,
   useChatSettings,
   useUpdateChatSettings,
 } from "@/lib/chat-settings.query";
@@ -64,6 +65,8 @@ import {
 
 const PLACEHOLDER_KEY = "••••••••••••••••";
 
+type ChatProvider = "anthropic" | "openai";
+
 function ChatSettingsContent() {
   const { data: chatSettings } = useChatSettings();
   const { data: prompts } = usePrompts();
@@ -72,8 +75,13 @@ function ChatSettingsContent() {
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
 
-  const [apiKey, setApiKey] = useState("");
-  const [hasApiKeyChanged, setHasApiKeyChanged] = useState(false);
+  const [provider, setProvider] = useState<ChatProvider>("anthropic");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [hasAnthropicKeyChanged, setHasAnthropicKeyChanged] = useState(false);
+  const [hasOpenaiKeyChanged, setHasOpenaiKeyChanged] = useState(false);
+  const [hasModelChanged, setHasModelChanged] = useState(false);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<{
     id?: string;
@@ -82,76 +90,128 @@ function ChatSettingsContent() {
     content: string;
   } | null>(null);
 
-  // Set placeholder dots when API key is configured
+  // Set initial values when chat settings load
   useEffect(() => {
-    if (chatSettings?.anthropicApiKeySecretId) {
-      setApiKey(PLACEHOLDER_KEY);
-      setHasApiKeyChanged(false);
-    }
-  }, [chatSettings?.anthropicApiKeySecretId]);
+    if (chatSettings) {
+      setProvider(chatSettings.provider || "anthropic");
+      setSelectedModel(chatSettings.model || "");
+      setHasModelChanged(false);
 
-  const handleApiKeyChange = (value: string) => {
-    setApiKey(value);
-    // Mark as changed if user modified the field
+      if (chatSettings.anthropicApiKeySecretId) {
+        setAnthropicApiKey(PLACEHOLDER_KEY);
+        setHasAnthropicKeyChanged(false);
+      }
+
+      if (chatSettings.openaiApiKeySecretId) {
+        setOpenaiApiKey(PLACEHOLDER_KEY);
+        setHasOpenaiKeyChanged(false);
+      }
+    }
+  }, [chatSettings]);
+
+  const handleAnthropicApiKeyChange = (value: string) => {
+    setAnthropicApiKey(value);
     if (chatSettings?.anthropicApiKeySecretId) {
-      // If key exists, changed means it's different from placeholder
-      setHasApiKeyChanged(value !== PLACEHOLDER_KEY);
+      setHasAnthropicKeyChanged(value !== PLACEHOLDER_KEY);
     } else {
-      // If no key exists, any non-empty value is a change
-      setHasApiKeyChanged(value !== "");
+      setHasAnthropicKeyChanged(value !== "");
     }
   };
 
-  const handleSaveApiKey = async () => {
+  const handleOpenaiApiKeyChange = (value: string) => {
+    setOpenaiApiKey(value);
+    if (chatSettings?.openaiApiKeySecretId) {
+      setHasOpenaiKeyChanged(value !== PLACEHOLDER_KEY);
+    } else {
+      setHasOpenaiKeyChanged(value !== "");
+    }
+  };
+
+  const handleSaveSettings = async () => {
     try {
-      // Only send the API key if it's been changed from the placeholder
-      const keyToSend = hasApiKeyChanged ? apiKey : undefined;
+      const anthropicKey = hasAnthropicKeyChanged ? anthropicApiKey : undefined;
+      const openaiKey = hasOpenaiKeyChanged ? openaiApiKey : undefined;
+      const modelToSave = hasModelChanged ? selectedModel : undefined;
 
       await updateChatSettings.mutateAsync({
-        anthropicApiKey: keyToSend,
+        provider,
+        model: modelToSave,
+        anthropicApiKey: anthropicKey,
+        openaiApiKey: openaiKey,
       });
-      toast.success("API key saved successfully");
+      toast.success("Settings saved successfully");
 
-      // Reset to placeholder dots if key was configured
-      if (chatSettings?.anthropicApiKeySecretId || keyToSend) {
-        setApiKey(PLACEHOLDER_KEY);
-        setHasApiKeyChanged(false);
-      } else {
-        setApiKey("");
+      // Reset to placeholder dots if keys were configured
+      if (chatSettings?.anthropicApiKeySecretId || anthropicKey) {
+        setAnthropicApiKey(PLACEHOLDER_KEY);
+        setHasAnthropicKeyChanged(false);
       }
+      if (chatSettings?.openaiApiKeySecretId || openaiKey) {
+        setOpenaiApiKey(PLACEHOLDER_KEY);
+        setHasOpenaiKeyChanged(false);
+      }
+      setHasModelChanged(false);
     } catch (_error) {
-      toast.error("Failed to save API key");
+      toast.error("Failed to save settings");
     }
   };
 
-  const handleCancelApiKey = () => {
-    // Reset to placeholder dots if key exists, otherwise empty
+  const handleCancelChanges = () => {
+    // Reset provider
+    setProvider(chatSettings?.provider || "anthropic");
+
+    // Reset model
+    setSelectedModel(chatSettings?.model || "");
+    setHasModelChanged(false);
+
+    // Reset Anthropic API key
     if (chatSettings?.anthropicApiKeySecretId) {
-      setApiKey(PLACEHOLDER_KEY);
+      setAnthropicApiKey(PLACEHOLDER_KEY);
     } else {
-      setApiKey("");
+      setAnthropicApiKey("");
     }
-    setHasApiKeyChanged(false);
+    setHasAnthropicKeyChanged(false);
+
+    // Reset OpenAI API key
+    if (chatSettings?.openaiApiKeySecretId) {
+      setOpenaiApiKey(PLACEHOLDER_KEY);
+    } else {
+      setOpenaiApiKey("");
+    }
+    setHasOpenaiKeyChanged(false);
   };
 
-  const handleResetApiKey = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to reset the Anthropic API key? Chat functionality will stop working until a new key is configured.",
-      )
-    ) {
+  const handleResetAnthropicApiKey = async () => {
+    if (!confirm("Are you sure you want to reset the Anthropic API key?")) {
       return;
     }
 
     try {
       await updateChatSettings.mutateAsync({
-        resetApiKey: true,
+        resetAnthropicApiKey: true,
       });
-      toast.success("API key reset successfully");
-      setApiKey("");
-      setHasApiKeyChanged(false);
+      toast.success("Anthropic API key reset successfully");
+      setAnthropicApiKey("");
+      setHasAnthropicKeyChanged(false);
     } catch (_error) {
-      toast.error("Failed to reset API key");
+      toast.error("Failed to reset Anthropic API key");
+    }
+  };
+
+  const handleResetOpenaiApiKey = async () => {
+    if (!confirm("Are you sure you want to reset the OpenAI API key?")) {
+      return;
+    }
+
+    try {
+      await updateChatSettings.mutateAsync({
+        resetOpenaiApiKey: true,
+      });
+      toast.success("OpenAI API key reset successfully");
+      setOpenaiApiKey("");
+      setHasOpenaiKeyChanged(false);
+    } catch (_error) {
+      toast.error("Failed to reset OpenAI API key");
     }
   };
 
@@ -215,72 +275,175 @@ function ChatSettingsContent() {
     }
   };
 
+  // Check if current provider has an API key saved in database
+  const hasApiKeyForCurrentProvider =
+    (provider === "anthropic" && chatSettings?.anthropicApiKeySecretId) ||
+    (provider === "openai" && chatSettings?.openaiApiKeySecretId);
+
+  // Fetch models only when API key exists for selected provider
+  const { data: modelsData } = useChatModels(
+    hasApiKeyForCurrentProvider ? provider : undefined,
+  );
+
+  // Reset model when provider changes
+  useEffect(() => {
+    if (chatSettings && provider !== chatSettings.provider) {
+      setSelectedModel("");
+      setHasModelChanged(true);
+    }
+  }, [provider, chatSettings]);
+
+  const hasChanges =
+    hasAnthropicKeyChanged ||
+    hasOpenaiKeyChanged ||
+    hasModelChanged ||
+    provider !== (chatSettings?.provider || "anthropic");
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full space-y-6">
-      {/* API Key Section */}
+      {/* Provider and API Keys Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Anthropic API Key</CardTitle>
+          <CardTitle>Chat Provider Settings</CardTitle>
           <CardDescription>
-            Configure the Anthropic API key for chat functionality
+            Configure the AI provider and API keys for chat functionality
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Provider Selection - Temporarily disabled, only Anthropic supported */}
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key</Label>
-            <div className="relative">
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="sk-ant-..."
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                className={
-                  chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged
-                    ? "border-green-500 pr-10"
-                    : ""
-                }
-              />
-              {chatSettings?.anthropicApiKeySecretId && !hasApiKeyChanged && (
-                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+            <Label htmlFor="provider">AI Provider</Label>
+            <Select value={provider} disabled>
+              <SelectTrigger id="provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                {/* <SelectItem value="openai">OpenAI (GPT)</SelectItem> */}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Anthropic API Key - Only show for Anthropic provider */}
+          {provider === "anthropic" && (
+            <div className="space-y-2">
+              <Label htmlFor="anthropicApiKey">Anthropic API Key</Label>
+              <div className="relative">
+                <Input
+                  id="anthropicApiKey"
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={anthropicApiKey}
+                  onChange={(e) => handleAnthropicApiKeyChange(e.target.value)}
+                  className={
+                    chatSettings?.anthropicApiKeySecretId &&
+                    !hasAnthropicKeyChanged
+                      ? "border-green-500 pr-10"
+                      : ""
+                  }
+                />
+                {chatSettings?.anthropicApiKeySecretId &&
+                  !hasAnthropicKeyChanged && (
+                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                  )}
+              </div>
+              {chatSettings?.anthropicApiKeySecretId &&
+                !hasAnthropicKeyChanged && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetAnthropicApiKey}
+                    disabled={updateChatSettings.isPending}
+                  >
+                    <RotateCcw className="mr-2 h-3 w-3" />
+                    Reset Anthropic Key
+                  </Button>
+                )}
+            </div>
+          )}
+
+          {/* OpenAI API Key - Only show for OpenAI provider */}
+          {provider === "openai" && (
+            <div className="space-y-2">
+              <Label htmlFor="openaiApiKey">OpenAI API Key</Label>
+              <div className="relative">
+                <Input
+                  id="openaiApiKey"
+                  type="password"
+                  placeholder="sk-..."
+                  value={openaiApiKey}
+                  onChange={(e) => handleOpenaiApiKeyChange(e.target.value)}
+                  className={
+                    chatSettings?.openaiApiKeySecretId && !hasOpenaiKeyChanged
+                      ? "border-green-500 pr-10"
+                      : ""
+                  }
+                />
+                {chatSettings?.openaiApiKeySecretId && !hasOpenaiKeyChanged && (
+                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-500" />
+                )}
+              </div>
+              {chatSettings?.openaiApiKeySecretId && !hasOpenaiKeyChanged && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetOpenaiApiKey}
+                  disabled={updateChatSettings.isPending}
+                >
+                  <RotateCcw className="mr-2 h-3 w-3" />
+                  Reset OpenAI Key
+                </Button>
               )}
             </div>
-          </div>
-          {hasApiKeyChanged ? (
-            <div className="flex gap-2">
+          )}
+
+          {/* Model Selection - Show only when API key is configured for current provider */}
+          {hasApiKeyForCurrentProvider &&
+            modelsData?.models &&
+            modelsData.models.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="model">Model</Label>
+                <Select
+                  value={selectedModel}
+                  onValueChange={(value: string) => {
+                    setSelectedModel(value);
+                    setHasModelChanged(value !== (chatSettings?.model || ""));
+                  }}
+                >
+                  <SelectTrigger id="model">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelsData.models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name || model.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+          {/* Save/Cancel Buttons */}
+          {hasChanges && (
+            <div className="flex gap-2 pt-4 border-t">
               <Button
                 variant="outline"
-                onClick={handleCancelApiKey}
+                onClick={handleCancelChanges}
                 disabled={updateChatSettings.isPending}
               >
                 Cancel
               </Button>
               <Button
-                onClick={handleSaveApiKey}
-                disabled={updateChatSettings.isPending || !apiKey}
-              >
-                {updateChatSettings.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {chatSettings?.anthropicApiKeySecretId
-                  ? "Update API Key"
-                  : "Save API Key"}
-              </Button>
-            </div>
-          ) : (
-            chatSettings?.anthropicApiKeySecretId && (
-              <Button
-                variant="destructive"
-                onClick={handleResetApiKey}
+                onClick={handleSaveSettings}
                 disabled={updateChatSettings.isPending}
               >
                 {updateChatSettings.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Reset API Key
+                Save Settings
               </Button>
-            )
+            </div>
           )}
         </CardContent>
       </Card>

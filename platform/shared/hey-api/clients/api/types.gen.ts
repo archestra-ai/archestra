@@ -4756,6 +4756,80 @@ export type UpdateTrustedDataPolicyResponses = {
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
 
+export type GetChatModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        provider?: 'anthropic' | 'openai';
+    };
+    url: '/api/chat-models';
+};
+
+export type GetChatModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetChatModelsError = GetChatModelsErrors[keyof GetChatModelsErrors];
+
+export type GetChatModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            id: string;
+            name: string;
+            type?: string;
+        }>;
+    };
+};
+
+export type GetChatModelsResponse = GetChatModelsResponses[keyof GetChatModelsResponses];
+
 export type StreamChatData = {
     body: {
         id: string;
@@ -5341,7 +5415,10 @@ export type GetChatSettingsResponses = {
     200: {
         id: string;
         organizationId: string;
+        provider: 'anthropic' | 'openai';
+        model: string | null;
         anthropicApiKeySecretId: string | null;
+        openaiApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -5351,8 +5428,12 @@ export type GetChatSettingsResponse = GetChatSettingsResponses[keyof GetChatSett
 
 export type UpdateChatSettingsData = {
     body?: {
+        provider?: 'anthropic' | 'openai';
+        model?: string;
         anthropicApiKey?: string;
-        resetApiKey?: boolean;
+        openaiApiKey?: string;
+        resetAnthropicApiKey?: boolean;
+        resetOpenaiApiKey?: boolean;
     };
     path?: never;
     query?: never;
@@ -5416,7 +5497,10 @@ export type UpdateChatSettingsResponses = {
     200: {
         id: string;
         organizationId: string;
+        provider: 'anthropic' | 'openai';
+        model: string | null;
         anthropicApiKeySecretId: string | null;
+        openaiApiKeySecretId: string | null;
         createdAt: string;
         updatedAt: string;
     };

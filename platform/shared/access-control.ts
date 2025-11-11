@@ -259,6 +259,7 @@ export const RouteId = {
   // Chat Settings Routes
   GetChatSettings: "getChatSettings",
   UpdateChatSettings: "updateChatSettings",
+  GetChatModels: "getChatModels",
 
   // Prompt Routes
   GetPrompts: "getPrompts",

@@ -17,7 +17,8 @@ const mcpServerTable = pgTable("mcp_server", {
     .notNull(),
   serverType: text("server_type")
     .$type<InternalMcpCatalogServerType>()
-    .notNull(),
+    .notNull()
+    .default("local"),
   secretId: uuid("secret_id").references(() => secretTable.id, {
     onDelete: "set null",
   }),

@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -115,44 +116,87 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Starting chat stream",
       );
 
-      // Get Anthropic API key from database
+      // Get chat settings from database
       const chatSettings =
         await ChatSettingsModel.findByOrganizationId(organizationId);
 
-      let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
+      const provider = chatSettings?.provider || "anthropic";
+      let apiKey = "";
 
-      if (chatSettings?.anthropicApiKeySecretId) {
-        const secret = await SecretModel.findById(
-          chatSettings.anthropicApiKeySecretId,
-        );
-        if (secret?.secret?.anthropicApiKey) {
-          anthropicApiKey = secret.secret.anthropicApiKey as string;
-          fastify.log.info("Using Anthropic API key from database");
+      if (provider === "anthropic") {
+        apiKey = config.chat.anthropic.apiKey; // Fallback to env var
+
+        if (chatSettings?.anthropicApiKeySecretId) {
+          const secret = await SecretModel.findById(
+            chatSettings.anthropicApiKeySecretId,
+          );
+          if (secret?.secret?.anthropicApiKey) {
+            apiKey = secret.secret.anthropicApiKey as string;
+            fastify.log.info("Using Anthropic API key from database");
+          }
+        } else {
+          fastify.log.info("Using Anthropic API key from environment variable");
         }
-      } else {
-        fastify.log.info("Using Anthropic API key from environment variable");
+
+        if (!apiKey) {
+          return reply.status(400).send({
+            error: {
+              message:
+                "Anthropic API key not configured. Please configure it in Chat Settings.",
+              type: "bad_request",
+            },
+          });
+        }
+      } else if (provider === "openai") {
+        apiKey = config.chat.openai.apiKey; // Fallback to env var
+
+        if (chatSettings?.openaiApiKeySecretId) {
+          const secret = await SecretModel.findById(
+            chatSettings.openaiApiKeySecretId,
+          );
+          if (secret?.secret?.openaiApiKey) {
+            apiKey = secret.secret.openaiApiKey as string;
+            fastify.log.info("Using OpenAI API key from database");
+          }
+        } else {
+          fastify.log.info("Using OpenAI API key from environment variable");
+        }
+
+        if (!apiKey) {
+          return reply.status(400).send({
+            error: {
+              message:
+                "OpenAI API key not configured. Please configure it in Chat Settings.",
+              type: "bad_request",
+            },
+          });
+        }
       }
 
-      if (!anthropicApiKey) {
-        return reply.status(400).send({
-          error: {
-            message:
-              "Anthropic API key not configured. Please configure it in Chat Settings.",
-            type: "bad_request",
-          },
+      // Create the appropriate client based on provider
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK language model type is complex
+      let model: any;
+
+      if (provider === "anthropic") {
+        // Create Anthropic client pointing to LLM Proxy
+        // URL format: /v1/anthropic/:agentId/v1/messages
+        const anthropic = createAnthropic({
+          apiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
         });
+        model = anthropic(conversation.selectedModel);
+      } else if (provider === "openai") {
+        // Create OpenAI client
+        const openai = createOpenAI({
+          apiKey,
+          baseURL: `http://localhost:${config.api.port}/v1/openai/${conversation.agentId}`,
+        });
+        model = openai(conversation.selectedModel);
       }
-
-      // Create Anthropic client pointing to LLM Proxy
-      // URL format: /v1/anthropic/:agentId/v1/messages
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
-        baseURL: `http://localhost:${config.api.port}/v1/anthropic/${conversation.agentId}/v1`,
-      });
 
       // Stream with AI SDK
       const result = streamText({
-        model: anthropic(conversation.selectedModel),
+        model,
         system: systemPrompt,
         messages: convertToModelMessages(messages),
         tools: mcpTools,
@@ -403,6 +447,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Get model from chat settings if not explicitly provided
+      let modelToUse = selectedModel;
+      if (!modelToUse) {
+        const chatSettings =
+          await ChatSettingsModel.findByOrganizationId(organizationId);
+        modelToUse = chatSettings?.model || config.chat.defaultModel;
+      }
+
       // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
@@ -410,7 +462,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           agentId,
           title,
-          selectedModel: selectedModel || config.chat.defaultModel,
+          selectedModel: modelToUse,
         }),
       );
     },

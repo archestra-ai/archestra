@@ -1,21 +1,32 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 
+export type ChatProvider = "anthropic" | "openai";
+
 export interface ChatSettings {
   id: string;
   organizationId: string;
+  provider: ChatProvider;
+  model: string | null;
   anthropicApiKeySecretId: string | null;
+  openaiApiKeySecretId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface CreateChatSettingsInput {
   organizationId: string;
+  provider?: ChatProvider;
+  model?: string | null;
   anthropicApiKeySecretId?: string | null;
+  openaiApiKeySecretId?: string | null;
 }
 
 export interface UpdateChatSettingsInput {
+  provider?: ChatProvider;
+  model?: string | null;
   anthropicApiKeySecretId?: string | null;
+  openaiApiKeySecretId?: string | null;
 }
 
 /**
@@ -31,7 +42,9 @@ class ChatSettingsModel {
       .insert(schema.chatSettingsTable)
       .values({
         organizationId: input.organizationId,
+        provider: input.provider || "anthropic",
         anthropicApiKeySecretId: input.anthropicApiKeySecretId || null,
+        openaiApiKeySecretId: input.openaiApiKeySecretId || null,
       })
       .returning();
 
@@ -73,11 +86,24 @@ class ChatSettingsModel {
     organizationId: string,
     input: UpdateChatSettingsInput,
   ): Promise<ChatSettings | null> {
+    const updateData: Partial<CreateChatSettingsInput> = {};
+
+    if (input.provider !== undefined) {
+      updateData.provider = input.provider;
+    }
+    if (input.model !== undefined) {
+      updateData.model = input.model;
+    }
+    if (input.anthropicApiKeySecretId !== undefined) {
+      updateData.anthropicApiKeySecretId = input.anthropicApiKeySecretId;
+    }
+    if (input.openaiApiKeySecretId !== undefined) {
+      updateData.openaiApiKeySecretId = input.openaiApiKeySecretId;
+    }
+
     const [updated] = await db
       .update(schema.chatSettingsTable)
-      .set({
-        anthropicApiKeySecretId: input.anthropicApiKeySecretId,
-      })
+      .set(updateData)
       .where(eq(schema.chatSettingsTable.organizationId, organizationId))
       .returning();
 

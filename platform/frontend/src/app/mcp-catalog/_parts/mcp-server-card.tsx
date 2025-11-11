@@ -29,9 +29,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
+import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useMcpServerLogs,
   useMcpServerTools,
@@ -137,6 +139,7 @@ export function McpServerCard({
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
+  const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
@@ -506,7 +509,7 @@ export function McpServerCard({
             <TooltipTrigger asChild>
               <Button
                 onClick={onInstallLocalServer}
-                disabled={isInstalling}
+                disabled={isInstalling || !isLocalMcpEnabled}
                 size="sm"
                 variant="outline"
                 className="w-full"
@@ -516,7 +519,11 @@ export function McpServerCard({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Provide your credentials to connect this server</p>
+              <p>
+                {!isLocalMcpEnabled
+                  ? LOCAL_MCP_DISABLED_MESSAGE
+                  : "Provide your credentials to connect this server"}
+              </p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -572,7 +579,7 @@ export function McpServerCard({
               <TooltipTrigger asChild>
                 <Button
                   onClick={onInstallLocalServerTeam}
-                  disabled={isInstalling}
+                  disabled={isInstalling || !isLocalMcpEnabled}
                   size="sm"
                   variant="outline"
                   className="w-full"
@@ -582,7 +589,11 @@ export function McpServerCard({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Install and allow teams to use this server</p>
+                <p>
+                  {!isLocalMcpEnabled
+                    ? LOCAL_MCP_DISABLED_MESSAGE
+                    : "Install and allow teams to use this server"}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

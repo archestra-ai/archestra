@@ -7,9 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import InvitationModel from "@/models/invitation";
-import MemberModel from "@/models/member";
-import SessionModel from "@/models/session";
+import { InvitationModel, MemberModel, SessionModel } from "@/models";
 
 const APP_NAME = "Archestra";
 const {

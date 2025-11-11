@@ -1,7 +1,13 @@
 import { and, eq, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { CreateLimit, Limit, LimitType, UpdateLimit } from "@/types";
+import type {
+  CreateLimit,
+  Limit,
+  LimitEntityType,
+  LimitType,
+  UpdateLimit,
+} from "@/types";
 
 class LimitModel {
   /**
@@ -20,7 +26,7 @@ class LimitModel {
    * Find all limits, optionally filtered by entity type, entity ID, and/or limit type
    */
   static async findAll(
-    entityType?: "organization" | "team" | "agent",
+    entityType?: LimitEntityType,
     entityId?: string,
     limitType?: LimitType,
   ): Promise<Limit[]> {
@@ -62,20 +68,15 @@ class LimitModel {
   }
 
   /**
-   * Update a limit
+   * Patch a limit
    */
-  static async update(id: string, data: Partial<UpdateLimit>): Promise<Limit | null> {
-    // Remove the id from the data object if it exists
-    const { id: _id, ...updateData } = data;
-
-    if (Object.keys(updateData).length === 0) {
-      // No fields to update, just return the existing limit
-      return LimitModel.findById(id);
-    }
-
+  static async patch(
+    id: string,
+    data: Partial<UpdateLimit>,
+  ): Promise<Limit | null> {
     const [limit] = await db
       .update(schema.limitsTable)
-      .set(updateData)
+      .set(data)
       .where(eq(schema.limitsTable.id, id))
       .returning();
 
@@ -86,11 +87,15 @@ class LimitModel {
    * Delete a limit
    */
   static async delete(id: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.limitsTable)
-      .where(eq(schema.limitsTable.id, id));
+    // First check if the limit exists
+    const existing = await LimitModel.findById(id);
+    if (!existing) {
+      return false;
+    }
 
-    return result.rowCount !== null && result.rowCount > 0;
+    await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
+
+    return true;
   }
 
   /**
@@ -127,7 +132,7 @@ class LimitModel {
    * Used by usage tracking service after interactions
    */
   static async updateTokenLimitUsage(
-    entityType: "organization" | "team" | "agent",
+    entityType: LimitEntityType,
     entityId: string,
     inputTokens: number,
     outputTokens: number,
@@ -208,7 +213,7 @@ class LimitModel {
    * Used by limit validation service to check if limits are exceeded
    */
   static async findLimitsForValidation(
-    entityType: "organization" | "team" | "agent",
+    entityType: LimitEntityType,
     entityId: string,
     limitType: LimitType = "token_cost",
   ): Promise<Limit[]> {

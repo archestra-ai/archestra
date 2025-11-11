@@ -1,8 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import LimitModel from "@/models/limit";
-import TokenPriceModel from "@/models/token-price";
+import { LimitModel, TokenPriceModel } from "@/models";
 import {
   CreateLimitSchema,
   constructResponseSchema,
@@ -43,7 +42,11 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Ensure all models from interactions have pricing records
         await TokenPriceModel.ensureAllModelsHavePricing();
 
-        const limits = await LimitModel.findAll(entityType, entityId, limitType);
+        const limits = await LimitModel.findAll(
+          entityType,
+          entityId,
+          limitType,
+        );
         return reply.send(limits);
       } catch (error) {
         fastify.log.error(error);
@@ -71,8 +74,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const limit = await LimitModel.create(request.body);
-        return reply.send(limit);
+        return reply.send(await LimitModel.create(request.body));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -126,7 +128,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.put(
+  fastify.patch(
     "/api/limits/:id",
     {
       schema: {
@@ -136,16 +138,13 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateLimitSchema.omit({ id: true }),
+        body: UpdateLimitSchema.partial(),
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
+    async ({ params: { id }, body }, reply) => {
       try {
-        const limit = await LimitModel.update(request.params.id, {
-          ...request.body,
-          updatedAt: new Date(),
-        });
+        const limit = await LimitModel.patch(id, body);
 
         if (!limit) {
           return reply.status(404).send({

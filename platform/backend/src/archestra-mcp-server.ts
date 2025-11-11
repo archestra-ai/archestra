@@ -230,7 +230,10 @@ export async function executeArchestraTool(
     try {
       const entityType = args?.entity_type as "organization" | "team" | "agent";
       const entityId = args?.entity_id as string;
-      const limitType = args?.limit_type as "token_cost" | "mcp_server_calls" | "tool_calls";
+      const limitType = args?.limit_type as
+        | "token_cost"
+        | "mcp_server_calls"
+        | "tool_calls";
       const limitValue = args?.limit_value as number;
       const model = args?.model as string | undefined;
       const mcpServerName = args?.mcp_server_name as string | undefined;
@@ -327,7 +330,11 @@ export async function executeArchestraTool(
     );
 
     try {
-      const entityType = args?.entity_type as "organization" | "team" | "agent" | undefined;
+      const entityType = args?.entity_type as
+        | "organization"
+        | "team"
+        | "agent"
+        | undefined;
       const entityId = args?.entity_id as string | undefined;
 
       const limits = await LimitModel.findAll(entityType, entityId);
@@ -337,9 +344,10 @@ export async function executeArchestraTool(
           content: [
             {
               type: "text",
-              text: entityType || entityId
-                ? `No limits found${entityType ? ` for entity type: ${entityType}` : ""}${entityId ? ` and entity ID: ${entityId}` : ""}.`
-                : "No limits found.",
+              text:
+                entityType || entityId
+                  ? `No limits found${entityType ? ` for entity type: ${entityType}` : ""}${entityId ? ` and entity ID: ${entityId}` : ""}.`
+                  : "No limits found.",
             },
           ],
           isError: false,
@@ -356,9 +364,11 @@ export async function executeArchestraTool(
           result += `\n  Current Usage (In): ${limit.currentUsageTokensIn}`;
           result += `\n  Current Usage (Out): ${limit.currentUsageTokensOut}`;
           if (limit.model) result += `\n  Model: ${limit.model}`;
-          if (limit.mcpServerName) result += `\n  MCP Server: ${limit.mcpServerName}`;
+          if (limit.mcpServerName)
+            result += `\n  MCP Server: ${limit.mcpServerName}`;
           if (limit.toolName) result += `\n  Tool: ${limit.toolName}`;
-          if (limit.lastCleanup) result += `\n  Last Cleanup: ${limit.lastCleanup}`;
+          if (limit.lastCleanup)
+            result += `\n  Last Cleanup: ${limit.lastCleanup}`;
           return result;
         })
         .join("\n\n");
@@ -425,7 +435,7 @@ export async function executeArchestraTool(
         };
       }
 
-      const limit = await LimitModel.update(id, updateData);
+      const limit = await LimitModel.patch(id, updateData);
 
       if (!limit) {
         return {
@@ -621,7 +631,8 @@ export function getArchestraMcpTools(): Tool[] {
           },
           limit_value: {
             type: "number",
-            description: "The limit value (tokens or count depending on limit type)",
+            description:
+              "The limit value (tokens or count depending on limit type)",
           },
           model: {
             type: "string",
@@ -629,7 +640,8 @@ export function getArchestraMcpTools(): Tool[] {
           },
           mcp_server_name: {
             type: "string",
-            description: "MCP server name (required for mcp_server_calls and tool_calls limits)",
+            description:
+              "MCP server name (required for mcp_server_calls and tool_calls limits)",
           },
           tool_name: {
             type: "string",
@@ -667,8 +679,7 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_UPDATE_LIMIT_FULL_NAME,
       title: "Update Limit",
-      description:
-        "Update an existing limit's value.",
+      description: "Update an existing limit's value.",
       inputSchema: {
         type: "object",
         properties: {
@@ -689,8 +700,7 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_DELETE_LIMIT_FULL_NAME,
       title: "Delete Limit",
-      description:
-        "Delete an existing limit by ID.",
+      description: "Delete an existing limit by ID.",
       inputSchema: {
         type: "object",
         properties: {
@@ -714,7 +724,8 @@ export function getArchestraMcpTools(): Tool[] {
         properties: {
           agent_id: {
             type: "string",
-            description: "The ID of the agent to get usage for (optional, defaults to current agent)",
+            description:
+              "The ID of the agent to get usage for (optional, defaults to current agent)",
           },
         },
         required: [],

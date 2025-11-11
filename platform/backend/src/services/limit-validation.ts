@@ -1,9 +1,7 @@
 import { inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import AgentTeamModel from "@/models/agent-team";
-import LimitModel from "@/models/limit";
-import TokenPriceModel from "@/models/token-price";
+import { AgentTeamModel, LimitModel, TokenPriceModel } from "@/models";
 import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 /**

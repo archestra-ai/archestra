@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import LimitModel from "@/models/limit";
+import { LimitModel } from "@/models";
 
 export async function cleanupLimitsIfNeeded(
   organizationId: string,

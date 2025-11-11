@@ -3,7 +3,9 @@ import LimitModel from "./limit";
 
 describe("LimitModel", () => {
   describe("create", () => {
-    test("can create a token_cost limit for an agent", async ({ makeAgent }) => {
+    test("can create a token_cost limit for an agent", async ({
+      makeAgent,
+    }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
       const limit = await LimitModel.create({
@@ -203,7 +205,7 @@ describe("LimitModel", () => {
     });
   });
 
-  describe("update", () => {
+  describe("patch", () => {
     test("can update a limit value", async ({ makeAgent }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
@@ -215,7 +217,7 @@ describe("LimitModel", () => {
         model: "claude-3-5-sonnet-20241022",
       });
 
-      const updated = await LimitModel.update(limit.id, {
+      const updated = await LimitModel.patch(limit.id, {
         limitValue: 2000000,
       });
 
@@ -225,33 +227,13 @@ describe("LimitModel", () => {
     });
 
     test("returns null for non-existent limit", async () => {
-      const updated = await LimitModel.update(
+      const updated = await LimitModel.patch(
         "00000000-0000-0000-0000-000000000000",
         {
           limitValue: 2000000,
         },
       );
       expect(updated).toBeNull();
-    });
-
-    test("returns existing limit if no fields to update", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({ name: "Test Agent" });
-
-      const limit = await LimitModel.create({
-        entityType: "agent",
-        entityId: agent.id,
-        limitType: "token_cost",
-        limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
-      });
-
-      const updated = await LimitModel.update(limit.id, {});
-
-      expect(updated).toBeDefined();
-      expect(updated?.id).toBe(limit.id);
-      expect(updated?.limitValue).toBe(1000000);
     });
   });
 
@@ -298,18 +280,16 @@ describe("LimitModel", () => {
 
     test("can get token usage for an agent with interactions", async ({
       makeAgent,
-      makeConversation,
       makeInteraction,
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
-      const conversation = await makeConversation(agent.id);
 
-      await makeInteraction(conversation.id, agent.id, {
+      await makeInteraction(agent.id, {
         inputTokens: 100,
         outputTokens: 200,
       });
 
-      await makeInteraction(conversation.id, agent.id, {
+      await makeInteraction(agent.id, {
         inputTokens: 150,
         outputTokens: 250,
       });
@@ -413,7 +393,7 @@ describe("LimitModel", () => {
 
       // Set lastCleanup to 2 hours ago
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      await LimitModel.update(limit.id, { lastCleanup: twoHoursAgo });
+      await LimitModel.patch(limit.id, { lastCleanup: twoHoursAgo });
 
       // Check with cutoff of 1 hour ago
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -440,7 +420,7 @@ describe("LimitModel", () => {
 
       // Set lastCleanup to 30 minutes ago
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      await LimitModel.update(limit.id, { lastCleanup: thirtyMinutesAgo });
+      await LimitModel.patch(limit.id, { lastCleanup: thirtyMinutesAgo });
 
       // Check with cutoff of 1 hour ago
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);

@@ -3,8 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
-import { AgentModel } from "@/models";
-import AgentLabelModel from "@/models/agent-label";
+import { AgentLabelModel, AgentModel } from "@/models";
 import {
   constructResponseSchema,
   createPaginatedResponseSchema,

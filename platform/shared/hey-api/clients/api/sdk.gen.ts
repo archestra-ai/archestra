@@ -797,7 +797,7 @@ export const getLimit = <ThrowOnError extends boolean = false>(options: Options<
  * Update a limit
  */
 export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
+    return (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
         url: '/api/limits/{id}',
         ...options,
         headers: {

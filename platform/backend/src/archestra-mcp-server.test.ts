@@ -251,7 +251,9 @@ describe("executeArchestraTool", () => {
 
       expect(result.isError).toBe(false);
       expect(result.content).toHaveLength(1);
-      expect((result.content[0] as any).text).toContain("Successfully created limit");
+      expect((result.content[0] as any).text).toContain(
+        "Successfully created limit",
+      );
       expect((result.content[0] as any).text).toContain("Limit ID:");
       expect((result.content[0] as any).text).toContain("token_cost");
     });
@@ -375,7 +377,9 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain("Successfully updated limit");
+      expect((result.content[0] as any).text).toContain(
+        "Successfully updated limit",
+      );
       expect((result.content[0] as any).text).toContain("2000000");
     });
 
@@ -435,7 +439,9 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain("Successfully deleted limit");
+      expect((result.content[0] as any).text).toContain(
+        "Successfully deleted limit",
+      );
     });
 
     test("should return error when id is missing", async () => {
@@ -472,7 +478,9 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain("Token usage for agent");
+      expect((result.content[0] as any).text).toContain(
+        "Token usage for agent",
+      );
       expect((result.content[0] as any).text).toContain("Total Input Tokens:");
       expect((result.content[0] as any).text).toContain("Total Output Tokens:");
       expect((result.content[0] as any).text).toContain("Total Tokens:");
@@ -490,7 +498,9 @@ describe("executeArchestraTool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect((result.content[0] as any).text).toContain(`Token usage for agent ${otherAgent.id}`);
+      expect((result.content[0] as any).text).toContain(
+        `Token usage for agent ${otherAgent.id}`,
+      );
     });
   });
 

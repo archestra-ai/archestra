@@ -1,7 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import AgentTeamModel from "@/models/agent-team";
-import LimitModel from "@/models/limit";
+import { AgentTeamModel, LimitModel } from "@/models";
 import type { InsertInteraction } from "@/types";
 
 /**

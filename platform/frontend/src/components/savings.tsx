@@ -81,10 +81,6 @@ export function Savings({
                     {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`}
                     )
                   </div>
-                  <div className="text-xs text-muted-foreground pt-2">
-                    Note: Costs are estimates based on standard pricing. Actual
-                    costs may vary due to pricing tiers.
-                  </div>
                 </>
               )}
             </div>

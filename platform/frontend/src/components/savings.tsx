@@ -38,18 +38,15 @@ export function Savings({
 
   const content = (
     <>
-      {format === "percent" && (
-        <>
-          {savings === 0
-            ? "0%"
-            : savings > 0
-              ? `+${savingsPercent}%`
-              : `${savingsPercent}%`}
-        </>
-      )}
-      {format === "number" && (
-        <>{savings === 0 ? "$0" : formatCost(Math.abs(savings))}</>
-      )}
+      {format === "percent" &&
+        (savings === 0
+          ? "0%"
+          : savings > 0
+            ? `+${savingsPercent}%`
+            : `${savingsPercent}%`)}
+      {format === "number" && savings === 0
+        ? "$0"
+        : formatCost(Math.abs(savings))}
     </>
   );
 

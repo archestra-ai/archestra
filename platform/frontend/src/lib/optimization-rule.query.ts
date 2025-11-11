@@ -11,27 +11,16 @@ const {
 } = archestraApiSdk;
 
 export type OptimizationRule =
-  archestraApiTypes.GetOptimizationRulesResponses["200"][number];
+  archestraApiTypes.CreateOptimizationRuleResponses["201"];
 
-export interface CreateOptimizationRuleInput {
-  agentId: string;
-  ruleType: "content_length" | "tool_presence";
-  conditions: { maxLength: number } | { hasTools: boolean };
-  provider: "anthropic" | "openai";
-  targetModel: string;
-  priority?: number;
-  enabled?: boolean;
-}
+export type CreateOptimizationRuleInput =
+  archestraApiTypes.CreateOptimizationRuleData["body"] &
+    archestraApiTypes.CreateOptimizationRuleData["path"];
 
-export interface UpdateOptimizationRuleInput {
-  id: string;
-  ruleType?: "content_length" | "tool_presence";
-  conditions?: { maxLength: number } | { hasTools: boolean };
-  provider?: "anthropic" | "openai";
-  targetModel?: string;
-  priority?: number;
-  enabled?: boolean;
-}
+export type UpdateOptimizationRuleInput = Partial<
+  archestraApiTypes.UpdateOptimizationRuleData["body"]
+> &
+  archestraApiTypes.UpdateOptimizationRuleData["path"];
 
 // Get all optimization rules for an agent
 export function useOptimizationRules(agentId: string | null) {

@@ -63,17 +63,18 @@ interface OptimizationRulesTabProps {
   optimizationRulesLoading: boolean;
 }
 
-interface OptimizationRuleFormData {
+// Form data type for inline editing - uses strings for number inputs
+type OptimizationRuleFormData = {
   id?: string;
   agentId: string;
-  ruleType: "content_length" | "tool_presence";
+  ruleType: OptimizationRule["ruleType"];
   maxLength?: string;
   hasTools?: boolean;
-  provider: "anthropic" | "openai";
+  provider: OptimizationRule["provider"];
   targetModel: string;
   priority: string;
   enabled: boolean;
-}
+};
 
 function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
   const skeletons = Array.from(
@@ -220,9 +221,7 @@ function OptimizationRuleInlineForm({
             setFormData({ ...formData, targetModel: e.target.value })
           }
           placeholder={
-            formData.provider === "openai"
-              ? "gpt-4o-mini"
-              : "claude-4-5-haiku"
+            formData.provider === "openai" ? "gpt-4o-mini" : "claude-4-5-haiku"
           }
           required
           onKeyDown={(e) => {

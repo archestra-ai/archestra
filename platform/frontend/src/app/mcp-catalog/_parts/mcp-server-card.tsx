@@ -507,16 +507,18 @@ export function McpServerCard({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                onClick={onInstallLocalServer}
-                disabled={isInstalling || !isLocalMcpEnabled}
-                size="sm"
-                variant="outline"
-                className="w-full"
-              >
-                <User className="mr-2 h-4 w-4" />
-                Connect
-              </Button>
+              <div className="w-full">
+                <Button
+                  onClick={onInstallLocalServer}
+                  disabled={isInstalling || !isLocalMcpEnabled}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  Connect
+                </Button>
+              </div>
             </TooltipTrigger>
             <TooltipContent>
               <p>

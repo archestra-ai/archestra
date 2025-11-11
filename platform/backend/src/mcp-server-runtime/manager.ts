@@ -27,8 +27,8 @@ const {
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
   private k8sApi?: k8s.CoreV1Api;
-  private k8sAttach?: Attach;
-  private k8sLog?: k8s.Log;
+  private k8sAttach: Attach;
+  private k8sLog: k8s.Log;
   private namespace: string;
   private mcpServerIdToPodMap: Map<string, K8sPod> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
@@ -58,15 +58,15 @@ export class McpServerRuntimeManager {
         this.k8sConfig.loadFromDefault();
       }
 
-      // Only create API clients if config loaded successfully
+      // Only create API client if K8s config loaded successfully
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
-      this.k8sAttach = new Attach(this.k8sConfig);
-      this.k8sLog = new k8s.Log(this.k8sConfig);
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config:");
       this.status = "error";
     }
 
+    this.k8sAttach = new Attach(this.k8sConfig);
+    this.k8sLog = new k8s.Log(this.k8sConfig);
     this.namespace = namespace;
   }
 
@@ -181,7 +181,7 @@ export class McpServerRuntimeManager {
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAttach || !this.k8sLog) {
+    if (!this.k8sApi) {
       throw new Error("Kubernetes API client not initialized");
     }
 

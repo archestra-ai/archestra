@@ -1,7 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus } from "ai";
 import Image from "next/image";
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -53,6 +53,8 @@ export function ChatMessages({
   hideToolCalls = false,
   status,
 }: ChatMessagesProps) {
+  const isStreamingStalled = useStreamingStallDetection(messages, status);
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -238,7 +240,8 @@ export function ChatMessages({
               })}
             </div>
           ))}
-          {status === "submitted" && (
+          {(status === "submitted" ||
+            (status === "streaming" && isStreamingStalled)) && (
             <Message from="assistant">
               <Image
                 src={"/logo.png"}
@@ -254,4 +257,43 @@ export function ChatMessages({
       <ConversationScrollButton />
     </Conversation>
   );
+}
+
+// Custom hook to detect when streaming has stalled (>500ms without updates)
+function useStreamingStallDetection(
+  messages: UIMessage[],
+  status: ChatStatus,
+): boolean {
+  const lastUpdateTimeRef = useRef<number>(Date.now());
+  const [isStreamingStalled, setIsStreamingStalled] = useState(false);
+
+  // Update last update time when messages change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: we need to react to messages change here
+  useEffect(() => {
+    if (status === "streaming") {
+      lastUpdateTimeRef.current = Date.now();
+      setIsStreamingStalled(false);
+    }
+  }, [messages, status]);
+
+  // Check periodically if streaming has stalled
+  useEffect(() => {
+    if (status !== "streaming") {
+      setIsStreamingStalled(false);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const timeSinceLastUpdate = Date.now() - lastUpdateTimeRef.current;
+      if (timeSinceLastUpdate > 1_000) {
+        setIsStreamingStalled(true);
+      } else {
+        setIsStreamingStalled(false);
+      }
+    }, 100); // Check every 100ms
+
+    return () => clearInterval(interval);
+  }, [status]);
+
+  return isStreamingStalled;
 }

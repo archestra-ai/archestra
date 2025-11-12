@@ -381,56 +381,10 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   }
 }
 
-/**
- * Seeds default optimization rules for the default agent
- */
-async function seedOptimizationRules(): Promise<void> {
-  const agent = await AgentModel.getAgentOrCreateDefault();
-
-  // Check if optimization rules already exist for this agent
-  const existingRules = await OptimizationRuleModel.findByAgentIdAndProvider(
-    agent.id,
-    "openai",
-  );
-
-  if (existingRules.length === 0) {
-    // Create content length rule: use gpt-4o-mini for short content
-    await OptimizationRuleModel.create({
-      agentId: agent.id,
-      ruleType: "content_length",
-      conditions: { maxLength: 1000 },
-      provider: "openai",
-      targetModel: "gpt-4o-mini",
-      priority: 10,
-      enabled: true,
-    });
-    logger.info(
-      "✓ Seeded content length optimization rule (gpt-4o-mini for content <= 1000 chars)",
-    );
-
-    // Create tool presence rule: use gpt-4o-mini when no tools are present
-    await OptimizationRuleModel.create({
-      agentId: agent.id,
-      ruleType: "tool_presence",
-      conditions: { hasTools: false },
-      provider: "openai",
-      targetModel: "gpt-4o-mini",
-      priority: 20,
-      enabled: true,
-    });
-    logger.info(
-      "✓ Seeded tool presence optimization rule (gpt-4o-mini when no tools)",
-    );
-  } else {
-    logger.info("✓ Optimization rules already exist, skipping");
-  }
-}
-
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await AgentModel.getAgentOrCreateDefault();
-  await seedOptimizationRules();
 }

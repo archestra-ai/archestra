@@ -718,12 +718,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Extract the actual error message from Anthropic SDK errors using lodash get
       // Anthropic errors have structure: { error: { error: { message: "..." } } }
       const getErrorMessage = (err: unknown): string => {
-        // Log the error structure for debugging
-        fastify.log.info(
-          { errorStructure: JSON.stringify(err, null, 2) },
-          "Error structure for extraction",
-        );
-
         // Try to extract from triple-nested path
         const anthropicMessage = get(err, "error.error.message");
         if (typeof anthropicMessage === "string") {

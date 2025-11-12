@@ -3,6 +3,7 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { get } from "lodash-es";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
@@ -714,29 +715,67 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
-      // Check if we're streaming (headers already sent)
-      if (stream && reply.sent) {
-        // For streaming, send error as SSE event
+      // Extract the actual error message from Anthropic SDK errors using lodash get
+      // Anthropic errors have structure: { error: { error: { message: "..." } } }
+      const getErrorMessage = (err: unknown): string => {
+        // Log the error structure for debugging
+        fastify.log.info(
+          { errorStructure: JSON.stringify(err, null, 2) },
+          "Error structure for extraction",
+        );
+
+        // Try to extract from triple-nested path
+        const anthropicMessage = get(err, "error.error.message");
+        if (typeof anthropicMessage === "string") {
+          fastify.log.info(
+            { extractedMessage: anthropicMessage },
+            "Successfully extracted Anthropic error message",
+          );
+          return anthropicMessage;
+        }
+
+        if (err instanceof Error) {
+          fastify.log.info(
+            { message: err.message },
+            "Using Error.message fallback",
+          );
+          return err.message;
+        }
+        return "Internal server error";
+      };
+
+      const errorMessage = getErrorMessage(error);
+
+      // Check if we're streaming
+      if (stream) {
+        // For streaming responses, send error as SSE event (even if headers not sent yet)
         const errorEvent = {
           type: "error",
           error: {
             type: "api_error",
-            message:
-              error instanceof Error ? error.message : "Internal server error",
+            message: errorMessage,
           },
         };
-        reply.raw.write(
-          `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
-        );
-        reply.raw.end();
+
+        if (reply.sent) {
+          // Headers already sent, write to stream
+          reply.raw.write(
+            `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+          );
+          reply.raw.end();
+        } else {
+          // Headers not sent yet, send as SSE format string with 200 status
+          // (streaming responses need 200 OK, error is in the stream content)
+          const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
+          return reply.status(200).send(sseError);
+        }
         return reply;
       }
 
-      // For non-streaming or if headers not sent yet, send JSON error
+      // For non-streaming, send JSON error
       return reply.status(statusCode).send({
         error: {
-          message:
-            error instanceof Error ? error.message : "Internal server error",
+          message: errorMessage,
           type: "api_error",
         },
       });

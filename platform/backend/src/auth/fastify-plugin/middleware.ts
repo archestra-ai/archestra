@@ -104,14 +104,18 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    if (!routeId) {
+    const requiredPermissions = routeId
+      ? requiredEndpointPermissionsMap[routeId]
+      : undefined;
+
+    if (requiredPermissions === undefined) {
       return {
         success: false,
-        error: new Error("Forbidden, routeId not found"),
+        error: new Error(
+          "Forbidden, the route is not configured in auth middleware and is protected by default",
+        ),
       };
     }
-
-    const requiredPermissions = requiredEndpointPermissionsMap[routeId] ?? {};
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {

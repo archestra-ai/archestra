@@ -1,4 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
+import type { ChatStatus } from "ai";
+import Image from "next/image";
 import { Fragment } from "react";
 import {
   Conversation,
@@ -23,6 +25,7 @@ import {
 interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
+  status: ChatStatus;
 }
 
 // Type guards for tool parts
@@ -48,6 +51,7 @@ function isToolPart(part: any): part is {
 export function ChatMessages({
   messages,
   hideToolCalls = false,
+  status,
 }: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
@@ -234,6 +238,17 @@ export function ChatMessages({
               })}
             </div>
           ))}
+          {status === "submitted" && (
+            <Message from="assistant">
+              <Image
+                src={"/logo.png"}
+                alt="Loading logo"
+                width={40}
+                height={40}
+                className="object-contain h-8 animate-[bounce_700ms_ease_200ms_forwards_infinite]"
+              />
+            </Message>
+          )}
         </div>
       </ConversationContent>
       <ConversationScrollButton />

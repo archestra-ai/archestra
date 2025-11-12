@@ -285,16 +285,11 @@ export default function ChatPage() {
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
           <>
-            <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
-            {status === "streaming" && (
-              <Image
-                src={"/logo.png"}
-                alt="Loading logo"
-                width={40}
-                height={40}
-                className="object-contain h-8 mx-auto mb-4 animate-[bounce_700ms_ease_200ms_forwards_infinite]"
-              />
-            )}
+            <ChatMessages
+              messages={messages}
+              hideToolCalls={hideToolCalls}
+              status={status}
+            />
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgent && Object.keys(groupedTools).length > 0 && (

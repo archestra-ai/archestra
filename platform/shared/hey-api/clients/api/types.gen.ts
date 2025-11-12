@@ -3433,6 +3433,93 @@ export type AssignToolToAgentResponses = {
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
 
+export type BulkAssignToolsData = {
+    body: {
+        assignments: Array<{
+            agentId: string;
+            toolId: string;
+            credentialSourceMcpServerId?: string | null;
+            executionSourceMcpServerId?: string | null;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents/tools/bulk-assign';
+};
+
+export type BulkAssignToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type BulkAssignToolsError = BulkAssignToolsErrors[keyof BulkAssignToolsErrors];
+
+export type BulkAssignToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        succeeded: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
+        failed: Array<{
+            agentId: string;
+            toolId: string;
+            error: string;
+        }>;
+        duplicates: Array<{
+            agentId: string;
+            toolId: string;
+        }>;
+    };
+};
+
+export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
+
 export type GetAgentToolsData = {
     body?: never;
     path: {

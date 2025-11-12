@@ -45,6 +45,10 @@ export function useAssignAgentPrompts() {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "prompts"],
       });
+      // Invalidate general prompts queries to update "Unassigned Prompts" section in chat
+      queryClient.invalidateQueries({
+        queryKey: ["prompts"],
+      });
     },
   });
 }
@@ -65,6 +69,10 @@ export function useDeleteAgentPrompt() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["agents", variables.agentId, "prompts"],
+      });
+      // Invalidate general prompts queries to update "Unassigned Prompts" section in chat
+      queryClient.invalidateQueries({
+        queryKey: ["prompts"],
       });
     },
   });

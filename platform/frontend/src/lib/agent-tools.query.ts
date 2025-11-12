@@ -7,6 +7,7 @@ import {
 
 const {
   assignToolToAgent,
+  bulkAssignTools,
   getAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
@@ -75,6 +76,61 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+    },
+  });
+}
+
+export function useBulkAssignTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assignments,
+      mcpServerId,
+    }: {
+      assignments: Array<{
+        agentId: string;
+        toolId: string;
+        credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
+      }>;
+      mcpServerId?: string | null;
+    }) => {
+      const { data } = await bulkAssignTools({
+        body: { assignments },
+      });
+      if (!data) return null;
+      return { ...data, mcpServerId };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+
+      // Invalidate specific agent tools queries for agents that had successful assignments
+      const agentIds = result.succeeded.map((a) => a.agentId);
+      const uniqueAgentIds = new Set(agentIds);
+      for (const agentId of uniqueAgentIds) {
+        queryClient.invalidateQueries({
+          queryKey: ["agents", agentId, "tools"],
+        });
+      }
+
+      // Invalidate global queries (only once, exact match to prevent nested invalidation)
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+
+      // Invalidate the MCP servers list
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-servers"],
+        exact: true,
+      });
+
+      // Invalidate the specific MCP server's tools if we know which server
+      if (result.mcpServerId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", result.mcpServerId, "tools"],
+        });
+      }
     },
   });
 }

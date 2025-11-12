@@ -148,7 +148,7 @@ jobs:
       - name: Install Playwright browsers
         if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium firefox
+        run: pnpm exec playwright install --with-deps chromium webkit firefox
 
       # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
       # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to

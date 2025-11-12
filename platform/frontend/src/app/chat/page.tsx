@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
+import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import {
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -167,7 +169,7 @@ export default function ChatPage() {
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages, stop } = useChat({
+  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat", // Must match backend route
       credentials: "include", // Send cookies for authentication
@@ -284,6 +286,15 @@ export default function ChatPage() {
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
           <>
+            {error && (
+              <div className="border-b p-4 bg-destructive/5">
+                <Alert variant="destructive" className="max-w-3xl mx-auto">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              </div>
+            )}
             <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
@@ -347,7 +358,10 @@ export default function ChatPage() {
                   </PromptInputBody>
                   <PromptInputToolbar>
                     <PromptInputTools />
-                    <PromptInputSubmit status={status} onStop={stop} />
+                    <PromptInputSubmit
+                      status={status === "error" ? "ready" : status}
+                      onStop={stop}
+                    />
                   </PromptInputToolbar>
                 </PromptInput>
               </div>

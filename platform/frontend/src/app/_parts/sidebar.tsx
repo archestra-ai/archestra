@@ -50,11 +50,11 @@ interface MenuItem {
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   return [
-    // {
-    //   title: "How security works",
-    //   url: "/test-agent",
-    //   icon: Info,
-    // },
+    {
+      title: "How security works",
+      url: "/test-agent",
+      icon: Info,
+    },
     ...(isAuthenticated
       ? [
           {

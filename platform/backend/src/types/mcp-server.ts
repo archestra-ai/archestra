@@ -20,6 +20,7 @@ export const SelectMcpServerSchema = createSelectSchema(
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
   ownerEmail: z.string().nullable().optional(),
+  catalogName: z.string().nullable().optional(),
   teams: z.array(z.string()).optional(),
   users: z.array(z.string()).optional(),
   userDetails: z

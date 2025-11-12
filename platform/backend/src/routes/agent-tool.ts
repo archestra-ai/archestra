@@ -579,7 +579,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * Assigns a single tool to a single agent with validation.
  * Returns null on success, "duplicate" if already exists, or an error object if validation fails.
  */
-async function assignToolToAgent(
+export async function assignToolToAgent(
   agentId: string,
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,

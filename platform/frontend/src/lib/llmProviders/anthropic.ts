@@ -12,7 +12,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
       interaction.request as archestraApiTypes.AnthropicMessagesRequest;
     this.response =
       interaction.response as archestraApiTypes.AnthropicMessagesResponse;
-    this.modelName = this.request.model;
+    this.modelName = interaction.model ?? this.request.model;
   }
 
   isLastMessageToolCall(): boolean {

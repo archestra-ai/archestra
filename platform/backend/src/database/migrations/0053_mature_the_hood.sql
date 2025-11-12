@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "consider_context_untrusted" boolean DEFAULT false NOT NULL;

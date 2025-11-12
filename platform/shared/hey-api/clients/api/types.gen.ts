@@ -2377,6 +2377,8 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
+            optimizeCost: boolean;
+            considerContextUntrusted: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2430,6 +2432,8 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        optimizeCost?: boolean;
+        considerContextUntrusted?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2502,6 +2506,8 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2607,6 +2613,8 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2712,6 +2720,8 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2889,6 +2899,8 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2933,6 +2945,8 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
+        optimizeCost?: boolean;
+        considerContextUntrusted?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3007,6 +3021,8 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
+        optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -6532,6 +6548,8 @@ export type GetInteractionsResponses = {
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -6542,6 +6560,8 @@ export type GetInteractionsResponses = {
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -6552,6 +6572,8 @@ export type GetInteractionsResponses = {
             model: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -6639,6 +6661,8 @@ export type GetInteractionResponses = {
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -6649,6 +6673,8 @@ export type GetInteractionResponses = {
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -6659,6 +6685,8 @@ export type GetInteractionResponses = {
         model: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
         createdAt: string;
     };
 };
@@ -10576,6 +10604,155 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetOptimizationRulesData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/optimization-rules';
+};
+
+export type GetOptimizationRulesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string;
+        ruleType: string;
+        conditions: unknown;
+        provider: string;
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof GetOptimizationRulesResponses];
+
+export type CreateOptimizationRuleData = {
+    body: {
+        ruleType: string;
+        conditions: {
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        };
+        provider: string;
+        targetModel: string;
+        priority?: number;
+        enabled?: boolean;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/optimization-rules';
+};
+
+export type CreateOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    201: {
+        id: string;
+        agentId: string;
+        ruleType: string;
+        conditions: unknown;
+        provider: string;
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateOptimizationRuleResponse = CreateOptimizationRuleResponses[keyof CreateOptimizationRuleResponses];
+
+export type DeleteOptimizationRuleData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type DeleteOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type DeleteOptimizationRuleError = DeleteOptimizationRuleErrors[keyof DeleteOptimizationRuleErrors];
+
+export type DeleteOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    204: null;
+};
+
+export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[keyof DeleteOptimizationRuleResponses];
+
+export type UpdateOptimizationRuleData = {
+    body?: {
+        ruleType?: string;
+        conditions?: {
+            maxLength: number;
+        } | {
+            hasTools: boolean;
+        };
+        provider?: string;
+        targetModel?: string;
+        priority?: number;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/optimization-rules/{id}';
+};
+
+export type UpdateOptimizationRuleErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        message: string;
+    };
+};
+
+export type UpdateOptimizationRuleError = UpdateOptimizationRuleErrors[keyof UpdateOptimizationRuleErrors];
+
+export type UpdateOptimizationRuleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        ruleType: string;
+        conditions: unknown;
+        provider: string;
+        targetModel: string;
+        priority: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateOptimizationRuleResponse = UpdateOptimizationRuleResponses[keyof UpdateOptimizationRuleResponses];
 
 export type GetRolesData = {
     body?: never;

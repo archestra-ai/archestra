@@ -9,6 +9,7 @@ export const getAgentIdFromRequest = async (
   (await AgentModel.getAgentOrCreateDefault(userAgentHeader)).id;
 
 export * as adapters from "./adapters";
+export * as costOptimization from "./cost-optimization";
 export * as toolInvocation from "./tool-invocation";
 export * as tools from "./tools";
 export * as tracing from "./tracing";

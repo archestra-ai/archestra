@@ -55,11 +55,16 @@ class McpServerModel {
       .select({
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
+        catalogName: schema.internalMcpCatalogTable.name,
       })
       .from(schema.mcpServersTable)
       .leftJoin(
         schema.usersTable,
         eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .$dynamic();
 
@@ -101,6 +106,7 @@ class McpServerModel {
         return {
           ...result.server,
           ownerEmail: result.ownerEmail,
+          catalogName: result.catalogName,
           teams: teamDetails.map((t) => t.teamId),
           users: userDetails.map((u) => u.userId),
           userDetails,

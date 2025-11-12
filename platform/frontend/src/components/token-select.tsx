@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -49,6 +50,18 @@ export function TokenSelect({
   const userTokens = mcpServers?.filter(
     (server) => server.authType === "personal",
   );
+
+  // Auto-select if there's only one token available
+  useEffect(() => {
+    if (!mcpServers || isLoading || value || agentIds.length === 0) return;
+
+    const allTokens = mcpServers?.filter(
+      (server) => server.authType === "team" || server.authType === "personal",
+    );
+    if (allTokens.length === 1) {
+      onValueChange(allTokens[0].id);
+    }
+  }, [mcpServers, agentIds, isLoading, value, onValueChange]);
 
   return (
     <Select

@@ -20,9 +20,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             z.object({
               id: z.string(),
               agentId: z.string(),
-              ruleType: z.enum(["content_length", "tool_presence"]),
+              ruleType: z.string(),
               conditions: z.unknown(),
-              provider: z.enum(["anthropic", "openai"]),
+              provider: z.string(),
               targetModel: z.string(),
               priority: z.number(),
               enabled: z.boolean(),
@@ -54,12 +54,12 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: z.string().uuid(),
         }),
         body: z.object({
-          ruleType: z.enum(["content_length", "tool_presence"]),
+          ruleType: z.string().min(1),
           conditions: z.union([
             z.object({ maxLength: z.number().int().positive() }),
             z.object({ hasTools: z.boolean() }),
           ]),
-          provider: z.enum(["anthropic", "openai"]),
+          provider: z.string().min(1),
           targetModel: z.string().min(1),
           priority: z.number().int().default(0),
           enabled: z.boolean().default(true),
@@ -68,9 +68,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           201: z.object({
             id: z.string(),
             agentId: z.string(),
-            ruleType: z.enum(["content_length", "tool_presence"]),
+            ruleType: z.string().min(1),
             conditions: z.unknown(),
-            provider: z.enum(["anthropic", "openai"]),
+            provider: z.string().min(1),
             targetModel: z.string(),
             priority: z.number(),
             enabled: z.boolean(),
@@ -111,14 +111,14 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: z.string().uuid(),
         }),
         body: z.object({
-          ruleType: z.enum(["content_length", "tool_presence"]).optional(),
+          ruleType: z.string().min(1).optional(),
           conditions: z
             .union([
               z.object({ maxLength: z.number().int().positive() }),
               z.object({ hasTools: z.boolean() }),
             ])
             .optional(),
-          provider: z.enum(["anthropic", "openai"]).optional(),
+          provider: z.string().min(1).optional(),
           targetModel: z.string().min(1).optional(),
           priority: z.number().int().optional(),
           enabled: z.boolean().optional(),
@@ -127,9 +127,9 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.object({
             id: z.string(),
             agentId: z.string(),
-            ruleType: z.enum(["content_length", "tool_presence"]),
+            ruleType: z.string().min(1),
             conditions: z.unknown(),
-            provider: z.enum(["anthropic", "openai"]),
+            provider: z.string().min(1),
             targetModel: z.string(),
             priority: z.number(),
             enabled: z.boolean(),

@@ -10613,9 +10613,9 @@ export type GetOptimizationRulesResponses = {
     200: Array<{
         id: string;
         agentId: string;
-        ruleType: 'content_length' | 'tool_presence';
+        ruleType: string;
         conditions: unknown;
-        provider: 'anthropic' | 'openai';
+        provider: string;
         targetModel: string;
         priority: number;
         enabled: boolean;
@@ -10628,13 +10628,13 @@ export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof G
 
 export type CreateOptimizationRuleData = {
     body: {
-        ruleType: 'content_length' | 'tool_presence';
+        ruleType: string;
         conditions: {
             maxLength: number;
         } | {
             hasTools: boolean;
         };
-        provider: 'anthropic' | 'openai';
+        provider: string;
         targetModel: string;
         priority?: number;
         enabled?: boolean;
@@ -10653,9 +10653,9 @@ export type CreateOptimizationRuleResponses = {
     201: {
         id: string;
         agentId: string;
-        ruleType: 'content_length' | 'tool_presence';
+        ruleType: string;
         conditions: unknown;
-        provider: 'anthropic' | 'openai';
+        provider: string;
         targetModel: string;
         priority: number;
         enabled: boolean;
@@ -10697,13 +10697,13 @@ export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[key
 
 export type UpdateOptimizationRuleData = {
     body?: {
-        ruleType?: 'content_length' | 'tool_presence';
+        ruleType?: string;
         conditions?: {
             maxLength: number;
         } | {
             hasTools: boolean;
         };
-        provider?: 'anthropic' | 'openai';
+        provider?: string;
         targetModel?: string;
         priority?: number;
         enabled?: boolean;
@@ -10733,9 +10733,9 @@ export type UpdateOptimizationRuleResponses = {
     200: {
         id: string;
         agentId: string;
-        ruleType: 'content_length' | 'tool_presence';
+        ruleType: string;
         conditions: unknown;
-        provider: 'anthropic' | 'openai';
+        provider: string;
         targetModel: string;
         priority: number;
         enabled: boolean;

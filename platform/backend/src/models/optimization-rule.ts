@@ -10,8 +10,9 @@ import type {
 export type OptimizationRule = typeof optimizationRulesTable.$inferSelect;
 export type NewOptimizationRule = typeof optimizationRulesTable.$inferInsert;
 
-export type OptimizationRuleType = "content_length" | "tool_presence";
-export type LlmProvider = "anthropic" | "openai";
+// Allow any string for rule type and provider to support future types without migration
+export type OptimizationRuleType = string;
+export type LlmProvider = string;
 
 class OptimizationRuleModel {
   static async create(data: {

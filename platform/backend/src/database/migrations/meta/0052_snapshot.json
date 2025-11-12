@@ -1,5 +1,5 @@
 {
-  "id": "6e25fdfa-7a71-41df-8931-bfac64232b9f",
+  "id": "c2da55cc-baef-49fe-8921-c63d52f955b8",
   "prevId": "f0f49c4e-b4f6-4088-aaca-53dd4b21a872",
   "version": "7",
   "dialect": "postgresql",
@@ -2175,8 +2175,7 @@
         },
         "rule_type": {
           "name": "rule_type",
-          "type": "optimization_rule_type",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -2188,8 +2187,7 @@
         },
         "provider": {
           "name": "provider",
-          "type": "llm_provider",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -3357,24 +3355,7 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {
-    "public.llm_provider": {
-      "name": "llm_provider",
-      "schema": "public",
-      "values": [
-        "anthropic",
-        "openai"
-      ]
-    },
-    "public.optimization_rule_type": {
-      "name": "optimization_rule_type",
-      "schema": "public",
-      "values": [
-        "content_length",
-        "tool_presence"
-      ]
-    }
-  },
+  "enums": {},
   "schemas": {},
   "sequences": {},
   "roles": {},

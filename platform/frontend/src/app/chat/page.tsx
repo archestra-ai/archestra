@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -285,6 +286,15 @@ export default function ChatPage() {
         ) : (
           <>
             <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
+            {status === "streaming" && (
+              <Image
+                src={"/logo.png"}
+                alt="Loading logo"
+                width={40}
+                height={40}
+                className="object-contain h-8 mx-auto mb-4 animate-[bounce_700ms_ease_200ms_forwards_infinite]"
+              />
+            )}
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgent && Object.keys(groupedTools).length > 0 && (

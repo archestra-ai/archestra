@@ -128,7 +128,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), agent-based chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), agent-based chat with MCP tools, comprehensive built-in Archestra MCP tools
 
 **Workspaces**:
 
@@ -292,19 +292,16 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Archestra MCP Server**:
 
 - Built-in tools automatically injected into all agents
-- Tools prefixed with `archestra__` to avoid conflicts
+- Tools prefixed with `archestra__` to avoid conflicts  
 - Available tools:
-  - `archestra__whoami`: Returns agent name and ID
-  - `archestra__search_private_mcp_registry`: Search internal MCP catalog
-  - `archestra__create_agent`: Create new agents with optional teams and labels
-  - `archestra__create_limit`: Create cost/usage limits for organization, team, or agent
-  - `archestra__get_limits`: Retrieve limits with optional filtering
-  - `archestra__update_limit`: Update existing limit values
-  - `archestra__delete_limit`: Delete limits by ID
-  - `archestra__get_agent_token_usage`: Get total token usage statistics for agents
-- Planned tool (temporarily disabled):
-  - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
+  - Agent management: `whoami`, `create_agent`, `get_agent`
+  - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_agent_token_usage`
+  - Policies: `get/create/update/delete_tool_invocation_policy`, `get/create/update/delete_trusted_data_policy`
+  - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
+  - Tool assignment: `bulk_assign_tools_to_agents`
+  - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
+- Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
 
 **Testing**:
 

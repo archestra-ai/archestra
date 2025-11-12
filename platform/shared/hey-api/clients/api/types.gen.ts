@@ -2378,6 +2378,7 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             optimizeCost: boolean;
+            considerContextUntrusted: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2432,6 +2433,7 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         optimizeCost?: boolean;
+        considerContextUntrusted?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2505,6 +2507,7 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2611,6 +2614,7 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2717,6 +2721,7 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2895,6 +2900,7 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2940,6 +2946,7 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         optimizeCost?: boolean;
+        considerContextUntrusted?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3015,6 +3022,7 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         optimizeCost: boolean;
+        considerContextUntrusted: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{

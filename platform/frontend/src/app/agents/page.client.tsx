@@ -489,7 +489,7 @@ function Agents() {
                         labels: agent.labels || [],
                         optimizeCost: agent.optimizeCost,
                         considerContextUntrusted:
-                        agent.considerContextUntrusted,
+                          agent.considerContextUntrusted,
                       });
                     }}
                   >
@@ -736,7 +736,14 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedTeamIds, labels, optimizeCost, considerContextUntrusted, createAgent],
+    [
+      name,
+      assignedTeamIds,
+      labels,
+      optimizeCost,
+      considerContextUntrusted,
+      createAgent,
+    ],
   );
 
   const handleClose = useCallback(() => {
@@ -787,7 +794,7 @@ function CreateAgentDialog({
                   </p>
                   <Select value={selectedTeamId} onValueChange={handleAddTeam}>
                     <SelectTrigger id="assign-team">
-                      <SelectValue placeholder="Select a team to assign"/>
+                      <SelectValue placeholder="Select a team to assign" />
                     </SelectTrigger>
                     <SelectContent>
                       {teams?.length === 0 ? (
@@ -823,7 +830,7 @@ function CreateAgentDialog({
                               onClick={() => handleRemoveTeam(teamId)}
                               className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                             >
-                              <X className="h-3 w-3"/>
+                              <X className="h-3 w-3" />
                             </button>
                           </Badge>
                         );
@@ -902,7 +909,7 @@ function CreateAgentDialog({
               </DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto py-4 flex-1">
-              <AgentConnectionTabs agentId={createdAgent.id}/>
+              <AgentConnectionTabs agentId={createdAgent.id} />
             </div>
             <DialogFooter className="shrink-0">
               <Button
@@ -1064,7 +1071,7 @@ function EditAgentDialog({
               </p>
               <Select value={selectedTeamId} onValueChange={handleAddTeam}>
                 <SelectTrigger id="assign-team">
-                  <SelectValue placeholder="Select a team to assign"/>
+                  <SelectValue placeholder="Select a team to assign" />
                 </SelectTrigger>
                 <SelectContent>
                   {teams?.length === 0 ? (
@@ -1100,7 +1107,7 @@ function EditAgentDialog({
                           onClick={() => handleRemoveTeam(teamId)}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
-                          <X className="h-3 w-3"/>
+                          <X className="h-3 w-3" />
                         </button>
                       </Badge>
                     );
@@ -1177,7 +1184,7 @@ function EditAgentDialog({
   );
 }
 
-function AgentConnectionTabs({agentId}: { agentId: string }) {
+function AgentConnectionTabs({ agentId }: { agentId: string }) {
   return (
     <div className="grid grid-cols-2 gap-6">
       <div className="space-y-3">

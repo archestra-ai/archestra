@@ -31,6 +31,7 @@ import { McpConnectionInstructions } from "@/components/mcp-connection-instructi
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -264,6 +265,7 @@ function Agents() {
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    considerContextUntrusted: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -483,6 +485,8 @@ function Agents() {
                         name: agent.name,
                         teams: agent.teams || [],
                         labels: agent.labels || [],
+                        considerContextUntrusted:
+                          agent.considerContextUntrusted,
                       });
                     }}
                   >
@@ -652,6 +656,8 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<AgentLabel[]>([]);
+  const [considerContextUntrusted, setConsiderContextUntrusted] =
+    useState(false);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -714,6 +720,7 @@ function CreateAgentDialog({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
+          considerContextUntrusted,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -724,7 +731,7 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedTeamIds, labels, createAgent],
+    [name, assignedTeamIds, labels, createAgent, considerContextUntrusted],
   );
 
   const handleClose = useCallback(() => {
@@ -733,6 +740,7 @@ function CreateAgentDialog({
     setLabels([]);
     setSelectedTeamId("");
     setCreatedAgent(null);
+    setConsiderContextUntrusted(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -828,6 +836,28 @@ function CreateAgentDialog({
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
                 />
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="consider-context-untrusted"
+                    checked={considerContextUntrusted}
+                    onCheckedChange={(checked) =>
+                      setConsiderContextUntrusted(checked === true)
+                    }
+                  />
+                  <div className="grid gap-1">
+                    <Label
+                      htmlFor="consider-context-untrusted"
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      Treat user context as untrusted
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable when user prompts may contain untrusted and
+                      sensitive data.
+                    </p>
+                  </div>
+                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -875,6 +905,7 @@ function EditAgentDialog({
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    considerContextUntrusted: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -884,6 +915,9 @@ function EditAgentDialog({
     agent.teams || [],
   );
   const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
+  const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
+    agent.considerContextUntrusted,
+  );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -932,6 +966,7 @@ function EditAgentDialog({
             name: name.trim(),
             teams: assignedTeamIds,
             labels: updatedLabels,
+            considerContextUntrusted,
           },
         });
         toast.success("Agent updated successfully");
@@ -940,7 +975,15 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedTeamIds, labels, updateAgent, onOpenChange],
+    [
+      agent.id,
+      name,
+      assignedTeamIds,
+      labels,
+      updateAgent,
+      onOpenChange,
+      considerContextUntrusted,
+    ],
   );
 
   const getUnassignedTeams = useCallback(() => {
@@ -1045,6 +1088,28 @@ function EditAgentDialog({
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
             />
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-consider-context-untrusted"
+                checked={considerContextUntrusted}
+                onCheckedChange={(checked) =>
+                  setConsiderContextUntrusted(checked === true)
+                }
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="edit-consider-context-untrusted"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Treat user context as untrusted
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable when user prompts may contain untrusted and sensitive
+                  data.
+                </p>
+              </div>
+            </div>
           </div>
           <DialogFooter className="mt-4">
             <Button

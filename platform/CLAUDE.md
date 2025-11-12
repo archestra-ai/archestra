@@ -297,10 +297,11 @@ Tool invocation policies and trusted data policies are still enforced by the pro
   - Agent management: `whoami`, `create_agent`, `get_agent`
   - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_agent_token_usage`
   - Policies: `get/create/update/delete_tool_invocation_policy`, `get/create/update/delete_trusted_data_policy`
-  - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`, `create_mcp_server_installation_request`
+  - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
   - Tool assignment: `bulk_assign_tools_to_agents`
   - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
+- Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
 
 **Testing**:
 

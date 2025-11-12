@@ -15,6 +15,8 @@ export const createClientConfig: CreateClientConfig = (config) => {
     ...config,
     baseUrl: isServer ? backendUrl : "",
     credentials: "include",
-    throwOnError: true,
+    // Set to false to let React Query handle errors gracefully instead of throwing exceptions
+    // that crash the app (especially important for 403 errors during auth checks)
+    throwOnError: false,
   };
 };

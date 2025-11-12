@@ -20,7 +20,6 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
   Sidebar,
@@ -51,11 +50,11 @@ interface MenuItem {
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   return [
-    {
-      title: "How security works",
-      url: "/test-agent",
-      icon: Info,
-    },
+    // {
+    //   title: "How security works",
+    //   url: "/test-agent",
+    //   icon: Info,
+    // },
     ...(isAuthenticated
       ? [
           {
@@ -127,7 +126,7 @@ export function AppSidebar() {
   };
 
   const logoToShow = logo ? (
-    <div className="relative flex justify-center">
+    <div className="flex justify-center">
       <div className="flex flex-col items-center gap-1">
         <Image
           src={logo || "/logo.png"}
@@ -140,17 +139,11 @@ export function AppSidebar() {
           Powered by Archestra
         </p>
       </div>
-      <div className="absolute right-0 top-0">
-        <ColorModeToggle />
-      </div>
     </div>
   ) : (
-    <div className="flex items-center justify-between px-2">
-      <div className="flex items-center gap-2">
-        <Image src="/logo.png" alt="Logo" width={28} height={28} />
-        <span className="text-base font-semibold">Archestra.AI</span>
-      </div>
-      <ColorModeToggle />
+    <div className="flex items-center gap-2 px-2">
+      <Image src="/logo.png" alt="Logo" width={28} height={28} />
+      <span className="text-base font-semibold">Archestra.AI</span>
     </div>
   );
 

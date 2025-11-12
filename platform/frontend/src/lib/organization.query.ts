@@ -228,6 +228,7 @@ export function useOrganization(enabled = true) {
       const { data } = await archestraApiSdk.getOrganization();
       return data;
     },
+    // Only fetch when user is authenticated to prevent 403 errors during initial auth check
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes

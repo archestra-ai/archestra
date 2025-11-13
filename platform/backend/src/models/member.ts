@@ -54,6 +54,11 @@ class MemberModel {
 
     return deleted[0];
   }
+
+  static async isMemberAdmin(userId: string): Promise<boolean> {
+    const member = await MemberModel.getByUserId(userId);
+    return member?.role === "admin";
+  }
 }
 
 export default MemberModel;

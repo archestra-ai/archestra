@@ -8,6 +8,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  MemberModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -497,31 +498,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Admin personal tokens can be used with any agent
             if (server.authType === "personal" && server.ownerId) {
               const ownerId = server.ownerId;
-              // const owner = await UserModel.getById(ownerId);
 
-              /**
-               * NOTE: I'm doubtful this will work as intended, right now better-auth's
-               * hasPermissions API requires passing in request headers to do the authz check
-               * HOWEVER, in this particular context, we are looking at a user which may
-               * not necessarily be the user identified by the request.headers...
-               */
-              const { success: isAgentAdmin } = await hasPermission(
-                { agent: ["admin"] },
-                request.headers,
-              );
+              // Check if the token OWNER is an admin (not the requesting user)
+              const isOwnerAdmin = await MemberModel.isMemberAdmin(ownerId);
 
-              if (isAgentAdmin) {
+              if (isOwnerAdmin) {
                 return { server, valid: true };
               }
 
               // Member personal tokens: check if owner belongs to any of the agents' teams
               const hasAccessResults = await Promise.all(
                 agentIds.map((agentId) =>
-                  /**
-                   * NOTE: this is granting too much access here.. we should refactor this,
-                   * see the comment above the hasPermission call above for more context..
-                   */
-                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, true),
+                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, false),
                 ),
               );
               const hasAccessToAny = hasAccessResults.some(
@@ -748,27 +736,29 @@ async function validateCredentialSource(
     }
   } else if (mcpServer.authType === "personal") {
     /**
-     * For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent
-     * is assigned to
-     *
-     * NOTE: this is granting too much access here.. we should refactor this,
-     * see the comment above the hasPermission call above for more context..
+     * For personal tokens: admin tokens can be used with any agent,
+     * member tokens require team membership overlap
      */
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      owner.id,
-      agentId,
-      true,
-    );
+    const isOwnerAdmin = await MemberModel.isMemberAdmin(owner.id);
 
-    if (!hasAccess) {
-      return {
-        status: 400,
-        error: {
-          message:
-            "The selected personal token must belong to a user who is a member of a team that this agent is assigned to",
-          type: "validation_error",
-        },
-      };
+    if (!isOwnerAdmin) {
+      // For non-admin owners: check if owner belongs to a team that the agent is assigned to
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
+        owner.id,
+        agentId,
+        false,
+      );
+
+      if (!hasAccess) {
+        return {
+          status: 400,
+          error: {
+            message:
+              "The selected personal token must belong to a user who is a member of a team that this agent is assigned to",
+            type: "validation_error",
+          },
+        };
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { get } from "lodash-es";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";
@@ -66,6 +67,13 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     isContextTrusted: boolean,
   ): Promise<EvaluationResult> {
+    if (isArchestraMcpServerTool(toolName)) {
+      return {
+        isAllowed: true,
+        reason: "",
+      };
+    }
+
     /**
      * Get policies assigned to this agent that also match the tool name,
      * along with the tool's configuration

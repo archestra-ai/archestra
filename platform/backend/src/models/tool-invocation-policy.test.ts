@@ -561,4 +561,53 @@ describe("ToolInvocationPolicyModel", () => {
       });
     });
   });
+
+  describe("Archestra MCP server tools", () => {
+    test("always allows Archestra MCP server tools regardless of policies or context", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      // Ensure Archestra tools are assigned to the agent
+      await ToolModel.assignArchestraToolsToAgent(agent.id);
+
+      // Get an Archestra tool name (they start with "archestra__")
+      const archestraToolName = "archestra__whoami";
+
+      // Test with trusted context
+      const trustedResult = await ToolInvocationPolicyModel.evaluate(
+        agent.id,
+        archestraToolName,
+        { any: "anything" }, // Should match the blocking policy
+        true,
+      );
+
+      expect(trustedResult.isAllowed).toBe(true);
+      expect(trustedResult.reason).toBe("");
+
+      // Test with untrusted context
+      const untrustedResult = await ToolInvocationPolicyModel.evaluate(
+        agent.id,
+        archestraToolName,
+        { any: "anything" }, // Should match the blocking policy
+        false,
+      );
+
+      expect(untrustedResult.isAllowed).toBe(true);
+      expect(untrustedResult.reason).toBe("");
+    });
+
+    test("correctly identifies Archestra tools by name prefix", () => {
+      expect(
+        ToolInvocationPolicyModel.isArchestraTool("archestra__whoami"),
+      ).toBe(true);
+      expect(
+        ToolInvocationPolicyModel.isArchestraTool("archestra__create_agent"),
+      ).toBe(true);
+
+      expect(
+        ToolInvocationPolicyModel.isArchestraTool("mcp_server__tool"),
+      ).toBe(false);
+    });
+  });
 });

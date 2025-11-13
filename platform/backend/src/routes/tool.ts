@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import { hasPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import { constructResponseSchema, ExtendedSelectToolSchema } from "@/types";
@@ -23,7 +24,12 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers,
         );
 
-        return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
+        const tools = await ToolModel.findAll(user.id, isAgentAdmin);
+        const filteredTools = tools.filter(
+          (tool) => !isArchestraMcpServerTool(tool.name),
+        );
+
+        return reply.send(filteredTools);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

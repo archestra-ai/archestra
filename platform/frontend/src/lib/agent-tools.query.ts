@@ -16,14 +16,47 @@ const {
 
 export function useAllAgentTools({
   initialData,
+  pagination,
+  sorting,
+  filters,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
+  pagination?: {
+    limit?: number;
+    offset?: number;
+  };
+  sorting?: {
+    sortBy?:
+      | "name"
+      | "agent"
+      | "origin"
+      | "createdAt"
+      | "allowUsageWhenUntrustedDataIsPresent";
+    sortDirection?: "asc" | "desc";
+  };
+  filters?: {
+    search?: string;
+    agentId?: string;
+    origin?: string;
+    credentialSourceMcpServerId?: string;
+  };
 }) {
   return useSuspenseQuery({
-    queryKey: ["agent-tools"],
+    queryKey: ["agent-tools", pagination, sorting, filters],
     queryFn: async () => {
-      const result = await getAllAgentTools();
-      return result.data ?? [];
+      const result = await getAllAgentTools({
+        query: {
+          limit: pagination?.limit,
+          offset: pagination?.offset,
+          sortBy: sorting?.sortBy,
+          sortDirection: sorting?.sortDirection,
+          search: filters?.search,
+          agentId: filters?.agentId,
+          origin: filters?.origin,
+          credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+        },
+      });
+      return result.data ?? { data: [], pagination: { currentPage: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false } };
     },
     initialData,
   });

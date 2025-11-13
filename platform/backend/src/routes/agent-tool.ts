@@ -13,6 +13,8 @@ import {
 } from "@/models";
 import {
   constructResponseSchema,
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
   SelectAgentToolSchema,
   SelectToolSchema,
   UpdateAgentToolSchema,
@@ -25,9 +27,30 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAllAgentTools,
-        description: "Get all agent-tool relationships with details",
+        description:
+          "Get all agent-tool relationships with pagination, sorting, and filtering",
         tags: ["Agent Tools"],
-        response: constructResponseSchema(z.array(SelectAgentToolSchema)),
+        querystring: z
+          .object({
+            sortBy: z
+              .enum([
+                "name",
+                "agent",
+                "origin",
+                "createdAt",
+                "allowUsageWhenUntrustedDataIsPresent",
+              ])
+              .optional(),
+            sortDirection: z.enum(["asc", "desc"]).optional(),
+            search: z.string().optional(),
+            agentId: UuidIdSchema.optional(),
+            origin: z.string().optional(), // Can be "llm-proxy" or a catalogId
+            credentialSourceMcpServerId: UuidIdSchema.optional(),
+          })
+          .merge(PaginationQuerySchema),
+        response: {
+          200: createPaginatedResponseSchema(SelectAgentToolSchema),
+        },
       },
     },
     async (request, reply) => {
@@ -36,9 +59,27 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { agent: ["admin"] },
           request.headers,
         );
-        return reply.send(
-          await AgentToolModel.findAll(request.user.id, isAgentAdmin),
+
+        const {
+          limit,
+          offset,
+          sortBy,
+          sortDirection,
+          search,
+          agentId,
+          origin,
+          credentialSourceMcpServerId,
+        } = request.query;
+
+        const result = await AgentToolModel.findAllPaginated(
+          { limit, offset },
+          { sortBy, sortDirection },
+          { search, agentId, origin, credentialSourceMcpServerId },
+          request.user.id,
+          isAgentAdmin,
         );
+
+        return reply.send(result);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

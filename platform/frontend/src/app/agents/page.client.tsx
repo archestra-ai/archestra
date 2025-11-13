@@ -6,19 +6,21 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ChevronDown,
   ChevronUp,
-  MessageCircle,
-  MoreHorizontal,
-  Pencil,
-  Plug,
   Plus,
   Search,
   Tag,
-  Trash2,
   Wrench,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -29,6 +31,7 @@ import {
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,14 +44,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -74,6 +69,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { formatDate } from "@/lib/utils";
+import { AgentActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 import { ChatConfigDialog } from "./chat-config-dialog";
 
@@ -400,7 +396,21 @@ function Agents() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => <div>{row.original.tools.length}</div>,
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.tools.length}
+            <ActionButton
+              tooltip="Assign Tools"
+              aria-label="Assign Tools"
+              onClick={() => setAssigningToolsAgent(agent)}
+            >
+              <Wrench className="h-4 w-4" />
+            </ActionButton>
+          </div>
+        );
+      },
     },
     {
       id: "team",
@@ -421,103 +431,19 @@ function Agents() {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
+      size: 176,
+      enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <div className="flex items-center gap-0 border rounded-md overflow-hidden w-fit">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConnectingAgent({
-                        id: agent.id,
-                        name: agent.name,
-                      });
-                    }}
-                    className="rounded-none border-r h-8 w-8"
-                  >
-                    <Plug className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Connect</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="More Options"
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded-none h-8 w-8"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAssigningToolsAgent(agent);
-                    }}
-                  >
-                    <Wrench className="h-4 w-4" />
-                    Assign Tools
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setChatConfigAgent(agent);
-                    }}
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Prompts
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingAgent({
-                        id: agent.id,
-                        name: agent.name,
-                        teams: agent.teams || [],
-                        labels: agent.labels || [],
-                        optimizeCost: agent.optimizeCost,
-                        considerContextUntrusted:
-                          agent.considerContextUntrusted,
-                      });
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                {userCanDeleteAgents && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingAgentId(agent.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <AgentActions
+            agent={agent}
+            userCanDeleteAgents={userCanDeleteAgents || false}
+            onConnect={setConnectingAgent}
+            onConfigureChat={setChatConfigAgent}
+            onEdit={setEditingAgent}
+            onDelete={setDeletingAgentId}
+          />
         );
       },
     },

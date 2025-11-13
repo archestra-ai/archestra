@@ -9,10 +9,18 @@ import {
   Plus,
   Search,
   Tag,
+  Wrench,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -23,6 +31,7 @@ import {
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,6 +57,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
@@ -386,7 +396,20 @@ function Agents() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => <div>{row.original.tools.length}</div>,
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.tools.length}
+            <ActionButton
+              tooltip="Assign Tools"
+              onClick={() => setAssigningToolsAgent(agent)}
+            >
+              <Wrench className="h-4 w-4" />
+            </ActionButton>
+          </div>
+        );
+      },
     },
     {
       id: "team",
@@ -416,7 +439,6 @@ function Agents() {
             agent={agent}
             userCanDeleteAgents={userCanDeleteAgents || false}
             onConnect={setConnectingAgent}
-            onAssignTools={setAssigningToolsAgent}
             onConfigureChat={setChatConfigAgent}
             onEdit={setEditingAgent}
             onDelete={setDeletingAgentId}

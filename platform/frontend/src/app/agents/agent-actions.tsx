@@ -1,9 +1,8 @@
 import { E2eTestId } from "@shared";
-import { MessageCircle, Pencil, Plug, Trash2, Wrench } from "lucide-react";
-import type { ReactNode } from "react";
-import type { AgentLabel } from "@/components/agent-labels";
-import { Button } from "@/components/ui/button";
+import { MessageCircle, Pencil, Plug, Trash2 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import type { useAgentsPaginated } from "@/lib/agent.query";
 import {
   Tooltip,
   TooltipContent,
@@ -56,39 +55,32 @@ type Agent = {
   considerContextUntrusted: boolean;
   tools: Array<{ id: string }>;
 }
+// Infer Agent type from the API response
+type Agent = NonNullable<
+  ReturnType<typeof useAgentsPaginated>["data"]
+>["data"][number];
 
 type AgentActionsProps = {
   agent: Agent;
   userCanDeleteAgents: boolean;
-  onConnect: (agent: Pick<Agent, 'id' | 'name'>) => void;
-  onAssignTools: (agent: Agent) => void;
+  onConnect: (agent: Pick<Agent, "id" | "name">) => void;
   onConfigureChat: (agent: Agent) => void;
-  onEdit: (agent: Omit<Agent, 'tools'>) => void;
+  onEdit: (agent: Omit<Agent, "tools">) => void;
   onDelete: (agentId: string) => void;
-}
+};
 
 export function AgentActions({
   agent,
   userCanDeleteAgents,
   onConnect,
-  onAssignTools,
   onConfigureChat,
   onEdit,
   onDelete,
 }: AgentActionsProps) {
   return (
     <ButtonGroup>
-      <ActionButton
-        tooltip="Connect"
-        onClick={() => onConnect(agent)}
-      >
+      <ActionButton tooltip="Connect" onClick={() => onConnect(agent)}>
         <Plug className="h-4 w-4" />
-      </ActionButton>
-      <ActionButton
-        tooltip="Assign Tools"
-        onClick={() => onAssignTools(agent)}
-      >
-        <Wrench className="h-4 w-4" />
       </ActionButton>
       <ActionButton
         tooltip="Prompts"
@@ -102,10 +94,14 @@ export function AgentActions({
           onEdit({
             id: agent.id,
             name: agent.name,
+            isDemo: agent.isDemo,
+            isDefault: agent.isDefault,
             teams: agent.teams || [],
             labels: agent.labels || [],
             optimizeCost: agent.optimizeCost,
             considerContextUntrusted: agent.considerContextUntrusted,
+            createdAt: agent.createdAt,
+            updatedAt: agent.updatedAt,
           })
         }
       >

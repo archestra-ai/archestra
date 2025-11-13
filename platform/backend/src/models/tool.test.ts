@@ -83,8 +83,8 @@ describe("ToolModel", () => {
       });
 
       // Verify MCP tools have no agent relationship in tool table (agentId is null)
-      expect(foundMcpTool?.agent).toEqual({ id: null, name: null });
-      expect(foundUnassignedTool?.agent).toEqual({ id: null, name: null });
+      expect(foundMcpTool?.agent).toBeNull();
+      expect(foundUnassignedTool?.agent).toBeNull();
     });
 
     test("returns mixed assigned and unassigned tools for non-admin with access", async ({
@@ -227,8 +227,13 @@ describe("ToolModel", () => {
 
     test("includes Archestra built-in tools for admin", async ({
       makeAdmin,
+      makeAgent,
     }) => {
       const admin = await makeAdmin();
+      const agent = await makeAgent();
+
+      // Trigger assignment of Archestra tools to an agent to ensure they exist
+      await ToolModel.assignArchestraToolsToAgent(agent.id);
 
       const tools = await ToolModel.findAll(admin.id, true);
 

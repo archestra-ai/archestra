@@ -1,7 +1,9 @@
 import type { archestraApiTypes } from "@shared";
 
 export function isMcpTool(
-  tool: archestraApiTypes.GetToolsResponses["200"][number],
+  tool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"][number]["tool"]
+    | archestraApiTypes.GetToolsResponses["200"][number],
 ) {
   // Handle both tool types - some have mcpServerName, others have mcpServer.name
   const mcpServerName =

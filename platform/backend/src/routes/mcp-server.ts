@@ -37,7 +37,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const allServers = await McpServerModel.findAll(request.user.id);
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          request.headers,
+        );
+        const allServers = await McpServerModel.findAll(
+          request.user.id,
+          isMcpServerAdmin,
+        );
         const { authType } = request.query;
 
         // Filter by authType if provided

@@ -63,6 +63,8 @@ export function useUpdateInternalMcpCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       // Also invalidate MCP servers to refresh reinstallRequired flags
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate all chat MCP tools (server config may have changed)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {

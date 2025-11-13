@@ -99,7 +99,6 @@ export type McpServerCardProps = {
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  localServerInstallationCount?: number; // For local servers: count of all personal installations
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
   currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
   currentUserLocalServerInstallation?: InstalledServer; // For local servers: the current user's specific installation
@@ -124,7 +123,6 @@ export function McpServerCard({
   onReinstall,
   onEdit,
   onDelete,
-  localServerInstallationCount = 0,
   currentUserInstalledLocalServer = false,
   currentUserHasLocalTeamInstallation = false,
   currentUserLocalServerInstallation,
@@ -168,7 +166,12 @@ export function McpServerCard({
     error: logsError,
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
-  const needsReinstall = installedServer?.reinstallRequired ?? false;
+  // For local servers, check the current user's specific installation
+  // For remote servers, check the aggregated installation
+  const needsReinstall =
+    variant === "local" && currentUserLocalServerInstallation
+      ? (currentUserLocalServerInstallation.reinstallRequired ?? false)
+      : (installedServer?.reinstallRequired ?? false);
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
 
@@ -267,9 +270,7 @@ export function McpServerCard({
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
           Users authenticated:{" "}
-          <span className="font-medium text-foreground">
-            {localServerInstallationCount}
-          </span>
+          <span className="font-medium text-foreground">{userCount}</span>
           {currentUserInstalledLocalServer && (
             <Badge
               variant="secondary"
@@ -280,7 +281,7 @@ export function McpServerCard({
           )}
         </span>
       </div>
-      {localServerInstallationCount > 0 && (
+      {userCount > 0 && (
         <Button
           onClick={() => setIsManageLocalInstallationsDialogOpen(true)}
           size="sm"
@@ -398,7 +399,7 @@ export function McpServerCard({
           disabled={isInstalling}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+          {isInstalling ? "Reconnecting..." : "Reconnect Required"}
         </Button>
       )}
       {requiresAuth && !isCurrentUserAuthenticated && (

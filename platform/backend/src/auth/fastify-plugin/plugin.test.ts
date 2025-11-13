@@ -250,7 +250,8 @@ describe("authPlugin integration", () => {
       expect(mockReply.status).toHaveBeenCalledWith(403);
       expect(mockReply.send).toHaveBeenCalledWith({
         error: {
-          message: "Forbidden, routeId not found",
+          message:
+            "Forbidden, the route is not configured in auth middleware and is protected by default",
           type: "forbidden",
         },
       });

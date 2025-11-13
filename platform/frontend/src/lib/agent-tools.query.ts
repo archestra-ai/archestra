@@ -109,6 +109,10 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate chat MCP tools for this agent
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
     },
   });
 }
@@ -144,6 +148,10 @@ export function useBulkAssignTools() {
       for (const agentId of uniqueAgentIds) {
         queryClient.invalidateQueries({
           queryKey: ["agents", agentId, "tools"],
+        });
+        // Invalidate chat MCP tools for each affected agent
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "agents", agentId, "mcp-tools"],
         });
       }
 
@@ -191,6 +199,10 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate chat MCP tools for this agent
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
     },
   });
 }

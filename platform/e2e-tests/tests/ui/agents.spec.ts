@@ -29,16 +29,11 @@ test("can create and delete an agent", async ({
     page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
   ).toBeVisible();
 
-  // Delete created agent - first open the dropdown menu, then click delete
-  await page
-    .getByTestId(E2eTestId.AgentsTable)
-    .locator(`tr:has-text("${AGENT_NAME}")`)
-    .getByRole("button", { name: "More Options" })
-    .click();
+  // Delete created agent - click the delete button directly
   await page
     .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
     .click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Delete agent" }).click();
 
   await expect(
     page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),

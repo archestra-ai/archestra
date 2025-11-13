@@ -44,13 +44,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             sortDirection: z.enum(["asc", "desc"]).optional(),
             search: z.string().optional(),
             agentId: UuidIdSchema.optional(),
-            origin: z.string().optional(), // Can be "llm-proxy" or a catalogId
+            origin: z
+              .string()
+              .optional()
+              .describe("Can be 'llm-proxy' or a catalogId (UUID)"),
             credentialSourceMcpServerId: UuidIdSchema.optional(),
           })
           .merge(PaginationQuerySchema),
-        response: {
-          200: createPaginatedResponseSchema(SelectAgentToolSchema),
-        },
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectAgentToolSchema),
+        ),
       },
     },
     async (request, reply) => {

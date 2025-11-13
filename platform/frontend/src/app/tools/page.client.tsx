@@ -13,7 +13,8 @@ import { ErrorBoundary } from "../_parts/error-boundary";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
-type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+type AgentToolData =
+  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 
 export function ToolsClient() {
   const queryClient = useQueryClient();

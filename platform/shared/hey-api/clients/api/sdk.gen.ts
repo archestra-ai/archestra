@@ -158,7 +158,7 @@ export const getLabelValues = <ThrowOnError extends boolean = false>(options?: O
 };
 
 /**
- * Get all agent-tool relationships with details
+ * Get all agent-tool relationships with pagination, sorting, and filtering
  */
 export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetAllAgentToolsResponses, GetAllAgentToolsErrors, ThrowOnError>({

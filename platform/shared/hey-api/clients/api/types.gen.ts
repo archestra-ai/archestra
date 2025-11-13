@@ -3202,7 +3202,19 @@ export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValue
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
+        sortDirection?: 'asc' | 'desc';
+        search?: string;
+        agentId?: string;
+        /**
+         * Can be 'llm-proxy' or a catalogId (UUID)
+         */
+        origin?: string;
+        credentialSourceMcpServerId?: string;
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/agent-tools';
 };
 
@@ -3260,46 +3272,56 @@ export type GetAllAgentToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        credentialSourceMcpServerId: string | null;
-        executionSourceMcpServerId: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
-            name: string;
-        };
-        tool: {
-            id: string;
-            name: string;
-            description: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+            responseModifierTemplate: string | null;
+            credentialSourceMcpServerId: string | null;
+            executionSourceMcpServerId: string | null;
             createdAt: string;
             updatedAt: string;
-            catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
+            agent: {
+                id: string;
+                name: string;
+            };
+            tool: {
+                id: string;
+                name: string;
+                description: string | null;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                createdAt: string;
+                updatedAt: string;
+                catalogId: string | null;
+                mcpServerId: string | null;
+                mcpServerName: string | null;
+                mcpServerCatalogId: string | null;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-    }>;
+    };
 };
 
 export type GetAllAgentToolsResponse = GetAllAgentToolsResponses[keyof GetAllAgentToolsResponses];

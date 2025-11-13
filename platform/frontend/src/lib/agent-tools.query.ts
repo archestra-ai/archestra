@@ -56,7 +56,19 @@ export function useAllAgentTools({
           credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
         },
       });
-      return result.data ?? { data: [], pagination: { currentPage: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false } };
+      return (
+        result.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: 20,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
     initialData,
   });

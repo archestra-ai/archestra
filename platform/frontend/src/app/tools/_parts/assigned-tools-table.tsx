@@ -46,9 +46,9 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
-import { formatDate } from "@/lib/utils";
 
-type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+type AgentToolData =
+  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
@@ -127,12 +127,13 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       offset: pageIndex * pageSize,
     },
     sorting: {
-      sortBy: (sorting[0]?.id as
-        | "name"
-        | "agent"
-        | "origin"
-        | "createdAt"
-        | "allowUsageWhenUntrustedDataIsPresent") || "createdAt",
+      sortBy:
+        (sorting[0]?.id as
+          | "name"
+          | "agent"
+          | "origin"
+          | "createdAt"
+          | "allowUsageWhenUntrustedDataIsPresent") || "createdAt",
       sortDirection: sorting[0]?.desc ? "desc" : "asc",
     },
     filters: {
@@ -808,11 +809,17 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
-            {searchQuery || agentFilter !== "all" || originFilter !== "all" || credentialFilter !== "all"
+            {searchQuery ||
+            agentFilter !== "all" ||
+            originFilter !== "all" ||
+            credentialFilter !== "all"
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
-          {(searchQuery || agentFilter !== "all" || originFilter !== "all" || credentialFilter !== "all") && (
+          {(searchQuery ||
+            agentFilter !== "all" ||
+            originFilter !== "all" ||
+            credentialFilter !== "all") && (
             <Button
               variant="outline"
               onClick={() => {

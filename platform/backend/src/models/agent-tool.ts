@@ -266,9 +266,7 @@ class AgentToolModel {
 
     // Filter by agent
     if (filters?.agentId) {
-      whereConditions.push(
-        eq(schema.agentToolsTable.agentId, filters.agentId),
-      );
+      whereConditions.push(eq(schema.agentToolsTable.agentId, filters.agentId));
     }
 
     // Filter by origin (either "llm-proxy" or a catalogId)

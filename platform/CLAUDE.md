@@ -40,7 +40,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Backend Metrics**: <http://localhost:9050/metrics> (Prometheus metrics endpoint, separate from main API)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 - **Agent Tools API**: <http://localhost:9000/api/agent-tools> (GET paginated agent-tool relationships with filtering/sorting)
-- **Agent Tools API**: <http://localhost:9000/api/agent-tools> (GET paginated agent-tool relationships with filtering/sorting)
 
 ## Common Commands
 

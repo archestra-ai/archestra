@@ -204,7 +204,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
           }
 
-          // Delete all tools associated with this catalog
+          // Delete all tools associated with this catalog id
           // This ensures tools are rediscovered with updated configuration during reinstall
           const { ToolModel } = await import("@/models");
           await ToolModel.deleteByCatalogId(request.params.id);

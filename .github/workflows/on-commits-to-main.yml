@@ -46,8 +46,6 @@ jobs:
           platforms: linux/amd64
           build-args: |
             VERSION=${{ github.sha }}
-            ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE=${{ secrets.EASTER_EGG_TARGET_SEQUENCE }}
-            ARCHESTRA_EASTER_EGG_VIDEO_URL=${{ secrets.EASTER_EGG_VIDEO_URL }}
           push: true
           tags: |
             europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}

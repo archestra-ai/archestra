@@ -120,24 +120,23 @@ function buildMetricLabels(
 export function reportLLMTokens(
   provider: SupportedProvider,
   agent: Agent,
-  inputTokens?: number,
-  outputTokens?: number,
+  usage: { input?: number; output?: number },
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
     return;
   }
 
-  if (inputTokens && inputTokens > 0) {
+  if (usage.input && usage.input > 0) {
     llmTokensCounter.inc(
       buildMetricLabels(agent, { provider, type: "input" }),
-      inputTokens,
+      usage.input,
     );
   }
-  if (outputTokens && outputTokens > 0) {
+  if (usage.output && usage.output > 0) {
     llmTokensCounter.inc(
       buildMetricLabels(agent, { provider, type: "output" }),
-      outputTokens,
+      usage.output,
     );
   }
 }
@@ -194,12 +193,12 @@ export function getObservableFetch(
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, input, output);
+          reportLLMTokens(provider, agent, { input, output });
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, input, output);
+          reportLLMTokens(provider, agent, { input, output });
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -240,7 +239,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportLLMTokens(provider, agent, input, output);
+        reportLLMTokens(provider, agent, { input, output });
       }
 
       return result;

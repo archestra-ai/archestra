@@ -3,6 +3,7 @@ import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { get } from "lodash-es";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
@@ -15,6 +16,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
+import { MockAnthropicClient } from "./mock-anthropic-client";
 import * as utils from "./utils";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -153,11 +155,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { "x-api-key": anthropicApiKey } = headers;
 
-    const anthropicClient = new AnthropicProvider({
-      apiKey: anthropicApiKey,
-      baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch("anthropic", resolvedAgent),
-    });
+    const anthropicClient = config.benchmark.mockMode
+      ? (new MockAnthropicClient() as unknown as AnthropicProvider)
+      : new AnthropicProvider({
+          apiKey: anthropicApiKey,
+          baseURL: config.llm.anthropic.baseUrl,
+          fetch: getObservableFetch("anthropic", resolvedAgent),
+        });
 
     try {
       // Check if current usage limits are already exceeded
@@ -212,6 +216,32 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Clients handle tool execution via MCP Gateway
       const mergedTools = tools || [];
 
+      const baselineModel = body.model;
+      let model = baselineModel;
+      // Optimize model selection for cost if enabled using dynamic rules
+      if (resolvedAgent.optimizeCost) {
+        const hasTools = mergedTools.length > 0;
+        const optimizedModel = await utils.costOptimization.getOptimizedModel(
+          resolvedAgent,
+          body.messages,
+          "anthropic",
+          hasTools,
+        );
+
+        if (optimizedModel) {
+          model = optimizedModel;
+          fastify.log.info(
+            { resolvedAgentId, optimizedModel },
+            "Optimized model selected",
+          );
+        } else {
+          fastify.log.info(
+            { resolvedAgentId, baselineModel },
+            "No matching optimized model found, proceeding with baseline model",
+          );
+        }
+      }
+
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
         body.messages,
@@ -245,6 +275,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resolvedAgentId,
           anthropicApiKey,
           "anthropic",
+          resolvedAgent.considerContextUntrusted,
           stream
             ? () => {
                 // Send initial indicator when dual LLM starts (streaming only)
@@ -303,7 +334,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const messageStream = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
           "anthropic",
-          body.model,
+          model,
           true,
           resolvedAgent,
           async (llmSpan) => {
@@ -566,9 +597,21 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
 
         if (messageStartEvent?.message.usage) {
-          reportLLMTokens(
-            "anthropic",
-            resolvedAgent,
+          reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
+        }
+
+        // Only calculate costs if cost optimization is enabled
+        let cost: number | undefined;
+        let baselineCost: number | undefined;
+
+        if (resolvedAgent.optimizeCost) {
+          cost = await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+          baselineCost = await utils.costOptimization.calculateCost(
+            body.model,
             tokenUsage.input,
             tokenUsage.output,
           );
@@ -584,14 +627,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             type: "message",
             role: "assistant",
             content: responseContent,
-            model: body.model,
+            model: model,
             stop_reason: "end_turn",
             stop_sequence: null,
             usage,
           },
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost: cost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
         });
 
         // Send message_delta with stop_reason and usage
@@ -627,7 +672,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await utils.tracing.startActiveLlmSpan(
           "anthropic.messages",
           "anthropic",
-          body.model,
+          model,
           false,
           resolvedAgent,
           async (llmSpan) => {
@@ -673,14 +718,33 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
+            // Only calculate costs if cost optimization is enabled
+            let cost: number | undefined;
+            let baselineCost: number | undefined;
+
+            if (resolvedAgent.optimizeCost) {
+              cost = await utils.costOptimization.calculateCost(
+                model,
+                tokenUsage.input,
+                tokenUsage.output,
+              );
+              baselineCost = await utils.costOptimization.calculateCost(
+                body.model,
+                tokenUsage.input,
+                tokenUsage.output,
+              );
+            }
+
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
               response: response,
-              model: body.model,
+              model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
+              cost: cost?.toFixed(10) ?? null,
+              baselineCost: baselineCost?.toFixed(10) ?? null,
             });
 
             return reply.send(response);
@@ -694,14 +758,34 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.anthropic.getUsageTokens(response.usage)
           : { input: null, output: null };
 
+        // Calculate costs using database pricing (TokenPriceModel)
+        // Only calculate costs if cost optimization is enabled
+        let cost: number | undefined;
+        let baselineCost: number | undefined;
+
+        if (resolvedAgent.optimizeCost) {
+          cost = await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+          baselineCost = await utils.costOptimization.calculateCost(
+            body.model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
+        }
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
           response: response,
-          model: body.model,
+          model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
+          cost: cost?.toFixed(10) ?? null,
+          baselineCost: baselineCost?.toFixed(10) ?? null,
         });
 
         return reply.send(response);
@@ -714,29 +798,61 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
-      // Check if we're streaming (headers already sent)
-      if (stream && reply.sent) {
-        // For streaming, send error as SSE event
+      // Extract the actual error message from Anthropic SDK errors using lodash get
+      // Anthropic errors have structure: { error: { error: { message: "..." } } }
+      const getErrorMessage = (err: unknown): string => {
+        // Try to extract from triple-nested path
+        const anthropicMessage = get(err, "error.error.message");
+        if (typeof anthropicMessage === "string") {
+          fastify.log.info(
+            { extractedMessage: anthropicMessage },
+            "Successfully extracted Anthropic error message",
+          );
+          return anthropicMessage;
+        }
+
+        if (err instanceof Error) {
+          fastify.log.info(
+            { message: err.message },
+            "Using Error.message fallback",
+          );
+          return err.message;
+        }
+        return "Internal server error";
+      };
+
+      const errorMessage = getErrorMessage(error);
+
+      // Check if we're streaming
+      if (stream) {
+        // For streaming responses, send error as SSE event (even if headers not sent yet)
         const errorEvent = {
           type: "error",
           error: {
             type: "api_error",
-            message:
-              error instanceof Error ? error.message : "Internal server error",
+            message: errorMessage,
           },
         };
-        reply.raw.write(
-          `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
-        );
-        reply.raw.end();
+
+        if (reply.sent) {
+          // Headers already sent, write to stream
+          reply.raw.write(
+            `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+          );
+          reply.raw.end();
+        } else {
+          // Headers not sent yet, send as SSE format string with 200 status
+          // (streaming responses need 200 OK, error is in the stream content)
+          const sseError = `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`;
+          return reply.status(200).send(sseError);
+        }
         return reply;
       }
 
-      // For non-streaming or if headers not sent yet, send JSON error
+      // For non-streaming, send JSON error
       return reply.status(statusCode).send({
         error: {
-          message:
-            error instanceof Error ? error.message : "Internal server error",
+          message: errorMessage,
           type: "api_error",
         },
       });

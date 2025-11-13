@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { get } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -178,7 +179,53 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          return JSON.stringify(error);
+          fastify.log.error(
+            { error, conversationId, agentId: conversation.agentId },
+            "Chat stream error occurred",
+          );
+
+          // Extract error message as string for frontend using lodash get
+          // Try different nested paths: error.message or error.error.message
+          const directMessage = get(error, "message");
+          if (typeof directMessage === "string") {
+            fastify.log.info(
+              { extractedMessage: directMessage },
+              "Extracted error message from direct property",
+            );
+            return directMessage;
+          }
+
+          const nestedMessage = get(error, "error.message");
+          if (typeof nestedMessage === "string") {
+            fastify.log.info(
+              { extractedMessage: nestedMessage },
+              "Extracted error message from nested SSE error",
+            );
+            return nestedMessage;
+          }
+
+          // Fallback to generic message for empty objects
+          if (
+            error &&
+            typeof error === "object" &&
+            Object.keys(error).length === 0
+          ) {
+            return "An unknown error occurred (empty error object)";
+          }
+
+          if (error == null) return "An unknown error occurred";
+          if (typeof error === "string") return error;
+          if (error instanceof Error) return error.message;
+
+          // Last resort - try to stringify but provide fallback
+          try {
+            const stringified = JSON.stringify(error);
+            return stringified !== "{}"
+              ? stringified
+              : "An unknown error occurred";
+          } catch {
+            return "An unknown error occurred";
+          }
         },
         onFinish: async ({ messages: finalMessages }) => {
           if (!conversationId) return;

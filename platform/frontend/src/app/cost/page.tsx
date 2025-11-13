@@ -96,6 +96,7 @@ ChartJS.register(
 );
 
 import type { archestraApiTypes } from "@shared";
+import { OptimizationRulesTab } from "@/app/cost/optimization-rules-tab";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
   AlertDialog,
@@ -146,6 +147,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAgents, useDefaultAgent } from "@/lib/agent.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
@@ -153,6 +155,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
+import { useOptimizationRules } from "@/lib/optimization-rule.query";
 import {
   useOrganization,
   useUpdateOrganization,
@@ -803,6 +806,7 @@ export default function CostPage() {
     null,
   );
   const [isAddingTokenPrice, setIsAddingTokenPrice] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
@@ -811,6 +815,17 @@ export default function CostPage() {
   const { data: organizationDetails } = useOrganization();
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
+  const { data: agents = [] } = useAgents();
+  const { data: defaultAgent } = useDefaultAgent();
+  const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
+    useOptimizationRules(selectedAgentId);
+
+  // Set default agent as selected when it loads
+  useEffect(() => {
+    if (defaultAgent && !selectedAgentId) {
+      setSelectedAgentId(defaultAgent.id);
+    }
+  }, [defaultAgent, selectedAgentId]);
 
   // Statistics data fetching hooks
   const currentTimeframe = timeframe.startsWith("custom:")
@@ -1017,7 +1032,12 @@ export default function CostPage() {
     const tab = searchParams.get("tab");
     const tf = searchParams.get("timeframe");
 
-    if (tab && ["statistics", "limits", "token-price"].includes(tab)) {
+    if (
+      tab &&
+      ["statistics", "limits", "token-price", "optimization-rules"].includes(
+        tab,
+      )
+    ) {
       setActiveTab(tab);
     }
 
@@ -1360,6 +1380,9 @@ export default function CostPage() {
             <TabsTrigger value="statistics">Statistics</TabsTrigger>
             <TabsTrigger value="limits">Limits</TabsTrigger>
             <TabsTrigger value="token-price">Token Price</TabsTrigger>
+            <TabsTrigger value="optimization-rules">
+              Optimization Rules
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="statistics" className="mt-0 space-y-6">
@@ -2000,6 +2023,14 @@ export default function CostPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <OptimizationRulesTab
+            selectedAgentId={selectedAgentId}
+            setSelectedAgentId={setSelectedAgentId}
+            agents={agents}
+            optimizationRules={optimizationRules}
+            optimizationRulesLoading={optimizationRulesLoading}
+          />
         </Tabs>
       </div>
     </div>

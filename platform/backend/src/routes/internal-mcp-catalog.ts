@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
-import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import {
   constructResponseSchema,
   InsertInternalMcpCatalogSchema,
@@ -162,47 +162,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Check if name, serverUrl, or authentication changed
-        const nameChanged =
-          "name" in request.body &&
-          request.body.name !== originalCatalogItem.name;
-        const urlChanged =
-          "serverUrl" in request.body &&
-          request.body.serverUrl !== originalCatalogItem.serverUrl;
+        // Mark all installed servers for reinstall
+        // and delete existing tools so they can be rediscovered
+        const installedServers = await McpServerModel.findByCatalogId(
+          request.params.id,
+        );
 
-        // For OAuth config, use lodash to normalize and compare
-        // Remove falsy values (null, undefined, empty strings) before comparison
-        const normalizeOAuthConfig = (config: unknown) => {
-          if (!config || typeof config !== "object") return null;
-          return omitBy(
-            config as Record<string, unknown>,
-            (value, key) =>
-              value === null ||
-              value === undefined ||
-              value === "" ||
-              ["name", "description"].includes(key),
-          );
-        };
-
-        const oauthConfigChanged =
-          "oauthConfig" in request.body &&
-          !isEqual(
-            normalizeOAuthConfig(request.body.oauthConfig),
-            normalizeOAuthConfig(originalCatalogItem.oauthConfig),
-          );
-
-        // If critical fields changed, mark all installed servers for reinstall
-        if (nameChanged || urlChanged || oauthConfigChanged) {
-          const installedServers = await McpServerModel.findByCatalogId(
-            request.params.id,
-          );
-
-          for (const server of installedServers) {
-            await McpServerModel.update(server.id, {
-              reinstallRequired: true,
-            });
-          }
+        for (const server of installedServers) {
+          await McpServerModel.update(server.id, {
+            reinstallRequired: true,
+          });
         }
+
+        // Delete all tools associated with this catalog id
+        // This ensures tools are rediscovered with updated configuration during reinstall
+        await ToolModel.deleteByCatalogId(request.params.id);
 
         return reply.send(catalogItem);
       } catch (error) {

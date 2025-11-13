@@ -6,19 +6,21 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ChevronDown,
   ChevronUp,
-  MessageCircle,
-  MoreHorizontal,
-  Pencil,
-  Plug,
   Plus,
   Search,
   Tag,
-  Trash2,
   Wrench,
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
@@ -29,8 +31,10 @@ import {
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
@@ -40,14 +44,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -72,6 +69,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { formatDate } from "@/lib/utils";
+import { AgentActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 import { ChatConfigDialog } from "./chat-config-dialog";
 
@@ -264,6 +262,8 @@ function Agents() {
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    optimizeCost?: boolean;
+    considerContextUntrusted: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -396,7 +396,21 @@ function Agents() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => <div>{row.original.tools.length}</div>,
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.tools.length}
+            <ActionButton
+              tooltip="Assign Tools"
+              aria-label="Assign Tools"
+              onClick={() => setAssigningToolsAgent(agent)}
+            >
+              <Wrench className="h-4 w-4" />
+            </ActionButton>
+          </div>
+        );
+      },
     },
     {
       id: "team",
@@ -417,100 +431,19 @@ function Agents() {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
+      size: 176,
+      enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <div className="flex items-center gap-0 border rounded-md overflow-hidden w-fit">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConnectingAgent({
-                        id: agent.id,
-                        name: agent.name,
-                      });
-                    }}
-                    className="rounded-none border-r h-8 w-8"
-                  >
-                    <Plug className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Connect</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="More Options"
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded-none h-8 w-8"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAssigningToolsAgent(agent);
-                    }}
-                  >
-                    <Wrench className="h-4 w-4" />
-                    Assign Tools
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setChatConfigAgent(agent);
-                    }}
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Configure Chat
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingAgent({
-                        id: agent.id,
-                        name: agent.name,
-                        teams: agent.teams || [],
-                        labels: agent.labels || [],
-                      });
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                {userCanDeleteAgents && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingAgentId(agent.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <AgentActions
+            agent={agent}
+            userCanDeleteAgents={userCanDeleteAgents || false}
+            onConnect={setConnectingAgent}
+            onConfigureChat={setChatConfigAgent}
+            onEdit={setEditingAgent}
+            onDelete={setDeletingAgentId}
+          />
         );
       },
     },
@@ -652,6 +585,9 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<AgentLabel[]>([]);
+  const [optimizeCost, setOptimizeCost] = useState<boolean>(false);
+  const [considerContextUntrusted, setConsiderContextUntrusted] =
+    useState(false);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -714,6 +650,8 @@ function CreateAgentDialog({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
+          optimizeCost,
+          considerContextUntrusted,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -724,15 +662,24 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedTeamIds, labels, createAgent],
+    [
+      name,
+      assignedTeamIds,
+      labels,
+      optimizeCost,
+      considerContextUntrusted,
+      createAgent,
+    ],
   );
 
   const handleClose = useCallback(() => {
     setName("");
     setAssignedTeamIds([]);
     setLabels([]);
+    setOptimizeCost(false);
     setSelectedTeamId("");
     setCreatedAgent(null);
+    setConsiderContextUntrusted(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -828,6 +775,47 @@ function CreateAgentDialog({
                   onLabelsChange={setLabels}
                   availableKeys={availableKeys}
                 />
+
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="create-optimize-cost">
+                        Cost Optimization
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically select cheaper models when appropriate
+                        (e.g., gpt-4o-mini for short contexts)
+                      </p>
+                    </div>
+                    <Switch
+                      id="create-optimize-cost"
+                      checked={optimizeCost}
+                      onCheckedChange={setOptimizeCost}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="consider-context-untrusted"
+                    checked={considerContextUntrusted}
+                    onCheckedChange={(checked) =>
+                      setConsiderContextUntrusted(checked === true)
+                    }
+                  />
+                  <div className="grid gap-1">
+                    <Label
+                      htmlFor="consider-context-untrusted"
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      Treat user context as untrusted
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable when user prompts may contain untrusted and
+                      sensitive data.
+                    </p>
+                  </div>
+                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -875,6 +863,8 @@ function EditAgentDialog({
     name: string;
     teams: string[];
     labels: AgentLabel[];
+    optimizeCost?: boolean;
+    considerContextUntrusted: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -884,6 +874,12 @@ function EditAgentDialog({
     agent.teams || [],
   );
   const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
+  const [optimizeCost, setOptimizeCost] = useState<boolean>(
+    agent.optimizeCost || false,
+  );
+  const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
+    agent.considerContextUntrusted,
+  );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -932,6 +928,8 @@ function EditAgentDialog({
             name: name.trim(),
             teams: assignedTeamIds,
             labels: updatedLabels,
+            optimizeCost,
+            considerContextUntrusted,
           },
         });
         toast.success("Agent updated successfully");
@@ -940,7 +938,16 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedTeamIds, labels, updateAgent, onOpenChange],
+    [
+      agent.id,
+      name,
+      assignedTeamIds,
+      labels,
+      optimizeCost,
+      updateAgent,
+      onOpenChange,
+      considerContextUntrusted,
+    ],
   );
 
   const getUnassignedTeams = useCallback(() => {
@@ -1045,6 +1052,45 @@ function EditAgentDialog({
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
             />
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="optimize-cost">Cost Optimization</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically select cheaper models when appropriate (e.g.,
+                    gpt-4o-mini for short contexts)
+                  </p>
+                </div>
+                <Switch
+                  id="optimize-cost"
+                  checked={optimizeCost}
+                  onCheckedChange={setOptimizeCost}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-consider-context-untrusted"
+                checked={considerContextUntrusted}
+                onCheckedChange={(checked) =>
+                  setConsiderContextUntrusted(checked === true)
+                }
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="edit-consider-context-untrusted"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Treat user context as untrusted
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable when user prompts may contain untrusted and sensitive
+                  data.
+                </p>
+              </div>
+            </div>
           </div>
           <DialogFooter className="mt-4">
             <Button

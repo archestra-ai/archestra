@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
-import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import {
   constructResponseSchema,
   InsertInternalMcpCatalogSchema,
@@ -206,7 +206,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Delete all tools associated with this catalog
           // This ensures tools are rediscovered with updated configuration during reinstall
-          const { ToolModel } = await import("@/models");
           await ToolModel.deleteByCatalogId(request.params.id);
         }
 

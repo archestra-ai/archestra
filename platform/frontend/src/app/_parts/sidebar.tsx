@@ -6,7 +6,6 @@ import {
   Bug,
   DollarSign,
   Github,
-  Info,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -36,6 +35,12 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrgTheme } from "@/lib/theme.hook";
@@ -48,59 +53,76 @@ interface MenuItem {
   customIsActive?: (pathname: string) => boolean;
 }
 
+const FooterCommunityLink = ({
+  Icon,
+  href,
+  tooltipContent,
+}: {
+  Icon: LucideIcon;
+  href: string;
+  tooltipContent: React.ReactNode;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Icon className="h-4 w-4" />
+      </a>
+    </TooltipTrigger>
+    <TooltipContent>{tooltipContent}</TooltipContent>
+  </Tooltip>
+);
+
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+  if (!isAuthenticated) {
+    return [];
+  }
+
   return [
     {
-      title: "How security works",
-      url: "/test-agent",
-      icon: Info,
+      title: "Chat",
+      url: "/chat",
+      icon: MessageCircle,
+      customIsActive: (pathname: string) => pathname.startsWith("/chat"),
     },
-    ...(isAuthenticated
-      ? [
-          {
-            title: "Chat",
-            url: "/chat",
-            icon: MessageCircle,
-            customIsActive: (pathname: string) => pathname.startsWith("/chat"),
-          },
-          {
-            title: "Agents",
-            url: "/agents",
-            icon: Bot,
-          },
-          {
-            title: "Logs",
-            url: "/logs/llm-proxy",
-            icon: MessagesSquare,
-            customIsActive: (pathname: string) => pathname.startsWith("/logs"),
-          },
-          {
-            title: "Tools",
-            url: "/tools",
-            icon: Wrench,
-            customIsActive: (pathname: string) => pathname.startsWith("/tools"),
-          },
-          {
-            title: "MCP Registry",
-            url: "/mcp-catalog/registry",
-            icon: Router,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp-catalog"),
-          },
-          {
-            title: "Settings",
-            url: "/settings",
-            icon: Settings,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/settings"),
-          },
-          {
-            title: "Cost & Limits",
-            url: "/cost",
-            icon: DollarSign,
-          },
-        ]
-      : []),
+    {
+      title: "Agents",
+      url: "/agents",
+      icon: Bot,
+    },
+    {
+      title: "Logs",
+      url: "/logs/llm-proxy",
+      icon: MessagesSquare,
+      customIsActive: (pathname: string) => pathname.startsWith("/logs"),
+    },
+    {
+      title: "Tools",
+      url: "/tools",
+      icon: Wrench,
+      customIsActive: (pathname: string) => pathname.startsWith("/tools"),
+    },
+    {
+      title: "MCP Registry",
+      url: "/mcp-catalog/registry",
+      icon: Router,
+      customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
+    },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: Settings,
+      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+    },
+    {
+      title: "Cost & Limits",
+      url: "/cost",
+      icon: DollarSign,
+    },
   ];
 };
 
@@ -202,68 +224,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarGroup className="px-4">
-          <SidebarGroupLabel>Community</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a
-                    href="https://github.com/archestra-ai/archestra"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Github />
-                    <span className="flex items-center gap-2">
-                      Star us on GitHub
-                      <span className="flex items-center gap-1 text-xs">
-                        <Star className="h-3 w-3" />
-                        {starCount}
-                      </span>
-                    </span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a
-                    href="https://www.archestra.ai/docs/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <BookOpen />
-                    <span>Documentation</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a
-                    href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Slack />
-                    <span>Talk to developers</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a
-                    href="https://github.com/archestra-ai/archestra/issues/new"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Bug />
-                    <span>Report a bug</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <DefaultCredentialsWarning />
@@ -295,6 +255,38 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SignedOut>
+        <TooltipProvider>
+          <div className="flex justify-center items-center gap-4">
+            <FooterCommunityLink
+              Icon={Github}
+              href="https://github.com/archestra-ai/archestra"
+              tooltipContent={
+                <span className="flex items-center gap-2">
+                  Star us on GitHub
+                  <span className="flex items-center gap-1 text-xs">
+                    <Star className="h-3 w-3" />
+                    {starCount}
+                  </span>
+                </span>
+              }
+            />
+            <FooterCommunityLink
+              Icon={BookOpen}
+              href="https://www.archestra.ai/docs/"
+              tooltipContent={<p>Documentation</p>}
+            />
+            <FooterCommunityLink
+              Icon={Slack}
+              href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg"
+              tooltipContent={<p>Talk to developers</p>}
+            />
+            <FooterCommunityLink
+              Icon={Bug}
+              href="https://github.com/archestra-ai/archestra/issues/new"
+              tooltipContent={<p>Report a bug</p>}
+            />
+          </div>
+        </TooltipProvider>
       </SidebarFooter>
     </Sidebar>
   );

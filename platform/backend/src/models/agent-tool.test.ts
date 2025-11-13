@@ -1,5 +1,5 @@
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
-import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
 describe("AgentToolModel.findAllPaginated", () => {
@@ -24,7 +24,11 @@ describe("AgentToolModel.findAllPaginated", () => {
       }
 
       // Test first page
-      const page1 = await AgentToolModel.findAllPaginated({ limit: 2, offset: 0 });
+      const page1 = await AgentToolModel.findAllPaginated(
+        { limit: 2, offset: 0 },
+        undefined,
+        { excludeArchestraTools: true },
+      );
       expect(page1.data).toHaveLength(2);
       expect(page1.pagination.total).toBe(5);
       expect(page1.pagination.currentPage).toBe(1);
@@ -33,14 +37,22 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(page1.pagination.hasPrev).toBe(false);
 
       // Test second page
-      const page2 = await AgentToolModel.findAllPaginated({ limit: 2, offset: 2 });
+      const page2 = await AgentToolModel.findAllPaginated(
+        { limit: 2, offset: 2 },
+        undefined,
+        { excludeArchestraTools: true },
+      );
       expect(page2.data).toHaveLength(2);
       expect(page2.pagination.currentPage).toBe(2);
       expect(page2.pagination.hasNext).toBe(true);
       expect(page2.pagination.hasPrev).toBe(true);
 
       // Test last page
-      const page3 = await AgentToolModel.findAllPaginated({ limit: 2, offset: 4 });
+      const page3 = await AgentToolModel.findAllPaginated(
+        { limit: 2, offset: 4 },
+        undefined,
+        { excludeArchestraTools: true },
+      );
       expect(page3.data).toHaveLength(1);
       expect(page3.pagination.currentPage).toBe(3);
       expect(page3.pagination.hasNext).toBe(false);
@@ -65,14 +77,21 @@ describe("AgentToolModel.findAllPaginated", () => {
         await makeAgentTool(agent.id, tool.id);
       }
 
-      const result = await AgentToolModel.findAllPaginated({ limit: 3, offset: 0 });
+      const result = await AgentToolModel.findAllPaginated(
+        { limit: 3, offset: 0 },
+        undefined,
+        { excludeArchestraTools: true },
+      );
       expect(result.data).toHaveLength(3);
       expect(result.pagination.limit).toBe(3);
       expect(result.pagination.totalPages).toBe(2);
     });
 
     test("handles empty results", async () => {
-      const result = await AgentToolModel.findAllPaginated({ limit: 10, offset: 0 });
+      const result = await AgentToolModel.findAllPaginated({
+        limit: 10,
+        offset: 0,
+      });
       expect(result.data).toHaveLength(0);
       expect(result.pagination.total).toBe(0);
       expect(result.pagination.totalPages).toBe(0);
@@ -99,6 +118,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         { sortBy: "name", sortDirection: "asc" },
+        { excludeArchestraTools: true },
       );
 
       expect(result.data[0].tool.name).toBe("a-tool");
@@ -123,6 +143,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         { sortBy: "name", sortDirection: "desc" },
+        { excludeArchestraTools: true },
       );
 
       expect(result.data[0].tool.name).toBe("c-tool");
@@ -147,6 +168,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         { sortBy: "agent", sortDirection: "asc" },
+        { excludeArchestraTools: true },
       );
 
       expect(result.data[0].agent.name).toBe("A-Agent");
@@ -169,7 +191,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       // MCP tool (with catalogId)
       const mcpTool = await makeTool({
         name: "mcp-tool",
-        catalogId: catalog.id
+        catalogId: catalog.id,
       });
 
       await makeAgentTool(agent.id, llmProxyTool.id);
@@ -207,23 +229,39 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       const resultAsc = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
-        { sortBy: "allowUsageWhenUntrustedDataIsPresent", sortDirection: "asc" },
+        {
+          sortBy: "allowUsageWhenUntrustedDataIsPresent",
+          sortDirection: "asc",
+        },
+        { excludeArchestraTools: true },
       );
 
       // false comes before true
-      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(false);
+      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
       expect(resultAsc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
       expect(resultAsc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(true);
 
       const resultDesc = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
-        { sortBy: "allowUsageWhenUntrustedDataIsPresent", sortDirection: "desc" },
+        {
+          sortBy: "allowUsageWhenUntrustedDataIsPresent",
+          sortDirection: "desc",
+        },
+        { excludeArchestraTools: true },
       );
 
       // true comes before false
-      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(true);
-      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
-      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(false);
+      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
     });
 
     test("sorts by createdAt by default", async ({
@@ -246,6 +284,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         { sortBy: "createdAt", sortDirection: "desc" },
+        { excludeArchestraTools: true },
       );
 
       // Most recent first
@@ -322,7 +361,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        { agentId: agent1.id },
+        { agentId: agent1.id, excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(1);
@@ -341,7 +380,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const llmProxyTool = await makeTool({ name: "llm-proxy-tool" });
       const mcpTool = await makeTool({
         name: "mcp-tool",
-        catalogId: catalog.id
+        catalogId: catalog.id,
       });
 
       await makeAgentTool(agent.id, llmProxyTool.id);
@@ -350,7 +389,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        { origin: "llm-proxy" },
+        { origin: "llm-proxy", excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(1);
@@ -429,10 +468,22 @@ describe("AgentToolModel.findAllPaginated", () => {
       const catalog = await makeInternalMcpCatalog();
 
       // Create MCP tools with "read" in name
-      const tool1 = await makeTool({ name: "read-file", catalogId: catalog.id });
-      const tool2 = await makeTool({ name: "read-database", catalogId: catalog.id });
-      const tool3 = await makeTool({ name: "write-file", catalogId: catalog.id });
-      const tool4 = await makeTool({ name: "read-config", catalogId: catalog.id });
+      const tool1 = await makeTool({
+        name: "read-file",
+        catalogId: catalog.id,
+      });
+      const tool2 = await makeTool({
+        name: "read-database",
+        catalogId: catalog.id,
+      });
+      const tool3 = await makeTool({
+        name: "write-file",
+        catalogId: catalog.id,
+      });
+      const tool4 = await makeTool({
+        name: "read-config",
+        catalogId: catalog.id,
+      });
 
       await makeAgentTool(agent.id, tool1.id);
       await makeAgentTool(agent.id, tool2.id);
@@ -445,7 +496,7 @@ describe("AgentToolModel.findAllPaginated", () => {
         {
           search: "read",
           agentId: agent.id,
-          origin: catalog.id
+          origin: catalog.id,
         },
       );
 
@@ -475,7 +526,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        undefined,
+        { excludeArchestraTools: true },
         admin.id,
         true,
       );
@@ -498,11 +549,21 @@ describe("AgentToolModel.findAllPaginated", () => {
       const team1 = await makeTeam(org.id, admin.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team 2" });
 
-      // Add user to team1
-      await AgentTeamModel.assignTeamsToAgent(user.id, [team1.id]);
-
       const agent1 = await makeAgent({ name: "Agent 1", teams: [team1.id] });
       const agent2 = await makeAgent({ name: "Agent 2", teams: [team2.id] });
+
+      // Add user to team1 via team membership
+      await db
+        .insert(schema.teamMembersTable)
+        .values({
+          id: crypto.randomUUID(),
+          teamId: team1.id,
+          userId: user.id,
+          role: "member",
+          createdAt: new Date(),
+        })
+        .returning();
+
       const tool = await makeTool();
 
       await makeAgentTool(agent1.id, tool.id);
@@ -511,7 +572,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        undefined,
+        { excludeArchestraTools: true },
         user.id,
         false,
       );
@@ -558,6 +619,8 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 100 },
+        undefined,
+        { excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(0);
@@ -579,6 +642,8 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       const result = await AgentToolModel.findAllPaginated(
         { limit: 1000, offset: 0 },
+        undefined,
+        { excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(2);

@@ -6,7 +6,6 @@ import {
   eq,
   getTableColumns,
   inArray,
-  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -17,6 +16,9 @@ import {
 } from "@/database/utils/pagination";
 import type {
   AgentTool,
+  AgentToolFilters,
+  AgentToolSortBy,
+  AgentToolSortDirection,
   InsertAgentTool,
   PaginationQuery,
   UpdateAgentTool,
@@ -221,20 +223,10 @@ class AgentToolModel {
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: {
-      sortBy?:
-        | "name"
-        | "agent"
-        | "origin"
-        | "createdAt"
-        | "allowUsageWhenUntrustedDataIsPresent";
-      sortDirection?: "asc" | "desc";
+      sortBy?: AgentToolSortBy;
+      sortDirection?: AgentToolSortDirection;
     },
-    filters?: {
-      search?: string;
-      agentId?: string;
-      origin?: string; // Can be "llm-proxy" or a catalogId
-      credentialSourceMcpServerId?: string;
-    },
+    filters?: AgentToolFilters,
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<AgentTool>> {
@@ -290,6 +282,13 @@ class AgentToolModel {
       );
     }
 
+    // Exclude Archestra built-in tools for test isolation
+    if (filters?.excludeArchestraTools) {
+      whereConditions.push(
+        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
+      );
+    }
+
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
@@ -315,7 +314,6 @@ class AgentToolModel {
           schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
         );
         break;
-      case "createdAt":
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;

@@ -12,6 +12,9 @@ import {
   UserModel,
 } from "@/models";
 import {
+  AgentToolFilterSchema,
+  AgentToolSortBySchema,
+  AgentToolSortDirectionSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
@@ -30,27 +33,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all agent-tool relationships with pagination, sorting, and filtering",
         tags: ["Agent Tools"],
-        querystring: z
-          .object({
-            sortBy: z
-              .enum([
-                "name",
-                "agent",
-                "origin",
-                "createdAt",
-                "allowUsageWhenUntrustedDataIsPresent",
-              ])
-              .optional(),
-            sortDirection: z.enum(["asc", "desc"]).optional(),
-            search: z.string().optional(),
-            agentId: UuidIdSchema.optional(),
-            origin: z
-              .string()
-              .optional()
-              .describe("Can be 'llm-proxy' or a catalogId (UUID)"),
-            credentialSourceMcpServerId: UuidIdSchema.optional(),
-          })
-          .merge(PaginationQuerySchema),
+        querystring: AgentToolFilterSchema.extend({
+          sortBy: AgentToolSortBySchema.optional(),
+          sortDirection: AgentToolSortDirectionSchema.optional(),
+        }).merge(PaginationQuerySchema),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectAgentToolSchema),
         ),

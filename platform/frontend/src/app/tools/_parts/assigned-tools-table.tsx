@@ -47,6 +47,16 @@ import {
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
 
+type GetAllAgentToolsQueryParams = NonNullable<
+  archestraApiTypes.GetAllAgentToolsData["query"]
+>;
+type AgentToolsSortByValues = NonNullable<
+  GetAllAgentToolsQueryParams["sortBy"]
+> | null;
+type AgentToolsSortDirectionValues = NonNullable<
+  GetAllAgentToolsQueryParams["sortDirection"]
+> | null;
+
 type AgentToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
@@ -89,17 +99,10 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentIdFromUrl = searchParams.get("agentId");
   const originFromUrl = searchParams.get("origin");
   const credentialFromUrl = searchParams.get("credential");
-  const sortByFromUrl = searchParams.get("sortBy") as
-    | "name"
-    | "agent"
-    | "origin"
-    | "createdAt"
-    | "allowUsageWhenUntrustedDataIsPresent"
-    | null;
-  const sortDirectionFromUrl = searchParams.get("sortDirection") as
-    | "asc"
-    | "desc"
-    | null;
+  const sortByFromUrl = searchParams.get("sortBy") as AgentToolsSortByValues;
+  const sortDirectionFromUrl = searchParams.get(
+    "sortDirection",
+  ) as AgentToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || "50");
@@ -127,13 +130,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       offset: pageIndex * pageSize,
     },
     sorting: {
-      sortBy:
-        (sorting[0]?.id as
-          | "name"
-          | "agent"
-          | "origin"
-          | "createdAt"
-          | "allowUsageWhenUntrustedDataIsPresent") || "createdAt",
+      sortBy: (sorting[0]?.id as AgentToolsSortByValues) || "createdAt",
       sortDirection: sorting[0]?.desc ? "desc" : "asc",
     },
     filters: {

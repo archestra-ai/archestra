@@ -201,7 +201,10 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+      | "allowUsageWhenUntrustedDataIsPresent"
+      | "toolResultTreatment"
+      | "credentialSourceMcpServerId"
+      | "executionSourceMcpServerId"
     >
   > = {},
 ) {
@@ -306,12 +309,19 @@ async function makeMcpServer(
     Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "serverType">
   > = {},
 ) {
+  // Create a catalog if catalogId is not provided
+  let catalogId = overrides.catalogId;
+  if (!catalogId) {
+    const catalog = await makeInternalMcpCatalog();
+    catalogId = catalog.id;
+  }
+
   const [mcpServer] = await db
     .insert(schema.mcpServersTable)
     .values({
       name: `test-server-${crypto.randomUUID().substring(0, 8)}`,
       serverType: "local",
-      catalogId: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      catalogId,
       secretId: null,
       ownerId: null,
       authType: null,

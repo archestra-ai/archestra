@@ -8,11 +8,14 @@ import {
 const {
   assignToolToAgent,
   bulkAssignTools,
-  getAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
+
+type GetAllAgentToolsQueryParams = NonNullable<
+  archestraApiTypes.GetAllAgentToolsData["query"]
+>;
 
 export function useAllAgentTools({
   initialData,
@@ -26,13 +29,8 @@ export function useAllAgentTools({
     offset?: number;
   };
   sorting?: {
-    sortBy?:
-      | "name"
-      | "agent"
-      | "origin"
-      | "createdAt"
-      | "allowUsageWhenUntrustedDataIsPresent";
-    sortDirection?: "asc" | "desc";
+    sortBy?: NonNullable<GetAllAgentToolsQueryParams["sortBy"]>;
+    sortDirection?: NonNullable<GetAllAgentToolsQueryParams["sortDirection"]>;
   };
   filters?: {
     search?: string;
@@ -71,16 +69,6 @@ export function useAllAgentTools({
       );
     },
     initialData,
-  });
-}
-
-export function useAgentTools(agentId: string) {
-  return useSuspenseQuery({
-    queryKey: ["agents", agentId, "tools"],
-    queryFn: async () => {
-      const { data } = await getAgentTools({ path: { agentId } });
-      return data || [];
-    },
   });
 }
 

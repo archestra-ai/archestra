@@ -3203,15 +3203,22 @@ export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
     query?: {
-        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
-        sortDirection?: 'asc' | 'desc';
         search?: string;
         agentId?: string;
         /**
-         * Can be 'llm-proxy' or a catalogId (UUID)
+         * Can be 'llm-proxy' or a catalogId
          */
         origin?: string;
+        /**
+         * MCP server ID
+         */
         credentialSourceMcpServerId?: string;
+        /**
+         * For test isolation
+         */
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
+        sortDirection?: 'asc' | 'desc';
         limit?: number;
         offset?: number;
     };

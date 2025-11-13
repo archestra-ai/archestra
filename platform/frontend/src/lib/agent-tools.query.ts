@@ -40,7 +40,7 @@ export function useAllAgentTools({
   };
 }) {
   return useSuspenseQuery({
-    queryKey: ["agent-tools", pagination, sorting, filters],
+    queryKey: ["agent-tools"],
     queryFn: async () => {
       const result = await getAllAgentTools({
         query: {

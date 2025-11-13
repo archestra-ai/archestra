@@ -26,6 +26,7 @@ import {
   AgentLabels,
   type AgentLabelsRef,
 } from "@/components/agent-labels";
+import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -228,28 +229,6 @@ function Agents() {
     setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
   }, [sortBy, sortDirection]);
 
-  // Debounce search query updates to URL
-  useEffect(() => {
-    // Only run if search query differs from URL
-    const currentNameParam = searchParams.get("name") || "";
-    if (searchQuery === currentNameParam) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (searchQuery) {
-        params.set("name", searchQuery);
-      } else {
-        params.delete("name");
-      }
-      params.set("page", "1"); // Reset to first page on search
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    }, 500); // 500ms debounce
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, searchParams, router, pathname]);
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -273,10 +252,21 @@ function Agents() {
 
   type AgentData = (typeof agents)[number];
 
-  // Update local search state only - URL update is debounced in useEffect
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value);
-  }, []);
+  // Update URL when search query changes
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set("name", value);
+      } else {
+        params.delete("name");
+      }
+      params.set("page", "1"); // Reset to first page on search
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
 
   // Update URL when sorting changes
   const handleSortingChange = useCallback(
@@ -561,19 +551,17 @@ function Agents() {
       </div>
 
       <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
-        {agents.length > 0 ? (
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search agents by name..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <DebouncedInput
+              placeholder="Search agents by name..."
+              initialValue={searchQuery}
+              onChange={handleSearchChange}
+              className="pl-9"
+            />
           </div>
-        ) : null}
+        </div>
 
         {!agents || agents.length === 0 ? (
           <div className="text-muted-foreground">

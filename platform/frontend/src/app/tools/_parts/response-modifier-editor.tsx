@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 
 interface ResponseModifierEditorProps {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }
 
 export function ResponseModifierEditor({

@@ -221,26 +221,10 @@ export function useAgentToolPatchMutation() {
       });
       return result.data ?? null;
     },
-    onSuccess: (data) => {
-      // Update the cache directly without invalidating
-      queryClient.setQueryData<
-        archestraApiTypes.GetAllAgentToolsResponses["200"]
-      >(["agent-tools"], (old) => {
-        if (!old || !data) return old;
-
-        // Find and update the agent-tool with the response data
-        const agentToolIndex = old.findIndex((at) => at.id === data.id);
-        if (agentToolIndex === -1) {
-          return old;
-        }
-
-        // Create a new array with the updated agent-tool from the server response
-        const newAgentTools = [...old];
-        newAgentTools[agentToolIndex] = {
-          ...newAgentTools[agentToolIndex],
-          ...data,
-        };
-        return newAgentTools;
+    onSuccess: () => {
+      // Invalidate all agent-tools queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
       });
     },
   });

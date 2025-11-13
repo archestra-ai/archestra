@@ -23,7 +23,9 @@ import { useAssignTool } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 
 interface AssignAgentDialogProps {
-  tool: archestraApiTypes.GetAllAgentToolsResponses["200"][number] | null;
+  tool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

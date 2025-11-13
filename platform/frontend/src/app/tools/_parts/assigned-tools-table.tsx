@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DebouncedInput } from "@/components/debounced-input";
 import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
@@ -18,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -638,10 +638,10 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       <div className="flex flex-wrap gap-4">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+          <DebouncedInput
             placeholder="Search tools by name..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            initialValue={searchQuery}
+            onChange={handleSearchChange}
             className="pl-9"
           />
         </div>

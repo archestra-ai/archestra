@@ -330,6 +330,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <TruncatedText
             message={row.original.tool.name}
             className="break-all"
+            maxLength={25}
           />
         ),
         size: 130,
@@ -350,8 +351,12 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
         cell: ({ row }) => {
           const agentName = row.original.agent?.name || "-";
 
+          const TruncatedAgentName = (
+            <TruncatedText message={agentName} maxLength={30} />
+          );
+
           if (!isMcpTool(row.original.tool)) {
-            return <TruncatedText message={agentName} />;
+            return TruncatedAgentName;
           }
 
           const handleUnassign = async (e: React.MouseEvent) => {
@@ -371,7 +376,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
           return (
             <div className="flex items-center gap-2">
-              <TruncatedText message={agentName} />
+              {TruncatedAgentName}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -451,7 +456,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             </TooltipProvider>
           );
         },
-        size: 120,
+        size: 100,
       },
       {
         id: "token",
@@ -507,7 +512,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             />
           );
         },
-        size: 160,
+        size: 120,
       },
       {
         id: "allowUsageWhenUntrustedDataIsPresent",
@@ -552,7 +557,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             </div>
           );
         },
-        size: 120,
+        size: 140,
       },
       {
         id: "toolResultTreatment",

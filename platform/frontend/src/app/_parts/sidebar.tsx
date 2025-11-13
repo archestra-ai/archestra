@@ -6,7 +6,6 @@ import {
   Bug,
   DollarSign,
   Github,
-  Info,
   LogIn,
   type LucideIcon,
   MessageCircle,
@@ -20,6 +19,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useCallback } from "react";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
   Sidebar,
@@ -49,58 +49,51 @@ interface MenuItem {
 }
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+  if (!isAuthenticated) {
+    return [];
+  }
+
   return [
     {
-      title: "How security works",
-      url: "/test-agent",
-      icon: Info,
+      title: "Chat",
+      url: "/chat",
+      icon: MessageCircle,
+      customIsActive: (pathname: string) => pathname.startsWith("/chat"),
     },
-    ...(isAuthenticated
-      ? [
-          {
-            title: "Chat",
-            url: "/chat",
-            icon: MessageCircle,
-            customIsActive: (pathname: string) => pathname.startsWith("/chat"),
-          },
-          {
-            title: "Agents",
-            url: "/agents",
-            icon: Bot,
-          },
-          {
-            title: "Logs",
-            url: "/logs/llm-proxy",
-            icon: MessagesSquare,
-            customIsActive: (pathname: string) => pathname.startsWith("/logs"),
-          },
-          {
-            title: "Tools",
-            url: "/tools",
-            icon: Wrench,
-            customIsActive: (pathname: string) => pathname.startsWith("/tools"),
-          },
-          {
-            title: "MCP Registry",
-            url: "/mcp-catalog/registry",
-            icon: Router,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp-catalog"),
-          },
-          {
-            title: "Settings",
-            url: "/settings",
-            icon: Settings,
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/settings"),
-          },
-          {
-            title: "Cost & Limits",
-            url: "/cost",
-            icon: DollarSign,
-          },
-        ]
-      : []),
+    {
+      title: "Agents",
+      url: "/agents",
+      icon: Bot,
+    },
+    {
+      title: "Logs",
+      url: "/logs/llm-proxy",
+      icon: MessagesSquare,
+      customIsActive: (pathname: string) => pathname.startsWith("/logs"),
+    },
+    {
+      title: "Tools",
+      url: "/tools",
+      icon: Wrench,
+      customIsActive: (pathname: string) => pathname.startsWith("/tools"),
+    },
+    {
+      title: "MCP Registry",
+      url: "/mcp-catalog/registry",
+      icon: Router,
+      customIsActive: (pathname: string) => pathname.startsWith("/mcp-catalog"),
+    },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: Settings,
+      customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+    },
+    {
+      title: "Cost & Limits",
+      url: "/cost",
+      icon: DollarSign,
+    },
   ];
 };
 
@@ -120,10 +113,13 @@ export function AppSidebar() {
   const { data: starCount } = useGithubStars();
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
 
-  const handleChatClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    router.push("/chat");
-  };
+  const handleChatClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      router.push("/chat");
+    },
+    [router],
+  );
 
   const logoToShow = logo ? (
     <div className="flex justify-center">

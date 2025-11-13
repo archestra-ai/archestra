@@ -1,14 +1,5 @@
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import {
-  and,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  notInArray,
-  or,
-} from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -349,63 +340,6 @@ class ToolModel {
       // Assign tool to agent via junction table
       await AgentToolModel.createIfNotExists(agentId, tool.id);
     }
-  }
-
-  /**
-   * Get all tools that have no agent relationships
-   * Returns tools that are neither:
-   * 1. Directly associated with any agent (agentId is null)
-   * 2. Assigned to any agent via the agent_tools junction table
-   */
-  static async findUnassigned(): Promise<ExtendedTool[]> {
-    // Get all tool IDs that are assigned via agent_tools junction table
-    const assignedToolIds = await AgentToolModel.findAllAssignedToolIds();
-
-    // Get all tools with extended information
-    let query = db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        catalogId: schema.toolsTable.catalogId,
-        parameters: schema.toolsTable.parameters,
-        description: schema.toolsTable.description,
-        createdAt: schema.toolsTable.createdAt,
-        updatedAt: schema.toolsTable.updatedAt,
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-        mcpServer: {
-          id: schema.mcpServersTable.id,
-          name: schema.mcpServersTable.name,
-        },
-      })
-      .from(schema.toolsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.toolsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .orderBy(desc(schema.toolsTable.createdAt))
-      .$dynamic();
-
-    // Filter to tools that have no agent relationship
-    // This means: agentId is null AND toolId is not in assignedToolIds
-    if (assignedToolIds.length > 0) {
-      query = query.where(
-        and(
-          isNull(schema.toolsTable.agentId),
-          notInArray(schema.toolsTable.id, assignedToolIds),
-        ),
-      );
-    } else {
-      query = query.where(isNull(schema.toolsTable.agentId));
-    }
-
-    return query;
   }
 
   /**

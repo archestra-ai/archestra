@@ -21,9 +21,9 @@ export function PageLayout({
           <h1 className="mb-2 text-2xl font-semibold tracking-tight">
             {title}
           </h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground mb-8">{description}</p>
           {tabs.length > 0 && (
-            <div className="mt-8 flex gap-4">
+            <div className="flex gap-4">
               {tabs.map((tab) => (
                 <Link
                   key={tab.href}

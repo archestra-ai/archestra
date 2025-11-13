@@ -9171,6 +9171,7 @@ export type GetMcpServersResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -9282,6 +9283,7 @@ export type InstallMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -9446,6 +9448,7 @@ export type GetMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -13223,99 +13226,3 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
-
-export type GetUnassignedToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/tools/unassigned';
-};
-
-export type GetUnassignedToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetUnassignedToolsError = GetUnassignedToolsErrors[keyof GetUnassignedToolsErrors];
-
-export type GetUnassignedToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        catalogId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        mcpServer: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
-};
-
-export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];

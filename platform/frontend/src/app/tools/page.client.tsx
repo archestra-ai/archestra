@@ -10,13 +10,13 @@ import {
   prefetchToolInvocationPolicies,
   prefetchToolResultPolicies,
 } from "@/lib/policy.query";
-import { ErrorBoundary } from "../../_parts/error-boundary";
-import { AssignedToolsList } from "../_parts/assigned-tools-list";
-import { ToolDetailsDialog } from "../_parts/tool-details-dialog";
+import { ErrorBoundary } from "../_parts/error-boundary";
+import { AssignedToolsTable } from "./_parts/assigned-tools-table";
+import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
 type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 
-export function AgentsAssignedClient({
+export function ToolsClient({
   initialData,
 }: {
   initialData?: AgentToolData[];
@@ -34,18 +34,14 @@ export function AgentsAssignedClient({
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner className="mt-[30vh]" />}>
-          <AgentsAssignedList initialData={initialData} />
+          <ToolsList initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
   );
 }
 
-function AgentsAssignedList({
-  initialData,
-}: {
-  initialData?: AgentToolData[];
-}) {
+function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
   const { data: agentTools } = useAllAgentTools({
     initialData,
   });
@@ -55,7 +51,7 @@ function AgentsAssignedList({
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-      <AssignedToolsList
+      <AssignedToolsTable
         agentTools={agentTools || []}
         onToolClick={setSelectedToolForDialog}
       />

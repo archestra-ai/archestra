@@ -1,6 +1,7 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { AlertCircle } from "lucide-react";
@@ -116,10 +117,12 @@ export default function ChatPage() {
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = mcpTools.reduce(
     (acc, tool) => {
-      const parts = tool.name.split("__");
+      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
       // Last part is tool name, everything else is server name
       const serverName =
-        parts.length > 1 ? parts.slice(0, -1).join("__") : "default";
+        parts.length > 1
+          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+          : "default";
       if (!acc[serverName]) {
         acc[serverName] = [];
       }
@@ -326,7 +329,9 @@ export default function ChatPage() {
                               >
                                 <div className="space-y-1">
                                   {tools.map((tool) => {
-                                    const parts = tool.name.split("__");
+                                    const parts = tool.name.split(
+                                      MCP_SERVER_TOOL_NAME_SEPARATOR,
+                                    );
                                     const toolName =
                                       parts.length > 1
                                         ? parts[parts.length - 1]

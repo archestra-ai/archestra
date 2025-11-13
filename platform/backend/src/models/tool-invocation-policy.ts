@@ -115,15 +115,9 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is untrusted and tool allows usage with untrusted data, allow immediately
-    if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
-      return {
-        isAllowed: true,
-        reason: "",
-      };
-    }
-
     // Evaluate each policy
+    // IMPORTANT: block_always policies must be evaluated BEFORE checking allowUsageWhenUntrustedDataIsPresent
+    // to ensure that explicit block rules always take precedence
     for (const {
       argumentName,
       operator,
@@ -135,11 +129,17 @@ class ToolInvocationPolicyModel {
       const argumentValue = get(toolInput, argumentName);
 
       if (argumentValue === undefined) {
-        // If the argument doesn't exist and we have a block policy, that's okay
+        // If the argument doesn't exist and we have a block policy, that's okay - skip it
+        // (can't block based on a value that doesn't exist)
         if (action === "block_always") {
           continue;
         }
-        // If it's an allow policy and the argument is missing, that's a problem
+        // If it's an allow policy and the argument is missing:
+        // - If tool allows usage when untrusted data is present, skip this policy
+        // - Otherwise, it's an error (because we can't evaluate if the call should be allowed)
+        if (allowUsageWhenUntrustedDataIsPresent) {
+          continue;
+        }
         return {
           isAllowed: false,
           reason: `Missing required argument: ${argumentName}`,
@@ -198,6 +198,15 @@ class ToolInvocationPolicyModel {
           };
         }
       }
+    }
+
+    // After evaluating all block_always policies, check if context is untrusted
+    // and tool allows usage with untrusted data
+    if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
+      return {
+        isAllowed: true,
+        reason: "",
+      };
     }
 
     // If context is untrusted and we don't have an explicit allow rule, block

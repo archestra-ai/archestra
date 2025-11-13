@@ -273,12 +273,7 @@ export function useAgentAvailableTokens(params: {
     queryKey: ["agent-available-tokens", { agentIds, catalogId }],
     queryFn: async () => {
       if (!agentIds || agentIds.length === 0) {
-        // If no agentIds, fallback to fetching all servers
-        const response = await getMcpServers({});
-        const servers = response.data ?? [];
-        return catalogId
-          ? servers.filter((server) => server.catalogId === catalogId)
-          : servers;
+        return [];
       }
 
       // Use dedicated endpoint when agentIds are provided

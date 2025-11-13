@@ -4,6 +4,282 @@ import TeamModel from "./team";
 import ToolModel from "./tool";
 
 describe("ToolModel", () => {
+  describe("findAll", () => {
+    test("returns all tools for admin (assigned and unassigned)", async ({
+      makeAdmin,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "TestAgent" });
+
+      // Create an internal MCP catalog item
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-mcp-server",
+        serverUrl: "https://api.test.com/mcp/",
+      });
+
+      // Create an MCP server
+      const mcpServer = await makeMcpServer({
+        name: "test-server",
+        catalogId: catalogItem.id,
+        ownerId: admin.id,
+      });
+
+      // Create proxy-sniffed tool (agentId set)
+      const proxyTool = await makeTool({
+        agentId: agent.id,
+        name: "proxy_tool",
+        description: "Proxy Tool",
+        parameters: {},
+      });
+
+      // Create MCP tool assigned to agent (via agent_tools junction)
+      const mcpTool = await makeTool({
+        name: "mcp_assigned_tool",
+        description: "MCP Tool Assigned",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+      await AgentToolModel.create(agent.id, mcpTool.id);
+
+      // Create unassigned MCP tool (not in junction table)
+      const unassignedTool = await makeTool({
+        name: "unassigned_mcp_tool",
+        description: "Unassigned MCP Tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const allTools = await ToolModel.findAll(admin.id, true);
+
+      // Filter out Archestra built-in tools to focus on our test tools
+      const testTools = allTools.filter(
+        (t) => !t.name.startsWith("archestra__"),
+      );
+
+      // Should contain exactly our 3 created tools
+      expect(testTools).toHaveLength(3);
+
+      // Find our created tools in the results
+      const foundProxyTool = testTools.find((t) => t.id === proxyTool.id);
+      const foundMcpTool = testTools.find((t) => t.id === mcpTool.id);
+      const foundUnassignedTool = testTools.find(
+        (t) => t.id === unassignedTool.id,
+      );
+
+      expect(foundProxyTool).toBeDefined();
+      expect(foundMcpTool).toBeDefined();
+      expect(foundUnassignedTool).toBeDefined();
+
+      // Verify proxy tool has agent relationship
+      expect(foundProxyTool?.agent).toEqual({
+        id: agent.id,
+        name: "TestAgent",
+      });
+
+      // Verify MCP tools have no agent relationship in tool table (agentId is null)
+      expect(foundMcpTool?.agent).toEqual({ id: null, name: null });
+      expect(foundUnassignedTool?.agent).toEqual({ id: null, name: null });
+    });
+
+    test("returns mixed assigned and unassigned tools for non-admin with access", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      // Create team and add user
+      const team = await makeTeam(org.id, admin.id, { name: "UserTeam" });
+      await TeamModel.addMember(team.id, user.id);
+
+      // Create agents - one accessible, one not
+      const accessibleAgent = await makeAgent({
+        name: "AccessibleAgent",
+        teams: [team.id],
+      });
+      const inaccessibleAgent = await makeAgent({ name: "InaccessibleAgent" });
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-mcp-server",
+        serverUrl: "https://api.test.com/mcp/",
+      });
+
+      const mcpServer = await makeMcpServer({
+        name: "test-server",
+        catalogId: catalogItem.id,
+        ownerId: admin.id,
+      });
+
+      // Create tool for accessible agent
+      const accessibleTool = await makeTool({
+        agentId: accessibleAgent.id,
+        name: "accessible_tool",
+        description: "Accessible Tool",
+        parameters: {},
+      });
+
+      // Create tool for inaccessible agent
+      await makeTool({
+        agentId: inaccessibleAgent.id,
+        name: "inaccessible_tool",
+        description: "Inaccessible Tool",
+        parameters: {},
+      });
+
+      // Create unassigned MCP tool (user should see this because mcpServerId is not null)
+      const unassignedMcpTool = await makeTool({
+        name: "unassigned_mcp_tool",
+        description: "Unassigned MCP Tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const allTools = await ToolModel.findAll(user.id, false);
+
+      // Filter out Archestra built-in tools
+      const testTools = allTools.filter(
+        (t) => !t.name.startsWith("archestra__"),
+      );
+
+      // Should contain: accessible tool + unassigned MCP tool = 2
+      expect(testTools).toHaveLength(2);
+
+      const foundAccessible = testTools.find((t) => t.id === accessibleTool.id);
+      const foundUnassigned = testTools.find(
+        (t) => t.id === unassignedMcpTool.id,
+      );
+
+      expect(foundAccessible).toBeDefined();
+      expect(foundUnassigned).toBeDefined();
+
+      // Should not contain inaccessible tool
+      const foundInaccessible = testTools.find(
+        (t) => t.name === "inaccessible_tool",
+      );
+      expect(foundInaccessible).toBeUndefined();
+    });
+
+    test("returns only MCP tools for user with no agent access", async ({
+      makeUser,
+      makeAdmin,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "RestrictedAgent" });
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-mcp-server",
+        serverUrl: "https://api.test.com/mcp/",
+      });
+
+      const mcpServer = await makeMcpServer({
+        name: "test-server",
+        catalogId: catalogItem.id,
+        ownerId: admin.id,
+      });
+
+      // Create agent-specific tool (user shouldn't see this)
+      await makeTool({
+        agentId: agent.id,
+        name: "restricted_tool",
+        description: "Restricted Tool",
+        parameters: {},
+      });
+
+      // Create unassigned MCP tools (user should see these)
+      const unassignedMcpTool = await makeTool({
+        name: "public_mcp_tool",
+        description: "Public MCP Tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const allTools = await ToolModel.findAll(user.id, false);
+
+      // Filter out Archestra built-in tools
+      const testTools = allTools.filter(
+        (t) => !t.name.startsWith("archestra__"),
+      );
+
+      // Should contain only the unassigned MCP tool
+      expect(testTools).toHaveLength(1);
+      expect(testTools[0].id).toBe(unassignedMcpTool.id);
+    });
+
+    test("includes Archestra built-in tools for admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      const tools = await ToolModel.findAll(admin.id, true);
+
+      // Check for Archestra tools
+      const archestraTools = tools.filter((t) =>
+        t.name.startsWith("archestra__"),
+      );
+      expect(archestraTools.length).toBeGreaterThan(0);
+    });
+
+    test("sorts tools by createdAt desc", async ({
+      makeAdmin,
+      makeAgent,
+      makeTool,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await makeAgent({ name: "TestAgent" });
+
+      // Create tools with slight delays to ensure different timestamps
+      const tool1 = await makeTool({
+        agentId: agent.id,
+        name: "first_tool",
+        description: "First Tool",
+        parameters: {},
+      });
+
+      // Small delay
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const tool2 = await makeTool({
+        agentId: agent.id,
+        name: "second_tool",
+        description: "Second Tool",
+        parameters: {},
+      });
+
+      const allTools = await ToolModel.findAll(admin.id, true);
+
+      // Filter to just our test tools
+      const testTools = allTools.filter(
+        (t) => t.name === "first_tool" || t.name === "second_tool",
+      );
+
+      expect(testTools).toHaveLength(2);
+
+      // tool2 should appear before tool1 (desc order by createdAt)
+      expect(testTools[0].id).toBe(tool2.id);
+      expect(testTools[1].id).toBe(tool1.id);
+    });
+  });
+
   describe("Access Control", () => {
     test("admin can see all tools", async ({
       makeAdmin,
@@ -239,9 +515,7 @@ describe("ToolModel", () => {
   describe("getMcpToolsAssignedToAgent", () => {
     test("returns empty array when no tools provided", async ({
       makeAgent,
-      makeUser,
     }) => {
-      const _user = await makeUser();
       const agent = await makeAgent();
 
       const result = await ToolModel.getMcpToolsAssignedToAgent([], agent.id);
@@ -250,10 +524,8 @@ describe("ToolModel", () => {
 
     test("returns empty array when no MCP tools assigned to agent", async ({
       makeAgent,
-      makeUser,
       makeTool,
     }) => {
-      const _user = await makeUser();
       const agent = await makeAgent();
 
       // Create a proxy-sniffed tool (no mcpServerId)

@@ -7,6 +7,7 @@ import {
   OptimizationRuleModel,
   OrganizationModel,
   PromptModel,
+  ToolModel,
   UserModel,
 } from "@/models";
 import type { InsertDualLlmConfig } from "@/types";
@@ -381,10 +382,26 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   }
 }
 
+/**
+ * Creates and assigns Archestra MCP tools to all agents
+ */
+async function seedArchestraTools(): Promise<void> {
+  const agents = await AgentModel.findAll();
+
+  for (const agent of agents) {
+    // Assigns Archestra MCP tools, while also creating them in the database if they are missing.
+    await ToolModel.assignArchestraToolsToAgent(agent.id);
+    logger.info(
+      `✓ Assigned Archestra MCP tools to agent: ${agent.name} (${agent.id})`,
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await AgentModel.getAgentOrCreateDefault();
+  await seedArchestraTools();
 }

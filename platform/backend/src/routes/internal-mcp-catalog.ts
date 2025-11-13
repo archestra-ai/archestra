@@ -192,6 +192,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
         // If critical fields changed, mark all installed servers for reinstall
+        // and delete existing tools so they can be rediscovered
         if (nameChanged || urlChanged || oauthConfigChanged) {
           const installedServers = await McpServerModel.findByCatalogId(
             request.params.id,
@@ -202,6 +203,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               reinstallRequired: true,
             });
           }
+
+          // Delete all tools associated with this catalog
+          // This ensures tools are rediscovered with updated configuration during reinstall
+          const { ToolModel } = await import("@/models");
+          await ToolModel.deleteByCatalogId(request.params.id);
         }
 
         return reply.send(catalogItem);

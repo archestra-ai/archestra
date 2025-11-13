@@ -166,7 +166,12 @@ export function McpServerCard({
     error: logsError,
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
-  const needsReinstall = installedServer?.reinstallRequired ?? false;
+  // For local servers, check the current user's specific installation
+  // For remote servers, check the aggregated installation
+  const needsReinstall =
+    variant === "local" && currentUserLocalServerInstallation
+      ? (currentUserLocalServerInstallation.reinstallRequired ?? false)
+      : (installedServer?.reinstallRequired ?? false);
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
 
@@ -394,7 +399,7 @@ export function McpServerCard({
           disabled={isInstalling}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+          {isInstalling ? "Reconnecting..." : "Reconnect Required"}
         </Button>
       )}
       {requiresAuth && !isCurrentUserAuthenticated && (

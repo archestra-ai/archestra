@@ -362,60 +362,54 @@ export function InternalMCPCatalog({
     };
   };
 
-  const handleReinstallRequired = async (
-    catalogId: string,
-    updatedData?: { name?: string; serverUrl?: string },
-  ) => {
-    // Check if there's an installed server from this catalog item
-    const installedServer = installedServers?.find(
-      (server) => server.catalogId === catalogId,
-    );
-
-    // Only show reinstall dialog if the server is actually installed
-    if (!installedServer) {
-      return;
-    }
-
-    // Wait a bit for queries to refetch after mutation
-    // This ensures we have fresh catalog data
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Find the catalog item and show reinstall dialog
-    let catalogItem = catalogItems?.find((item) => item.id === catalogId);
-
-    // If we have updated data from the edit, merge it with the catalog item
-    if (catalogItem && updatedData) {
-      catalogItem = {
-        ...catalogItem,
-        ...(updatedData.name && { name: updatedData.name }),
-        ...(updatedData.serverUrl && { serverUrl: updatedData.serverUrl }),
-      };
-    }
-
-    if (catalogItem) {
-      setCatalogItemForReinstall(catalogItem);
-      setShowReinstallDialog(true);
-    }
+  const handleReinstall = (catalogItem: CatalogItem) => {
+    // Show confirmation dialog before reinstalling
+    setCatalogItemForReinstall(catalogItem);
+    setShowReinstallDialog(true);
   };
 
-  const handleReinstall = async (catalogItem: CatalogItem) => {
-    // Get the installed server to get its ID (not catalog ID)
-    const installedServer = installedServers?.find(
-      (server) => server.catalogId === catalogItem.id,
-    );
+  const handleReinstallConfirm = async () => {
+    if (!catalogItemForReinstall) return;
+
+    // For local servers, find the current user's specific installation
+    // For remote servers, find any installation (there should be only one per catalog)
+    let installedServer: InstalledServer | undefined;
+    if (catalogItemForReinstall.serverType === "local" && currentUserId) {
+      installedServer = installedServers?.find(
+        (server) =>
+          server.catalogId === catalogItemForReinstall.id &&
+          server.ownerId === currentUserId &&
+          server.authType === "personal",
+      );
+    } else {
+      installedServer = installedServers?.find(
+        (server) => server.catalogId === catalogItemForReinstall.id,
+      );
+    }
+
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
+      setShowReinstallDialog(false);
+      setCatalogItemForReinstall(null);
       return;
     }
+
+    setShowReinstallDialog(false);
 
     // Delete the installed server using its server ID
     await deleteMutation.mutateAsync({
       id: installedServer.id,
-      name: catalogItem.name,
+      name: catalogItemForReinstall.name,
     });
 
-    // Then reinstall
-    await handleInstall(catalogItem);
+    // Then reinstall (for local servers, this will prompt for credentials again)
+    if (catalogItemForReinstall.serverType === "local") {
+      await handleInstallLocalServer(catalogItemForReinstall);
+    } else {
+      await handleInstall(catalogItemForReinstall);
+    }
+
+    setCatalogItemForReinstall(null);
   };
 
   const sortInstalledFirst = (items: CatalogItem[]) =>
@@ -559,8 +553,13 @@ export function InternalMCPCatalog({
 
       <EditCatalogDialog
         item={editingItem}
-        onClose={() => setEditingItem(null)}
-        onReinstallRequired={handleReinstallRequired}
+        onClose={() => {
+          const item = editingItem;
+          if (item) {
+            setEditingItem(null);
+            handleReinstall(item);
+          }
+        }}
       />
 
       <DeleteCatalogDialog
@@ -609,13 +608,7 @@ export function InternalMCPCatalog({
           setShowReinstallDialog(false);
           setCatalogItemForReinstall(null);
         }}
-        onConfirm={async () => {
-          if (catalogItemForReinstall) {
-            setShowReinstallDialog(false);
-            await handleReinstall(catalogItemForReinstall);
-            setCatalogItemForReinstall(null);
-          }
-        }}
+        onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={installMutation.isPending}
       />

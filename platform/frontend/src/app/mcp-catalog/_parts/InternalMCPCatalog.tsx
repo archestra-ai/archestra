@@ -523,7 +523,6 @@ export function InternalMCPCatalog({
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
-                  localServerInstallationCount={localServers.length}
                   currentUserInstalledLocalServer={
                     currentUserInstalledLocalServer
                   }

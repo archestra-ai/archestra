@@ -12,12 +12,15 @@ type ActionButtonProps = {
   onClick: (e: React.MouseEvent) => void;
   testId?: string;
   className?: string;
+  "data-testid"?: string;
+  "aria-label"?: string;
 };
 export function ActionButton({
   children,
   tooltip,
   onClick,
-  testId,
+  "data-testid": dataTestId,
+  "aria-label": ariaLabel,
   className,
 }: ActionButtonProps) {
   return (
@@ -30,7 +33,8 @@ export function ActionButton({
             e.stopPropagation();
             onClick(e);
           }}
-          data-testid={testId}
+          data-testid={dataTestId}
+          aria-label={ariaLabel || ""}
           className={`border h-8 w-8 ${className}`}
         >
           {children}

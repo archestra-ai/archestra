@@ -1,13 +1,9 @@
 import { E2eTestId } from "@shared";
 import { MessageCircle, Pencil, Plug, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import type { useAgentsPaginated } from "@/lib/agent.query";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface ActionButtonProps {
   children: ReactNode;
@@ -17,44 +13,6 @@ interface ActionButtonProps {
   className?: string;
 }
 
-function ActionButton({
-  children,
-  tooltip,
-  onClick,
-  "data-testid": dataTestId,
-  className,
-}: ActionButtonProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick(e);
-          }}
-          data-testid={dataTestId}
-          aria-label={tooltip}
-          className={`border h-8 w-8 ${className}`}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-type Agent = {
-  id: string;
-  name: string;
-  teams: string[];
-  labels: AgentLabel[];
-  optimizeCost?: boolean;
-  considerContextUntrusted: boolean;
-  tools: Array<{ id: string }>;
-}
 // Infer Agent type from the API response
 type Agent = NonNullable<
   ReturnType<typeof useAgentsPaginated>["data"]
@@ -79,10 +37,15 @@ export function AgentActions({
 }: AgentActionsProps) {
   return (
     <ButtonGroup>
-      <ActionButton tooltip="Connect" onClick={() => onConnect(agent)}>
+      <ActionButton
+        aria-label="Connect"
+        tooltip="Connect"
+        onClick={() => onConnect(agent)}
+      >
         <Plug className="h-4 w-4" />
       </ActionButton>
       <ActionButton
+        aria-label="Prompts"
         tooltip="Prompts"
         onClick={() => onConfigureChat(agent)}
       >
@@ -90,6 +53,7 @@ export function AgentActions({
       </ActionButton>
       <ActionButton
         tooltip="Edit"
+        aria-label="Edit"
         onClick={() =>
           onEdit({
             id: agent.id,
@@ -111,6 +75,7 @@ export function AgentActions({
         <ActionButton
           tooltip="Delete"
           onClick={() => onDelete(agent.id)}
+          aria-label="Delete"
           data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
         >
           <Trash2 className="h-4 w-4 text-destructive" />

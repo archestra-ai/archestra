@@ -403,6 +403,7 @@ function Agents() {
             {row.original.tools.length}
             <ActionButton
               tooltip="Assign Tools"
+              aria-label="Assign Tools"
               onClick={() => setAssigningToolsAgent(agent)}
             >
               <Wrench className="h-4 w-4" />

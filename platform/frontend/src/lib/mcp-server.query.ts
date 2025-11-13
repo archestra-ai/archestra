@@ -54,6 +54,8 @@ export function useInstallMcpServer() {
           queryKey: ["mcp-servers", installedServer.id, "tools"],
         });
       }
+      // Invalidate all chat MCP tools (new tools may be available)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
     onError: (_error, variables) => {
       toast.error(`Failed to install ${variables.name}`);
@@ -75,6 +77,8 @@ export function useDeleteMcpServer() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate all chat MCP tools (tools are now unavailable)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       toast.success(`Successfully uninstalled ${variables.name}`);
     },
     onError: (error, variables) => {

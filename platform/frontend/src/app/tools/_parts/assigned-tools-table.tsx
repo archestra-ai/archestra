@@ -48,7 +48,7 @@ import { formatDate } from "@/lib/utils";
 type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
-interface AssignedToolsListProps {
+interface AssignedToolsTableProps {
   agentTools: AgentToolData[];
   onToolClick: (tool: AgentToolData) => void;
 }
@@ -67,10 +67,10 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsList({
+export function AssignedToolsTable({
   agentTools,
   onToolClick,
-}: AssignedToolsListProps) {
+}: AssignedToolsTableProps) {
   const agentToolPatchMutation = useAgentToolPatchMutation();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
@@ -521,80 +521,6 @@ export function AssignedToolsList({
           );
         },
         size: 190,
-      },
-      {
-        accessorKey: "createdAt",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Detected
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <TruncatedText
-            message={formatDate({ date: row.original.createdAt })}
-            className="font-mono text-xs text-muted-foreground"
-          />
-        ),
-        size: 100,
-      },
-      {
-        id: "parameters",
-        header: "Parameters",
-        cell: ({ row }) => {
-          const tool = row.original.tool;
-          const paramCount = Object.keys(
-            tool.parameters?.properties || {},
-          ).length;
-
-          if (paramCount === 0) {
-            return <span className="text-sm text-muted-foreground">None</span>;
-          }
-
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                    {paramCount}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md">
-                  <div className="space-y-1">
-                    {Object.entries(tool.parameters?.properties || {}).map(
-                      ([key, value]: [string, { type?: string }]) => {
-                        const isRequired = Array.isArray(
-                          tool.parameters?.required,
-                        )
-                          ? tool.parameters.required.includes(key)
-                          : false;
-                        return (
-                          <div key={key} className="text-xs">
-                            <code className="font-medium">{key}</code>
-                            <span className="text-green-700">
-                              : {value.type}
-                            </span>
-                            {isRequired && (
-                              <span className="text-green-700">
-                                {" "}
-                                (required)
-                              </span>
-                            )}
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
-        size: 100,
       },
     ],
     [

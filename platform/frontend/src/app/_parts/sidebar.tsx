@@ -76,7 +76,7 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
           },
           {
             title: "Tools",
-            url: "/tools/agents-assigned",
+            url: "/tools",
             icon: Wrench,
             customIsActive: (pathname: string) => pathname.startsWith("/tools"),
           },

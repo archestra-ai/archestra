@@ -33,15 +33,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useAgentToolPatchMutation,
-  useUnassignTool,
-} from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
+import { useAgentToolPatchMutation, useUnassignTool } from "@/lib/tool.query";
 import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
 

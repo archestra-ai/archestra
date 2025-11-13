@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
   useToolResultPolicies,
@@ -25,6 +24,7 @@ import {
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
+import { useAgentToolPatchMutation } from "@/lib/tool.query";
 import { PolicyCard } from "./policy-card";
 
 function AttributePathExamples() {

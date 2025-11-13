@@ -19,8 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
-import { useAssignTool } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useAssignTool } from "@/lib/tool.query";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {

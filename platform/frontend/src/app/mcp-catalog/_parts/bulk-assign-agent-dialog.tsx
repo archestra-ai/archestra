@@ -18,8 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
-import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
+import { useBulkAssignTools } from "@/lib/tool.query";
 
 interface BulkAssignAgentDialogProps {
   tools: Array<{

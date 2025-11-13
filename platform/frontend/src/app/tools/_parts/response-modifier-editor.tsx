@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useAgentToolPatchMutation } from "@/lib/tool.query";
 
 interface ResponseModifierEditorProps {
   agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];

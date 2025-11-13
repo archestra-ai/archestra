@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
   useToolInvocationPolicies,
@@ -19,6 +18,7 @@ import {
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
+import { useAgentToolPatchMutation } from "@/lib/tool.query";
 import { PolicyCard } from "./policy-card";
 
 export function ToolCallPolicies({

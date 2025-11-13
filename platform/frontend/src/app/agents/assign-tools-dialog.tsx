@@ -18,14 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useAgentToolPatchMutation,
   useAllAgentTools,
   useAssignTool,
+  useTools,
   useUnassignTool,
-} from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useTools } from "@/lib/tool.query";
+} from "@/lib/tool.query";
 
 interface AssignToolsDialogProps {
   agent: archestraApiTypes.GetAllAgentsResponses["200"][number];

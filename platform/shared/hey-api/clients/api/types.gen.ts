@@ -9171,6 +9171,7 @@ export type GetMcpServersResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -9282,6 +9283,7 @@ export type InstallMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -9446,6 +9448,7 @@ export type GetMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
+        catalogName?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{

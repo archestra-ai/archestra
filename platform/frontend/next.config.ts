@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { MCP_CATALOG_API_BASE_URL } from "@shared";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -17,7 +18,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/archestra-catalog/:path*',
-        destination: 'https://www.archestra.ai/mcp-catalog/api/:path*',
+        destination: `${MCP_CATALOG_API_BASE_URL}/:path*`,
       },
       {
         source: '/api/:path*',

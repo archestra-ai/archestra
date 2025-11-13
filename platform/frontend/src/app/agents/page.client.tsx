@@ -477,7 +477,7 @@ function Agents() {
                     }}
                   >
                     <MessageCircle className="h-4 w-4" />
-                    Configure Chat
+                    Prompts
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={(e) => {

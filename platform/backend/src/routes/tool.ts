@@ -36,32 +36,6 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
-
-  fastify.get(
-    "/api/tools/unassigned",
-    {
-      schema: {
-        operationId: RouteId.GetUnassignedTools,
-        description: "Get all tools that have no agent relationships",
-        tags: ["Tools"],
-        response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
-      },
-    },
-    async (_request, reply) => {
-      try {
-        return reply.send(await ToolModel.findUnassigned());
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
 };
 
 export default toolRoutes;

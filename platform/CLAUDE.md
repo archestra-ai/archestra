@@ -308,6 +308,8 @@ Tool invocation policies and trusted data policies are still enforced by the pro
   - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
 - Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
+- Security: Archestra tools are always trusted and bypass tool invocation/trusted data policies
+- UI: Hidden from tools management interface (use `excludeArchestraTools: true` query param)
 
 **Testing**:
 

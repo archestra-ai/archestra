@@ -1232,11 +1232,11 @@ export async function executeArchestraTool(
       results.forEach((result, index) => {
         const { agentId, toolId } = assignments[index];
         if (result.status === "fulfilled") {
-          if (result.value === null) {
-            // Success
+          if (result.value === null || result.value === "updated") {
+            // Success (created or updated)
             succeeded.push({ agentId, toolId });
           } else if (result.value === "duplicate") {
-            // Already assigned
+            // Already assigned with same credentials
             duplicates.push({ agentId, toolId });
           } else {
             // Validation error

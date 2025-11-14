@@ -1,6 +1,5 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import {

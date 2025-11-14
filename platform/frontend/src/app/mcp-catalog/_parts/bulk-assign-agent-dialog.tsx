@@ -222,7 +222,7 @@ export function BulkAssignAgentDialog({
                   onValueChange={setExecutionSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
-                  agentIds={selectedAgentIds}
+                  shouldSetDefaultValue
                 />
               </>
             ) : (
@@ -242,7 +242,7 @@ export function BulkAssignAgentDialog({
                   onValueChange={setCredentialSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
-                  agentIds={selectedAgentIds}
+                  shouldSetDefaultValue
                 />
               </>
             )}

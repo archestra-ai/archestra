@@ -286,7 +286,6 @@ export function AssignToolsDialog({
                                 </span>
                                 <InstallationSelect
                                   catalogId={catalogId}
-                                  agentIds={[agent.id]}
                                   onValueChange={(executionSourceId) =>
                                     handleExecutionSourceChange(
                                       tool.id,
@@ -297,6 +296,7 @@ export function AssignToolsDialog({
                                     selectedTool?.executionSourceId ?? undefined
                                   }
                                   className="mb-4"
+                                  shouldSetDefaultValue
                                 />
                               </>
                             ) : (
@@ -306,7 +306,6 @@ export function AssignToolsDialog({
                                 </span>
                                 <TokenSelect
                                   catalogId={catalogId}
-                                  agentIds={[agent.id]}
                                   onValueChange={(credentialsSourceId) =>
                                     handleCredentialsSourceChange(
                                       tool.id,
@@ -318,6 +317,7 @@ export function AssignToolsDialog({
                                     undefined
                                   }
                                   className="mb-4"
+                                  shouldSetDefaultValue
                                 />
                               </>
                             )}

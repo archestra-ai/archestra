@@ -230,10 +230,10 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 };
 
 /**
- * Get MCP servers that can be used as credential sources for the specified agents' tools
+ * Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId
  */
-export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options: Options<GetAgentAvailableTokensData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({
+export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAvailableTokensData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({
         url: '/api/agents/available-tokens',
         ...options
     });

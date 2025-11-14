@@ -1,5 +1,6 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import {
@@ -85,11 +86,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           executionSourceMcpServerId,
         );
 
-        if (result && result !== "duplicate") {
+        if (result && result !== "duplicate" && result !== "updated") {
           return reply.status(result.status).send(result);
         }
 
-        // Return success for both new assignments and duplicates
+        // Return success for new assignments, duplicates, and updates
         return reply.send({ success: true });
       } catch (error) {
         fastify.log.error(error);
@@ -168,11 +169,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         results.forEach((result, index) => {
           const { agentId, toolId } = assignments[index];
           if (result.status === "fulfilled") {
-            if (result.value === null) {
-              // Success
+            if (result.value === null || result.value === "updated") {
+              // Success (created or updated credentials)
               succeeded.push({ agentId, toolId });
             } else if (result.value === "duplicate") {
-              // Already assigned
+              // Already assigned with same credentials
               duplicates.push({ agentId, toolId });
             } else {
               // Validation error
@@ -418,61 +419,41 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetAgentAvailableTokens,
         description:
-          "Get MCP servers that can be used as credential sources for the specified agents' tools",
+          "Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId",
         tags: ["Agent Tools"],
         querystring: z.object({
-          agentIds: z
-            .string()
-            .transform((val) => val.split(","))
-            .pipe(z.array(UuidIdSchema)),
           catalogId: UuidIdSchema.optional(),
         }),
         response: constructResponseSchema(
-          z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              authType: z.enum(["personal", "team"]),
-              serverType: z.enum(["local", "remote"]),
-              catalogId: z.string().nullable(),
-              ownerId: z.string().nullable(),
-              ownerEmail: z.string().nullable(),
-              teamDetails: z
-                .array(
-                  z.object({
-                    teamId: z.string(),
-                    name: z.string(),
-                    createdAt: z.coerce.date(),
-                  }),
-                )
-                .optional(),
-            }),
+          z.record(
+            z.string(),
+            z.array(
+              z.object({
+                id: z.string(),
+                name: z.string(),
+                authType: z.enum(["personal", "team"]),
+                serverType: z.enum(["local", "remote"]),
+                catalogId: z.string().nullable(),
+                ownerId: z.string().nullable(),
+                ownerEmail: z.string().nullable(),
+                teamDetails: z
+                  .array(
+                    z.object({
+                      teamId: z.string(),
+                      name: z.string(),
+                      createdAt: z.coerce.date(),
+                    }),
+                  )
+                  .optional(),
+              }),
+            ),
           ),
         ),
       },
     },
     async (request, reply) => {
       try {
-        const { agentIds, catalogId } = request.query;
-
-        // Validate that at least one agent ID is provided
-        if (agentIds.length === 0) {
-          return reply.status(200).send([]);
-        }
-
-        // Validate that all agents exist
-        const agents = await Promise.all(
-          agentIds.map((id) => AgentModel.findById(id)),
-        );
-        const invalidAgentIds = agentIds.filter((_id, idx) => !agents[idx]);
-        if (invalidAgentIds.length > 0) {
-          return reply.status(404).send({
-            error: {
-              message: `Agent(s) not found: ${invalidAgentIds.join(", ")}`,
-              type: "not_found",
-            },
-          });
-        }
+        const { catalogId } = request.query;
 
         const { success: isAgentAdmin } = await hasPermission(
           { agent: ["admin"] },
@@ -485,82 +466,52 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isAgentAdmin,
         );
 
-        // Filter by catalogId if provided
-        const filteredServers = catalogId
-          ? allServers.filter((server) => server.catalogId === catalogId)
-          : allServers;
-
-        // Apply token validation logic to filter available tokens
-        // A token is valid if it can be used with ANY of the provided agents
-        const validServers = await Promise.all(
-          filteredServers.map(async (server) => {
-            // Admin personal tokens can be used with any agent
-            if (server.authType === "personal" && server.ownerId) {
-              const ownerId = server.ownerId;
-              // const owner = await UserModel.getById(ownerId);
-
-              /**
-               * NOTE: I'm doubtful this will work as intended, right now better-auth's
-               * hasPermissions API requires passing in request headers to do the authz check
-               * HOWEVER, in this particular context, we are looking at a user which may
-               * not necessarily be the user identified by the request.headers...
-               */
-              const { success: isAgentAdmin } = await hasPermission(
-                { agent: ["admin"] },
-                request.headers,
-              );
-
-              if (isAgentAdmin) {
-                return { server, valid: true };
-              }
-
-              // Member personal tokens: check if owner belongs to any of the agents' teams
-              const hasAccessResults = await Promise.all(
-                agentIds.map((agentId) =>
-                  /**
-                   * NOTE: this is granting too much access here.. we should refactor this,
-                   * see the comment above the hasPermission call above for more context..
-                   */
-                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, true),
-                ),
-              );
-              const hasAccessToAny = hasAccessResults.some(
-                (hasAccess) => hasAccess,
-              );
-              return { server, valid: hasAccessToAny };
-            }
-
-            // Team tokens: check if server and any of the agents share a team
-            if (server.authType === "team") {
-              const shareTeamResults = await Promise.all(
-                agentIds.map((agentId) =>
-                  AgentTeamModel.agentAndMcpServerShareTeam(agentId, server.id),
-                ),
-              );
-              const shareTeamWithAny = shareTeamResults.some(
-                (shareTeam) => shareTeam,
-              );
-              return { server, valid: shareTeamWithAny };
-            }
-
-            return { server, valid: false };
-          }),
+        // Filter by catalogId if provided, otherwise include all
+        const filteredServers = allServers.filter(
+          (server) =>
+            (catalogId ? server.catalogId === catalogId : true) &&
+            server.authType !== null,
         );
 
-        const availableTokens = validServers
-          .filter(({ valid, server }) => valid && server.authType !== null)
-          .map(({ server }) => ({
-            id: server.id,
-            name: server.name,
-            authType: server.authType as "personal" | "team",
-            serverType: server.serverType,
-            catalogId: server.catalogId,
-            ownerId: server.ownerId,
-            ownerEmail: server.ownerEmail ?? null,
-            teamDetails: server.teamDetails,
-          }));
+        // Map servers to the response format
+        const mappedServers = filteredServers.map((server) => ({
+          id: server.id,
+          name: server.name,
+          authType: server.authType as "personal" | "team",
+          serverType: server.serverType as "local" | "remote",
+          catalogId: server.catalogId,
+          ownerId: server.ownerId,
+          ownerEmail: server.ownerEmail ?? null,
+          teamDetails: server.teamDetails,
+        }));
 
-        return reply.send(availableTokens);
+        // Sort servers: current user's personal tokens first, then other personal tokens, then team tokens
+        const currentUserId = request.user.id;
+        const sortedServers = mappedServers.sort((a, b) => {
+          const aIsCurrentUser =
+            a.authType === "personal" && a.ownerId === currentUserId;
+          const bIsCurrentUser =
+            b.authType === "personal" && b.ownerId === currentUserId;
+
+          // Current user's tokens come first
+          if (aIsCurrentUser && !bIsCurrentUser) return -1;
+          if (!aIsCurrentUser && bIsCurrentUser) return 1;
+
+          // Then other personal tokens before team tokens
+          if (a.authType === "personal" && b.authType === "team") return -1;
+          if (a.authType === "team" && b.authType === "personal") return 1;
+
+          // Keep original order otherwise
+          return 0;
+        });
+
+        // Group by catalogId
+        const groupedByCatalogId = groupBy(
+          sortedServers,
+          (server) => server.catalogId,
+        );
+
+        return reply.send(groupedByCatalogId);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -577,7 +528,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 /**
  * Assigns a single tool to a single agent with validation.
- * Returns null on success, "duplicate" if already exists, or an error object if validation fails.
+ * Returns null on success/update, "duplicate" if already exists with same credentials, or an error object if validation fails.
  */
 export async function assignToolToAgent(
   agentId: string,
@@ -590,6 +541,7 @@ export async function assignToolToAgent(
       error: { message: string; type: string };
     }
   | "duplicate"
+  | "updated"
   | null
 > {
   // Validate that agent exists
@@ -670,20 +622,24 @@ export async function assignToolToAgent(
     }
   }
 
-  // Create the assignment (no-op if already exists)
-  const result = await AgentToolModel.createIfNotExists(
+  // Create or update the assignment with credentials
+  const result = await AgentToolModel.createOrUpdateCredentials(
     agentId,
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
   );
 
-  // If result is null, it means the assignment already existed (duplicate)
-  if (result === null) {
+  // Return appropriate status
+  if (result.status === "unchanged") {
     return "duplicate";
   }
 
-  return null;
+  if (result.status === "updated") {
+    return "updated";
+  }
+
+  return null; // created
 }
 
 /**

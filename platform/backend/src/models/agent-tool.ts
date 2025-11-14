@@ -112,6 +112,82 @@ class AgentToolModel {
     return null;
   }
 
+  /**
+   * Creates a new agent-tool assignment or updates credentials if it already exists.
+   * Returns the status: "created", "updated", or "unchanged".
+   */
+  static async createOrUpdateCredentials(
+    agentId: string,
+    toolId: string,
+    credentialSourceMcpServerId?: string | null,
+    executionSourceMcpServerId?: string | null,
+  ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+    // Check if assignment already exists
+    const [existing] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      // Create new assignment
+      const options: Partial<
+        Pick<
+          InsertAgentTool,
+          | "allowUsageWhenUntrustedDataIsPresent"
+          | "toolResultTreatment"
+          | "responseModifierTemplate"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+        >
+      > = {};
+
+      if (credentialSourceMcpServerId) {
+        options.credentialSourceMcpServerId = credentialSourceMcpServerId;
+      }
+
+      if (executionSourceMcpServerId) {
+        options.executionSourceMcpServerId = executionSourceMcpServerId;
+      }
+
+      await AgentToolModel.create(agentId, toolId, options);
+      return { status: "created" };
+    }
+
+    // Check if credentials need updating
+    const needsUpdate =
+      existing.credentialSourceMcpServerId !==
+        (credentialSourceMcpServerId ?? null) ||
+      existing.executionSourceMcpServerId !==
+        (executionSourceMcpServerId ?? null);
+
+    if (needsUpdate) {
+      // Update credentials
+      const updateData: Partial<
+        Pick<
+          UpdateAgentTool,
+          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+        >
+      > = {};
+
+      // Always set both fields to ensure they're updated correctly
+      updateData.credentialSourceMcpServerId =
+        credentialSourceMcpServerId ?? null;
+      updateData.executionSourceMcpServerId =
+        executionSourceMcpServerId ?? null;
+
+      await AgentToolModel.update(existing.id, updateData);
+      return { status: "updated" };
+    }
+
+    return { status: "unchanged" };
+  }
+
   static async update(
     id: string,
     data: Partial<

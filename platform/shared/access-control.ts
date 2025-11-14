@@ -351,7 +351,7 @@ export const requiredEndpointPermissionsMap: Partial<
     tool: ["read"],
   },
   [RouteId.GetAgentAvailableTokens]: {
-    agent: ["read"],
+    agent: ["admin"],
   },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],

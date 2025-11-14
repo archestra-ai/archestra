@@ -261,33 +261,23 @@ export function useMcpServerInstallationStatus(
 }
 
 /**
- * Get MCP servers (tokens) available for use with specific agents' tools.
- * Filters based on team membership and admin status.
+ * Get MCP servers (tokens) available for use with agents' tools.
+ * Returns data grouped by catalogId.
  *
- * @param agentIds - Array of agent IDs to filter tokens for. If null/empty, returns all servers.
- * @param catalogId - Optional catalog ID to further filter tokens.
+ * @param catalogId - Optional catalog ID to filter tokens. If not provided, returns tokens for all catalog items.
  */
-export function useAgentAvailableTokens(params: {
-  agentIds: string[];
-  catalogId: string;
-}) {
-  const { agentIds, catalogId } = params;
+export function useAgentAvailableTokens(params: { catalogId?: string }) {
+  const { catalogId } = params;
 
   return useQuery({
-    queryKey: ["agent-available-tokens", { agentIds, catalogId }],
+    queryKey: ["agent-available-tokens", { catalogId }],
     queryFn: async () => {
-      if (!agentIds || agentIds.length === 0) {
-        return [];
-      }
-
-      // Use dedicated endpoint when agentIds are provided
       const response = await getAgentAvailableTokens({
         query: {
-          agentIds: agentIds.join(","),
           ...(catalogId ? { catalogId } : {}),
         },
       });
-      return response.data ?? [];
+      return response.data ?? {};
     },
   });
 }

@@ -4,7 +4,6 @@ import {
   AgentModel,
   DualLlmConfigModel,
   MemberModel,
-  OptimizationRuleModel,
   OrganizationModel,
   PromptModel,
   ToolModel,

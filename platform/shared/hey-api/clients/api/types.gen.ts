@@ -3716,8 +3716,7 @@ export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgent
 export type GetAgentAvailableTokensData = {
     body?: never;
     path?: never;
-    query: {
-        agentIds: string;
+    query?: {
         catalogId?: string;
     };
     url: '/api/agents/available-tokens';
@@ -3777,20 +3776,22 @@ export type GetAgentAvailableTokensResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        authType: 'personal' | 'team';
-        serverType: 'local' | 'remote';
-        catalogId: string | null;
-        ownerId: string | null;
-        ownerEmail: string | null;
-        teamDetails?: Array<{
-            teamId: string;
+    200: {
+        [key: string]: Array<{
+            id: string;
             name: string;
-            createdAt: string;
+            authType: 'personal' | 'team';
+            serverType: 'local' | 'remote';
+            catalogId: string | null;
+            ownerId: string | null;
+            ownerEmail: string | null;
+            teamDetails?: Array<{
+                teamId: string;
+                name: string;
+                createdAt: string;
+            }>;
         }>;
-    }>;
+    };
 };
 
 export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];

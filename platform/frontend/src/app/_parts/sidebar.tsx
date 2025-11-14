@@ -20,6 +20,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback } from "react";
+import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
   Sidebar,
@@ -176,6 +177,9 @@ export function AppSidebar() {
                       </Link>
                     )}
                   </SidebarMenuButton>
+                  {/* Chat conversations as sub-items */}
+                  {item.title === "Chat" && <ChatSidebarSection />}
+                  {/* Other sub-items */}
                   {item.subItems && (
                     <SidebarMenuSub>
                       {item.subItems.map((subItem) => (

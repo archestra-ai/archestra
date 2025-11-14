@@ -18,7 +18,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ConversationList } from "@/components/chat/conversation-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,7 +54,13 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
-  const [hideToolCalls, setHideToolCalls] = useState(false);
+  const [hideToolCalls, setHideToolCalls] = useState(() => {
+    // Initialize from localStorage
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("archestra-chat-hide-tool-calls") === "true";
+    }
+    return false;
+  });
   const [hasInitialized, setHasInitialized] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
@@ -164,30 +169,11 @@ export default function ChatPage() {
     }
   };
 
-  // Update conversation mutation
-  const updateConversationMutation = useUpdateConversation();
-  const handleUpdateConversation = async (id: string, title: string) => {
-    await updateConversationMutation.mutateAsync({ id, title });
-  };
-
-  // Delete conversation mutation
-  const deleteConversationMutation = useDeleteConversation();
-  const handleDeleteConversation = async (id: string) => {
-    // If we're deleting the selected conversation, clear the selection first
-    // to prevent the query from trying to refetch a deleted conversation
-    if (conversationId === id) {
-      setConversationId(undefined);
-      setMessages([]);
-      router.push(pathname);
-    }
-
-    // Clear from localStorage if this was the last viewed conversation
-    const lastConversationId = localStorage.getItem(LAST_CONVERSATION_KEY);
-    if (lastConversationId === id) {
-      localStorage.removeItem(LAST_CONVERSATION_KEY);
-    }
-
-    await deleteConversationMutation.mutateAsync(id);
+  // Persist hide tool calls preference
+  const toggleHideToolCalls = () => {
+    const newValue = !hideToolCalls;
+    setHideToolCalls(newValue);
+    localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
@@ -289,19 +275,8 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen">
-      <ConversationList
-        conversations={conversations}
-        selectedConversationId={conversationId}
-        onSelectConversation={selectConversation}
-        onNewChat={() => selectConversation(undefined)}
-        onUpdateConversation={handleUpdateConversation}
-        onDeleteConversation={handleDeleteConversation}
-        hideToolCalls={hideToolCalls}
-        onToggleHideToolCalls={setHideToolCalls}
-      />
-
-      <div className="flex-1 flex flex-col">
+    <div className="flex h-screen w-full">
+      <div className="flex-1 flex flex-col w-full">
         {!conversationId ? (
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
@@ -318,6 +293,7 @@ export default function ChatPage() {
             <ChatMessages
               messages={messages}
               hideToolCalls={hideToolCalls}
+              onToggleHideToolCalls={toggleHideToolCalls}
               status={status}
             />
             <div className="border-t p-4">

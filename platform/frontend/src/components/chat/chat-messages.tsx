@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatStatus } from "ai";
+import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
@@ -21,10 +22,12 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
 
 interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
+  onToggleHideToolCalls?: () => void;
   status: ChatStatus;
 }
 
@@ -51,6 +54,7 @@ function isToolPart(part: any): part is {
 export function ChatMessages({
   messages,
   hideToolCalls = false,
+  onToggleHideToolCalls,
   status,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
@@ -68,6 +72,28 @@ export function ChatMessages({
 
   return (
     <Conversation className="h-full">
+      {onToggleHideToolCalls && (
+        <div className="border-b p-2 flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleHideToolCalls}
+            className="text-xs"
+          >
+            {hideToolCalls ? (
+              <>
+                <Eye className="h-3 w-3 mr-1" />
+                Show tool calls
+              </>
+            ) : (
+              <>
+                <EyeOff className="h-3 w-3 mr-1" />
+                Hide tool calls
+              </>
+            )}
+          </Button>
+        </div>
+      )}
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => (

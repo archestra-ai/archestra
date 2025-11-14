@@ -46,6 +46,7 @@ import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
 // Local storage key for persisting last conversation
 const LAST_CONVERSATION_KEY = "archestra-chat-last-conversation";
+const CONVERSATION_QUERY_PARAM = "conversation";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -69,7 +70,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (hasInitialized) return;
 
-    const conversationParam = searchParams.get("conversation");
+    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
 
     // If no conversation in URL, try to restore the last viewed conversation
     if (!conversationParam) {
@@ -80,7 +81,9 @@ export default function ChatPage() {
           (conv) => conv.id === lastConversationId,
         );
         if (conversationExists) {
-          router.replace(`${pathname}?conversation=${lastConversationId}`);
+          router.replace(
+            `${pathname}?${CONVERSATION_QUERY_PARAM}=${lastConversationId}`,
+          );
           setHasInitialized(true);
           return;
         } else {
@@ -95,7 +98,7 @@ export default function ChatPage() {
 
   // Sync conversation ID with URL
   useEffect(() => {
-    const conversationParam = searchParams.get("conversation");
+    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
     if (conversationParam !== conversationId) {
       setConversationId(conversationParam || undefined);
     }
@@ -105,7 +108,7 @@ export default function ChatPage() {
   const selectConversation = (id: string | undefined) => {
     setConversationId(id);
     if (id) {
-      router.push(`${pathname}?conversation=${id}`);
+      router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
       // Save the conversation ID to localStorage for persistence
       localStorage.setItem(LAST_CONVERSATION_KEY, id);
     } else {

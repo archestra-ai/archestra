@@ -46,7 +46,7 @@ export function AssignToolsDialog({
   // Fetch currently assigned tools for this agent (use getAllAgentTools to get credentialSourceMcpServerId)
   const { data: allAgentTools } = useAllAgentTools({});
   const agentToolRelations = useMemo(
-    () => allAgentTools?.filter((at) => at.agent.id === agent.id) || [],
+    () => allAgentTools?.data?.filter((at) => at.agent.id === agent.id) || [],
     [allAgentTools, agent.id],
   );
 

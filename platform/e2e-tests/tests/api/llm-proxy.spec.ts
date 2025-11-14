@@ -75,7 +75,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
-    const readFileAgentTool = agentTools.find(
+    const readFileAgentTool = agentTools.data.find(
       (at: { agent: { id: string }; tool: { name: string } }) =>
         at.agent.id === agentId && at.tool.name === "read_file",
     );
@@ -287,7 +287,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
-    const readFileAgentTool = agentTools.find(
+    const readFileAgentTool = agentTools.data.find(
       // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
       (at: any) => at.agent.id === agentId && at.tool.name === "read_file",
     );

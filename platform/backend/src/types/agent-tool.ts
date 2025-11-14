@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
 const ToolResultTreatmentSchema = z.enum([
@@ -55,8 +56,31 @@ export const UpdateAgentToolSchema = createUpdateSchema(
   },
 );
 
+export const AgentToolFilterSchema = z.object({
+  search: z.string().optional(),
+  agentId: UuidIdSchema.optional(),
+  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  credentialSourceMcpServerId:
+    UuidIdSchema.optional().describe("MCP server ID"),
+  excludeArchestraTools: z.boolean().optional().describe("For test isolation"),
+});
+export const AgentToolSortBySchema = z.enum([
+  "name",
+  "agent",
+  "origin",
+  "createdAt",
+  "allowUsageWhenUntrustedDataIsPresent",
+]);
+export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
+
 export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
 
 export type ToolResultTreatment = z.infer<typeof ToolResultTreatmentSchema>;
+
+export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
+export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
+export type AgentToolSortDirection = z.infer<
+  typeof AgentToolSortDirectionSchema
+>;

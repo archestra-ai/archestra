@@ -1,17 +1,8 @@
 import { E2eTestId } from "@shared";
 import { MessageCircle, Pencil, Plug, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import type { useAgentsPaginated } from "@/lib/agent.query";
-
-interface ActionButtonProps {
-  children: ReactNode;
-  tooltip: string;
-  onClick: (e: React.MouseEvent) => void;
-  "data-testid"?: string;
-  className?: string;
-}
 
 // Infer Agent type from the API response
 type Agent = NonNullable<

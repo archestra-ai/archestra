@@ -63,6 +63,7 @@ interface TestFixtures {
   makeSession: typeof makeSession;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
+  makeSecret: typeof makeSecret;
 }
 
 async function _makeUser(
@@ -201,7 +202,10 @@ async function makeAgentTool(
   overrides: Partial<
     Pick<
       AgentTool,
-      "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+      | "allowUsageWhenUntrustedDataIsPresent"
+      | "toolResultTreatment"
+      | "credentialSourceMcpServerId"
+      | "executionSourceMcpServerId"
     >
   > = {},
 ) {
@@ -306,12 +310,19 @@ async function makeMcpServer(
     Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "serverType">
   > = {},
 ) {
+  // Create a catalog if catalogId is not provided
+  let catalogId = overrides.catalogId;
+  if (!catalogId) {
+    const catalog = await makeInternalMcpCatalog();
+    catalogId = catalog.id;
+  }
+
   const [mcpServer] = await db
     .insert(schema.mcpServersTable)
     .values({
       name: `test-server-${crypto.randomUUID().substring(0, 8)}`,
       serverType: "local",
-      catalogId: `test-catalog-${crypto.randomUUID().substring(0, 8)}`,
+      catalogId,
       secretId: null,
       ownerId: null,
       authType: null,
@@ -552,6 +563,22 @@ async function makeInteraction(
   return interaction;
 }
 
+/**
+ * Creates a test secret in the database
+ */
+async function makeSecret(overrides: Partial<{ secret: object }> = {}) {
+  const [secret] = await db
+    .insert(schema.secretsTable)
+    .values({
+      secret: {
+        access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+      },
+      ...overrides,
+    })
+    .returning();
+  return secret;
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -607,5 +634,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeInteraction: async ({}, use) => {
     await use(makeInteraction);
+  },
+  makeSecret: async ({}, use) => {
+    await use(makeSecret);
   },
 });

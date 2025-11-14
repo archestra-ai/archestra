@@ -20,14 +20,11 @@ import {
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
-  SelectConversationWithAgentSchema,
-  SelectConversationWithMessagesSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // ========== Streaming (useChat format) ==========
   fastify.post(
     "/api/chat",
     {
@@ -306,14 +303,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List all conversations for current user with agent details",
         tags: ["Chat"],
-        response: constructResponseSchema(
-          z.array(SelectConversationWithAgentSchema),
-        ),
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
       return reply.send(
-        await ConversationModel.findAllWithAgent(
+        await ConversationModel.findAll(
           request.user.id,
           request.organizationId,
         ),
@@ -329,11 +324,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get conversation with messages",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectConversationWithMessagesSchema),
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findByIdWithMessages(
+      const conversation = await ConversationModel.findById(
         id,
         user.id,
         organizationId,

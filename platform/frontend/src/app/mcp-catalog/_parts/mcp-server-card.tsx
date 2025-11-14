@@ -659,6 +659,11 @@ export function McpServerCard({
           selectedToolForAssignment
             ? {
                 id: selectedToolForAssignment.id,
+                allowUsageWhenUntrustedDataIsPresent: false,
+                toolResultTreatment: "untrusted" as const,
+                responseModifierTemplate: null,
+                credentialSourceMcpServerId: null,
+                executionSourceMcpServerId: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,
@@ -669,8 +674,9 @@ export function McpServerCard({
                   mcpServerId: selectedToolForAssignment.mcpServerId,
                   mcpServerName: selectedToolForAssignment.mcpServerName,
                   catalogId: item.id,
+                  mcpServerCatalogId: null,
                 },
-                agent: null,
+                agent: { id: "", name: "" },
                 createdAt: selectedToolForAssignment.createdAt,
                 updatedAt: selectedToolForAssignment.createdAt,
               }

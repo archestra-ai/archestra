@@ -18,7 +18,7 @@ setup("authenticate", async ({ page }) => {
   await page.getByRole("button", { name: "Login" }).click();
 
   // Wait until the page redirects to the authenticated area
-  await page.waitForURL(`${UI_BASE_URL}/test-agent`);
+  await page.waitForURL(`${UI_BASE_URL}/chat`);
 
   // Create a minimal log to mark onboarding as complete
   // This prevents the onboarding dialog from appearing in tests

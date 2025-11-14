@@ -3202,7 +3202,26 @@ export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValue
 export type GetAllAgentToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        agentId?: string;
+        /**
+         * Can be 'llm-proxy' or a catalogId
+         */
+        origin?: string;
+        /**
+         * MCP server ID
+         */
+        credentialSourceMcpServerId?: string;
+        /**
+         * For test isolation
+         */
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'agent' | 'origin' | 'createdAt' | 'allowUsageWhenUntrustedDataIsPresent';
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/agent-tools';
 };
 
@@ -3260,46 +3279,56 @@ export type GetAllAgentToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        credentialSourceMcpServerId: string | null;
-        executionSourceMcpServerId: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
-            name: string;
-        };
-        tool: {
-            id: string;
-            name: string;
-            description: string | null;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+            responseModifierTemplate: string | null;
+            credentialSourceMcpServerId: string | null;
+            executionSourceMcpServerId: string | null;
             createdAt: string;
             updatedAt: string;
-            catalogId: string | null;
-            mcpServerId: string | null;
-            mcpServerName: string | null;
-            mcpServerCatalogId: string | null;
+            agent: {
+                id: string;
+                name: string;
+            };
+            tool: {
+                id: string;
+                name: string;
+                description: string | null;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                createdAt: string;
+                updatedAt: string;
+                catalogId: string | null;
+                mcpServerId: string | null;
+                mcpServerName: string | null;
+                mcpServerCatalogId: string | null;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-    }>;
+    };
 };
 
 export type GetAllAgentToolsResponse = GetAllAgentToolsResponses[keyof GetAllAgentToolsResponses];
@@ -4995,6 +5024,7 @@ export type GetChatConversationsResponses = {
             id: string;
             name: string;
         };
+        messages: Array<unknown>;
     }>;
 };
 
@@ -5074,6 +5104,11 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
@@ -5221,6 +5256,10 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
         messages: Array<unknown>;
     };
 };
@@ -5302,6 +5341,11 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
@@ -13227,99 +13271,3 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
-
-export type GetUnassignedToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/tools/unassigned';
-};
-
-export type GetUnassignedToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetUnassignedToolsError = GetUnassignedToolsErrors[keyof GetUnassignedToolsErrors];
-
-export type GetUnassignedToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        catalogId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        mcpServer: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
-};
-
-export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];

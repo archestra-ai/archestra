@@ -121,7 +121,7 @@ export default class K8sPod {
   }
 
   /**
-   * Create a Kubernetes Secret for environment variables marked as "secret" type
+   * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
     const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
@@ -154,19 +154,58 @@ export default class K8sPod {
         data,
       };
 
-      await this.k8sApi.createNamespacedSecret({
-        namespace: this.namespace,
-        body: secret,
-      });
-
-      logger.info(
-        {
-          mcpServerId: this.mcpServer.id,
-          secretName: k8sSecretName,
+      try {
+        // Try to create the secret
+        await this.k8sApi.createNamespacedSecret({
           namespace: this.namespace,
-        },
-        "Created K8s Secret for MCP server",
-      );
+          body: secret,
+        });
+
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName: k8sSecretName,
+            namespace: this.namespace,
+          },
+          "Created K8s Secret for MCP server",
+        );
+      } catch (createError: unknown) {
+        // If secret already exists (409), update it instead
+        const isConflict =
+          createError &&
+          typeof createError === "object" &&
+          (("statusCode" in createError && createError.statusCode === 409) ||
+            ("code" in createError && createError.code === 409));
+
+        if (isConflict) {
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "K8s Secret already exists, updating it",
+          );
+
+          await this.k8sApi.replaceNamespacedSecret({
+            name: k8sSecretName,
+            namespace: this.namespace,
+            body: secret,
+          });
+
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "Updated existing K8s Secret for MCP server",
+          );
+        } else {
+          // Re-throw other errors
+          throw createError;
+        }
+      }
     } catch (error) {
       logger.error(
         {
@@ -174,7 +213,7 @@ export default class K8sPod {
           mcpServerId: this.mcpServer.id,
           secretName: k8sSecretName,
         },
-        "Failed to create K8s Secret",
+        "Failed to create or update K8s Secret",
       );
       throw error;
     }

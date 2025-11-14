@@ -57,11 +57,8 @@ export function ChatMessages({
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <p className="text-lg mb-2">No messages yet</p>
-          <p className="text-sm">Start a conversation by sending a message</p>
-        </div>
+      <div className="flex-1 flex h-full items-center justify-center text-center text-muted-foreground">
+        <p className="text-sm">Start a conversation by sending a message</p>
       </div>
     );
   }

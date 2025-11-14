@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DebouncedInput } from "@/components/debounced-input";
 import { InstallationSelect } from "@/components/installation-select";
 import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
@@ -18,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -33,23 +33,35 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAgents } from "@/lib/agent.query";
 import {
   useAgentToolPatchMutation,
+  useAllAgentTools,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
-import { formatDate } from "@/lib/utils";
 
-type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+type GetAllAgentToolsQueryParams = NonNullable<
+  archestraApiTypes.GetAllAgentToolsData["query"]
+>;
+type AgentToolsSortByValues = NonNullable<
+  GetAllAgentToolsQueryParams["sortBy"]
+> | null;
+type AgentToolsSortDirectionValues = NonNullable<
+  GetAllAgentToolsQueryParams["sortDirection"]
+> | null;
+
+type AgentToolData =
+  archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
-interface AssignedToolsListProps {
-  agentTools: AgentToolData[];
+interface AssignedToolsTableProps {
   onToolClick: (tool: AgentToolData) => void;
 }
 
@@ -67,116 +79,177 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsList({
-  agentTools,
-  onToolClick,
-}: AssignedToolsListProps) {
+export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useAgentToolPatchMutation();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
+  const { data: agents } = useAgents();
+  const { data: mcpServers } = useMcpServers();
 
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
+  // Get URL params
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
+  const searchFromUrl = searchParams.get("search");
+  const agentIdFromUrl = searchParams.get("agentId");
+  const originFromUrl = searchParams.get("origin");
+  const credentialFromUrl = searchParams.get("credential");
+  const sortByFromUrl = searchParams.get("sortBy") as AgentToolsSortByValues;
+  const sortDirectionFromUrl = searchParams.get(
+    "sortDirection",
+  ) as AgentToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || "50");
 
-  const filteredAgentTools = useMemo(() => {
-    if (!searchQuery.trim()) return agentTools;
+  // State
+  const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
+  const [agentFilter, setAgentFilter] = useState(agentIdFromUrl || "all");
+  const [originFilter, setOriginFilter] = useState(originFromUrl || "all");
+  const [credentialFilter, setCredentialFilter] = useState(
+    credentialFromUrl || "all",
+  );
+  const [sorting, setSorting] = useState<SortingState>([
+    {
+      id: sortByFromUrl || "createdAt",
+      desc: sortDirectionFromUrl !== "asc",
+    },
+  ]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
 
-    const query = searchQuery.toLowerCase();
-    return agentTools.filter((agentTool) =>
-      agentTool.tool?.name.toLowerCase().includes(query),
-    );
-  }, [agentTools, searchQuery]);
+  // Fetch agent tools with server-side pagination, filtering, and sorting
+  const { data: agentToolsData } = useAllAgentTools({
+    pagination: {
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    },
+    sorting: {
+      sortBy: (sorting[0]?.id as AgentToolsSortByValues) || "createdAt",
+      sortDirection: sorting[0]?.desc ? "desc" : "asc",
+    },
+    filters: {
+      search: searchQuery || undefined,
+      agentId: agentFilter !== "all" ? agentFilter : undefined,
+      origin: originFilter !== "all" ? originFilter : undefined,
+      credentialSourceMcpServerId:
+        credentialFilter !== "all" ? credentialFilter : undefined,
+    },
+  });
 
-  const sortedAndFilteredTools = useMemo(() => {
-    if (sorting.length === 0) return filteredAgentTools;
+  const agentTools = agentToolsData.data;
+  const paginationMeta = agentToolsData.pagination;
 
-    const sorted = [...filteredAgentTools].sort((a, b) => {
-      for (const sort of sorting) {
-        let aValue: string | number;
-        let bValue: string | number;
-
-        switch (sort.id) {
-          case "name":
-            aValue = a.tool.name;
-            bValue = b.tool.name;
-            break;
-          case "agent":
-            aValue = a.agent?.name || "";
-            bValue = b.agent?.name || "";
-            break;
-          case "origin":
-            aValue = isMcpTool(a.tool) ? "1-mcp" : "2-intercepted";
-            bValue = isMcpTool(b.tool) ? "1-mcp" : "2-intercepted";
-            break;
-          case "createdAt":
-            aValue = a.createdAt;
-            bValue = b.createdAt;
-            break;
-          default:
-            continue;
+  // Helper to update URL params
+  const updateUrlParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "" || value === "all") {
+          params.delete(key);
+        } else {
+          params.set(key, value);
         }
-
-        if (aValue < bValue) return sort.desc ? 1 : -1;
-        if (aValue > bValue) return sort.desc ? -1 : 1;
-      }
-      return 0;
-    });
-
-    return sorted;
-  }, [filteredAgentTools, sorting]);
-
-  const paginatedTools = useMemo(() => {
-    const startIndex = pageIndex * pageSize;
-    const endIndex = startIndex + pageSize;
-    return sortedAndFilteredTools.slice(startIndex, endIndex);
-  }, [sortedAndFilteredTools, pageIndex, pageSize]);
+      });
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
       setSelectedTools([]);
 
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      updateUrlParams({
+        page: String(newPagination.pageIndex + 1),
+        pageSize: String(newPagination.pageSize),
+      });
     },
-    [searchParams, router, pathname],
+    [updateUrlParams],
   );
 
   const handleRowSelectionChange = useCallback(
     (newRowSelection: RowSelectionState) => {
       setRowSelection(newRowSelection);
 
-      const startIndex = pageIndex * pageSize;
-      const pageTools = sortedAndFilteredTools.slice(
-        startIndex,
-        startIndex + pageSize,
-      );
-
       const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => pageTools[Number(index)])
+        .map((index) => agentTools[Number(index)])
         .filter(Boolean);
 
       setSelectedTools(newSelectedTools);
     },
-    [sortedAndFilteredTools, pageIndex, pageSize],
+    [agentTools],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      updateUrlParams({
+        search: value || null,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+    },
+    [updateUrlParams],
+  );
+
+  const handleAgentFilterChange = useCallback(
+    (value: string) => {
+      setAgentFilter(value);
+      updateUrlParams({
+        agentId: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+    },
+    [updateUrlParams],
+  );
+
+  const handleOriginFilterChange = useCallback(
+    (value: string) => {
+      setOriginFilter(value);
+      updateUrlParams({
+        origin: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+    },
+    [updateUrlParams],
+  );
+
+  const handleCredentialFilterChange = useCallback(
+    (value: string) => {
+      setCredentialFilter(value);
+      updateUrlParams({
+        credential: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+    },
+    [updateUrlParams],
+  );
+
+  const handleSortingChange = useCallback(
+    (newSorting: SortingState) => {
+      setSorting(newSorting);
+      if (newSorting.length > 0) {
+        updateUrlParams({
+          sortBy: newSorting[0].id,
+          sortDirection: newSorting[0].desc ? "desc" : "asc",
+        });
+      }
+    },
+    [updateUrlParams],
   );
 
   const handleBulkAction = useCallback(
@@ -257,6 +330,7 @@ export function AssignedToolsList({
           <TruncatedText
             message={row.original.tool.name}
             className="break-all"
+            maxLength={25}
           />
         ),
         size: 130,
@@ -277,8 +351,12 @@ export function AssignedToolsList({
         cell: ({ row }) => {
           const agentName = row.original.agent?.name || "-";
 
+          const TruncatedAgentName = (
+            <TruncatedText message={agentName} maxLength={30} />
+          );
+
           if (!isMcpTool(row.original.tool)) {
-            return <TruncatedText message={agentName} />;
+            return TruncatedAgentName;
           }
 
           const handleUnassign = async (e: React.MouseEvent) => {
@@ -298,7 +376,7 @@ export function AssignedToolsList({
 
           return (
             <div className="flex items-center gap-2">
-              <TruncatedText message={agentName} />
+              {TruncatedAgentName}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -378,7 +456,7 @@ export function AssignedToolsList({
             </TooltipProvider>
           );
         },
-        size: 120,
+        size: 100,
       },
       {
         id: "token",
@@ -434,11 +512,20 @@ export function AssignedToolsList({
             />
           );
         },
-        size: 160,
+        size: 120,
       },
       {
-        id: "allowWithUntrusted",
-        header: "In untrusted context",
+        id: "allowUsageWhenUntrustedDataIsPresent",
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            In untrusted context
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        ),
         cell: ({ row }) => {
           const hasCustomPolicy =
             invocationPolicies?.byAgentToolId[row.original.id]?.length > 0;
@@ -470,7 +557,7 @@ export function AssignedToolsList({
             </div>
           );
         },
-        size: 120,
+        size: 140,
       },
       {
         id: "toolResultTreatment",
@@ -522,80 +609,6 @@ export function AssignedToolsList({
         },
         size: 190,
       },
-      {
-        accessorKey: "createdAt",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Detected
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <TruncatedText
-            message={formatDate({ date: row.original.createdAt })}
-            className="font-mono text-xs text-muted-foreground"
-          />
-        ),
-        size: 100,
-      },
-      {
-        id: "parameters",
-        header: "Parameters",
-        cell: ({ row }) => {
-          const tool = row.original.tool;
-          const paramCount = Object.keys(
-            tool.parameters?.properties || {},
-          ).length;
-
-          if (paramCount === 0) {
-            return <span className="text-sm text-muted-foreground">None</span>;
-          }
-
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                    {paramCount}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md">
-                  <div className="space-y-1">
-                    {Object.entries(tool.parameters?.properties || {}).map(
-                      ([key, value]: [string, { type?: string }]) => {
-                        const isRequired = Array.isArray(
-                          tool.parameters?.required,
-                        )
-                          ? tool.parameters.required.includes(key)
-                          : false;
-                        return (
-                          <div key={key} className="text-xs">
-                            <code className="font-medium">{key}</code>
-                            <span className="text-green-700">
-                              : {value.type}
-                            </span>
-                            {isRequired && (
-                              <span className="text-green-700">
-                                {" "}
-                                (required)
-                              </span>
-                            )}
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
-        size: 100,
-      },
     ],
     [
       invocationPolicies,
@@ -608,27 +621,78 @@ export function AssignedToolsList({
 
   const hasSelection = selectedTools.length > 0;
 
+  // Get unique origins from internal MCP catalog
+  const uniqueOrigins = useMemo(() => {
+    const origins = new Set<{ id: string; name: string }>();
+    internalMcpCatalogItems?.forEach((item) => {
+      origins.add({ id: item.id, name: item.name });
+    });
+    return Array.from(origins);
+  }, [internalMcpCatalogItems]);
+
+  // Get unique credentials (MCP servers)
+  const uniqueCredentials = useMemo(() => {
+    return mcpServers || [];
+  }, [mcpServers]);
+
   return (
     <div className="space-y-6">
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search tools by name..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            if (pageIndex !== 0) {
-              const params = new URLSearchParams(searchParams.toString());
-              params.set("page", "1");
-              router.push(`${pathname}?${params.toString()}`, {
-                scroll: false,
-              });
-            }
-            setRowSelection({});
-            setSelectedTools([]);
-          }}
-          className="pl-9"
-        />
+      <div className="flex flex-wrap gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <DebouncedInput
+            placeholder="Search tools by name..."
+            initialValue={searchQuery}
+            onChange={handleSearchChange}
+            className="pl-9"
+          />
+        </div>
+
+        <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by Agent" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Agents</SelectItem>
+            {agents?.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={originFilter} onValueChange={handleOriginFilterChange}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by Origin" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Origins</SelectItem>
+            <SelectItem value="llm-proxy">LLM Proxy</SelectItem>
+            {uniqueOrigins.map((origin) => (
+              <SelectItem key={origin.id} value={origin.id}>
+                {origin.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={credentialFilter}
+          onValueChange={handleCredentialFilterChange}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by Credential" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Credentials</SelectItem>
+            {uniqueCredentials.map((credential) => (
+              <SelectItem key={credential.id} value={credential.id}>
+                {credential.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
@@ -742,28 +806,39 @@ export function AssignedToolsList({
         </div>
       </div>
 
-      {filteredAgentTools.length === 0 && searchQuery ? (
+      {agentTools.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
-            No tools match "{searchQuery}". Try adjusting your search.
+            {searchQuery ||
+            agentFilter !== "all" ||
+            originFilter !== "all" ||
+            credentialFilter !== "all"
+              ? "No tools match your filters. Try adjusting your search or filters."
+              : "No tools have been assigned yet."}
           </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setSearchQuery("");
-              setRowSelection({});
-              setSelectedTools([]);
-            }}
-          >
-            Clear search
-          </Button>
+          {(searchQuery ||
+            agentFilter !== "all" ||
+            originFilter !== "all" ||
+            credentialFilter !== "all") && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                handleSearchChange("");
+                handleAgentFilterChange("all");
+                handleOriginFilterChange("all");
+                handleCredentialFilterChange("all");
+              }}
+            >
+              Clear all filters
+            </Button>
+          )}
         </div>
       ) : (
         <DataTable
           columns={columns}
-          data={paginatedTools}
+          data={agentTools}
           onRowClick={(tool, event) => {
             const target = event.target as HTMLElement;
             const isCheckboxClick =
@@ -776,13 +851,13 @@ export function AssignedToolsList({
             }
           }}
           sorting={sorting}
-          onSortingChange={setSorting}
+          onSortingChange={handleSortingChange}
           manualSorting={true}
           manualPagination={true}
           pagination={{
             pageIndex,
             pageSize,
-            total: sortedAndFilteredTools.length,
+            total: paginationMeta.total,
           }}
           onPaginationChange={handlePaginationChange}
           rowSelection={rowSelection}

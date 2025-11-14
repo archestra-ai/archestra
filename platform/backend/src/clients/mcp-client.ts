@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -316,7 +317,7 @@ class McpClient {
    * Strip server prefix from tool name (case-insensitive)
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
-    const serverPrefix = `${prefixName}__`;
+    const serverPrefix = `${prefixName}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
     // Case-insensitive comparison
     if (toolName.toLowerCase().startsWith(serverPrefix.toLowerCase())) {
       return toolName.substring(serverPrefix.length);

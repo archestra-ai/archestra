@@ -24,7 +24,7 @@ import { PolicyCard } from "./policy-card";
 export function ToolCallPolicies({
   agentTool,
 }: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }) {
   const {
     data: { byAgentToolId },

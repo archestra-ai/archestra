@@ -21,12 +21,10 @@ import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
   tool:
-    | archestraApiTypes.GetAllAgentToolsResponses["200"][number]
-    | UnassignedToolData
+    | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
     | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;

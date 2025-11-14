@@ -182,7 +182,10 @@ function McpToolCallsTable({
       cell: ({ row }) => {
         return (
           <Badge variant="secondary" className="text-xs whitespace-normal">
-            <TruncatedText message={row.original.mcpServerName} maxLength={30} />
+            <TruncatedText
+              message={row.original.mcpServerName}
+              maxLength={15}
+            />
           </Badge>
         );
       },

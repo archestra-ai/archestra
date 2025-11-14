@@ -39,7 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **Backend Metrics**: <http://localhost:9050/metrics> (Prometheus metrics endpoint, separate from main API)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
-- **Profile Tools API**: <http://localhost:9000/api/agent-tools> (GET paginated profile-tool relationships with filtering/sorting)
+- **Profile Tools API**: <http://localhost:9000/api/profile-tools> (GET paginated profile-tool relationships with filtering/sorting)
 
 ## Common Commands
 
@@ -187,7 +187,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Backend**:
 
 - Use Drizzle ORM for database operations through MODELS ONLY!
-- Table exports: Use plural names with "Table" suffix (e.g., `agentLabelsTable`, `sessionsTable`)
+- Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
@@ -199,7 +199,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 - Profiles and MCP servers use team-based authorization
 - Teams managed via better-auth organization plugin
-- Junction tables: `agent_team` and `mcp_server_team`
+- Junction tables: `profile_team` and `mcp_server_team`
 - Breaking change: `usersWithAccess[]` replaced with `teams[]`
 - Admin-only team CRUD via `/api/teams/*`
 - Members can read teams and access assigned resources
@@ -218,11 +218,11 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Profile Labels**:
 
 - Profiles support key-value labels for organization/categorization
-- Database schema: `label_keys`, `label_values`, `agent_labels` tables
+- Database schema: `label_keys`, `label_values`, `profile_labels` tables
 - Keys and values stored separately for consistency and reuse
 - One value per key per profile (updating same key replaces value)
 - Labels returned in alphabetical order by key for consistency
-- API endpoints: GET `/api/agents/labels/keys`, GET `/api/agents/labels/values?key=<key>` (key param filters values by key)
+- API endpoints: GET `/api/profiles/labels/keys`, GET `/api/profiles/labels/values?key=<key>` (key param filters values by key)
 
 **MCP Server Installation Requests**:
 

@@ -31,7 +31,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(desc(schema.conversationsTable.updatedAt));
+      .orderBy(desc(schema.conversationsTable.createdAt));
 
     return conversations;
   }
@@ -59,7 +59,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(desc(schema.conversationsTable.updatedAt));
+      .orderBy(desc(schema.conversationsTable.createdAt));
 
     return rows.map((row) => ({
       ...row.conversation,

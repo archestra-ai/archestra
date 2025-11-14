@@ -106,7 +106,7 @@ export function ChatSidebarSection() {
   );
 
   return (
-    <SidebarGroup className="px-4">
+    <SidebarGroup className="px-4 py-0">
       <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
 
       <SidebarGroupContent>

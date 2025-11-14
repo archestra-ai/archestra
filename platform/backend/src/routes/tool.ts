@@ -19,7 +19,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers }, reply) => {
       try {
         const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
+          { profile: ["admin"] },
           headers,
         );
 

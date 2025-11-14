@@ -312,7 +312,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        { search: "file" },
+        { search: "file", excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(2);
@@ -669,7 +669,7 @@ describe("AgentToolModel.findAllPaginated", () => {
       const result = await AgentToolModel.findAllPaginated(
         { limit: 2, offset: 0 },
         undefined,
-        { search: "file" },
+        { search: "file", excludeArchestraTools: true },
       );
 
       expect(result.data).toHaveLength(2);

@@ -18,8 +18,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
@@ -33,9 +32,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
@@ -45,8 +41,7 @@ interface MenuItem {
   title: string;
   url: string;
   icon: LucideIcon;
-  subItems?: MenuItem[];
-  customIsActive?: (pathname: string) => boolean;
+  customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
@@ -56,10 +51,11 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
 
   return [
     {
-      title: "Chat",
+      title: "New Chat",
       url: "/chat",
       icon: MessageCircle,
-      customIsActive: (pathname: string) => pathname.startsWith("/chat"),
+      customIsActive: (pathname: string, searchParams: URLSearchParams) =>
+        pathname === "/chat" && !searchParams.get("conversation"),
     },
     {
       title: "Agents",
@@ -109,18 +105,10 @@ const userItems: MenuItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
   const { logo, isLoadingAppearance } = useOrgTheme() ?? {};
-
-  const handleChatClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      router.push("/chat");
-    },
-    [router],
-  );
 
   const logoToShow = logo ? (
     <div className="flex justify-center">
@@ -156,52 +144,25 @@ export function AppSidebar() {
               {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
-                    asChild={item.title !== "Chat"}
+                    asChild
                     isActive={
-                      item.customIsActive?.(pathname) ??
+                      item.customIsActive?.(pathname, searchParams) ??
                       pathname.startsWith(item.url)
                     }
-                    onClick={
-                      item.title === "Chat" ? handleChatClick : undefined
-                    }
                   >
-                    {item.title === "Chat" ? (
-                      <>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </>
-                    ) : (
-                      <Link href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    )}
+                    <Link href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
                   </SidebarMenuButton>
-                  {/* Chat conversations as sub-items */}
-                  {item.title === "Chat" && <ChatSidebarSection />}
-                  {/* Other sub-items */}
-                  {item.subItems && (
-                    <SidebarMenuSub>
-                      {item.subItems.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={subItem.url === pathname}
-                          >
-                            <Link href={subItem.url}>
-                              {subItem.icon && <subItem.icon />}
-                              <span>{subItem.title}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Chats Section */}
+        <ChatSidebarSection />
 
         <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>

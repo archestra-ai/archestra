@@ -36,13 +36,10 @@ import {
 import {
   useChatAgentMcpTools,
   useConversation,
-  useConversations,
   useCreateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
-// Local storage key for persisting last conversation
-const LAST_CONVERSATION_KEY = "archestra-chat-last-conversation";
 const CONVERSATION_QUERY_PARAM = "conversation";
 
 export default function ChatPage() {
@@ -66,38 +63,11 @@ export default function ChatPage() {
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
 
-  // Fetch conversations with agent details
-  const { data: conversations = [] } = useConversations();
-
-  // Initialize and handle last conversation redirect
+  // Initialize
   useEffect(() => {
     if (hasInitialized) return;
-
-    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
-
-    // If no conversation in URL, try to restore the last viewed conversation
-    if (!conversationParam) {
-      const lastConversationId = localStorage.getItem(LAST_CONVERSATION_KEY);
-      if (lastConversationId && conversations.length > 0) {
-        // Check if the last conversation still exists
-        const conversationExists = conversations.some(
-          (conv) => conv.id === lastConversationId,
-        );
-        if (conversationExists) {
-          router.replace(
-            `${pathname}?${CONVERSATION_QUERY_PARAM}=${lastConversationId}`,
-          );
-          setHasInitialized(true);
-          return;
-        } else {
-          // Clean up stale conversation ID
-          localStorage.removeItem(LAST_CONVERSATION_KEY);
-        }
-      }
-    }
-
     setHasInitialized(true);
-  }, [hasInitialized, searchParams, conversations, pathname, router]);
+  }, [hasInitialized]);
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -112,12 +82,8 @@ export default function ChatPage() {
     setConversationId(id);
     if (id) {
       router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
-      // Save the conversation ID to localStorage for persistence
-      localStorage.setItem(LAST_CONVERSATION_KEY, id);
     } else {
       router.push(pathname);
-      // Clear the saved conversation when going to "New Chat"
-      localStorage.removeItem(LAST_CONVERSATION_KEY);
     }
   };
 
@@ -326,8 +292,6 @@ export default function ChatPage() {
               <ChatMessages
                 messages={messages}
                 hideToolCalls={hideToolCalls}
-                onToggleHideToolCalls={toggleHideToolCalls}
-                agentName={conversation?.agent?.name}
                 status={status}
               />
             </div>

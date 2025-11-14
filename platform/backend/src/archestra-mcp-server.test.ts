@@ -113,7 +113,7 @@ describe("executeArchestraTool", () => {
   beforeEach(async ({ makeAgent }) => {
     testAgent = await makeAgent({ name: "Test Agent" });
     mockContext = {
-      agent: testAgent,
+      profile: testAgent,
     };
   });
 

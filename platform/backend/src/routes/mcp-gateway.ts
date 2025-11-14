@@ -146,7 +146,7 @@ async function createAgentServer(
 
           // Handle Archestra tools directly
           const archestraResponse = await executeArchestraTool(name, args, {
-            agent,
+            profile: agent,
           });
 
           logger.info(

@@ -56,6 +56,13 @@ pnpm test:e2e                           # Run e2e tests with Playwright (chromiu
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
 
+# Database Connection
+# PostgreSQL is running in Kubernetes (managed by Tilt)
+# Connect to database:
+kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_password psql -U archestra -d archestra_dev
+
+# Common queries: \dt (list tables), \d table_name (describe table), SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
+
 # Logs
 tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource

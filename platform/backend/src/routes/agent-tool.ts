@@ -59,12 +59,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           origin,
           credentialSourceMcpServerId,
+          excludeArchestraTools,
         } = request.query;
 
         const result = await AgentToolModel.findAllPaginated(
           { limit, offset },
           { sortBy, sortDirection },
-          { search, agentId, origin, credentialSourceMcpServerId },
+          {
+            search,
+            agentId,
+            origin,
+            credentialSourceMcpServerId,
+            excludeArchestraTools,
+          },
           request.user.id,
           isAgentAdmin,
         );

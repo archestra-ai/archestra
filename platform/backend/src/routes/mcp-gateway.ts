@@ -292,6 +292,32 @@ function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
 }
 
 /**
+ * Clear all active sessions for a specific agent
+ */
+export function clearAgentSessions(agentId: string): void {
+  const sessionsToClear: string[] = [];
+
+  // Find all sessions for this agent
+  for (const [sessionId, sessionData] of activeSessions.entries()) {
+    // Sessions are named like "archestra-agent-{agentId}"
+    if (sessionData.server.serverInfo.name === `archestra-agent-${agentId}`) {
+      sessionsToClear.push(sessionId);
+    }
+  }
+
+  // Delete all matching sessions
+  for (const sessionId of sessionsToClear) {
+    logger.info({ agentId, sessionId }, "Clearing agent session");
+    activeSessions.delete(sessionId);
+  }
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "Cleared agent sessions",
+  );
+}
+
+/**
  * Fastify route plugin for MCP gateway
  */
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -565,6 +591,99 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
         }
       }
+    },
+  );
+
+  // DELETE endpoint to clear sessions for an agent
+  fastify.delete(
+    `${endpoint}/sessions`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        response: {
+          200: z.object({
+            message: z.string(),
+            clearedCount: z.number(),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const agentId = extractAgentIdFromAuth(
+        request.headers.authorization as string | undefined,
+      );
+
+      fastify.log.info(
+        {
+          agentId,
+          totalActiveSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - Request received",
+      );
+
+      if (!agentId) {
+        fastify.log.warn("DELETE /v1/mcp/sessions - Unauthorized request");
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+        };
+      }
+
+      const sessionsToClear: string[] = [];
+      const allSessionNames: string[] = [];
+
+      // Find all sessions for this agent
+      for (const [sessionId, sessionData] of activeSessions.entries()) {
+        allSessionNames.push(sessionData.server.serverInfo.name);
+        // Sessions are named like "archestra-agent-{agentId}"
+        if (
+          sessionData.server.serverInfo.name === `archestra-agent-${agentId}`
+        ) {
+          sessionsToClear.push(sessionId);
+        }
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          targetServerName: `archestra-agent-${agentId}`,
+          allSessionNames,
+          sessionsToClear,
+          totalSessions: activeSessions.size,
+          matchingSessionsCount: sessionsToClear.length,
+        },
+        "DELETE /v1/mcp/sessions - Found sessions to clear",
+      );
+
+      // Delete all matching sessions
+      for (const sessionId of sessionsToClear) {
+        fastify.log.info(
+          { agentId, sessionId },
+          "DELETE /v1/mcp/sessions - Clearing session",
+        );
+        activeSessions.delete(sessionId);
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - Sessions cleared successfully",
+      );
+
+      reply.type("application/json");
+      return {
+        message: "Sessions cleared successfully",
+        clearedCount: sessionsToClear.length,
+      };
     },
   );
 };

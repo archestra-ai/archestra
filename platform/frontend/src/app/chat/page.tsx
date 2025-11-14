@@ -59,6 +59,7 @@ export default function ChatPage() {
   const [hasInitialized, setHasInitialized] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
+  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
@@ -92,6 +93,47 @@ export default function ChatPage() {
 
   // Get current agent info
   const currentAgentId = conversation?.agentId;
+
+  // Clear MCP Gateway sessions when opening a NEW conversation
+  useEffect(() => {
+    // Only clear sessions if this is a newly created conversation
+    if (
+      currentAgentId &&
+      conversationId &&
+      newlyCreatedConversationRef.current === conversationId
+    ) {
+      console.log("[Chat] Clearing MCP sessions for NEW conversation", {
+        conversationId,
+        agentId: currentAgentId,
+      });
+      // Clear sessions for this agent to ensure fresh MCP state
+      fetch("/v1/mcp/sessions", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${currentAgentId}`,
+        },
+      })
+        .then(async (response) => {
+          const data = await response.json();
+          console.log("[Chat] MCP sessions cleared successfully", {
+            conversationId,
+            agentId: currentAgentId,
+            clearedCount: data.clearedCount,
+          });
+          // Clear the ref after clearing sessions
+          newlyCreatedConversationRef.current = undefined;
+        })
+        .catch((error) => {
+          console.error("[Chat] Failed to clear MCP sessions:", {
+            conversationId,
+            agentId: currentAgentId,
+            error,
+          });
+          // Clear the ref even on error to avoid retry loops
+          newlyCreatedConversationRef.current = undefined;
+        });
+    }
+  }, [conversationId, currentAgentId]);
 
   // Fetch MCP tools from gateway (same as used in chat backend)
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
@@ -129,6 +171,8 @@ export default function ChatPage() {
     const newConversation =
       await createConversationMutation.mutateAsync(agentId);
     if (newConversation) {
+      // Mark this as a newly created conversation
+      newlyCreatedConversationRef.current = newConversation.id;
       selectConversation(newConversation.id);
     }
   };

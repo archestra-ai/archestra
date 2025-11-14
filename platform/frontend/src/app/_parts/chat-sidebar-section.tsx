@@ -10,6 +10,12 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useConversations,
   useDeleteConversation,
   useUpdateConversation,
@@ -153,18 +159,27 @@ export function ChatSidebarSection() {
                       className="h-7 text-sm flex-1"
                     />
                   ) : (
-                    <SidebarMenuSubButton
-                      onClick={() => handleSelectConversation(conv.id)}
-                      isActive={isCurrentConversation}
-                      className="cursor-pointer flex-1 pr-1"
-                    >
-                      <span
-                        className="truncate"
-                        title={conv.title || "New chat"}
-                      >
-                        {conv.title || "New chat"}
-                      </span>
-                    </SidebarMenuSubButton>
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuSubButton
+                            onClick={() => handleSelectConversation(conv.id)}
+                            isActive={isCurrentConversation}
+                            className="cursor-pointer flex-1 pr-1"
+                          >
+                            <span
+                              className="truncate"
+                              title={conv.title || "New chat"}
+                            >
+                              {conv.title || "New chat"}
+                            </span>
+                          </SidebarMenuSubButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>{conv.agent.name}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
                   {editingId !== conv.id && (
                     <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">

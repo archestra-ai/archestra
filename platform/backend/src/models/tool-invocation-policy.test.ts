@@ -605,5 +605,41 @@ describe("ToolInvocationPolicyModel", () => {
         expect(allowedResult.isAllowed).toBe(true);
       });
     });
+
+    describe("Archestra MCP server tools", () => {
+      test("always allows Archestra MCP server tools regardless of policies or context", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent();
+
+        // Ensure Archestra tools are assigned to the agent
+        await ToolModel.assignArchestraToolsToAgent(agent.id);
+
+        // Get an Archestra tool name (they start with "archestra__")
+        const archestraToolName = "archestra__whoami";
+
+        // Test with trusted context
+        const trustedResult = await ToolInvocationPolicyModel.evaluate(
+          agent.id,
+          archestraToolName,
+          { any: "anything" }, // Should match the blocking policy
+          true,
+        );
+
+        expect(trustedResult.isAllowed).toBe(true);
+        expect(trustedResult.reason).toBe("Archestra MCP server tool");
+
+        // Test with untrusted context
+        const untrustedResult = await ToolInvocationPolicyModel.evaluate(
+          agent.id,
+          archestraToolName,
+          { any: "anything" }, // Should match the blocking policy
+          false,
+        );
+
+        expect(untrustedResult.isAllowed).toBe(true);
+        expect(untrustedResult.reason).toBe("Archestra MCP server tool");
+      });
+    });
   });
 });

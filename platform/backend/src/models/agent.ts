@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -189,6 +190,11 @@ class AgentModel {
           toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
         })
         .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(sql`NOT ${schema.toolsTable.name} LIKE 'archestra__%'`)
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 
@@ -277,8 +283,8 @@ class AgentModel {
         });
       }
 
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
+      // Add tool if it exists and is not an Archestra MCP tool (leftJoin returns null for agents with no tools)
+      if (tool && !isArchestraMcpServerTool(tool.name)) {
         agentsMap.get(agent.id)?.tools.push(tool);
       }
     }

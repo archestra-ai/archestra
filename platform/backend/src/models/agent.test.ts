@@ -543,8 +543,8 @@ describe("AgentModel", () => {
       expect(result.data[0].name).toBe("Agent A");
       expect(result.data[1].name).toBe("Agent B");
 
-      // Verify each agent has all their tools loaded
-      expect(result.data[0].tools.length).toBeGreaterThan(30); // 30 + archestra tools
+      // Verify each agent has all their regular tools loaded (excluding Archestra tools)
+      expect(result.data[0].tools.length).toBe(30); // Only the 30 regular tools, Archestra tools excluded
     });
 
     test("pagination with different sort options returns correct agent count", async ({
@@ -697,6 +697,205 @@ describe("AgentModel", () => {
       const page2Ids = page2.data.map((a) => a.id);
       const intersection = page1Ids.filter((id) => page2Ids.includes(id));
       expect(intersection).toHaveLength(0);
+    });
+  });
+
+  describe("Archestra Tools Exclusion", () => {
+    test("findAllPaginated excludes Archestra MCP tools from tools array", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create an agent
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      // Add some regular tools
+      for (let i = 0; i < 3; i++) {
+        const tool = await makeTool({
+          name: `regular_tool_${i}`,
+          description: `Regular tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      // Add some Archestra MCP tools (these should be excluded)
+      for (let i = 0; i < 5; i++) {
+        const tool = await makeTool({
+          name: `archestra__archestra_tool_${i}`,
+          description: `Archestra tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      // Query the agent
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      // Find our test agent
+      const testAgent = result.data.find((a) => a.name === "Test Agent");
+      expect(testAgent).toBeDefined();
+
+      // Should only include the 3 regular tools, not the 5 Archestra tools
+      expect(testAgent!.tools).toHaveLength(3);
+
+      // Verify all tools in the array are regular tools (not Archestra)
+      for (const tool of testAgent!.tools) {
+        expect(tool.name).not.toMatch(/^archestra__/);
+      }
+
+      // Verify the regular tools are there
+      const toolNames = testAgent!.tools.map((t) => t.name).sort();
+      expect(toolNames).toEqual([
+        "regular_tool_0",
+        "regular_tool_1",
+        "regular_tool_2",
+      ]);
+    });
+
+    test("sorting by toolsCount excludes Archestra tools from count", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create two agents
+      const agent1 = await AgentModel.create({
+        name: "Agent with 5 regular tools",
+        teams: [],
+      });
+
+      const agent2 = await AgentModel.create({
+        name: "Agent with 2 regular tools",
+        teams: [],
+      });
+
+      // Give agent1 5 regular tools + 10 Archestra tools
+      for (let i = 0; i < 5; i++) {
+        const tool = await makeTool({
+          name: `regular_tool_agent1_${i}`,
+          description: `Regular tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent1.id, tool.id);
+      }
+
+      for (let i = 0; i < 10; i++) {
+        const tool = await makeTool({
+          name: `archestra__tool_agent1_${i}`,
+          description: `Archestra tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent1.id, tool.id);
+      }
+
+      // Give agent2 2 regular tools + 20 Archestra tools
+      for (let i = 0; i < 2; i++) {
+        const tool = await makeTool({
+          name: `regular_tool_agent2_${i}`,
+          description: `Regular tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent2.id, tool.id);
+      }
+
+      for (let i = 0; i < 20; i++) {
+        const tool = await makeTool({
+          name: `archestra__tool_agent2_${i}`,
+          description: `Archestra tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent2.id, tool.id);
+      }
+
+      // Sort by toolsCount descending - agent1 should come first (5 > 2 regular tools)
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "toolsCount", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      // Find our test agents
+      const testAgent1 = result.data.find(
+        (a) => a.name === "Agent with 5 regular tools",
+      );
+      const testAgent2 = result.data.find(
+        (a) => a.name === "Agent with 2 regular tools",
+      );
+
+      expect(testAgent1).toBeDefined();
+      expect(testAgent2).toBeDefined();
+
+      // Verify the tools count excludes Archestra tools
+      expect(testAgent1!.tools).toHaveLength(5); // Only regular tools
+      expect(testAgent2!.tools).toHaveLength(2); // Only regular tools
+
+      // Verify sorting order based on regular tools count (not total tools including Archestra)
+      const agent1Index = result.data.findIndex(
+        (a) => a.name === "Agent with 5 regular tools",
+      );
+      const agent2Index = result.data.findIndex(
+        (a) => a.name === "Agent with 2 regular tools",
+      );
+
+      // agent1 should come before agent2 when sorted by toolsCount desc
+      expect(agent1Index).toBeLessThan(agent2Index);
+    });
+
+    test("agents with only Archestra tools show 0 tools", async ({
+      makeAdmin,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create an agent with only Archestra tools
+      const agent = await AgentModel.create({
+        name: "Archestra Only Agent",
+        teams: [],
+      });
+
+      // Add only Archestra MCP tools
+      for (let i = 0; i < 3; i++) {
+        const tool = await makeTool({
+          name: `archestra__only_archestra_${i}`,
+          description: `Archestra tool ${i}`,
+          parameters: {},
+        });
+        await makeAgentTool(agent.id, tool.id);
+      }
+
+      // Query the agent
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+
+      // Find our test agent
+      const testAgent = result.data.find(
+        (a) => a.name === "Archestra Only Agent",
+      );
+      expect(testAgent).toBeDefined();
+
+      // Should show 0 tools since all were Archestra tools
+      expect(testAgent!.tools).toHaveLength(0);
     });
   });
 });

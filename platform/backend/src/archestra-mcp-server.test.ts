@@ -7,6 +7,7 @@ import {
   type ArchestraContext,
   executeArchestraTool,
   getArchestraMcpTools,
+  isArchestraMcpServerTool,
   MCP_SERVER_NAME,
 } from "./archestra-mcp-server";
 
@@ -617,4 +618,10 @@ describe("executeArchestraTool", () => {
       });
     });
   });
+});
+
+test("isArchestraMcpServerTool", () => {
+  expect(isArchestraMcpServerTool("archestra__whoami")).toBe(true);
+  expect(isArchestraMcpServerTool("archestra__create_agent")).toBe(true);
+  expect(isArchestraMcpServerTool("mcp_server__tool")).toBe(false);
 });

@@ -60,6 +60,7 @@ export function useAllAgentTools({
           agentId: filters?.agentId,
           origin: filters?.origin,
           credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+          excludeArchestraTools: true,
         },
       });
       return (

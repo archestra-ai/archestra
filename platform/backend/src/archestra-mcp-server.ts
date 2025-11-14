@@ -15,7 +15,6 @@ import type { Agent, InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
   type LimitEntityType,
-  LimitEntityTypeSchema,
   type LimitType,
   LimitTypeSchema,
   type ToolInvocation,
@@ -1516,7 +1515,7 @@ export function getArchestraMcpTools(): Tool[] {
         properties: {
           entity_type: {
             type: "string",
-            enum: LimitEntityTypeSchema.options,
+            enum: ["organization", "team", "profile"],
             description: "The type of entity to apply the limit to",
           },
           entity_id: {
@@ -1563,7 +1562,7 @@ export function getArchestraMcpTools(): Tool[] {
         properties: {
           entity_type: {
             type: "string",
-            enum: LimitEntityTypeSchema.options,
+            enum: ["organization", "team", "profile"],
             description: "Optional filter by entity type",
           },
           entity_id: {

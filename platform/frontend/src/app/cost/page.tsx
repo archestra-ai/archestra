@@ -1625,7 +1625,8 @@ export default function CostPage() {
                               colSpan={5}
                               className="text-center py-8 text-muted-foreground"
                             >
-                              No profile data available for the selected timeframe
+                              No profile data available for the selected
+                              timeframe
                             </TableCell>
                           </TableRow>
                         ) : (

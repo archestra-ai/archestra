@@ -238,8 +238,8 @@ export function AssignAgentDialog({
                   Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when these profiles execute this
-                  tool
+                  Select which token will be used when these profiles execute
+                  this tool
                 </p>
                 <TokenSelect
                   value={credentialSourceMcpServerId}

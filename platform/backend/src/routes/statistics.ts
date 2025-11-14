@@ -44,7 +44,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query: { timeframe }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
       return reply.send(
@@ -83,7 +83,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query: { timeframe }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 
@@ -122,7 +122,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query: { timeframe }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 
@@ -158,7 +158,7 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query: { timeframe }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 

@@ -443,9 +443,8 @@ function Agents() {
               </h1>
               <p className="text-sm text-muted-foreground">
                 Profiles are a way to organize access and logging. <br />
-                <br />
-                A profile can be: an N8N workflow, a custom application, or a
-                team sharing an MCP gateway.{" "}
+                <br />A profile can be: an N8N workflow, a custom application,
+                or a team sharing an MCP gateway.{" "}
                 <a
                   href="https://www.archestra.ai/docs/platform-agents"
                   target="_blank"

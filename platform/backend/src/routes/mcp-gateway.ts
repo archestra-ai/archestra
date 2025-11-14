@@ -15,6 +15,7 @@ import {
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "@/archestra-mcp-server";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -313,7 +314,15 @@ export function clearAgentSessions(agentId: string): void {
 
   logger.info(
     { agentId, clearedCount: sessionsToClear.length },
-    "Cleared agent sessions",
+    "All sessions cleared, now clearing cached MCP client",
+  );
+
+  // Also clear the cached MCP client so it will reconnect with a new session
+  clearChatMcpClient(agentId);
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "✅ Cleared agent sessions and client cache - next request will create fresh session",
   );
 }
 
@@ -673,7 +682,19 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           clearedCount: sessionsToClear.length,
           remainingSessions: activeSessions.size,
         },
-        "DELETE /v1/mcp/sessions - Sessions cleared successfully",
+        "DELETE /v1/mcp/sessions - All sessions cleared, now clearing cached MCP client",
+      );
+
+      // Also clear the cached MCP client so it will reconnect with a new session
+      clearChatMcpClient(agentId);
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - ✅ Sessions and client cache cleared successfully",
       );
 
       reply.type("application/json");

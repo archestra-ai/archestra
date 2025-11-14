@@ -1,9 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   assignToolToAgent,
@@ -39,8 +35,20 @@ export function useAllAgentTools({
     credentialSourceMcpServerId?: string;
   };
 }) {
-  return useSuspenseQuery({
-    queryKey: ["agent-tools"],
+  return useQuery({
+    queryKey: [
+      "agent-tools",
+      {
+        limit: pagination?.limit,
+        offset: pagination?.offset,
+        sortBy: sorting?.sortBy,
+        sortDirection: sorting?.sortDirection,
+        search: filters?.search,
+        agentId: filters?.agentId,
+        origin: filters?.origin,
+        credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+      },
+    ],
     queryFn: async () => {
       const result = await getAllAgentTools({
         query: {

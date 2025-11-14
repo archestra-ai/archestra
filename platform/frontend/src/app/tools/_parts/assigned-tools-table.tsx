@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { InstallationSelect } from "@/components/installation-select";
+import { LoadingSpinner } from "@/components/loading";
 import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -124,7 +125,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
-  const { data: agentToolsData } = useAllAgentTools({
+  const { data: agentToolsData, isLoading } = useAllAgentTools({
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
@@ -142,8 +143,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     },
   });
 
-  const agentTools = agentToolsData.data;
-  const paginationMeta = agentToolsData.pagination;
+  const agentTools = agentToolsData?.data ?? [];
 
   // Helper to update URL params
   const updateUrlParams = useCallback(
@@ -806,7 +806,11 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
         </div>
       </div>
 
-      {agentTools.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <LoadingSpinner />
+        </div>
+      ) : agentTools.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
@@ -857,7 +861,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           pagination={{
             pageIndex,
             pageSize,
-            total: paginationMeta.total,
+            total: agentToolsData?.pagination?.total ?? 0,
           }}
           onPaginationChange={handlePaginationChange}
           rowSelection={rowSelection}

@@ -65,11 +65,12 @@ export function TokenSelect({
     (server) => server.authType === "personal",
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
       onValueChange(mcpServers[0].id);
     }
-  }, [mcpServers, shouldSetDefaultValue, value, onValueChange]);
+  }, [mcpServers.length]);
 
   if (!mcpServers || mcpServers.length === 0) {
     return (

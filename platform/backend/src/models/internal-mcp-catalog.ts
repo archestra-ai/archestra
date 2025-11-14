@@ -1,4 +1,4 @@
-import { asc, eq, ilike, or } from "drizzle-orm";
+import { desc, eq, ilike, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertInternalMcpCatalog,
@@ -23,7 +23,7 @@ class InternalMcpCatalogModel {
     return await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .orderBy(asc(schema.internalMcpCatalogTable.createdAt));
+      .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
   }
 
   static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {

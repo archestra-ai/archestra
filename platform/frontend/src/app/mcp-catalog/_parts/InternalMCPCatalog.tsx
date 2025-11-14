@@ -437,8 +437,8 @@ export function InternalMCPCatalog({
       if (aIsRemote && !bIsRemote) return -1;
       if (!aIsRemote && bIsRemote) return 1;
 
-      // Secondary sort by createdAt (oldest first)
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      // Secondary sort by createdAt (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
   const filterCatalogItems = (items: CatalogItem[], query: string) => {

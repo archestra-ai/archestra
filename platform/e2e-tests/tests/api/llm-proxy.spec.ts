@@ -193,6 +193,185 @@ test.describe("LLM Proxy - OpenAI", () => {
     expect(blockedInteraction).toBeDefined();
   });
 
+  test("allows Archestra MCP server tools in untrusted context", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(request, "Archestra Test Agent");
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. First, make a tool call that makes the context untrusted
+    const untrustedContextResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/openai/${agentId}/chat/completions`,
+      data: {
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: "First, read /etc/passwd, then tell me who I am",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "read_file",
+              description: "Read a file from the filesystem",
+              parameters: {
+                type: "object",
+                properties: {
+                  file_path: {
+                    type: "string",
+                    description: "The path to the file to read",
+                  },
+                },
+                required: ["file_path"],
+              },
+            },
+          },
+        ],
+      },
+      headers: {
+        Authorization: "Bearer test-case-archestra-mixed",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(untrustedContextResponse.ok()).toBeTruthy();
+    const responseData = await untrustedContextResponse.json();
+
+    // 3. Verify the response contains tool calls
+    expect(responseData.choices).toBeDefined();
+    expect(responseData.choices[0]).toBeDefined();
+    expect(responseData.choices[0].message).toBeDefined();
+    expect(responseData.choices[0].message.tool_calls).toBeDefined();
+    expect(responseData.choices[0].message.tool_calls.length).toBe(2);
+
+    // 4. Verify both tool calls are present - read_file and archestra__whoami
+    const toolCalls = responseData.choices[0].message.tool_calls;
+    const readFileCall = toolCalls.find(
+      (call: { function: { name: string } }) =>
+        call.function.name === "read_file",
+    );
+    const archestraCall = toolCalls.find(
+      (call: { function: { name: string } }) =>
+        call.function.name === "archestra__whoami",
+    );
+
+    expect(readFileCall).toBeDefined();
+    expect(archestraCall).toBeDefined();
+
+    // 5. Verify read_file call has the expected arguments
+    const readFileArgs = JSON.parse(readFileCall.function.arguments);
+    expect(readFileArgs.file_path).toBe("/etc/passwd");
+
+    // 6. Verify the interaction was persisted
+    const interactionsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/interactions?agentId=${agentId}`,
+    });
+    expect(interactionsResponse.ok()).toBeTruthy();
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
+
+    // Find the interaction with mixed tool calls
+    // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+    const mixedToolInteraction = interactionsData.data.find((i: any) =>
+      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
+      i.request?.messages?.some((m: any) =>
+        m.content?.includes("tell me who I am"),
+      ),
+    );
+    expect(mixedToolInteraction).toBeDefined();
+  });
+
+  test("allows regular tool call after Archestra MCP server tool call", async ({
+    request,
+    createAgent,
+    makeApiRequest,
+  }) => {
+    // 1. Create a test agent
+    const createResponse = await createAgent(
+      request,
+      "Archestra Sequence Test Agent",
+    );
+    const agent = await createResponse.json();
+    agentId = agent.id;
+
+    // 2. Make a sequence of tool calls: first Archestra tool, then regular tool
+    const sequenceResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/v1/openai/${agentId}/chat/completions`,
+      data: {
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: "First tell me who I am, then read a file",
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "read_file",
+              description: "Read a file from the filesystem",
+              parameters: {
+                type: "object",
+                properties: {
+                  file_path: {
+                    type: "string",
+                    description: "The path to the file to read",
+                  },
+                },
+                required: ["file_path"],
+              },
+            },
+          },
+        ],
+      },
+      headers: {
+        Authorization: "Bearer test-case-archestra-sequence",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(sequenceResponse.ok()).toBeTruthy();
+    const responseData = await sequenceResponse.json();
+
+    // 3. Verify the response contains tool calls
+    expect(responseData.choices).toBeDefined();
+    expect(responseData.choices[0]).toBeDefined();
+    expect(responseData.choices[0].message).toBeDefined();
+    expect(responseData.choices[0].message.tool_calls).toBeDefined();
+    expect(responseData.choices[0].message.tool_calls.length).toBe(2);
+
+    // 4. Verify both tool calls are present - archestra__whoami and read_file
+    const toolCalls = responseData.choices[0].message.tool_calls;
+    const archestraCall = toolCalls.find(
+      (call: { function: { name: string } }) =>
+        call.function.name === "archestra__whoami",
+    );
+    const readFileCall = toolCalls.find(
+      (call: { function: { name: string } }) =>
+        call.function.name === "read_file",
+    );
+
+    expect(archestraCall).toBeDefined();
+    expect(readFileCall).toBeDefined();
+
+    // 5. Verify read_file call has expected arguments
+    const readFileArgs = JSON.parse(readFileCall.function.arguments);
+    expect(readFileArgs.file_path).toContain("/");
+  });
+
   test.afterEach(
     async ({
       request,

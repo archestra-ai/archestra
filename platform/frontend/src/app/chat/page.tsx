@@ -2,7 +2,7 @@
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -35,18 +35,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  type ConversationWithAgent,
   useChatAgentMcpTools,
+  useConversation,
   useConversations,
   useCreateConversation,
   useDeleteConversation,
   useUpdateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
-
-interface ConversationWithMessages extends ConversationWithAgent {
-  messages: UIMessage[];
-}
 
 export default function ChatPage() {
   const router = useRouter();
@@ -84,35 +80,13 @@ export default function ChatPage() {
   const { data: conversations = [] } = useConversations();
 
   // Fetch conversation with messages
-  const { data: conversation } = useQuery<ConversationWithMessages>({
-    queryKey: ["conversation", conversationId],
-    queryFn: async () => {
-      if (!conversationId) return null;
-      const res = await fetch(`/api/chat/conversations/${conversationId}`);
-      if (!res.ok) {
-        // If conversation was deleted (404), clear the selection gracefully
-        if (res.status === 404) {
-          selectConversation(undefined);
-          return null;
-        }
-        throw new Error("Failed to fetch conversation");
-      }
-      return res.json();
-    },
-    enabled: !!conversationId,
-    staleTime: 0, // Always refetch to ensure we have the latest messages
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-    retry: false, // Don't retry on error to avoid multiple 404s
-  });
+  const { data: conversation } = useConversation(conversationId);
 
   // Get current agent info
-  const currentAgent =
-    conversation?.agent ||
-    conversations.find((c) => c.id === conversationId)?.agent;
+  const currentAgentId = conversation?.agentId;
 
   // Fetch MCP tools from gateway (same as used in chat backend)
-  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgent?.id);
+  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = mcpTools.reduce(
@@ -201,7 +175,7 @@ export default function ChatPage() {
       conversation.id === conversationId &&
       loadedConversationRef.current !== conversationId
     ) {
-      setMessages(conversation.messages);
+      setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
 
       // If there's a pending prompt and the conversation is empty, send it
@@ -271,7 +245,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar - Conversation List */}
       <ConversationList
         conversations={conversations}
         selectedConversationId={conversationId}
@@ -283,7 +256,6 @@ export default function ChatPage() {
         onToggleHideToolCalls={setHideToolCalls}
       />
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {!conversationId ? (
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
@@ -305,7 +277,7 @@ export default function ChatPage() {
             />
             <div className="border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
-                {currentAgent && Object.keys(groupedTools).length > 0 && (
+                {currentAgentId && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
                       <div className="flex flex-wrap gap-2">

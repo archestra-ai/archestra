@@ -28,6 +28,7 @@ interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
   onToggleHideToolCalls?: () => void;
+  agentName?: string;
   status: ChatStatus;
 }
 
@@ -55,6 +56,7 @@ export function ChatMessages({
   messages,
   hideToolCalls = false,
   onToggleHideToolCalls,
+  agentName,
   status,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
@@ -73,25 +75,35 @@ export function ChatMessages({
   return (
     <Conversation className="h-full">
       {onToggleHideToolCalls && (
-        <div className="border-b p-2 flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleHideToolCalls}
-            className="text-xs"
-          >
-            {hideToolCalls ? (
-              <>
-                <Eye className="h-3 w-3 mr-1" />
-                Show tool calls
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-3 w-3 mr-1" />
-                Hide tool calls
-              </>
-            )}
-          </Button>
+        <div className="border-b p-2 flex items-center justify-between">
+          <div className="flex-1" />
+          {agentName && (
+            <div className="flex-1 text-center">
+              <span className="text-sm font-medium text-muted-foreground">
+                {agentName}
+              </span>
+            </div>
+          )}
+          <div className="flex-1 flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleHideToolCalls}
+              className="text-xs"
+            >
+              {hideToolCalls ? (
+                <>
+                  <Eye className="h-3 w-3 mr-1" />
+                  Show tool calls
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3 w-3 mr-1" />
+                  Hide tool calls
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
       <ConversationContent>

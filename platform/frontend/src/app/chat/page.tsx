@@ -294,6 +294,7 @@ export default function ChatPage() {
               messages={messages}
               hideToolCalls={hideToolCalls}
               onToggleHideToolCalls={toggleHideToolCalls}
+              agentName={conversation?.agent?.name}
               status={status}
             />
             <div className="border-t p-4">

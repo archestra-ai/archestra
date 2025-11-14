@@ -1,9 +1,35 @@
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import type { ExtendedTool, InsertTool, Tool } from "@/types";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  ExtendedTool,
+  InsertTool,
+  PaginationQuery,
+  Tool,
+  ToolFilters,
+  ToolSortBy,
+  ToolSortDirection,
+  ToolWithAssignments,
+} from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
@@ -393,8 +419,7 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        responseModifierTemplate:
-          schema.agentToolsTable.responseModifierTemplate,
+        responseModifierTemplate: schema.toolPoliciesTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
@@ -410,6 +435,10 @@ class ToolModel {
       .innerJoin(
         schema.agentToolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .leftJoin(
         schema.mcpServersTable,
@@ -561,6 +590,174 @@ class ToolModel {
       .select()
       .from(schema.toolsTable)
       .where(inArray(schema.toolsTable.id, ids));
+  }
+
+  /**
+   * Find all tools with pagination, sorting, and filtering support
+   * Returns unique tools (not duplicated per agent assignment) with assignment counts
+   */
+  static async findAllPaginated(
+    pagination: PaginationQuery,
+    sorting?: {
+      sortBy?: ToolSortBy;
+      sortDirection?: ToolSortDirection;
+    },
+    filters?: ToolFilters,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<PaginatedResult<ToolWithAssignments>> {
+    // Build WHERE conditions
+    const whereConditions: SQL[] = [];
+
+    /**
+     * Apply access control filtering for users that are not agent admins
+     *
+     * If the user is not an admin, we basically allow them to see all tools that are assigned to agents
+     * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
+     */
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
+
+      if (accessibleAgentIds.length === 0) {
+        whereConditions.push(mcpServerSourceClause);
+      } else {
+        whereConditions.push(
+          or(
+            inArray(schema.toolsTable.agentId, accessibleAgentIds),
+            mcpServerSourceClause,
+          )!,
+        );
+      }
+    }
+
+    // Filter by search query (tool name or description)
+    if (filters?.search) {
+      whereConditions.push(
+        or(
+          sql`LOWER(${schema.toolsTable.name}) LIKE ${`%${filters.search.toLowerCase()}%`}`,
+          sql`LOWER(${schema.toolsTable.description}) LIKE ${`%${filters.search.toLowerCase()}%`}`,
+        )!,
+      );
+    }
+
+    // Filter by origin (either "llm-proxy" or a catalogId)
+    if (filters?.origin) {
+      if (filters.origin === "llm-proxy") {
+        // LLM Proxy tools have null catalogId
+        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NULL`);
+      } else {
+        // MCP tools have a catalogId
+        whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
+      }
+    }
+
+    // Exclude Archestra built-in tools for test isolation
+    if (filters?.excludeArchestraTools) {
+      whereConditions.push(
+        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
+      );
+    }
+
+    const whereClause =
+      whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+    // Determine the ORDER BY clause based on sorting params
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+    let orderByClause: SQL;
+
+    switch (sorting?.sortBy) {
+      case "name":
+        orderByClause = direction(schema.toolsTable.name);
+        break;
+      case "origin":
+        // Sort by catalogId (null values last for LLM Proxy)
+        orderByClause = direction(
+          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
+        );
+        break;
+      case "assignedAgentCount":
+        orderByClause = direction(sql`assigned_agent_count`);
+        break;
+      default:
+        orderByClause = direction(schema.toolsTable.createdAt);
+        break;
+    }
+
+    // Build the main query with assignment counts and policy counts
+    const [data, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          catalogId: schema.toolsTable.catalogId,
+          parameters: schema.toolsTable.parameters,
+          description: schema.toolsTable.description,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          agent: sql<{ id: string; name: string } | null>`
+            CASE
+              WHEN ${schema.agentsTable.id} IS NOT NULL THEN
+                json_build_object('id', ${schema.agentsTable.id}, 'name', ${schema.agentsTable.name})
+              ELSE NULL
+            END
+          `,
+          mcpServer: sql<{ id: string; name: string } | null>`
+            CASE
+              WHEN ${schema.mcpServersTable.id} IS NOT NULL THEN
+                json_build_object('id', ${schema.mcpServersTable.id}, 'name', ${schema.mcpServersTable.name})
+              ELSE NULL
+            END
+          `,
+          assignedAgentCount: sql<number>`
+            COALESCE(
+              (SELECT COUNT(DISTINCT ${schema.agentToolsTable.agentId})
+               FROM ${schema.agentToolsTable}
+               WHERE ${schema.agentToolsTable.toolId} = ${schema.toolsTable.id}),
+              0
+            )
+          `.as("assigned_agent_count"),
+          policyCount: sql<number>`
+            COALESCE(
+              (SELECT COUNT(*)
+               FROM ${schema.toolPoliciesTable}
+               WHERE ${schema.toolPoliciesTable.toolId} = ${schema.toolsTable.id}),
+              0
+            )
+          `.as("policy_count"),
+        })
+        .from(schema.toolsTable)
+        .leftJoin(
+          schema.agentsTable,
+          eq(schema.toolsTable.agentId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(whereClause)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.toolsTable)
+        .leftJoin(
+          schema.agentsTable,
+          eq(schema.toolsTable.agentId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(whereClause),
+    ]);
+
+    return createPaginatedResult(data, Number(total), pagination);
   }
 }
 

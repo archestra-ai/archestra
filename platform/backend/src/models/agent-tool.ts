@@ -32,9 +32,7 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
-        | "responseModifierTemplate"
+        | "toolPolicyId"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
       >
@@ -111,9 +109,7 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
-          | "responseModifierTemplate"
+          | "toolPolicyId"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
         >
@@ -161,9 +157,7 @@ class AgentToolModel {
       const options: Partial<
         Pick<
           InsertAgentTool,
-          | "allowUsageWhenUntrustedDataIsPresent"
-          | "toolResultTreatment"
-          | "responseModifierTemplate"
+          | "toolPolicyId"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
         >
@@ -215,9 +209,7 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        | "allowUsageWhenUntrustedDataIsPresent"
-        | "toolResultTreatment"
-        | "responseModifierTemplate"
+        | "toolPolicyId"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
       >
@@ -385,11 +377,6 @@ class AgentToolModel {
           sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
         );
         break;
-      case "allowUsageWhenUntrustedDataIsPresent":
-        orderByClause = direction(
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        );
-        break;
       default:
         orderByClause = direction(schema.agentToolsTable.createdAt);
         break;
@@ -455,6 +442,10 @@ class AgentToolModel {
     return createPaginatedResult(data, Number(total), pagination);
   }
 
+  /**
+   * Get security configuration for an agent-tool combination
+   * Returns policy settings if a tool policy is assigned, otherwise returns default values
+   */
   static async getSecurityConfig(
     agentId: string,
     toolName: string,
@@ -462,16 +453,21 @@ class AgentToolModel {
     allowUsageWhenUntrustedDataIsPresent: boolean;
     toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
   } | null> {
-    const [agentTool] = await db
+    const [result] = await db
       .select({
+        toolPolicyId: schema.agentToolsTable.toolPolicyId,
         allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+          schema.toolPoliciesTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.toolPoliciesTable.toolResultTreatment,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         and(
@@ -480,7 +476,23 @@ class AgentToolModel {
         ),
       );
 
-    return agentTool || null;
+    if (!result) {
+      return null;
+    }
+
+    // If no policy is assigned, return default values
+    if (!result.toolPolicyId) {
+      return {
+        allowUsageWhenUntrustedDataIsPresent: false,
+        toolResultTreatment: "untrusted",
+      };
+    }
+
+    return {
+      allowUsageWhenUntrustedDataIsPresent:
+        result.allowUsageWhenUntrustedDataIsPresent,
+      toolResultTreatment: result.toolResultTreatment,
+    };
   }
 
   /**

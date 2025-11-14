@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-
+import { UuidIdSchema } from "./api";
 import { OpenAi } from "./llm-providers";
 
 /**
@@ -52,3 +52,34 @@ export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 
 export type ToolParametersContent = z.infer<typeof ToolParametersContentSchema>;
+
+// Pagination, filtering, and sorting for tools
+export const ToolFilterSchema = z.object({
+  search: z.string().optional(),
+  origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
+  excludeArchestraTools: z.coerce
+    .boolean()
+    .optional()
+    .describe("For test isolation"),
+});
+
+export const ToolSortBySchema = z.enum([
+  "name",
+  "origin",
+  "createdAt",
+  "assignedAgentCount",
+]);
+
+export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
+
+export type ToolFilters = z.infer<typeof ToolFilterSchema>;
+export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
+export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;
+
+// Extended tool with assignment count
+export const ToolWithAssignmentsSchema = ExtendedSelectToolSchema.extend({
+  assignedAgentCount: z.number(),
+  policyCount: z.number(),
+});
+
+export type ToolWithAssignments = z.infer<typeof ToolWithAssignmentsSchema>;

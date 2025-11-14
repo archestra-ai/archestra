@@ -63,6 +63,7 @@ interface TestFixtures {
   makeSession: typeof makeSession;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
+  makeSecret: typeof makeSecret;
 }
 
 async function _makeUser(
@@ -562,6 +563,22 @@ async function makeInteraction(
   return interaction;
 }
 
+/**
+ * Creates a test secret in the database
+ */
+async function makeSecret(overrides: Partial<{ secret: object }> = {}) {
+  const [secret] = await db
+    .insert(schema.secretsTable)
+    .values({
+      secret: {
+        access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
+      },
+      ...overrides,
+    })
+    .returning();
+  return secret;
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -617,5 +634,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeInteraction: async ({}, use) => {
     await use(makeInteraction);
+  },
+  makeSecret: async ({}, use) => {
+    await use(makeSecret);
   },
 });

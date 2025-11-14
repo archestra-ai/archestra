@@ -29,7 +29,7 @@ class ConversationModel {
     const rows = await db
       .select({
         conversation: getTableColumns(schema.conversationsTable),
-        messages: schema.messagesTable.content,
+        message: getTableColumns(schema.messagesTable),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
@@ -52,13 +52,27 @@ class ConversationModel {
       )
       .orderBy(desc(schema.conversationsTable.createdAt));
 
-    const conversations = rows.map((row) => ({
-      ...row.conversation,
-      agent: row.agent,
-      messages: row.messages,
-    }));
+    // Group messages by conversation
+    const conversationMap = new Map<string, Conversation>();
 
-    return conversations;
+    for (const row of rows) {
+      const conversationId = row.conversation.id;
+
+      if (!conversationMap.has(conversationId)) {
+        conversationMap.set(conversationId, {
+          ...row.conversation,
+          agent: row.agent,
+          messages: [],
+        });
+      }
+
+      const conversation = conversationMap.get(conversationId);
+      if (conversation && row?.message?.content) {
+        conversation.messages.push(row.message.content);
+      }
+    }
+
+    return Array.from(conversationMap.values());
   }
 
   static async findById(
@@ -66,14 +80,14 @@ class ConversationModel {
     userId: string,
     organizationId: string,
   ): Promise<Conversation | null> {
-    const [conversation] = await db
+    const rows = await db
       .select({
-        ...getTableColumns(schema.conversationsTable),
+        conversation: getTableColumns(schema.conversationsTable),
+        message: getTableColumns(schema.messagesTable),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
         },
-        messages: schema.messagesTable.content,
       })
       .from(schema.conversationsTable)
       .innerJoin(
@@ -92,7 +106,24 @@ class ConversationModel {
         ),
       );
 
-    return conversation;
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const firstRow = rows[0];
+    const messages = [];
+
+    for (const row of rows) {
+      if (row.message?.content) {
+        messages.push(row.message.content);
+      }
+    }
+
+    return {
+      ...firstRow.conversation,
+      agent: firstRow.agent,
+      messages,
+    };
   }
 
   static async update(
@@ -112,6 +143,10 @@ class ConversationModel {
         ),
       )
       .returning();
+
+    if (!updated) {
+      return null;
+    }
 
     const updatedWithAgent = (await ConversationModel.findById(
       updated.id,

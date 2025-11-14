@@ -2,20 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ChatSettingsModel, SecretModel } from "@/models";
-import { constructResponseSchema } from "@/types";
-
-const ChatSettingsSchema = z.object({
-  id: z.string(),
-  organizationId: z.string(),
-  anthropicApiKeySecretId: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-
-const UpdateChatSettingsSchema = z.object({
-  anthropicApiKey: z.string().optional(),
-  resetApiKey: z.boolean().optional(),
-});
+import { constructResponseSchema, SelectChatSettingsSchema } from "@/types";
 
 const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -25,13 +12,12 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetChatSettings,
         description: "Get chat settings for the organization",
         tags: ["Chat Settings"],
-        response: constructResponseSchema(ChatSettingsSchema),
+        response: constructResponseSchema(SelectChatSettingsSchema),
       },
     },
     async ({ organizationId }, reply) => {
       try {
-        const settings = await ChatSettingsModel.getOrCreate(organizationId);
-        return reply.send(settings);
+        return reply.send(await ChatSettingsModel.getOrCreate(organizationId));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -53,8 +39,11 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Update chat settings (Anthropic API key) for the organization",
         tags: ["Chat Settings"],
-        body: UpdateChatSettingsSchema,
-        response: constructResponseSchema(ChatSettingsSchema),
+        body: z.object({
+          anthropicApiKey: z.string().optional(),
+          resetApiKey: z.boolean().optional(),
+        }),
+        response: constructResponseSchema(SelectChatSettingsSchema),
       },
     },
     async ({ body, organizationId }, reply) => {
@@ -67,9 +56,8 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Handle reset API key request
         if (body.resetApiKey === true) {
           secretId = null;
-        }
-        // If API key is provided, create or update secret
-        else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
+        } else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
+          // If API key is provided, create or update secret
           if (secretId) {
             // Update existing secret
             await SecretModel.update(secretId, {

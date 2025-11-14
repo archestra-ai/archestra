@@ -385,7 +385,7 @@ export function McpServerCard({
           ))}
         </div>
       )}
-      {needsReinstall && (
+      {isCurrentUserAuthenticated && needsReinstall && (
         <Button
           onClick={onReinstall}
           size="sm"
@@ -487,7 +487,7 @@ export function McpServerCard({
           ))}
         </div>
       )}
-      {needsReinstall && (
+      {isCurrentUserAuthenticated && needsReinstall && (
         <Button
           onClick={onReinstall}
           size="sm"

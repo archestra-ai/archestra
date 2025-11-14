@@ -459,7 +459,7 @@ export function OptimizationRulesTab({
                 onValueChange={setSelectedAgentId}
               >
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select an agent" />
+                  <SelectValue placeholder="Select a profile" />
                 </SelectTrigger>
                 <SelectContent>
                   {agents.map((agent) => (
@@ -520,8 +520,8 @@ export function OptimizationRulesTab({
                       className="text-center py-8 text-muted-foreground"
                     >
                       {selectedAgentId
-                        ? "No optimization rules configured for this agent"
-                        : "Select an agent to view optimization rules"}
+                        ? "No optimization rules configured for this profile"
+                        : "Select a profile to view optimization rules"}
                     </TableCell>
                   </TableRow>
                 ) : (

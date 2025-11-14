@@ -1229,7 +1229,7 @@ export default function CostPage() {
           labels: ["No Data"],
           datasets: [
             {
-              label: "No agents found",
+              label: "No profiles found",
               data: [0],
               borderColor: "#9ca3af",
               backgroundColor: "rgba(156, 163, 175, 0.1)",
@@ -1364,7 +1364,7 @@ export default function CostPage() {
             Cost & Limits
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor and manage your AI model usage costs across all agents and
+            Monitor and manage your AI model usage costs across all profiles and
             teams.
           </p>
         </div>
@@ -1548,7 +1548,7 @@ export default function CostPage() {
                         <TableRow>
                           <TableHead>Team Name</TableHead>
                           <TableHead>Members</TableHead>
-                          <TableHead>Agents</TableHead>
+                          <TableHead>Profiles</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
                           <TableHead className="text-right">Cost</TableHead>
@@ -1595,7 +1595,7 @@ export default function CostPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Agents</CardTitle>
+                <CardTitle>Profiles</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

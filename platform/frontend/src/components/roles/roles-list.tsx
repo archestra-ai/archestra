@@ -136,14 +136,12 @@ export function RolesList() {
 
   const openEditDialog = useCallback(
     (role: Role) => {
-      if (!selectedRole) return;
-
       setSelectedRole(role);
       setRoleName(role.name);
       setPermission(role.permission);
       setEditDialogOpen(true);
     },
-    [selectedRole],
+    [],
   );
 
   if (isLoading) {

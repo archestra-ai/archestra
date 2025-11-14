@@ -1,5 +1,6 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { get } from "lodash-es";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
 import AgentToolModel from "./agent-tool";
@@ -66,6 +67,13 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     isContextTrusted: boolean,
   ): Promise<EvaluationResult> {
+    if (isArchestraMcpServerTool(toolName)) {
+      return {
+        isAllowed: true,
+        reason: "Archestra MCP server tool",
+      };
+    }
+
     /**
      * Get policies assigned to this agent that also match the tool name,
      * along with the tool's configuration
@@ -103,8 +111,8 @@ class ToolInvocationPolicyModel {
         ? applicablePoliciesForAgent[0].allowUsageWhenUntrustedDataIsPresent
         : null;
 
-    // If we don't have the tool config from policies, fetch it from agent-tool relationship
     if (allowUsageWhenUntrustedDataIsPresent === null) {
+      // If we don't have the tool config from policies, fetch it from agent-tool relationship
       const securityConfig = await AgentToolModel.getSecurityConfig(
         agentId,
         toolName,
@@ -200,17 +208,17 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // After evaluating all block_always policies, check if context is untrusted
-    // and tool allows usage with untrusted data
     if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
+      // After evaluating all block_always policies, check if context is untrusted
+      // and tool allows usage with untrusted data
       return {
         isAllowed: true,
         reason: "",
       };
     }
 
-    // If context is untrusted and we don't have an explicit allow rule, block
     if (!isContextTrusted && !hasExplicitAllowRule) {
+      // If context is untrusted and we don't have an explicit allow rule, block
       return {
         isAllowed: false,
         reason: "Tool invocation blocked: context contains untrusted data",

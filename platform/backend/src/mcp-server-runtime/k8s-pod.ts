@@ -753,15 +753,47 @@ export default class K8sPod {
         name: this.podName,
         namespace: this.namespace,
       });
+
+      // Wait for pod to actually terminate (up to 30 seconds)
+      const maxWaitTime = 30000; // 30 seconds
+      const pollInterval = 1000; // 1 second
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        try {
+          // Try to get the pod - if it doesn't exist, we're done
+          await this.k8sApi.readNamespacedPod({
+            name: this.podName,
+            namespace: this.namespace,
+          });
+          // Pod still exists, wait and retry
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        } catch (error: unknown) {
+          // Pod not found (404) means it's been deleted
+          if (error instanceof Error && error.message.includes("404")) {
+            logger.info(`Pod ${this.podName} successfully terminated`);
+            this.state = "not_created";
+            return;
+          }
+          // Other errors, rethrow
+          throw error;
+        }
+      }
+
+      // Timeout reached but pod still exists
+      logger.warn(
+        `Pod ${this.podName} deletion timeout after ${maxWaitTime}ms, may still be terminating`,
+      );
       this.state = "not_created";
-      logger.info(`Pod ${this.podName} stopped`);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {
-        logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
-        throw error;
+        // Pod already doesn't exist, that's fine
+        logger.info(`Pod ${this.podName} already deleted`);
+        this.state = "not_created";
+        return;
       }
-      // Pod doesn't exist, that's fine
-      this.state = "not_created";
+      logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
+      throw error;
     }
   }
 

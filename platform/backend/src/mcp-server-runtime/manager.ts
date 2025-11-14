@@ -207,6 +207,31 @@ export class McpServerRuntimeManager {
         environmentValues,
       );
 
+      // Check for and clean up any stale pod with the same name
+      const potentialPodName = k8sPod.k8sPodName;
+      try {
+        const existingPod = await this.k8sApi.readNamespacedPod({
+          name: potentialPodName,
+          namespace: this.namespace,
+        });
+
+        if (existingPod) {
+          logger.warn(
+            `Found stale pod ${potentialPodName}, deleting before creating new one`,
+          );
+          // Reuse the stopPod method which handles deletion and termination wait
+          await k8sPod.stopPod();
+        }
+      } catch (error: unknown) {
+        // 404 error means pod doesn't exist, which is fine
+        if (!(error instanceof Error && error.message.includes("404"))) {
+          logger.error(
+            { err: error },
+            `Error checking for stale pod ${potentialPodName}:`,
+          );
+        }
+      }
+
       // Register the pod BEFORE starting it
       this.mcpServerIdToPodMap.set(id, k8sPod);
       logger.info(`Registered MCP server pod ${id} in map`);

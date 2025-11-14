@@ -116,11 +116,15 @@ export function InternalMCPCatalog({
 
     // For servers without configuration, install directly
     setInstallingItemId(catalogItem.id);
-    await installMutation.mutateAsync({
+    const installedServer = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       teams: [],
     });
+    // Track the installed server for polling if it's a local server
+    if (installedServer?.id && catalogItem.serverType === "local") {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    }
     setInstallingItemId(null);
   };
 
@@ -223,12 +227,16 @@ export function InternalMCPCatalog({
         ? metadata.access_token
         : undefined;
 
-    await installMutation.mutateAsync({
+    const installedServer = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
       teams,
     });
+    // Track the installed server for polling if it's a local server
+    if (installedServer?.id && catalogItem.serverType === "local") {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    }
     setInstallingItemId(null);
   };
 

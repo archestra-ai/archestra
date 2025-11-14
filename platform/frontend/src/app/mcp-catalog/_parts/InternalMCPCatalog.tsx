@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useDialogs } from "@/lib/dialog.hook";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
@@ -46,31 +47,34 @@ export function InternalMCPCatalog({
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
-    useState(false);
+  const { isDialogOpened, openDialog, closeDialog } = useDialogs<
+    | "create"
+    | "custom-request"
+    | "edit"
+    | "delete"
+    | "remote-install"
+    | "local-install"
+    | "oauth"
+    | "no-auth"
+    | "reinstall"
+  >();
+
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
-  const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
-    useState(false);
-  const [selectedCatalogItem, setSelectedCatalogItem] =
-    useState<CatalogItem | null>(null);
-  const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
-  const [showReinstallDialog, setShowReinstallDialog] = useState(false);
-  const [catalogItemForReinstall, setCatalogItemForReinstall] =
-    useState<CatalogItem | null>(null);
-  const [isTeamMode, setIsTeamMode] = useState(false);
-  const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
-  const [noAuthCatalogItem, setNoAuthCatalogItem] =
-    useState<CatalogItem | null>(null);
-  const [isLocalServerDialogOpen, setIsLocalServerDialogOpen] = useState(false);
-  const [localServerCatalogItem, setLocalServerCatalogItem] =
-    useState<CatalogItem | null>(null);
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
   );
+  const [installingItemId, setInstallingItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCatalogItem, setSelectedCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [catalogItemForReinstall, setCatalogItemForReinstall] =
+    useState<CatalogItem | null>(null);
+  const [isTeamMode, setIsTeamMode] = useState(false);
+  const [noAuthCatalogItem, setNoAuthCatalogItem] =
+    useState<CatalogItem | null>(null);
+  const [localServerCatalogItem, setLocalServerCatalogItem] =
+    useState<CatalogItem | null>(null);
 
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
@@ -93,24 +97,27 @@ export function InternalMCPCatalog({
     }
   }, [mcpServerInstallationStatus.data, installingServerIds]);
 
-  const handleInstall = async (catalogItem: CatalogItem, teamMode = false) => {
+  const handleInstallRemoteServer = async (
+    catalogItem: CatalogItem,
+    teamMode: boolean,
+  ) => {
     setIsTeamMode(teamMode);
 
-    // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
+    // Check if this is a remote server with user configuration
     if (
       catalogItem.serverType === "remote" &&
       catalogItem.userConfig &&
       Object.keys(catalogItem.userConfig).length > 0
     ) {
       setSelectedCatalogItem(catalogItem);
-      setIsRemoteServerDialogOpen(true);
+      openDialog("remote-install");
       return;
     }
 
     // Check if this server requires OAuth authentication
     if (catalogItem.oauthConfig) {
       setSelectedCatalogItem(catalogItem);
-      setIsOAuthDialogOpen(true);
+      openDialog("oauth");
       return;
     }
 
@@ -128,14 +135,14 @@ export function InternalMCPCatalog({
     setInstallingItemId(null);
   };
 
-  const handleInstallTeam = async (catalogItem: CatalogItem) => {
-    await handleInstall(catalogItem, true);
+  const handleInstallRemoteServerTeam = async (catalogItem: CatalogItem) => {
+    await handleInstallRemoteServer(catalogItem, true);
   };
 
   const handleInstallLocalServerTeam = async (catalogItem: CatalogItem) => {
     setIsTeamMode(true);
     setLocalServerCatalogItem(catalogItem);
-    setIsLocalServerDialogOpen(true);
+    openDialog("local-install");
   };
 
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
@@ -151,7 +158,7 @@ export function InternalMCPCatalog({
     if (hasUserConfig || hasPromptedEnvVars) {
       // Show configuration dialog
       setLocalServerCatalogItem(catalogItem);
-      setIsLocalServerDialogOpen(true);
+      openDialog("local-install");
       return;
     }
 
@@ -182,7 +189,7 @@ export function InternalMCPCatalog({
       catalogId: noAuthCatalogItem.id,
       teams,
     });
-    setIsNoAuthDialogOpen(false);
+    closeDialog("no-auth");
     setNoAuthCatalogItem(null);
     setInstallingItemId(null);
   };
@@ -209,7 +216,7 @@ export function InternalMCPCatalog({
       setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
     }
 
-    setIsLocalServerDialogOpen(false);
+    closeDialog("local-install");
     setLocalServerCatalogItem(null);
     setInstallingItemId(null);
   };
@@ -373,7 +380,7 @@ export function InternalMCPCatalog({
   const handleReinstall = (catalogItem: CatalogItem) => {
     // Show confirmation dialog before reinstalling
     setCatalogItemForReinstall(catalogItem);
-    setShowReinstallDialog(true);
+    openDialog("reinstall");
   };
 
   const handleReinstallConfirm = async () => {
@@ -397,12 +404,12 @@ export function InternalMCPCatalog({
 
     if (!installedServer) {
       toast.error("Server not found, cannot reinstall");
-      setShowReinstallDialog(false);
+      closeDialog("reinstall");
       setCatalogItemForReinstall(null);
       return;
     }
 
-    setShowReinstallDialog(false);
+    closeDialog("reinstall");
 
     // Delete the installed server using its server ID
     await deleteMutation.mutateAsync({
@@ -414,7 +421,7 @@ export function InternalMCPCatalog({
     if (catalogItemForReinstall.serverType === "local") {
       await handleInstallLocalServer(catalogItemForReinstall);
     } else {
-      await handleInstall(catalogItemForReinstall);
+      await handleInstallRemoteServer(catalogItemForReinstall, false);
     }
 
     setCatalogItemForReinstall(null);
@@ -450,6 +457,39 @@ export function InternalMCPCatalog({
     filterCatalogItems(catalogItems || [], searchQuery),
   );
 
+  const getInstalledServerInfo = (item: CatalogItem) => {
+    const installedServer = getAggregatedInstallation(item.id);
+    const isInstallInProgress =
+      installedServer && installingServerIds.has(installedServer.id);
+
+    // For local servers, count installations and check ownership
+    const localServers =
+      installedServers?.filter(
+        (server) =>
+          server.serverType === "local" && server.catalogId === item.id,
+      ) || [];
+    const currentUserLocalServerInstallation = currentUserId
+      ? localServers.find(
+          (server) =>
+            server.ownerId === currentUserId && server.authType === "personal",
+        )
+      : undefined;
+    const currentUserInstalledLocalServer = Boolean(
+      currentUserLocalServerInstallation,
+    );
+    const currentUserHasLocalTeamInstallation = Boolean(
+      localServers.some((server) => server.authType === "team"),
+    );
+
+    return {
+      installedServer,
+      isInstallInProgress,
+      currentUserInstalledLocalServer,
+      currentUserHasLocalTeamInstallation,
+      currentUserLocalServerInstallation,
+    };
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
@@ -465,8 +505,8 @@ export function InternalMCPCatalog({
         <Button
           onClick={() =>
             userIsMcpServerAdmin
-              ? setIsCreateDialogOpen(true)
-              : setIsCustomRequestDialogOpen(true)
+              ? openDialog("create")
+              : openDialog("custom-request")
           }
         >
           <Plus className="mr-2 h-4 w-4" />
@@ -479,45 +519,25 @@ export function InternalMCPCatalog({
         {filteredCatalogItems.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-start">
             {filteredCatalogItems.map((item) => {
-              const installedServer = getAggregatedInstallation(item.id);
-              const isInstallInProgress =
-                installedServer && installingServerIds.has(installedServer.id);
-
-              // For local servers, count installations and check ownership
-              const localServers =
-                installedServers?.filter(
-                  (server) =>
-                    server.serverType === "local" &&
-                    server.catalogId === item.id,
-                ) || [];
-              const currentUserLocalServerInstallation = currentUserId
-                ? localServers.find(
-                    (server) =>
-                      server.ownerId === currentUserId &&
-                      server.authType === "personal",
-                  )
-                : undefined;
-              const currentUserInstalledLocalServer = Boolean(
-                currentUserLocalServerInstallation,
-              );
-              const currentUserHasLocalTeamInstallation = Boolean(
-                localServers.some((server) => server.authType === "team"),
-              );
-
+              const serverInfo = getInstalledServerInfo(item);
               return (
                 <McpServerCard
                   variant={item.serverType === "remote" ? "remote" : "local"}
                   key={item.id}
                   item={item}
-                  installedServer={installedServer}
+                  installedServer={serverInfo.installedServer}
                   installingItemId={installingItemId}
                   installationStatus={
-                    isInstallInProgress
+                    serverInfo.isInstallInProgress
                       ? mcpServerInstallationStatus.data
                       : undefined
                   }
-                  onInstall={() => handleInstall(item, false)}
-                  onInstallTeam={() => handleInstallTeam(item)}
+                  onInstallRemoteServer={() =>
+                    handleInstallRemoteServer(item, false)
+                  }
+                  onInstallRemoteServerTeam={() =>
+                    handleInstallRemoteServerTeam(item)
+                  }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
                   onInstallLocalServerTeam={() =>
                     handleInstallLocalServerTeam(item)
@@ -526,13 +546,13 @@ export function InternalMCPCatalog({
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
                   currentUserInstalledLocalServer={
-                    currentUserInstalledLocalServer
+                    serverInfo.currentUserInstalledLocalServer
                   }
                   currentUserHasLocalTeamInstallation={
-                    currentUserHasLocalTeamInstallation
+                    serverInfo.currentUserHasLocalTeamInstallation
                   }
                   currentUserLocalServerInstallation={
-                    currentUserLocalServerInstallation
+                    serverInfo.currentUserLocalServerInstallation
                   }
                 />
               );
@@ -550,22 +570,26 @@ export function InternalMCPCatalog({
       </div>
 
       <CreateCatalogDialog
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
+        isOpen={isDialogOpened("create")}
+        onClose={() => closeDialog("create")}
       />
 
       <CustomServerRequestDialog
-        isOpen={isCustomRequestDialogOpen}
-        onClose={() => setIsCustomRequestDialogOpen(false)}
+        isOpen={isDialogOpened("custom-request")}
+        onClose={() => closeDialog("custom-request")}
       />
 
       <EditCatalogDialog
         item={editingItem}
         onClose={() => {
           const item = editingItem;
+
           if (item) {
             setEditingItem(null);
-            handleReinstall(item);
+            const serverInfo = getInstalledServerInfo(item);
+            if (serverInfo.installedServer?.reinstallRequired) {
+              handleReinstall(item);
+            }
           }
         }}
       />
@@ -583,9 +607,9 @@ export function InternalMCPCatalog({
       />
 
       <RemoteServerInstallDialog
-        isOpen={isRemoteServerDialogOpen}
+        isOpen={isDialogOpened("remote-install")}
         onClose={() => {
-          setIsRemoteServerDialogOpen(false);
+          closeDialog("remote-install");
           setSelectedCatalogItem(null);
           setIsTeamMode(false);
         }}
@@ -596,12 +620,16 @@ export function InternalMCPCatalog({
       />
 
       <OAuthConfirmationDialog
-        open={isOAuthDialogOpen}
-        onOpenChange={setIsOAuthDialogOpen}
+        open={isDialogOpened("oauth")}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDialog("oauth");
+          }
+        }}
         serverName={selectedCatalogItem?.name || ""}
         onConfirm={handleOAuthConfirm}
         onCancel={() => {
-          setIsOAuthDialogOpen(false);
+          closeDialog("oauth");
           setSelectedCatalogItem(null);
           setIsTeamMode(false);
         }}
@@ -611,20 +639,21 @@ export function InternalMCPCatalog({
       />
 
       <ReinstallConfirmationDialog
-        isOpen={showReinstallDialog}
+        isOpen={isDialogOpened("reinstall")}
         onClose={() => {
-          setShowReinstallDialog(false);
+          closeDialog("reinstall");
           setCatalogItemForReinstall(null);
         }}
+        isRemoteServer={catalogItemForReinstall?.serverType === "remote"}
         onConfirm={handleReinstallConfirm}
         serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={installMutation.isPending}
       />
 
       <NoAuthInstallDialog
-        isOpen={isNoAuthDialogOpen}
+        isOpen={isDialogOpened("no-auth")}
         onClose={() => {
-          setIsNoAuthDialogOpen(false);
+          closeDialog("no-auth");
           setNoAuthCatalogItem(null);
         }}
         onInstall={handleNoAuthConfirm}
@@ -633,9 +662,9 @@ export function InternalMCPCatalog({
       />
 
       <LocalServerInstallDialog
-        isOpen={isLocalServerDialogOpen}
+        isOpen={isDialogOpened("local-install")}
         onClose={() => {
-          setIsLocalServerDialogOpen(false);
+          closeDialog("local-install");
           setLocalServerCatalogItem(null);
         }}
         onInstall={handleLocalServerInstall}

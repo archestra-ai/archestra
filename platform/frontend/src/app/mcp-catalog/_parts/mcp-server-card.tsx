@@ -92,8 +92,8 @@ export type McpServerCardProps = {
     | "idle"
     | "discovering-tools"
     | null;
-  onInstall: () => void;
-  onInstallTeam: () => void;
+  onInstallRemoteServer: () => void;
+  onInstallRemoteServerTeam: () => void;
   onInstallLocalServer: () => void;
   onInstallLocalServerTeam: () => void;
   onReinstall: () => void;
@@ -116,8 +116,8 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installationStatus,
-  onInstall,
-  onInstallTeam,
+  onInstallRemoteServer,
+  onInstallRemoteServerTeam,
   onInstallLocalServer,
   onInstallLocalServerTeam,
   onReinstall,
@@ -166,12 +166,7 @@ export function McpServerCard({
     error: logsError,
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
-  // For local servers, check the current user's specific installation
-  // For remote servers, check the aggregated installation
-  const needsReinstall =
-    variant === "local" && currentUserLocalServerInstallation
-      ? (currentUserLocalServerInstallation.reinstallRequired ?? false)
-      : (installedServer?.reinstallRequired ?? false);
+  const needsReinstall = installedServer?.reinstallRequired;
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
 
@@ -407,7 +402,7 @@ export function McpServerCard({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                onClick={onInstall}
+                onClick={onInstallRemoteServer}
                 disabled={isInstalling}
                 size="sm"
                 variant="outline"
@@ -453,7 +448,7 @@ export function McpServerCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  onClick={onInstallTeam}
+                  onClick={onInstallRemoteServerTeam}
                   disabled={isInstalling}
                   size="sm"
                   variant="outline"

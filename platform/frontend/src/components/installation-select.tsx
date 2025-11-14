@@ -44,20 +44,7 @@ export function InstallationSelect({
   });
 
   // Get tokens for this catalogId from the grouped response
-  const mcpServers = (groupedTokens?.[catalogId] ?? []) as Array<{
-    id: string;
-    name: string;
-    authType: "team" | "personal";
-    serverType: "local" | "remote";
-    catalogId: string | null;
-    ownerId: string | null;
-    ownerEmail: string | null;
-    teamDetails?: Array<{
-      teamId: string;
-      name: string;
-      createdAt: Date;
-    }>;
-  }>;
+  const mcpServers = groupedTokens?.[catalogId] ?? [];
 
   // Filter to local servers only
   const installations = mcpServers.filter(
@@ -67,7 +54,7 @@ export function InstallationSelect({
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && installations.length > 0 && !value) {
-      onValueChange(installations[0]?.id);
+      onValueChange(installations[0].id);
     }
   }, [installations.length]);
 

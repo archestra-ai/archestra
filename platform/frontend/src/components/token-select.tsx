@@ -44,20 +44,7 @@ export function TokenSelect({
   });
 
   // Get tokens for this catalogId from the grouped response
-  const mcpServers = (groupedTokens?.[catalogId] ?? []) as Array<{
-    id: string;
-    name: string;
-    authType: "team" | "personal";
-    serverType: "local" | "remote";
-    catalogId: string | null;
-    ownerId: string | null;
-    ownerEmail: string | null;
-    teamDetails?: Array<{
-      teamId: string;
-      name: string;
-      createdAt: Date;
-    }>;
-  }>;
+  const mcpServers = groupedTokens?.[catalogId] ?? [];
 
   // Separate team and personal tokens
   const teamTokens = mcpServers.filter((server) => server.authType === "team");

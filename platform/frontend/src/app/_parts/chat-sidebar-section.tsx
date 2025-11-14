@@ -39,7 +39,10 @@ export function ChatSidebarSection() {
   const visibleChats = showAllChats
     ? conversations
     : conversations.slice(0, VISIBLE_CHAT_COUNT);
-  const hiddenChatsCount = Math.max(0, conversations.length - VISIBLE_CHAT_COUNT);
+  const hiddenChatsCount = Math.max(
+    0,
+    conversations.length - VISIBLE_CHAT_COUNT,
+  );
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -114,14 +117,14 @@ export function ChatSidebarSection() {
           <div className="flex items-center gap-2 px-2 py-1.5">
             <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
             <span className="text-xs text-muted-foreground">
-              Loading conversations...
+              Loading chats...
             </span>
           </div>
         </SidebarMenuSubItem>
       ) : conversations.length === 0 ? (
         <SidebarMenuSubItem>
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No conversations yet
+            No chats yet
           </div>
         </SidebarMenuSubItem>
       ) : (
@@ -155,8 +158,11 @@ export function ChatSidebarSection() {
                       isActive={isCurrentConversation}
                       className="cursor-pointer flex-1 pr-1"
                     >
-                      <span className="truncate" title={conv.title || "New conversation"}>
-                        {conv.title || "New conversation"}
+                      <span
+                        className="truncate"
+                        title={conv.title || "New chat"}
+                      >
+                        {conv.title || "New chat"}
                       </span>
                     </SidebarMenuSubButton>
                   )}
@@ -169,7 +175,7 @@ export function ChatSidebarSection() {
                           handleStartEdit(conv.id, conv.title);
                         }}
                         className="p-1 hover:bg-muted rounded shrink-0"
-                        title="Edit conversation name"
+                        title="Edit chat name"
                       >
                         <Edit2 className="h-3 w-3" />
                       </button>
@@ -180,7 +186,7 @@ export function ChatSidebarSection() {
                           handleDeleteConversation(conv.id);
                         }}
                         className="p-1 hover:bg-destructive/10 rounded shrink-0"
-                        title="Delete conversation"
+                        title="Delete chat"
                       >
                         <Trash2 className="h-3 w-3 text-destructive" />
                       </button>

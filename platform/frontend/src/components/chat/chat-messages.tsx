@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
-  onToggleHideToolCalls?: () => void;
+  onToggleHideToolCalls: () => void;
   status: ChatStatus;
 }
 
@@ -72,28 +72,26 @@ export function ChatMessages({
 
   return (
     <Conversation className="h-full">
-      {onToggleHideToolCalls && (
-        <div className="border-b p-2 flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleHideToolCalls}
-            className="text-xs"
-          >
-            {hideToolCalls ? (
-              <>
-                <Eye className="h-3 w-3 mr-1" />
-                Show tool calls
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-3 w-3 mr-1" />
-                Hide tool calls
-              </>
-            )}
-          </Button>
-        </div>
-      )}
+      <div className="border-b p-2 flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleHideToolCalls}
+          className="text-xs"
+        >
+          {hideToolCalls ? (
+            <>
+              <Eye className="h-3 w-3 mr-1" />
+              Show tool calls
+            </>
+          ) : (
+            <>
+              <EyeOff className="h-3 w-3 mr-1" />
+              Hide tool calls
+            </>
+          )}
+        </Button>
+      </div>
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => (

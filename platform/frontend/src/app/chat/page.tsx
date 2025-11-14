@@ -38,8 +38,6 @@ import {
   useConversation,
   useConversations,
   useCreateConversation,
-  useDeleteConversation,
-  useUpdateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 

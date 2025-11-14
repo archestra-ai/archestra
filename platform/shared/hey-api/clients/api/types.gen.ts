@@ -5023,6 +5023,7 @@ export type GetChatConversationsResponses = {
             id: string;
             name: string;
         };
+        messages: Array<unknown>;
     }>;
 };
 
@@ -5102,6 +5103,11 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 
@@ -5249,6 +5255,10 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
         messages: Array<unknown>;
     };
 };
@@ -5330,6 +5340,11 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
     };
 };
 

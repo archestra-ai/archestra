@@ -58,8 +58,8 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
         pathname === "/chat" && !searchParams.get("conversation"),
     },
     {
-      title: "Agents",
-      url: "/agents",
+      title: "Profiles",
+      url: "/profiles",
       icon: Bot,
     },
     {

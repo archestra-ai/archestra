@@ -110,7 +110,7 @@ export function BulkAssignAgentDialog({
         }
       } else if (duplicates.length === assignments.length) {
         toast.info(
-          "All selected tools are already assigned to the selected agents",
+          "All selected tools are already assigned to the selected profiles",
         );
       } else {
         toast.error("Failed to assign tools");
@@ -160,9 +160,9 @@ export function BulkAssignAgentDialog({
     >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Bulk Assign Tools to Agents</DialogTitle>
+          <DialogTitle>Bulk Assign Tools to Profiles</DialogTitle>
           <DialogDescription>
-            Select one or more agents to assign {tools?.length || 0} tool
+            Select one or more profiles to assign {tools?.length || 0} tool
             {tools && tools.length !== 1 ? "s" : ""} to.
           </DialogDescription>
         </DialogHeader>
@@ -172,7 +172,7 @@ export function BulkAssignAgentDialog({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search agents..."
+                placeholder="Search profiles..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -184,8 +184,8 @@ export function BulkAssignAgentDialog({
             {!filteredAgents || filteredAgents.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
-                  ? "No agents match your search"
-                  : "No agents available"}
+                  ? "No profiles match your search"
+                  : "No profiles available"}
               </div>
             ) : (
               <div className="divide-y">
@@ -234,7 +234,7 @@ export function BulkAssignAgentDialog({
                   Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when agents execute these
+                  Select which token will be used when profiles execute these
                   tools
                 </p>
                 <TokenSelect
@@ -273,7 +273,7 @@ export function BulkAssignAgentDialog({
           >
             {bulkAssignMutation.isPending
               ? "Assigning..."
-              : `Assign to ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? "s" : ""}`}
+              : `Assign to ${selectedAgentIds.length} profile${selectedAgentIds.length !== 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

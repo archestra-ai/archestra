@@ -906,7 +906,7 @@ export default function CostPage() {
     if (limit.entityType === "organization") {
       return "The whole organization";
     }
-    return "Unknown Agent";
+    return "Unknown Profile";
   };
 
   // Helper function to calculate real cost for token limits
@@ -1611,7 +1611,7 @@ export default function CostPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Agent Name</TableHead>
+                          <TableHead>Profile Name</TableHead>
                           <TableHead>Team</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
@@ -1625,7 +1625,7 @@ export default function CostPage() {
                               colSpan={5}
                               className="text-center py-8 text-muted-foreground"
                             >
-                              No agent data available for the selected timeframe
+                              No profile data available for the selected timeframe
                             </TableCell>
                           </TableRow>
                         ) : (

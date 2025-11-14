@@ -101,7 +101,7 @@ export async function executeArchestraTool(
       content: [
         {
           type: "text",
-          text: `Agent Name: ${agent.name}\nAgent ID: ${agent.id}`,
+          text: `Profile Name: ${agent.name}\nProfile ID: ${agent.id}`,
         },
       ],
       isError: false,
@@ -202,7 +202,7 @@ export async function executeArchestraTool(
           content: [
             {
               type: "text",
-              text: "Error: Agent name is required and cannot be empty.",
+              text: "Error: Profile name is required and cannot be empty.",
             },
           ],
           isError: true,
@@ -220,9 +220,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created agent.\n\nAgent Name: ${
+            text: `Successfully created profile.\n\nProfile Name: ${
               newAgent.name
-            }\nAgent ID: ${newAgent.id}\nTeams: ${
+            }\nProfile ID: ${newAgent.id}\nTeams: ${
               newAgent.teams.length > 0 ? newAgent.teams.join(", ") : "None"
             }\nLabels: ${
               newAgent.labels.length > 0
@@ -1411,7 +1411,7 @@ export async function executeArchestraTool(
           content: [
             {
               type: "text",
-              text: "Agent not found",
+              text: "Profile not found",
             },
           ],
           isError: true,
@@ -1593,7 +1593,7 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME,
-      title: "Get Agent Token Usage",
+      title: "Get Profile Token Usage",
       description:
         "Get the total token usage (input and output) for a specific agent. If no agent_id is provided, returns usage for the current agent.",
       inputSchema: {
@@ -1610,7 +1610,7 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_CREATE_AGENT_FULL_NAME,
-      title: "Create Agent",
+      title: "Create Profile",
       description:
         "Create a new agent with the specified name and optional configuration. The agent will be automatically assigned Archestra built-in tools.",
       inputSchema: {
@@ -1944,7 +1944,7 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME,
-      title: "Bulk Assign Tools to Agents",
+      title: "Bulk Assign Tools to Profiles",
       description:
         "Assign multiple tools to multiple agents in bulk with validation and error handling",
       inputSchema: {
@@ -2023,7 +2023,7 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_GET_AGENT_FULL_NAME,
-      title: "Get Agent",
+      title: "Get Profile",
       description:
         "Get a specific agent by ID with full details including labels and team assignments",
       inputSchema: {

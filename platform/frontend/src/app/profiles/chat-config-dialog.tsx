@@ -76,10 +76,10 @@ function ChatConfigDialogContent({
           regularPromptIds: selectedRegularPromptIds,
         },
       });
-      toast.success("Agent prompts updated successfully");
+      toast.success("Profile prompts updated successfully");
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to update agent prompts");
+      toast.error("Failed to update profile prompts");
     }
   };
 
@@ -96,7 +96,7 @@ function ChatConfigDialogContent({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Configure Chat Prompts</DialogTitle>
-          <DialogDescription>Assign prompts to {agent.name}.</DialogDescription>
+          <DialogDescription>Assign prompts to this profile.</DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
           {/* System Prompt Selection */}

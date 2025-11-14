@@ -160,10 +160,10 @@ function Agents() {
   const pathname = usePathname();
 
   const { data: userCanCreateAgents } = useHasPermissions({
-    agent: ["create"],
+    profile: ["create"],
   });
   const { data: userCanDeleteAgents } = useHasPermissions({
-    agent: ["delete"],
+    profile: ["delete"],
   });
 
   // Get pagination/filter params from URL

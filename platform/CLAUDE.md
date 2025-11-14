@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: <http://localhost:3000/>
 - **Backend**: <http://localhost:9000/> (Fastify API server)
-- **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations as sub-navigation in main sidebar)
+- **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations as expandable sub-items in main sidebar)
 - **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
 - **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
@@ -288,7 +288,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation management
 - Conversation navigation: Conversations appear as expandable sub-items under Chat in main sidebar with "+ New Chat" option
 - Hide tool calls toggle: Persisted in localStorage, located in chat messages header
-- Conversation management: All actions (select, edit, delete) now integrated in sidebar sub-navigation
+- Conversation management: All actions (select, edit, delete) integrated in sidebar sub-navigation
 - Smart visibility: Shows first 5 conversations by default with "Show N more" toggle for better UX
 - Tool execution: Routes through MCP Gateway, includes response modifiers and logging
 - No manual configuration: Deprecated `ARCHESTRA_CHAT_MCP_SERVER_URL` and `ARCHESTRA_CHAT_MCP_SERVER_HEADERS`

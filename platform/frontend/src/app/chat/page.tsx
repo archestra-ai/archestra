@@ -4,7 +4,7 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -278,7 +278,7 @@ export default function ChatPage() {
         {!conversationId ? (
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
-          <>
+          <div className="flex flex-col h-full">
             {error && (
               <div className="border-b p-4 bg-destructive/5">
                 <Alert variant="destructive" className="max-w-3xl mx-auto">
@@ -288,14 +288,52 @@ export default function ChatPage() {
                 </Alert>
               </div>
             )}
-            <ChatMessages
-              messages={messages}
-              hideToolCalls={hideToolCalls}
-              onToggleHideToolCalls={toggleHideToolCalls}
-              agentName={conversation?.agent?.name}
-              status={status}
-            />
-            <div className="border-t p-4">
+
+            {/* Sticky top bar with agent name and toggle */}
+            <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
+              <div className="flex-1" />
+              {conversation?.agent?.name && (
+                <div className="flex-1 text-center">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {conversation.agent.name}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleHideToolCalls}
+                  className="text-xs"
+                >
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Scrollable messages area */}
+            <div className="flex-1 overflow-y-auto">
+              <ChatMessages
+                messages={messages}
+                hideToolCalls={hideToolCalls}
+                onToggleHideToolCalls={toggleHideToolCalls}
+                agentName={conversation?.agent?.name}
+                status={status}
+              />
+            </div>
+
+            {/* Sticky bottom input area */}
+            <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgentId && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
@@ -367,7 +405,7 @@ export default function ChatPage() {
                 </PromptInput>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

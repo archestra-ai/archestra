@@ -74,36 +74,6 @@ export function ChatMessages({
 
   return (
     <Conversation className="h-full">
-      <div className="border-b p-2 flex items-center justify-between">
-        <div className="flex-1" />
-        {agentName && (
-          <div className="flex-1 text-center">
-            <span className="text-sm font-medium text-muted-foreground">
-              {agentName}
-            </span>
-          </div>
-        )}
-        <div className="flex-1 flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleHideToolCalls}
-            className="text-xs"
-          >
-            {hideToolCalls ? (
-              <>
-                <Eye className="h-3 w-3 mr-1" />
-                Show tool calls
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-3 w-3 mr-1" />
-                Hide tool calls
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
       <ConversationContent>
         <div className="max-w-4xl mx-auto">
           {messages.map((message, idx) => (

@@ -102,10 +102,6 @@ export default function ChatPage() {
       conversationId &&
       newlyCreatedConversationRef.current === conversationId
     ) {
-      console.log("[Chat] Clearing MCP sessions for NEW conversation", {
-        conversationId,
-        agentId: currentAgentId,
-      });
       // Clear sessions for this agent to ensure fresh MCP state
       fetch("/v1/mcp/sessions", {
         method: "DELETE",
@@ -113,13 +109,7 @@ export default function ChatPage() {
           Authorization: `Bearer ${currentAgentId}`,
         },
       })
-        .then(async (response) => {
-          const data = await response.json();
-          console.log("[Chat] MCP sessions cleared successfully", {
-            conversationId,
-            agentId: currentAgentId,
-            clearedCount: data.clearedCount,
-          });
+        .then(async () => {
           // Clear the ref after clearing sessions
           newlyCreatedConversationRef.current = undefined;
         })

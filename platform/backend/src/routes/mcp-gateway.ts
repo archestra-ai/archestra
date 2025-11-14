@@ -28,6 +28,7 @@ interface SessionData {
   server: Server;
   transport: StreamableHTTPServerTransport;
   lastAccess: number;
+  agentId: string;
 }
 
 /**
@@ -299,8 +300,7 @@ export function clearAgentSessions(agentId: string): void {
 
   // Find all sessions for this agent
   for (const [sessionId, sessionData] of activeSessions.entries()) {
-    // Sessions are named like "archestra-agent-{agentId}"
-    if (sessionData.server.serverInfo.name === `archestra-agent-${agentId}`) {
+    if (sessionData.agentId === agentId) {
       sessionsToClear.push(sessionId);
     }
   }
@@ -482,6 +482,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             server,
             transport,
             lastAccess: Date.now(),
+            agentId,
           });
           fastify.log.info(
             {
@@ -636,15 +637,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const sessionsToClear: string[] = [];
-      const allSessionNames: string[] = [];
+      const allAgentIds: string[] = [];
 
       // Find all sessions for this agent
       for (const [sessionId, sessionData] of activeSessions.entries()) {
-        allSessionNames.push(sessionData.server.serverInfo.name);
-        // Sessions are named like "archestra-agent-{agentId}"
-        if (
-          sessionData.server.serverInfo.name === `archestra-agent-${agentId}`
-        ) {
+        allAgentIds.push(sessionData.agentId);
+        if (sessionData.agentId === agentId) {
           sessionsToClear.push(sessionId);
         }
       }
@@ -652,8 +650,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.info(
         {
           agentId,
-          targetServerName: `archestra-agent-${agentId}`,
-          allSessionNames,
+          allAgentIds,
           sessionsToClear,
           totalSessions: activeSessions.size,
           matchingSessionsCount: sessionsToClear.length,

@@ -62,7 +62,10 @@ export const AgentToolFilterSchema = z.object({
   origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
   credentialSourceMcpServerId:
     UuidIdSchema.optional().describe("MCP server ID"),
-  excludeArchestraTools: z.boolean().optional().describe("For test isolation"),
+  excludeArchestraTools: z.coerce
+    .boolean()
+    .optional()
+    .describe("For test isolation"),
 });
 export const AgentToolSortBySchema = z.enum([
   "name",

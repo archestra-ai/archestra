@@ -1,7 +1,7 @@
 import { E2eTestId } from "@shared";
 import { expect, test } from "./fixtures";
 
-test("can create and delete an agent", async ({
+test("can create and delete a profile", async ({
   page,
   makeRandomString,
   goToPage,
@@ -14,26 +14,26 @@ test("can create and delete an agent", async ({
     await page.waitForTimeout(500);
   }
 
-  const AGENT_NAME = makeRandomString(10, "Test Agent");
-  await goToPage(page, "/agents");
+  const AGENT_NAME = makeRandomString(10, "Test Profile");
+  await goToPage(page, "/profiles");
   await page.getByTestId(E2eTestId.CreateAgentButton).click();
   await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
   await page.locator("[type=submit]").click();
   await page.waitForTimeout(1000);
 
-  // Close the "How to connect" modal which shows up after creating an agent
+  // Close the "How to connect" modal which shows up after creating a profile
   await page.getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton).click();
 
-  // Check if the agent is created
+  // Check if the profile is created
   await expect(
     page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),
   ).toBeVisible();
 
-  // Delete created agent - click the delete button directly
+  // Delete created profile - click the delete button directly
   await page
     .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
     .click();
-  await page.getByRole("button", { name: "Delete agent" }).click();
+  await page.getByRole("button", { name: "Delete profile" }).click();
 
   await expect(
     page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME),

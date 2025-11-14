@@ -906,7 +906,7 @@ export default function CostPage() {
     if (limit.entityType === "organization") {
       return "The whole organization";
     }
-    return "Unknown Agent";
+    return "Unknown Profile";
   };
 
   // Helper function to calculate real cost for token limits
@@ -1229,7 +1229,7 @@ export default function CostPage() {
           labels: ["No Data"],
           datasets: [
             {
-              label: "No agents found",
+              label: "No profiles found",
               data: [0],
               borderColor: "#9ca3af",
               backgroundColor: "rgba(156, 163, 175, 0.1)",
@@ -1364,7 +1364,7 @@ export default function CostPage() {
             Cost & Limits
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor and manage your AI model usage costs across all agents and
+            Monitor and manage your AI model usage costs across all profiles and
             teams.
           </p>
         </div>
@@ -1548,7 +1548,7 @@ export default function CostPage() {
                         <TableRow>
                           <TableHead>Team Name</TableHead>
                           <TableHead>Members</TableHead>
-                          <TableHead>Agents</TableHead>
+                          <TableHead>Profiles</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
                           <TableHead className="text-right">Cost</TableHead>
@@ -1595,7 +1595,7 @@ export default function CostPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Agents</CardTitle>
+                <CardTitle>Profiles</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1611,7 +1611,7 @@ export default function CostPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Agent Name</TableHead>
+                          <TableHead>Profile Name</TableHead>
                           <TableHead>Team</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
@@ -1625,7 +1625,8 @@ export default function CostPage() {
                               colSpan={5}
                               className="text-center py-8 text-muted-foreground"
                             >
-                              No agent data available for the selected timeframe
+                              No profile data available for the selected
+                              timeframe
                             </TableCell>
                           </TableRow>
                         ) : (

@@ -350,7 +350,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         const { success: userIsAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
+          { profile: ["admin"] },
           headers,
         );
 

@@ -64,7 +64,7 @@ describe("User.getUserPermissions", () => {
       id: customRoleId,
       name: "Custom Role",
       organizationId: testOrgId,
-      permission: { agent: ["read", "create"] },
+      permission: { profile: ["read", "create"] },
     };
     await OrganizationRoleModel.create(customRole);
 
@@ -80,7 +80,7 @@ describe("User.getUserPermissions", () => {
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     expect(result).toEqual({
-      agent: ["read", "create"],
+      profile: ["read", "create"],
     });
   });
 

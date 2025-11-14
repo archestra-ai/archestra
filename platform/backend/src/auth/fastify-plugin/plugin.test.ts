@@ -284,7 +284,7 @@ describe("authPlugin integration", () => {
       await authnz.handle(mockRequest, mockReply);
 
       expect(mockHasPermission).toHaveBeenCalledWith(
-        { agent: ["create"] },
+        { profile: ["create"] },
         expect.objectContaining({}),
       );
     });

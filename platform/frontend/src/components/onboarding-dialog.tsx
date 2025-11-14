@@ -89,7 +89,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                 size="lg"
                 data-testid={E2eTestId.OnboardingNextButton}
               >
-                Next: Connect Agent
+                Next: Connect Profile
               </Button>
             </div>
           ) : (

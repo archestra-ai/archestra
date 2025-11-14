@@ -275,7 +275,7 @@ async function makeCustomRole(
     id: crypto.randomUUID(),
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
-    permission: { agent: ["read"] },
+    permission: { profile: ["read"] },
     ...overrides,
   });
 }

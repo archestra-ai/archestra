@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_NAME } from "@shared";
+import { DEFAULT_PROFILE_NAME } from "@shared";
 import {
   and,
   asc,
@@ -394,7 +394,7 @@ class AgentModel {
 
     // No default agent exists, create one
     return AgentModel.create({
-      name: name || DEFAULT_AGENT_NAME,
+      name: name || DEFAULT_PROFILE_NAME,
       isDefault: true,
       teams: [],
       labels: [],

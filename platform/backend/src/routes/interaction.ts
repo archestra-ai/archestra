@@ -59,7 +59,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 
@@ -89,7 +89,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { interactionId }, user, headers }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 

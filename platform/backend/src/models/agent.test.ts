@@ -748,15 +748,15 @@ describe("AgentModel", () => {
       expect(testAgent).toBeDefined();
 
       // Should only include the 3 regular tools, not the 5 Archestra tools
-      expect(testAgent!.tools).toHaveLength(3);
+      expect(testAgent?.tools).toHaveLength(3);
 
       // Verify all tools in the array are regular tools (not Archestra)
-      for (const tool of testAgent!.tools) {
+      for (const tool of testAgent?.tools ?? []) {
         expect(tool.name).not.toMatch(/^archestra__/);
       }
 
       // Verify the regular tools are there
-      const toolNames = testAgent!.tools.map((t) => t.name).sort();
+      const toolNames = testAgent?.tools.map((t) => t.name).sort();
       expect(toolNames).toEqual([
         "regular_tool_0",
         "regular_tool_1",
@@ -841,8 +841,8 @@ describe("AgentModel", () => {
       expect(testAgent2).toBeDefined();
 
       // Verify the tools count excludes Archestra tools
-      expect(testAgent1!.tools).toHaveLength(5); // Only regular tools
-      expect(testAgent2!.tools).toHaveLength(2); // Only regular tools
+      expect(testAgent1?.tools).toHaveLength(5); // Only regular tools
+      expect(testAgent2?.tools).toHaveLength(2); // Only regular tools
 
       // Verify sorting order based on regular tools count (not total tools including Archestra)
       const agent1Index = result.data.findIndex(
@@ -895,7 +895,7 @@ describe("AgentModel", () => {
       expect(testAgent).toBeDefined();
 
       // Should show 0 tools since all were Archestra tools
-      expect(testAgent!.tools).toHaveLength(0);
+      expect(testAgent?.tools).toHaveLength(0);
     });
   });
 });

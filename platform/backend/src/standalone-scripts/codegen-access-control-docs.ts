@@ -18,10 +18,10 @@ import logger from "@/logging";
 
 function getResourceDescription(resource: Resource): string {
   const descriptions: Record<Resource, string> = {
-    agent: "AI agents that can use tools and interact with users",
-    tool: "Individual tools that can be assigned to agents",
+    profile: "Profiles that can use tools and interact with users",
+    tool: "Individual tools that can be assigned to profiles",
     policy: "Tool invocation and trusted data policies for security",
-    interaction: "Conversation history and agent interactions",
+    interaction: "Conversation history and profile interactions",
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
     organization: "Organization settings",
@@ -123,10 +123,10 @@ Archestra uses a role-based access control (RBAC) system to manage user permissi
 
 Permissions in Archestra are defined using a \`resource:action\` format, where:
 
-- **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`tool\`, \`organization\`)
+- **Resource**: The type of object or feature being accessed (e.g., \`profile\`, \`tool\`, \`organization\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, the permission \`agent:create\` allows creating new agents, while \`organization:read\` allows viewing organization information.
+For example, the permission \`profile:create\` allows creating new profiles, while \`organization:read\` allows viewing organization information.
 
 ## Predefined Roles
 
@@ -159,15 +159,15 @@ Grant users only the minimum permissions necessary for their role. Start with th
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
-2. **Assign agents and MCP servers** to specific teams
+2. **Assign profiles and MCP servers** to specific teams
 3. **Add members to teams** based on their role and responsibilities
 
 #### Team Access Control Rules
 
-**For Agents:**
-- Team members can only see agents assigned to teams they belong to
-- Exception: Users with \`agent:admin\` permission can see all agents
-- Exception: Agents with no team assignment are visible to all organization members
+**For Profiles:**
+- Team members can only see profiles assigned to teams they belong to
+- Exception: Users with \`profile:admin\` permission can see all profiles
+- Exception: Profiles with no team assignment are visible to all organization members
 
 **For MCP Servers:**
 - Team members can only access MCP servers assigned to teams they belong to
@@ -175,13 +175,13 @@ Combine roles with team-based access control for fine-grained resource access:
 - Exception: MCP servers with no team assignment are accessible to all organization members
 
 **Associated Artifacts:**
-Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for agents and MCP servers they have access to.
+Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for profiles and MCP servers they have access to.
 
 ### Regular Review
 Periodically review custom roles and member assignments to ensure they align with current organizational needs and security requirements.
 
 ### Role Naming
-Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Agent-Manager", "Read-Only-Analyst", "Tool-Developer").
+Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Profile-Manager", "Read-Only-Analyst", "Tool-Developer").
 `;
 }
 

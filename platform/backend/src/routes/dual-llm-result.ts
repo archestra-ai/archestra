@@ -56,7 +56,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { interactionId }, user, headers }, reply) => {
       try {
         const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
+          { profile: ["admin"] },
           headers,
         );
 

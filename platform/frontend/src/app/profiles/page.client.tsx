@@ -160,10 +160,10 @@ function Agents() {
   const pathname = usePathname();
 
   const { data: userCanCreateAgents } = useHasPermissions({
-    agent: ["create"],
+    profile: ["create"],
   });
   const { data: userCanDeleteAgents } = useHasPermissions({
-    agent: ["delete"],
+    profile: ["delete"],
   });
 
   // Get pagination/filter params from URL
@@ -439,13 +439,13 @@ function Agents() {
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight mb-2">
-                Agents
+                Profiles
               </h1>
               <p className="text-sm text-muted-foreground">
-                Agents are a way to organize access and logging. <br />
-                <br />
-                An agent can be: an N8N workflow, a custom application, or a
-                team sharing an MCP gateway.{" "}
+                Profiles are a way to organize access, available MCP tools, cost
+                limits, logging/o11y, etc. <br />
+                <br />A profile can be: an N8N workflow, a custom application,
+                or a team sharing an MCP gateway.{" "}
                 <a
                   href="https://www.archestra.ai/docs/platform-agents"
                   target="_blank"
@@ -462,7 +462,7 @@ function Agents() {
                 data-testid={E2eTestId.CreateAgentButton}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Create Agent
+                Create Profile
               </Button>
             )}
           </div>
@@ -474,7 +474,7 @@ function Agents() {
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <DebouncedInput
-              placeholder="Search agents by name..."
+              placeholder="Search profiles by name..."
               initialValue={searchQuery}
               onChange={handleSearchChange}
               className="pl-9"
@@ -485,8 +485,8 @@ function Agents() {
         {!agents || agents.length === 0 ? (
           <div className="text-muted-foreground">
             {nameFilter
-              ? "No agents found matching your search"
-              : "No agents found"}
+              ? "No profiles found matching your search"
+              : "No profiles found"}
           </div>
         ) : (
           <div data-testid={E2eTestId.AgentsTable}>
@@ -618,7 +618,7 @@ function CreateAgentDialog({
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!name.trim()) {
-        toast.error("Please enter an agent name");
+        toast.error("Please enter a profile name");
         return;
       }
 
@@ -635,12 +635,12 @@ function CreateAgentDialog({
           considerContextUntrusted,
         });
         if (!agent) {
-          throw new Error("Failed to create agent");
+          throw new Error("Failed to create profile");
         }
-        toast.success("Agent created successfully");
+        toast.success("Profile created successfully");
         setCreatedAgent({ id: agent.id, name: agent.name });
       } catch (_error) {
-        toast.error("Failed to create agent");
+        toast.error("Failed to create profile");
       }
     },
     [
@@ -673,9 +673,9 @@ function CreateAgentDialog({
         {!createdAgent ? (
           <>
             <DialogHeader>
-              <DialogTitle>Create new agent</DialogTitle>
+              <DialogTitle>Create new profile</DialogTitle>
               <DialogDescription>
-                Create a new agent to use with the Archestra Platform proxy.
+                Create a new profile to use with the Archestra Platform proxy.
               </DialogDescription>
             </DialogHeader>
             <form
@@ -684,12 +684,12 @@ function CreateAgentDialog({
             >
               <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="name">Agent Name</Label>
+                  <Label htmlFor="name">Profile Name</Label>
                   <Input
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="My AI Agent"
+                    placeholder="My AI Profile"
                     autoFocus
                   />
                 </div>
@@ -697,7 +697,7 @@ function CreateAgentDialog({
                 <div className="grid gap-2">
                   <Label>Team Access</Label>
                   <p className="text-sm text-muted-foreground">
-                    Assign teams to grant their members access to this agent.
+                    Assign teams to grant their members access to this profile.
                   </p>
                   <Select value={selectedTeamId} onValueChange={handleAddTeam}>
                     <SelectTrigger id="assign-team">
@@ -745,7 +745,7 @@ function CreateAgentDialog({
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No teams assigned yet. Admins have access to all agents.
+                      No teams assigned yet. Admins have access to all profiles.
                     </p>
                   )}
                 </div>
@@ -803,7 +803,7 @@ function CreateAgentDialog({
                   Cancel
                 </Button>
                 <Button type="submit" disabled={createAgent.isPending}>
-                  {createAgent.isPending ? "Creating..." : "Create agent"}
+                  {createAgent.isPending ? "Creating..." : "Create profile"}
                 </Button>
               </DialogFooter>
             </form>
@@ -894,7 +894,7 @@ function EditAgentDialog({
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!name.trim()) {
-        toast.error("Please enter an agent name");
+        toast.error("Please enter a profile name");
         return;
       }
 
@@ -913,10 +913,10 @@ function EditAgentDialog({
             considerContextUntrusted,
           },
         });
-        toast.success("Agent updated successfully");
+        toast.success("Profile updated successfully");
         onOpenChange(false);
       } catch (_error) {
-        toast.error("Failed to update agent");
+        toast.error("Failed to update profile");
       }
     },
     [
@@ -950,9 +950,9 @@ function EditAgentDialog({
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Edit agent</DialogTitle>
+          <DialogTitle>Edit profile</DialogTitle>
           <DialogDescription>
-            Update the agent's name and assign teams.
+            Update the profile's name and assign teams.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -961,12 +961,12 @@ function EditAgentDialog({
         >
           <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
             <div className="grid gap-2">
-              <Label htmlFor="edit-name">Agent Name</Label>
+              <Label htmlFor="edit-name">Profile Name</Label>
               <Input
                 id="edit-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My AI Agent"
+                placeholder="My AI Profile"
                 autoFocus
               />
             </div>
@@ -974,7 +974,7 @@ function EditAgentDialog({
             <div className="grid gap-2">
               <Label>Team Access</Label>
               <p className="text-sm text-muted-foreground">
-                Assign teams to grant their members access to this agent.
+                Assign teams to grant their members access to this profile.
               </p>
               <Select value={selectedTeamId} onValueChange={handleAddTeam}>
                 <SelectTrigger id="assign-team">
@@ -1022,7 +1022,7 @@ function EditAgentDialog({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No teams assigned yet. Admins have access to all agents.
+                  No teams assigned yet. Admins have access to all profiles.
                 </p>
               )}
             </div>
@@ -1082,7 +1082,7 @@ function EditAgentDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={updateAgent.isPending}>
-              {updateAgent.isPending ? "Updating..." : "Update agent"}
+              {updateAgent.isPending ? "Updating..." : "Update profile"}
             </Button>
           </DialogFooter>
         </form>
@@ -1107,7 +1107,7 @@ function AgentConnectionTabs({ agentId }: { agentId: string }) {
         <div className="flex items-center gap-2 pb-2 border-b">
           <h3 className="font-medium">MCP Gateway</h3>
           <h4 className="text-sm text-muted-foreground">
-            To enable tools for the agent
+            To enable tools for the profile
           </h4>
         </div>
         <McpConnectionInstructions agentId={agentId} />
@@ -1158,10 +1158,10 @@ function DeleteAgentDialog({
   const handleDelete = useCallback(async () => {
     try {
       await deleteAgent.mutateAsync(agentId);
-      toast.success("Agent deleted successfully");
+      toast.success("Profile deleted successfully");
       onOpenChange(false);
     } catch (_error) {
-      toast.error("Failed to delete agent");
+      toast.error("Failed to delete profile");
     }
   }, [agentId, deleteAgent, onOpenChange]);
 
@@ -1169,9 +1169,9 @@ function DeleteAgentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Delete agent</DialogTitle>
+          <DialogTitle>Delete profile</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this agent? This action cannot be
+            Are you sure you want to delete this profile? This action cannot be
             undone.
           </DialogDescription>
         </DialogHeader>
@@ -1188,7 +1188,7 @@ function DeleteAgentDialog({
             onClick={handleDelete}
             disabled={deleteAgent.isPending}
           >
-            {deleteAgent.isPending ? "Deleting..." : "Delete agent"}
+            {deleteAgent.isPending ? "Deleting..." : "Delete profile"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -46,7 +46,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
+          { profile: ["admin"] },
           request.headers,
         );
 
@@ -59,12 +59,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           origin,
           credentialSourceMcpServerId,
+          excludeArchestraTools,
         } = request.query;
 
         const result = await AgentToolModel.findAllPaginated(
           { limit, offset },
           { sortBy, sortDirection },
-          { search, agentId, origin, credentialSourceMcpServerId },
+          {
+            search,
+            agentId,
+            origin,
+            credentialSourceMcpServerId,
+            excludeArchestraTools,
+          },
           request.user.id,
           isAgentAdmin,
         );
@@ -486,7 +493,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { catalogId } = request.query;
 
         const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
+          { profile: ["admin"] },
           request.headers,
         );
 

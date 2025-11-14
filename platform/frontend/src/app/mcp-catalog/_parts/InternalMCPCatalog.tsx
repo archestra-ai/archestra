@@ -290,9 +290,18 @@ export function InternalMCPCatalog({
       };
     }
 
-    // Use the first server with users as the base, or just first server
+    // Find current user's specific installation to use as base
+    const currentUserServer = servers.find(
+      (s) =>
+        (s.authType === "personal" && s.ownerId === currentUserId) ||
+        (s.authType === "team" && s.ownerId === currentUserId),
+    );
+
+    // Prefer current user's server as base, otherwise use first server with users, or just first server
     const baseServer =
-      servers.find((s) => s.users && s.users.length > 0) || servers[0];
+      currentUserServer ||
+      servers.find((s) => s.users && s.users.length > 0) ||
+      servers[0];
 
     // Aggregate multiple servers
     const aggregated = { ...baseServer };

@@ -123,15 +123,11 @@ export function InternalMCPCatalog({
 
     // For servers without configuration, install directly
     setInstallingItemId(catalogItem.id);
-    const installedServer = await installMutation.mutateAsync({
+    await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       teams: [],
     });
-    // Track the installed server for polling if it's a local server
-    if (installedServer?.id && catalogItem.serverType === "local") {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
-    }
     setInstallingItemId(null);
   };
 
@@ -194,7 +190,7 @@ export function InternalMCPCatalog({
     setInstallingItemId(null);
   };
 
-  const handleLocalServerInstall = async (
+  const handleLocalServerInstallConfirm = async (
     userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
@@ -221,7 +217,7 @@ export function InternalMCPCatalog({
     setInstallingItemId(null);
   };
 
-  const handleRemoteServerInstall = async (
+  const handleRemoteServerInstallConfirm = async (
     catalogItem: CatalogItem,
     metadata?: Record<string, unknown>,
     teams: string[] = [],
@@ -234,16 +230,12 @@ export function InternalMCPCatalog({
         ? metadata.access_token
         : undefined;
 
-    const installedServer = await installMutation.mutateAsync({
+    await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       ...(accessToken && { accessToken }),
       teams,
     });
-    // Track the installed server for polling if it's a local server
-    if (installedServer?.id && catalogItem.serverType === "local") {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
-    }
     setInstallingItemId(null);
   };
 
@@ -613,7 +605,7 @@ export function InternalMCPCatalog({
           setSelectedCatalogItem(null);
           setIsTeamMode(false);
         }}
-        onInstall={handleRemoteServerInstall}
+        onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
         isTeamMode={isTeamMode}
@@ -667,7 +659,7 @@ export function InternalMCPCatalog({
           closeDialog("local-install");
           setLocalServerCatalogItem(null);
         }}
-        onInstall={handleLocalServerInstall}
+        onConfirm={handleLocalServerInstallConfirm}
         catalogItem={localServerCatalogItem}
         isInstalling={installMutation.isPending}
         authType={isTeamMode ? "team" : "personal"}

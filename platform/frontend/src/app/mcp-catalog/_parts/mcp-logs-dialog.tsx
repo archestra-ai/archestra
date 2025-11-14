@@ -29,6 +29,7 @@ interface McpLogsDialogProps {
   command: string;
   isLoading: boolean;
   error?: Error | null;
+  onRefresh?: () => void;
 }
 
 export function McpLogsDialog({
@@ -40,6 +41,7 @@ export function McpLogsDialog({
   command,
   isLoading: initialIsLoading,
   error: initialError,
+  onRefresh,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
@@ -239,8 +241,8 @@ export function McpLogsDialog({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.location.reload()}
-                      disabled={displayIsLoading}
+                      onClick={onRefresh}
+                      disabled={displayIsLoading || !onRefresh}
                     >
                       <RefreshCw className="mr-2 h-3 w-3" />
                       Refresh

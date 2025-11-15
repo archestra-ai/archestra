@@ -201,6 +201,11 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
+- **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
+- **Error Handling**: Throw `ApiError` instances with appropriate status codes - handled centrally by Fastify error handler
+- **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
+- **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
+- **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
 
 **Team-based Access Control**:
 

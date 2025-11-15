@@ -22,6 +22,7 @@ export * from "./optimization-rule";
 export * from "./organization";
 export * from "./prompt";
 export * from "./role";
+export * from "./secret";
 export * from "./session";
 export * from "./statistics";
 export * from "./team";

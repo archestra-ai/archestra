@@ -1,0 +1,39 @@
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
+import { z } from "zod";
+import { schema } from "@/database";
+
+/**
+ * The secret column stores authentication data in flexible JSON format:
+ * - For OAuth: { "access_token": "...", "refresh_token": "...", "expires_in": ..., "token_type": "Bearer" }
+ * - For Personal Access Tokens: { "access_token": "token_value" }
+ *
+ * TODO: we should make this a strongly typed discriminated union of the possible secret types...
+ */
+export const SecretValueSchema = z.record(z.string(), z.unknown());
+
+export const SelectSecretSchema = createSelectSchema(schema.secretsTable, {
+  secret: SecretValueSchema,
+});
+export const InsertSecretSchema = createInsertSchema(schema.secretsTable, {
+  secret: SecretValueSchema,
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const UpdateSecretSchema = createUpdateSchema(schema.secretsTable, {
+  secret: SecretValueSchema,
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type SecretValue = z.infer<typeof SecretValueSchema>;
+export type SelectSecret = z.infer<typeof SelectSecretSchema>;
+export type InsertSecret = z.infer<typeof InsertSecretSchema>;
+export type UpdateSecret = z.infer<typeof UpdateSecretSchema>;

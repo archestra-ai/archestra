@@ -19,15 +19,15 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { AgentLabelModel } from "@/models";
 import {
   Anthropic,
-  type ApiError,
+  ApiError,
   Gemini,
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 
 const {
@@ -71,7 +71,7 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 /**
  * Sets up logging and zod type provider + request validation & response serialization
  */
-const createFastifyInstance = () =>
+export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
   })
@@ -79,30 +79,49 @@ const createFastifyInstance = () =>
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
-    .setErrorHandler<ApiError>(function (error, _request, reply) {
-      const { statusCode, message, type } = error;
+    .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+      // Handle ApiError objects
+      if (error instanceof ApiError) {
+        const { statusCode, message, type } = error;
 
-      if (statusCode >= 500) {
-        this.log.error(
-          { error: message, statusCode },
-          "HTTP 50x request error occurred",
-        );
-      } else if (statusCode >= 400) {
-        this.log.info(
-          { error: message, statusCode },
-          "HTTP 40x request error occurred",
-        );
-      } else {
-        this.log.error(
-          { error: message, statusCode },
-          "HTTP request error occurred",
-        );
+        if (statusCode >= 500) {
+          this.log.error(
+            { error: message, statusCode },
+            "HTTP 50x request error occurred",
+          );
+        } else if (statusCode >= 400) {
+          this.log.info(
+            { error: message, statusCode },
+            "HTTP 40x request error occurred",
+          );
+        } else {
+          this.log.error(
+            { error: message, statusCode },
+            "HTTP request error occurred",
+          );
+        }
+
+        return reply.status(statusCode).send({
+          error: {
+            message,
+            type,
+          },
+        });
       }
+
+      // Handle standard Error objects
+      const message = error.message || "Internal server error";
+      const statusCode = 500;
+
+      this.log.error(
+        { error: message, statusCode },
+        "HTTP 50x request error occurred",
+      );
 
       return reply.status(statusCode).send({
         error: {
           message,
-          type,
+          type: "api_internal_server_error",
         },
       });
     });

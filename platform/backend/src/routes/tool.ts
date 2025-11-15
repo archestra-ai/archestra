@@ -4,14 +4,11 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { ToolModel, ToolPolicyModel } from "@/models";
 import {
-  constructPaginatedResponseSchema,
   constructResponseSchema,
-  ExtendedSelectToolSchema,
+  createPaginatedResponseSchema,
   PaginationQuerySchema,
   SelectToolPolicySchema,
-  ToolFilterSchema,
   ToolSortBySchema,
-  ToolSortDirectionSchema,
   ToolWithAssignmentsSchema,
   UuidIdSchema,
 } from "@/types";
@@ -25,10 +22,8 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetTools,
         description: "Get all tools with pagination, sorting, and filtering",
         tags: ["Tools"],
-        querystring: PaginationQuerySchema.merge(
+        querystring: ToolSortBySchema.merge(PaginationQuerySchema).merge(
           z.object({
-            sortBy: ToolSortBySchema.optional(),
-            sortDirection: ToolSortDirectionSchema.optional(),
             search: z.string().optional(),
             origin: z
               .string()
@@ -40,7 +35,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe("For test isolation"),
           }),
         ),
-        response: constructPaginatedResponseSchema(ToolWithAssignmentsSchema),
+        response: createPaginatedResponseSchema(ToolWithAssignmentsSchema),
       },
     },
     async ({ user, headers, query }, reply) => {
@@ -50,10 +45,10 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           headers,
         );
 
-        const { page = 1, limit = 10, sortBy, sortDirection, ...filters } = query;
+        const { limit, offset, sortBy, sortDirection, ...filters } = query;
 
         const result = await ToolModel.findAllPaginated(
-          { page, limit, offset: (page - 1) * limit },
+          { limit, offset },
           { sortBy, sortDirection },
           filters,
           user.id,

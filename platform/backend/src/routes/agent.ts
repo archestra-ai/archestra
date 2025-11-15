@@ -36,9 +36,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "team",
             ] as const),
           ),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAgentSchema),
-        ),
+        response: createPaginatedResponseSchema(SelectAgentSchema),
       },
     },
     async (

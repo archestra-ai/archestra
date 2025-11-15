@@ -69,14 +69,22 @@ export const PaginationMetaSchema = z.object({
 export const createPaginatedResponseSchema = <T extends z.ZodTypeAny>(
   itemSchema: T,
 ) => {
-  return z.object({
-    data: z.array(itemSchema),
-    pagination: PaginationMetaSchema,
-  });
+  return constructResponseSchema(
+    z.object({
+      data: z.array(itemSchema),
+      pagination: PaginationMetaSchema,
+    }),
+  );
 };
 
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 export type PaginationMeta = z.infer<typeof PaginationMetaSchema>;
+
+export const SortDirectionSchema = z
+  .enum(["asc", "desc"])
+  .optional()
+  .default("desc")
+  .describe("Sort direction (default: desc for descending)");
 
 /**
  * Sorting query parameters schema
@@ -86,9 +94,10 @@ export const SortingQuerySchema = z.object({
   /** Column to sort by */
   sortBy: z.string().optional(),
   /** Sort direction (default: desc for descending) */
-  sortDirection: z.enum(["asc", "desc"]).optional().default("desc"),
+  sortDirection: SortDirectionSchema,
 });
 
+export type SortDirection = z.infer<typeof SortDirectionSchema>;
 export type SortingQuery = z.infer<typeof SortingQuerySchema>;
 
 /**
@@ -101,13 +110,14 @@ export const createSortingQuerySchema = <
   allowedSortByValues: T,
 ) =>
   z.object({
-    /** Column to sort by (restricted to allowed values) */
-    sortBy: z.enum(allowedSortByValues).optional(),
-    /** Sort direction (default: desc for descending) */
-    sortDirection: z.enum(["asc", "desc"]).optional().default("desc"),
+    sortBy: z
+      .enum(allowedSortByValues)
+      .optional()
+      .describe("Column to sort by (restricted to allowed values)"),
+    sortDirection: SortDirectionSchema,
   });
 
 export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
-  sortDirection?: "asc" | "desc";
+  sortDirection?: SortDirection;
 };

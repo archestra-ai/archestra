@@ -33,9 +33,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "method",
             ] as const),
           ),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectMcpToolCallSchema),
-        ),
+        response: createPaginatedResponseSchema(SelectMcpToolCallSchema),
       },
     },
     async (

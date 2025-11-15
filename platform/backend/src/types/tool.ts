@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { UuidIdSchema } from "./api";
+import { createSortingQuerySchema } from "./api";
 import { OpenAi } from "./llm-providers";
 
 /**
@@ -63,18 +63,15 @@ export const ToolFilterSchema = z.object({
     .describe("For test isolation"),
 });
 
-export const ToolSortBySchema = z.enum([
+export const ToolSortBySchema = createSortingQuerySchema([
   "name",
   "origin",
   "createdAt",
   "assignedAgentCount",
-]);
-
-export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const);
 
 export type ToolFilters = z.infer<typeof ToolFilterSchema>;
-export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
-export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;
+export type ToolSortBy = z.infer<typeof ToolSortBySchema>["sortBy"];
 
 // Extended tool with assignment count
 export const ToolWithAssignmentsSchema = ExtendedSelectToolSchema.extend({

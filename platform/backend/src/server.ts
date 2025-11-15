@@ -202,7 +202,7 @@ const start = async () => {
   fastify.register(fastifyAuthPlugin);
 
   try {
-    await seedRequiredStartingData();
+    // await seedRequiredStartingData();
 
     // Initialize metrics with keys of custom agent labels
     const labelKeys = await AgentLabelModel.getAllKeys();

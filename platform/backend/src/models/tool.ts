@@ -24,10 +24,10 @@ import type {
   ExtendedTool,
   InsertTool,
   PaginationQuery,
+  SortDirection,
   Tool,
   ToolFilters,
   ToolSortBy,
-  ToolSortDirection,
   ToolWithAssignments,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
@@ -419,7 +419,8 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        responseModifierTemplate: schema.toolPoliciesTable.responseModifierTemplate,
+        responseModifierTemplate:
+          schema.toolPoliciesTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
@@ -600,7 +601,7 @@ class ToolModel {
     pagination: PaginationQuery,
     sorting?: {
       sortBy?: ToolSortBy;
-      sortDirection?: ToolSortDirection;
+      sortDirection?: SortDirection;
     },
     filters?: ToolFilters,
     userId?: string,

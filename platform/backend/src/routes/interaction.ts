@@ -32,9 +32,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "model",
             ] as const),
           ),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectInteractionSchema),
-        ),
+        response: createPaginatedResponseSchema(SelectInteractionSchema),
       },
     },
     async (

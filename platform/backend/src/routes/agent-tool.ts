@@ -14,8 +14,7 @@ import {
 } from "@/models";
 import {
   AgentToolFilterSchema,
-  AgentToolSortBySchema,
-  AgentToolSortDirectionSchema,
+  AgentToolSortingQuerySchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
@@ -34,13 +33,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all agent-tool relationships with pagination, sorting, and filtering",
         tags: ["Agent Tools"],
-        querystring: AgentToolFilterSchema.extend({
-          sortBy: AgentToolSortBySchema.optional(),
-          sortDirection: AgentToolSortDirectionSchema.optional(),
-        }).merge(PaginationQuerySchema),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAgentToolSchema),
-        ),
+        querystring: AgentToolSortingQuerySchema.merge(
+          PaginationQuerySchema,
+        ).merge(AgentToolFilterSchema),
+        response: createPaginatedResponseSchema(SelectAgentToolSchema),
       },
     },
     async (request, reply) => {

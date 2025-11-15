@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { UuidIdSchema } from "./api";
+import { createSortingQuerySchema, UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
 export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
@@ -32,12 +32,8 @@ export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
     }),
   });
 
-export const InsertAgentToolSchema = createInsertSchema(
-  schema.agentToolsTable,
-);
-export const UpdateAgentToolSchema = createUpdateSchema(
-  schema.agentToolsTable,
-);
+export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
+export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
@@ -50,23 +46,21 @@ export const AgentToolFilterSchema = z.object({
     .optional()
     .describe("For test isolation"),
 });
-export const AgentToolSortBySchema = z.enum([
+export const AgentToolSortingQuerySchema = createSortingQuerySchema([
   "name",
   "agent",
   "origin",
   "createdAt",
-]);
-export const AgentToolSortDirectionSchema = z.enum(["asc", "desc"]);
+] as const);
 
 export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
 
 export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
-export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
-export type AgentToolSortDirection = z.infer<
-  typeof AgentToolSortDirectionSchema
->;
+export type AgentToolSortBy = z.infer<
+  typeof AgentToolSortingQuerySchema
+>["sortBy"];
 
 // Re-export ToolResultTreatment for backward compatibility
 export type { ToolResultTreatment } from "./tool-policy";

@@ -9,6 +9,7 @@ export const ApiErrorTypeSchema = z.enum([
   "api_authorization_error",
   "api_not_found_error",
   "unknown_api_error",
+  "api_conflict_error",
 ]);
 
 /**
@@ -38,6 +39,9 @@ export class ApiError extends Error {
       case 404:
         this.type = "api_not_found_error";
         break;
+      case 409:
+        this.type = "api_conflict_error";
+        break;
       default:
         this.type = "unknown_api_error";
         break;
@@ -47,26 +51,33 @@ export class ApiError extends Error {
   }
 }
 
-export const ErrorResponseSchema = z.object({
-  error: z.union([
-    z.string(),
-    z.object({
-      message: z.string(),
-      type: ApiErrorTypeSchema,
-    }),
-  ]),
-});
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
+  {
+    error: {
+      message: string;
+      type: T;
+    };
+  };
 
-export const ErrorResponsesSchema: Record<
-  400 | 401 | 403 | 404 | 500,
-  typeof ErrorResponseSchema
-> = {
-  400: ErrorResponseSchema,
-  401: ErrorResponseSchema,
-  403: ErrorResponseSchema,
-  404: ErrorResponseSchema,
-  500: ErrorResponseSchema,
+export const generateErrorResponseSchema = <
+  T extends z.infer<typeof ApiErrorTypeSchema>,
+>(
+  errorType: T,
+) =>
+  z.object({
+    error: z.object({
+      message: z.string(),
+      type: z.literal(errorType),
+    }),
+  });
+
+export const ErrorResponsesSchema = {
+  400: generateErrorResponseSchema("api_validation_error"),
+  401: generateErrorResponseSchema("api_authentication_error"),
+  403: generateErrorResponseSchema("api_authorization_error"),
+  404: generateErrorResponseSchema("api_not_found_error"),
+  409: generateErrorResponseSchema("api_conflict_error"),
+  500: generateErrorResponseSchema("api_internal_server_error"),
 };
 
 export const constructResponseSchema = <T extends z.ZodTypeAny>(

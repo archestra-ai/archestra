@@ -2080,45 +2080,54 @@ export type GetAgentPromptsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2170,45 +2179,54 @@ export type AssignAgentPromptsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2245,45 +2263,54 @@ export type DeleteAgentPromptErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2322,45 +2349,54 @@ export type GetAgentsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2452,45 +2488,54 @@ export type CreateAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2559,45 +2604,54 @@ export type GetAllAgentsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2666,45 +2720,54 @@ export type GetDefaultAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2775,45 +2838,54 @@ export type DeleteAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2845,45 +2917,54 @@ export type GetAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -2967,45 +3048,54 @@ export type UpdateAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3074,45 +3164,54 @@ export type GetLabelKeysErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3145,45 +3244,54 @@ export type GetLabelValuesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3230,45 +3338,54 @@ export type GetAllAgentToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3348,45 +3465,54 @@ export type UnassignToolFromAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3422,45 +3548,54 @@ export type AssignToolToAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3497,45 +3632,54 @@ export type BulkAssignToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3579,45 +3723,54 @@ export type GetAgentToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3677,45 +3830,54 @@ export type UpdateAgentToolErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3756,45 +3918,54 @@ export type GetAgentAvailableTokensErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3845,45 +4016,54 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -3921,45 +4101,54 @@ export type AnthropicMessagesWithAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4048,45 +4237,54 @@ export type GetOperatorsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4117,45 +4315,54 @@ export type GetToolInvocationPoliciesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4200,45 +4407,54 @@ export type CreateToolInvocationPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4278,45 +4494,54 @@ export type DeleteToolInvocationPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4348,45 +4573,54 @@ export type GetToolInvocationPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4433,45 +4667,54 @@ export type UpdateToolInvocationPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4509,45 +4752,54 @@ export type GetTrustedDataPoliciesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4592,45 +4844,54 @@ export type CreateTrustedDataPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4670,45 +4931,54 @@ export type DeleteTrustedDataPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4740,45 +5010,54 @@ export type GetTrustedDataPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4825,45 +5104,54 @@ export type UpdateTrustedDataPolicyErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4905,45 +5193,54 @@ export type StreamChatErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -4962,45 +5259,54 @@ export type GetChatConversationsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5046,45 +5352,54 @@ export type CreateChatConversationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5128,45 +5443,54 @@ export type DeleteChatConversationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5198,45 +5522,54 @@ export type GetChatConversationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5283,45 +5616,54 @@ export type UpdateChatConversationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5365,45 +5707,54 @@ export type GetChatAgentMcpToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5437,45 +5788,54 @@ export type GetChatSettingsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5512,45 +5872,54 @@ export type UpdateChatSettingsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5584,45 +5953,54 @@ export type GetDefaultDualLlmConfigErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5659,45 +6037,54 @@ export type GetDualLlmConfigsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5740,45 +6127,54 @@ export type CreateDualLlmConfigErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5817,45 +6213,54 @@ export type DeleteDualLlmConfigErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5887,45 +6292,54 @@ export type GetDualLlmConfigErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -5970,45 +6384,54 @@ export type UpdateDualLlmConfigErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6047,45 +6470,54 @@ export type GetDualLlmResultByToolCallIdErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6124,45 +6556,54 @@ export type GetDualLlmResultsByInteractionErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6232,45 +6673,54 @@ export type PostV1GeminiModelsByModelGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6313,45 +6763,54 @@ export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6386,45 +6845,54 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6468,45 +6936,54 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6534,45 +7011,54 @@ export type GetInteractionsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6648,45 +7134,54 @@ export type GetInteractionErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6750,45 +7245,54 @@ export type GetInternalMcpCatalogErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -6953,45 +7457,54 @@ export type CreateInternalMcpCatalogItemErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7091,45 +7604,54 @@ export type DeleteInternalMcpCatalogItemErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7161,45 +7683,54 @@ export type GetInternalMcpCatalogItemErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7366,45 +7897,54 @@ export type UpdateInternalMcpCatalogItemErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7506,45 +8046,54 @@ export type GetLimitsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7595,45 +8144,54 @@ export type CreateLimitErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7677,45 +8235,54 @@ export type DeleteLimitErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7747,45 +8314,54 @@ export type GetLimitErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -7838,45 +8414,54 @@ export type UpdateLimitErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8006,45 +8591,54 @@ export type GetMcpServerInstallationRequestsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8201,45 +8795,54 @@ export type CreateMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8341,45 +8944,54 @@ export type DeleteMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8411,45 +9023,54 @@ export type GetMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8618,45 +9239,54 @@ export type UpdateMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8760,45 +9390,54 @@ export type ApproveMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -8902,45 +9541,54 @@ export type DeclineMcpServerInstallationRequestErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9044,45 +9692,54 @@ export type AddMcpServerInstallationRequestNoteErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9184,45 +9841,54 @@ export type GetMcpServersErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9296,45 +9962,54 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9391,45 +10066,54 @@ export type DeleteMcpServerErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9461,45 +10145,54 @@ export type GetMcpServerErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9556,45 +10249,54 @@ export type GetMcpServerInstallationStatusErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9627,45 +10329,54 @@ export type GetMcpServerToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9711,45 +10422,54 @@ export type GetMcpServerLogsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9784,45 +10504,54 @@ export type RestartMcpServerErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9856,45 +10585,54 @@ export type RevokeUserMcpServerAccessErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9926,45 +10664,54 @@ export type RevokeAllTeamsMcpServerAccessErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -9999,45 +10746,54 @@ export type GrantTeamMcpServerAccessErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10070,45 +10826,54 @@ export type RevokeTeamMcpServerAccessErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10147,45 +10912,54 @@ export type GetMcpToolCallsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10202,6 +10976,9 @@ export type GetMcpToolCallsResponses = {
             agentId: string;
             mcpServerName: string;
             method: string;
+            /**
+             * Represents a tool call in a provider-agnostic way
+             */
             toolCall: {
                 id: string;
                 name: string;
@@ -10239,45 +11016,54 @@ export type GetMcpToolCallErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10293,6 +11079,9 @@ export type GetMcpToolCallResponses = {
         agentId: string;
         mcpServerName: string;
         method: string;
+        /**
+         * Represents a tool call in a provider-agnostic way
+         */
         toolCall: {
             id: string;
             name: string;
@@ -10322,45 +11111,54 @@ export type InitiateOAuthErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10394,45 +11192,54 @@ export type HandleOAuthCallbackErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10478,45 +11285,54 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10556,45 +11372,54 @@ export type OpenAiChatCompletionsWithAgentErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10624,45 +11449,54 @@ export type GetOptimizationRulesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10721,45 +11555,54 @@ export type CreateOptimizationRuleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10804,45 +11647,54 @@ export type DeleteOptimizationRuleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10889,45 +11741,54 @@ export type UpdateOptimizationRuleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -10970,45 +11831,54 @@ export type GetRolesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11051,45 +11921,54 @@ export type CreateRoleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11132,45 +12011,54 @@ export type DeleteRoleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11205,45 +12093,54 @@ export type GetRoleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11291,45 +12188,54 @@ export type UpdateRoleErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11367,45 +12273,54 @@ export type GetOrganizationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11450,45 +12365,54 @@ export type UpdateOrganizationErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11527,45 +12451,54 @@ export type GetOnboardingStatusErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11598,45 +12531,54 @@ export type GetPromptsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11684,45 +12626,54 @@ export type CreatePromptErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11768,45 +12719,54 @@ export type DeletePromptErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11838,45 +12798,54 @@ export type GetPromptErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -11925,45 +12894,54 @@ export type UpdatePromptErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12009,45 +12987,54 @@ export type GetPromptVersionsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12093,45 +13080,54 @@ export type GetTeamStatisticsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12174,45 +13170,54 @@ export type GetAgentStatisticsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12254,45 +13259,54 @@ export type GetModelStatisticsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12333,45 +13347,54 @@ export type GetOverviewStatisticsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12406,45 +13429,54 @@ export type GetTeamsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12490,45 +13522,54 @@ export type CreateTeamErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12573,45 +13614,54 @@ export type DeleteTeamErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12643,45 +13693,54 @@ export type GetTeamErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12729,45 +13788,54 @@ export type UpdateTeamErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12812,45 +13880,54 @@ export type GetTeamMembersErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12889,45 +13966,54 @@ export type AddTeamMemberErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -12964,45 +14050,54 @@ export type RemoveTeamMemberErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13032,45 +14127,54 @@ export type GetTokenPricesErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13109,54 +14213,54 @@ export type CreateTokenPriceErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
         };
     };
     /**
      * Default Response
      */
     409: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13193,45 +14297,54 @@ export type DeleteTokenPriceErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13263,45 +14376,54 @@ export type GetTokenPriceErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13342,45 +14464,54 @@ export type UpdateTokenPriceErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };
@@ -13415,45 +14546,54 @@ export type GetToolsErrors = {
      * Default Response
      */
     400: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_validation_error';
         };
     };
     /**
      * Default Response
      */
     401: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authentication_error';
         };
     };
     /**
      * Default Response
      */
     403: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_authorization_error';
         };
     };
     /**
      * Default Response
      */
     404: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
         };
     };
     /**
      * Default Response
      */
     500: {
-        error: string | {
+        error: {
             message: string;
-            type: 'api_internal_server_error' | 'api_validation_error' | 'api_authentication_error' | 'api_authorization_error' | 'api_not_found_error' | 'unknown_api_error';
+            type: 'api_internal_server_error';
         };
     };
 };

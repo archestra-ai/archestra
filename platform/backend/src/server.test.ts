@@ -116,6 +116,27 @@ describe("createFastifyInstance", () => {
       });
     });
 
+    test("handles ApiError with 409 status code", async () => {
+      const app = createFastifyInstance();
+
+      app.get("/test-409", async () => {
+        throw new ApiError(409, "Resource conflict");
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-409",
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({
+        error: {
+          message: "Resource conflict",
+          type: "api_conflict_error",
+        },
+      });
+    });
+
     test("handles ApiError with unknown status code", async () => {
       const app = createFastifyInstance();
 
@@ -379,7 +400,7 @@ describe("createFastifyInstance", () => {
       expect(response.json()).toEqual({
         error: {
           message: "Conflict",
-          type: "unknown_api_error",
+          type: "api_conflict_error",
         },
       });
     });

@@ -7,7 +7,6 @@ import {
   CreateTokenPriceSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  ErrorResponseSchema,
   SelectTokenPriceSchema,
   UpdateTokenPriceSchema,
   UuidIdSchema,
@@ -40,10 +39,7 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new token price",
         tags: ["Token Prices"],
         body: CreateTokenPriceSchema,
-        response: {
-          ...constructResponseSchema(SelectTokenPriceSchema),
-          409: ErrorResponseSchema,
-        },
+        response: constructResponseSchema(SelectTokenPriceSchema),
       },
     },
     async (request, reply) => {
@@ -93,7 +89,7 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateTokenPriceSchema.omit({ id: true }),
+        body: UpdateTokenPriceSchema,
         response: constructResponseSchema(SelectTokenPriceSchema),
       },
     },

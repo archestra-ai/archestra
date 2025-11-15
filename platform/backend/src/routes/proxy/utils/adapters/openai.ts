@@ -1,5 +1,10 @@
-import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
-import type { CommonMessage, ToolResultUpdates } from "../types";
+import type {
+  CommonMessage,
+  CommonToolCall,
+  CommonToolResult,
+  OpenAi,
+  ToolResultUpdates,
+} from "@/types";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -46,7 +51,8 @@ export function toCommonFormat(messages: OpenAiMessages): CommonMessage[] {
           {
             id: message.tool_call_id,
             name: toolName,
-            result: toolResult,
+            content: toolResult,
+            isError: false,
           },
         ];
       }

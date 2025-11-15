@@ -1,8 +1,12 @@
 import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig, DualLlmMessage, SupportedProvider } from "@/types";
+import type {
+  CommonDualLlmParams,
+  DualLlmConfig,
+  DualLlmMessage,
+  SupportedProvider,
+} from "@/types";
 import { createDualLlmClient, type DualLlmClient } from "./dual-llm-client";
-import type { CommonDualLlmParams } from "./types";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely

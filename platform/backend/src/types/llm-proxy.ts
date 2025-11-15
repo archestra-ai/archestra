@@ -1,14 +1,4 @@
-/**
- * Represents a tool call in a provider-agnostic way
- */
-export interface CommonToolCall {
-  /** Unique identifier for the tool call */
-  id: string;
-  /** Name of the tool being called */
-  name: string;
-  /** The result/output from the tool execution */
-  result: unknown;
-}
+import type { CommonToolResult } from "./tool-execution";
 
 /**
  * Common message format for evaluating trusted data
@@ -18,7 +8,7 @@ export interface CommonMessage {
   /** Message role */
   role: "user" | "assistant" | "tool" | "system" | "model" | "function";
   /** Tool calls if this message contains them */
-  toolCalls?: CommonToolCall[];
+  toolCalls?: CommonToolResult[];
 }
 
 /**

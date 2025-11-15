@@ -359,6 +359,7 @@ class McpClient {
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
+      name: toolCall.name,
       content: null,
       isError: true,
       error,
@@ -387,6 +388,7 @@ class McpClient {
 
     const toolResult: CommonToolResult = {
       id: toolCall.id,
+      name: toolCall.name,
       content: modifiedContent,
       isError,
     };

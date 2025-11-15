@@ -1,5 +1,4 @@
-import type { Gemini } from "@/types";
-import type { CommonMessage, ToolResultUpdates } from "../types";
+import type { CommonMessage, Gemini, ToolResultUpdates } from "@/types";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
 

@@ -1,7 +1,10 @@
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
-import type { SupportedProvider } from "@/types";
+import type {
+  CommonMessage,
+  SupportedProvider,
+  ToolResultUpdates,
+} from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
-import type { CommonMessage, ToolResultUpdates } from "./types";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -50,7 +53,11 @@ export async function evaluateIfContextIsTrusted(
   for (const message of messages) {
     if (message.toolCalls && message.toolCalls.length > 0) {
       for (const toolCall of message.toolCalls) {
-        const { id: toolCallId, name: toolName, result: toolResult } = toolCall;
+        const {
+          id: toolCallId,
+          name: toolName,
+          content: toolResult,
+        } = toolCall;
 
         // Evaluate trusted data policy
         const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =

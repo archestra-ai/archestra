@@ -5,7 +5,7 @@ import type { LocalConfigSchema } from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
 

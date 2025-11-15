@@ -1,6 +1,5 @@
 import { type Span, trace } from "@opentelemetry/api";
-import type { Agent } from "@/types";
-import type { SupportedProvider } from "@/types/llm-providers";
+import type { Agent, SupportedProvider } from "@/types";
 
 /**
  * Route categories for tracing

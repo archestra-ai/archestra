@@ -1,16 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import config from "@/config";
+import type { DualLlmMessage } from "@/types";
 import type { SupportedProviders } from "./types";
-
-/**
- * Common message format for dual LLM Q&A conversation
- * Simple format: {role: "user" | "assistant", content: string}
- */
-export type DualLlmMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
 
 /**
  * Abstract interface for LLM clients used in dual LLM pattern

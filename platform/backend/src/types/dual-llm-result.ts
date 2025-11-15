@@ -2,7 +2,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
-export const DualLlmConversationSchema = z
+export const DualLlmMessageSchema = z
   .object({
     role: z.enum(["user", "assistant"]),
     content: z.string(),
@@ -19,6 +19,6 @@ export const InsertDualLlmResultSchema = createInsertSchema(
   schema.dualLlmResultsTable,
 );
 
-export type DualLlmConversation = z.infer<typeof DualLlmConversationSchema>;
+export type DualLlmMessage = z.infer<typeof DualLlmMessageSchema>;
 export type DualLlmResult = z.infer<typeof SelectDualLlmResultSchema>;
 export type InsertDualLlmResult = z.infer<typeof InsertDualLlmResultSchema>;

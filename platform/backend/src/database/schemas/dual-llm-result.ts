@@ -6,7 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { DualLlmConversation } from "@/types/dual-llm-result";
+import type { DualLlmMessage } from "@/types";
 import agentsTable from "./agent";
 
 /**
@@ -21,9 +21,7 @@ const dualLlmResultsTable = pgTable(
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     toolCallId: text("tool_call_id").notNull(),
-    conversations: jsonb("conversations")
-      .$type<DualLlmConversation[]>()
-      .notNull(),
+    conversations: jsonb("conversations").$type<DualLlmMessage[]>().notNull(),
     result: text("result").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },

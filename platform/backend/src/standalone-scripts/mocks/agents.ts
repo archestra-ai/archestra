@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { InsertAgent } from "@/types/agent";
+import type { InsertAgent } from "@/types";
 import { randomBool, randomElement } from "./utils";
 
 const AGENT_NAME_TEMPLATES = [

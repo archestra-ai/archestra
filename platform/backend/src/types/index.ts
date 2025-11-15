@@ -10,6 +10,7 @@ export * from "./dual-llm-config";
 export * from "./dual-llm-result";
 export * from "./interaction";
 export * from "./invitation";
+export * from "./label";
 export * from "./limit";
 export * from "./llm-providers";
 export * from "./mcp-catalog";

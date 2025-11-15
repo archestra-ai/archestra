@@ -1,11 +1,7 @@
 import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig } from "@/types";
-import {
-  createDualLlmClient,
-  type DualLlmClient,
-  type DualLlmMessage,
-} from "./dual-llm-client";
+import type { DualLlmConfig, DualLlmMessage } from "@/types";
+import { createDualLlmClient, type DualLlmClient } from "./dual-llm-client";
 import type { CommonDualLlmParams, SupportedProviders } from "./types";
 
 /**

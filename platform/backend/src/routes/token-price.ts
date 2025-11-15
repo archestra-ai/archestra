@@ -4,16 +4,14 @@ import { z } from "zod";
 import { TokenPriceModel } from "@/models";
 import {
   ApiError,
+  CreateTokenPriceSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponseSchema,
-  UuidIdSchema,
-} from "@/types";
-import {
-  CreateTokenPriceSchema,
   SelectTokenPriceSchema,
   UpdateTokenPriceSchema,
-} from "@/types/token-price";
+  UuidIdSchema,
+} from "@/types";
 
 const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

@@ -1,6 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import db from "@/database";
-import { optimizationRulesTable } from "@/database/schemas";
+import db, { schema } from "@/database";
 import type {
   InsertOptimizationRule,
   OptimizationRule,
@@ -13,7 +12,7 @@ import type {
 class OptimizationRuleModel {
   static async create(data: InsertOptimizationRule): Promise<OptimizationRule> {
     const [rule] = await db
-      .insert(optimizationRulesTable)
+      .insert(schema.optimizationRulesTable)
       .values(data)
       .returning();
 
@@ -23,9 +22,9 @@ class OptimizationRuleModel {
   static async findByAgentId(agentId: string): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
-      .from(optimizationRulesTable)
-      .where(eq(optimizationRulesTable.agentId, agentId))
-      .orderBy(asc(optimizationRulesTable.priority));
+      .from(schema.optimizationRulesTable)
+      .where(eq(schema.optimizationRulesTable.agentId, agentId))
+      .orderBy(asc(schema.optimizationRulesTable.priority));
 
     return rules;
   }
@@ -36,14 +35,14 @@ class OptimizationRuleModel {
   ): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
-      .from(optimizationRulesTable)
+      .from(schema.optimizationRulesTable)
       .where(
         and(
-          eq(optimizationRulesTable.agentId, agentId),
-          eq(optimizationRulesTable.provider, provider),
+          eq(schema.optimizationRulesTable.agentId, agentId),
+          eq(schema.optimizationRulesTable.provider, provider),
         ),
       )
-      .orderBy(asc(optimizationRulesTable.priority));
+      .orderBy(asc(schema.optimizationRulesTable.priority));
 
     return rules;
   }
@@ -54,15 +53,15 @@ class OptimizationRuleModel {
   ): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
-      .from(optimizationRulesTable)
+      .from(schema.optimizationRulesTable)
       .where(
         and(
-          eq(optimizationRulesTable.agentId, agentId),
-          eq(optimizationRulesTable.provider, provider),
-          eq(optimizationRulesTable.enabled, true),
+          eq(schema.optimizationRulesTable.agentId, agentId),
+          eq(schema.optimizationRulesTable.provider, provider),
+          eq(schema.optimizationRulesTable.enabled, true),
         ),
       )
-      .orderBy(asc(optimizationRulesTable.priority));
+      .orderBy(asc(schema.optimizationRulesTable.priority));
 
     return rules;
   }
@@ -72,9 +71,9 @@ class OptimizationRuleModel {
     data: Partial<UpdateOptimizationRule>,
   ): Promise<OptimizationRule | undefined> {
     const [rule] = await db
-      .update(optimizationRulesTable)
+      .update(schema.optimizationRulesTable)
       .set(data)
-      .where(eq(optimizationRulesTable.id, id))
+      .where(eq(schema.optimizationRulesTable.id, id))
       .returning();
 
     return rule;
@@ -82,8 +81,8 @@ class OptimizationRuleModel {
 
   static async delete(id: string): Promise<boolean> {
     const result = await db
-      .delete(optimizationRulesTable)
-      .where(eq(optimizationRulesTable.id, id));
+      .delete(schema.optimizationRulesTable)
+      .where(eq(schema.optimizationRulesTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
   }

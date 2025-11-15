@@ -5,8 +5,10 @@ import { hasPermission } from "@/auth";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamMemberBodySchema,
+  ApiError,
   CreateTeamBodySchema,
   constructResponseSchema,
+  DeleteObjectResponseSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
@@ -24,20 +26,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      try {
-        return reply.send(
-          await TeamModel.findByOrganization(request.organizationId),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(
+        await TeamModel.findByOrganization(request.organizationId),
+      );
     },
   );
 
@@ -53,25 +44,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { name, description }, user, organizationId }, reply) => {
-      try {
-        return reply.send(
-          await TeamModel.create({
-            name,
-            description,
-            organizationId,
-            createdBy: user.id,
-          }),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(
+        await TeamModel.create({
+          name,
+          description,
+          organizationId,
+          createdBy: user.id,
+        }),
+      );
     },
   );
 
@@ -89,39 +69,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
-      try {
-        const team = await TeamModel.findById(id);
+      const team = await TeamModel.findById(id);
 
-        if (!team) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Verify the team belongs to the user's organization
-        if (team.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(team);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!team) {
+        throw new ApiError(404, "Team not found");
       }
+
+      // Verify the team belongs to the user's organization
+      if (team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      return reply.send(team);
     },
   );
 
@@ -140,40 +99,19 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
-      try {
-        // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(id);
-        if (!existingTeam || existingTeam.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const team = await TeamModel.update(id, body);
-
-        if (!team) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(team);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      // Verify the team exists and belongs to the user's organization
+      const existingTeam = await TeamModel.findById(id);
+      if (!existingTeam || existingTeam.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
       }
+
+      const team = await TeamModel.update(id, body);
+
+      if (!team) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      return reply.send(team);
     },
   );
 
@@ -187,44 +125,23 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
-      try {
-        // Verify the team exists and belongs to the user's organization
-        const existingTeam = await TeamModel.findById(id);
-        if (!existingTeam || existingTeam.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const success = await TeamModel.delete(id);
-
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      // Verify the team exists and belongs to the user's organization
+      const existingTeam = await TeamModel.findById(id);
+      if (!existingTeam || existingTeam.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
       }
+
+      const success = await TeamModel.delete(id);
+
+      if (!success) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      return reply.send({ success: true });
     },
   );
 
@@ -242,29 +159,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
-      try {
-        // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(id);
-        if (!team || team.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(await TeamModel.getTeamMembers(id));
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
       }
+
+      return reply.send(await TeamModel.getTeamMembers(id));
     },
   );
 
@@ -282,32 +183,19 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamMemberSchema),
       },
     },
-    async ({ params: { id }, body, organizationId }, reply) => {
-      try {
-        // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(id);
-        if (!team || team.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const member = await TeamModel.addMember(id, body.userId, body.role);
-
-        return reply.send(member);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+    async (
+      { params: { id }, body: { userId, role }, organizationId },
+      reply,
+    ) => {
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
       }
+
+      const member = await TeamModel.addMember(id, userId, role);
+
+      return reply.send(member);
     },
   );
 
@@ -322,72 +210,48 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: z.string(),
           userId: z.string(),
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { id, userId }, organizationId, headers }, reply) => {
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      const success = await TeamModel.removeMember(id, userId);
+
+      if (!success) {
+        throw new ApiError(404, "Team member not found");
+      }
+
+      const { success: userIsAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Clean up invalid credential sources (personal tokens) for this user
+      // if they no longer have access to agents through other teams
       try {
-        // Verify the team exists and belongs to the user's organization
-        const team = await TeamModel.findById(id);
-        if (!team || team.organizationId !== organizationId) {
-          return reply.status(404).send({
-            error: {
-              message: "Team not found",
-              type: "not_found",
-            },
-          });
-        }
+        const cleanedCount =
+          await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
+            userId,
+            id,
+            userIsAgentAdmin,
+          );
 
-        const success = await TeamModel.removeMember(id, userId);
-
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Team member not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const { success: userIsAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          headers,
-        );
-
-        // Clean up invalid credential sources (personal tokens) for this user
-        // if they no longer have access to agents through other teams
-        try {
-          const cleanedCount =
-            await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
-              userId,
-              id,
-              userIsAgentAdmin,
-            );
-
-          if (cleanedCount > 0) {
-            fastify.log.info(
-              `Cleaned up ${cleanedCount} invalid credential sources for user ${userId}`,
-            );
-          }
-        } catch (cleanupError) {
-          // Log the error but don't fail the request
-          fastify.log.error(
-            cleanupError,
-            "Error cleaning up credential sources",
+        if (cleanedCount > 0) {
+          fastify.log.info(
+            `Cleaned up ${cleanedCount} invalid credential sources for user ${userId}`,
           );
         }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      } catch (cleanupError) {
+        // Log the error but don't fail the request
+        fastify.log.error(cleanupError, "Error cleaning up credential sources");
       }
+
+      return reply.send({ success: true });
     },
   );
 };

@@ -21,6 +21,7 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   Anthropic,
+  type ApiError,
   Gemini,
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
@@ -76,7 +77,35 @@ const createFastifyInstance = () =>
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
-    .setSerializerCompiler(serializerCompiler);
+    .setSerializerCompiler(serializerCompiler)
+    // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
+    .setErrorHandler<ApiError>(function (error, _request, reply) {
+      const { statusCode, message, type } = error;
+
+      if (statusCode >= 500) {
+        this.log.error(
+          { error: message, statusCode },
+          "HTTP 50x request error occurred",
+        );
+      } else if (statusCode >= 400) {
+        this.log.info(
+          { error: message, statusCode },
+          "HTTP 40x request error occurred",
+        );
+      } else {
+        this.log.error(
+          { error: message, statusCode },
+          "HTTP request error occurred",
+        );
+      }
+
+      return reply.status(statusCode).send({
+        error: {
+          message,
+          type,
+        },
+      });
+    });
 
 /**
  * Helper function to register the metrics plugin on a fastify instance.

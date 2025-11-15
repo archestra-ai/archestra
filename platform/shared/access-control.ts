@@ -284,6 +284,7 @@ export const RouteId = {
   // Organization Routes
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
+  GetOnboardingStatus: "getOnboardingStatus",
 
   // Token Price Routes
   GetTokenPrices: "getTokenPrices",
@@ -303,10 +304,6 @@ export const RouteId = {
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
-
-  // Onboarding Routes
-  GetOnboardingLogsStatus: "getOnboardingLogsStatus",
-  CompleteOnboarding: "completeOnboarding",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -645,6 +642,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateOrganization]: {
     organization: ["update"],
   },
+  [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetTokenPrices]: {
     tokenPrice: ["read"],
   },
@@ -684,9 +682,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOptimizationRule]: {
     profile: ["delete"],
   },
-  // Onboarding routes - available to all authenticated users (no specific permissions required)
-  [RouteId.GetOnboardingLogsStatus]: {},
-  [RouteId.CompleteOnboarding]: {},
 };
 
 /**

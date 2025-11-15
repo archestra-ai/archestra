@@ -186,6 +186,13 @@ class InteractionModel {
       pagination,
     );
   }
+
+  static async getCount() {
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.interactionsTable);
+    return result.total;
+  }
 }
 
 export default InteractionModel;

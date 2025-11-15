@@ -43,16 +43,22 @@ export const SelectMcpServerSchema = createSelectSchema(
     .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
 });
-export const InsertMcpServerSchema = createInsertSchema(
-  schema.mcpServersTable,
-).extend({
-  serverType: InternalMcpCatalogServerTypeSchema,
-  teams: z.array(z.string()).optional(),
-  userId: z.string().optional(), // For personal auth
-  localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
-  userConfigValues: z.record(z.string(), z.string()).optional(),
-  environmentValues: z.record(z.string(), z.string()).optional(),
-});
+
+export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
+  .extend({
+    serverType: InternalMcpCatalogServerTypeSchema,
+    teams: z.array(z.string()).optional(),
+    userId: z.string().optional(), // For personal auth
+    localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
+    userConfigValues: z.record(z.string(), z.string()).optional(),
+    environmentValues: z.record(z.string(), z.string()).optional(),
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
+
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation

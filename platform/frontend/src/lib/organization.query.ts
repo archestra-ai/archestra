@@ -25,6 +25,8 @@ export const organizationKeys = {
   activeMemberRole: () =>
     [...organizationKeys.activeOrg(), "member-role"] as const,
   details: () => [...organizationKeys.all, "details"] as const,
+  onboardingStatus: () =>
+    [...organizationKeys.all, "onboarding-status"] as const,
 };
 
 /**
@@ -232,6 +234,27 @@ export function useOrganization(enabled = true) {
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
+  });
+}
+
+/**
+ * Check if organization onboarding is complete
+ * Only polls when enabled
+ */
+export function useOrganizationOnboardingStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: organizationKeys.onboardingStatus(),
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getOnboardingStatus();
+
+      if (!data) {
+        throw new Error("Failed to fetch organization onboarding status");
+      }
+
+      return data;
+    },
+    refetchInterval: enabled ? 3000 : false, // Poll every 3 seconds when dialog is open
+    enabled, // Only run query when enabled
   });
 }
 

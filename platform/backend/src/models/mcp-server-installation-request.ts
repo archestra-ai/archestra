@@ -40,11 +40,12 @@ function rewriteOAuthRedirectUris(
 
 class McpServerInstallationRequestModel {
   static async create(
-    request: InsertMcpServerInstallationRequest,
+    requestedBy: string,
+    request: Omit<InsertMcpServerInstallationRequest, "requestedBy">,
   ): Promise<McpServerInstallationRequest> {
     const [createdRequest] = await db
       .insert(schema.mcpServerInstallationRequestsTable)
-      .values(request)
+      .values({ ...request, requestedBy })
       .returning();
 
     return createdRequest;

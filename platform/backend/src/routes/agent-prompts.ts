@@ -2,41 +2,15 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentPromptModel } from "@/models";
-import { constructResponseSchema, UuidIdSchema } from "@/types";
-
-const AgentPromptSchema = z.object({
-  id: z.string(),
-  agentId: z.string(),
-  promptId: z.string(),
-  order: z.number(),
-  createdAt: z.date(),
-});
-
-const AgentPromptWithDetailsSchema = z.object({
-  id: z.string(),
-  agentId: z.string(),
-  promptId: z.string(),
-  order: z.number(),
-  createdAt: z.date(),
-  prompt: z.object({
-    id: z.string(),
-    organizationId: z.string(),
-    name: z.string(),
-    type: z.enum(["system", "regular"]),
-    content: z.string(),
-    version: z.number(),
-    parentPromptId: z.string().nullable(),
-    isActive: z.boolean(),
-    createdBy: z.string(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-  }),
-});
-
-const AssignAgentPromptsSchema = z.object({
-  systemPromptId: z.string().uuid().optional().nullable(),
-  regularPromptIds: z.array(z.string().uuid()).optional(),
-});
+import {
+  ApiError,
+  AssignAgentPromptsSchema,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+  SelectAgentPromptSchema,
+  SelectAgentPromptWithDetailsSchema,
+  UuidIdSchema,
+} from "@/types";
 
 const agentPromptRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -50,26 +24,14 @@ const agentPromptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         response: constructResponseSchema(
-          z.array(AgentPromptWithDetailsSchema),
+          z.array(SelectAgentPromptWithDetailsSchema),
         ),
       },
     },
-    async ({ params }, reply) => {
-      try {
-        const agentPrompts = await AgentPromptModel.findByAgentIdWithPrompts(
-          params.agentId,
-        );
-        return reply.send(agentPrompts);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+    async ({ params: { agentId } }, reply) => {
+      return reply.send(
+        await AgentPromptModel.findByAgentIdWithPrompts(agentId),
+      );
     },
   );
 
@@ -85,28 +47,19 @@ const agentPromptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         body: AssignAgentPromptsSchema,
-        response: constructResponseSchema(z.array(AgentPromptSchema)),
+        response: constructResponseSchema(z.array(SelectAgentPromptSchema)),
       },
     },
-    async ({ params, body }, reply) => {
-      try {
-        const agentPrompts = await AgentPromptModel.replacePrompts({
-          agentId: params.agentId,
-          systemPromptId: body.systemPromptId || null,
-          regularPromptIds: body.regularPromptIds || [],
-        });
+    async (
+      { params: { agentId }, body: { systemPromptId, regularPromptIds } },
+      reply,
+    ) => {
+      const agentPrompts = await AgentPromptModel.replacePrompts(agentId, {
+        systemPromptId: systemPromptId || undefined,
+        regularPromptIds: regularPromptIds || undefined,
+      });
 
-        return reply.send(agentPrompts);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(agentPrompts);
     },
   );
 
@@ -121,36 +74,20 @@ const agentPromptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           promptId: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params }, reply) => {
-      try {
-        const success = await AgentPromptModel.delete(
-          params.agentId,
-          params.promptId,
-        );
+      const success = await AgentPromptModel.delete(
+        params.agentId,
+        params.promptId,
+      );
 
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Agent prompt not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!success) {
+        throw new ApiError(404, "Agent prompt not found");
       }
+
+      return reply.send({ success: true });
     },
   );
 };

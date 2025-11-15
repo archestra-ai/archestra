@@ -318,12 +318,10 @@ return $input.all().map(item => ({
 
 **Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
-    await PromptModel.create({
-      organizationId: org.id,
+    await PromptModel.create(org.id, user.id, {
       name: "n8n Expert",
       type: "system",
       content: n8nSystemPromptContent,
-      createdBy: user.id,
     });
     logger.info("✓ Seeded n8n Expert system prompt");
   } else {
@@ -365,12 +363,10 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   for (const promptData of defaultPrompts) {
     const exists = existingPrompts.find((p) => p.name === promptData.name);
     if (!exists) {
-      await PromptModel.create({
-        organizationId: org.id,
+      await PromptModel.create(org.id, user.id, {
         name: promptData.name,
         type: "regular",
         content: promptData.content,
-        createdBy: user.id,
       });
       logger.info(`✓ Seeded regular prompt: ${promptData.name}`);
     } else {

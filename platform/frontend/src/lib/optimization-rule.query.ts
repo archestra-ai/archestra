@@ -11,7 +11,7 @@ const {
 } = archestraApiSdk;
 
 export type OptimizationRule =
-  archestraApiTypes.CreateOptimizationRuleResponses["201"];
+  archestraApiTypes.CreateOptimizationRuleResponses["200"];
 
 export type CreateOptimizationRuleInput =
   archestraApiTypes.CreateOptimizationRuleData["body"] &

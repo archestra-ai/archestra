@@ -16,8 +16,10 @@ import {
   AgentToolFilterSchema,
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
+  ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
+  DeleteObjectResponseSchema,
   PaginationQuerySchema,
   SelectAgentToolSchema,
   SelectToolSchema,
@@ -43,14 +45,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          request.headers,
-        );
-
-        const {
+    async (
+      {
+        query: {
           limit,
           offset,
           sortBy,
@@ -60,33 +57,32 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           origin,
           credentialSourceMcpServerId,
           excludeArchestraTools,
-        } = request.query;
+        },
+        headers,
+        user,
+      },
+      reply,
+    ) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-        const result = await AgentToolModel.findAllPaginated(
-          { limit, offset },
-          { sortBy, sortDirection },
-          {
-            search,
-            agentId,
-            origin,
-            credentialSourceMcpServerId,
-            excludeArchestraTools,
-          },
-          request.user.id,
-          isAgentAdmin,
-        );
+      const result = await AgentToolModel.findAllPaginated(
+        { limit, offset },
+        { sortBy, sortDirection },
+        {
+          search,
+          agentId,
+          origin,
+          credentialSourceMcpServerId,
+          excludeArchestraTools,
+        },
+        user.id,
+        isAgentAdmin,
+      );
 
-        return reply.send(result);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(result);
     },
   );
 
@@ -111,34 +107,23 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      try {
-        const { agentId, toolId } = request.params;
-        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
-          request.body || {};
+      const { agentId, toolId } = request.params;
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+        request.body || {};
 
-        const result = await assignToolToAgent(
-          agentId,
-          toolId,
-          credentialSourceMcpServerId,
-          executionSourceMcpServerId,
-        );
+      const result = await assignToolToAgent(
+        agentId,
+        toolId,
+        credentialSourceMcpServerId,
+        executionSourceMcpServerId,
+      );
 
-        if (result && result !== "duplicate" && result !== "updated") {
-          return reply.status(result.status).send(result);
-        }
-
-        // Return success for new assignments, duplicates, and updates
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (result && result !== "duplicate" && result !== "updated") {
+        throw new ApiError(result.status, result.error.message);
       }
+
+      // Return success for new assignments, duplicates, and updates
+      return reply.send({ success: true });
     },
   );
 
@@ -185,59 +170,48 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      try {
-        const { assignments } = request.body;
+      const { assignments } = request.body;
 
-        const results = await Promise.allSettled(
-          assignments.map((assignment) =>
-            assignToolToAgent(
-              assignment.agentId,
-              assignment.toolId,
-              assignment.credentialSourceMcpServerId,
-              assignment.executionSourceMcpServerId,
-            ),
+      const results = await Promise.allSettled(
+        assignments.map((assignment) =>
+          assignToolToAgent(
+            assignment.agentId,
+            assignment.toolId,
+            assignment.credentialSourceMcpServerId,
+            assignment.executionSourceMcpServerId,
           ),
-        );
+        ),
+      );
 
-        const succeeded: { agentId: string; toolId: string }[] = [];
-        const failed: { agentId: string; toolId: string; error: string }[] = [];
-        const duplicates: { agentId: string; toolId: string }[] = [];
+      const succeeded: { agentId: string; toolId: string }[] = [];
+      const failed: { agentId: string; toolId: string; error: string }[] = [];
+      const duplicates: { agentId: string; toolId: string }[] = [];
 
-        results.forEach((result, index) => {
-          const { agentId, toolId } = assignments[index];
-          if (result.status === "fulfilled") {
-            if (result.value === null || result.value === "updated") {
-              // Success (created or updated credentials)
-              succeeded.push({ agentId, toolId });
-            } else if (result.value === "duplicate") {
-              // Already assigned with same credentials
-              duplicates.push({ agentId, toolId });
-            } else {
-              // Validation error
-              const error = result.value.error.message || "Unknown error";
-              failed.push({ agentId, toolId, error });
-            }
-          } else if (result.status === "rejected") {
-            // Runtime error
-            const error =
-              result.reason instanceof Error
-                ? result.reason.message
-                : "Unknown error";
+      results.forEach((result, index) => {
+        const { agentId, toolId } = assignments[index];
+        if (result.status === "fulfilled") {
+          if (result.value === null || result.value === "updated") {
+            // Success (created or updated credentials)
+            succeeded.push({ agentId, toolId });
+          } else if (result.value === "duplicate") {
+            // Already assigned with same credentials
+            duplicates.push({ agentId, toolId });
+          } else {
+            // Validation error
+            const error = result.value.error.message || "Unknown error";
             failed.push({ agentId, toolId, error });
           }
-        });
+        } else if (result.status === "rejected") {
+          // Runtime error
+          const error =
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Unknown error";
+          failed.push({ agentId, toolId, error });
+        }
+      });
 
-        return reply.send({ succeeded, failed, duplicates });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send({ succeeded, failed, duplicates });
     },
   );
 
@@ -252,26 +226,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           toolId: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const { agentId, toolId } = request.params;
+    async ({ params: { agentId, toolId } }, reply) => {
+      const success = await AgentToolModel.delete(agentId, toolId);
 
-        const success = await AgentToolModel.delete(agentId, toolId);
-
-        return reply.send({ success });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!success) {
+        throw new ApiError(404, "Agent tool not found");
       }
+
+      return reply.send({ success });
     },
   );
 
@@ -289,34 +254,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectToolSchema)),
       },
     },
-    async (request, reply) => {
-      try {
-        const { agentId } = request.params;
-
-        // Validate that agent exists
-        const agent = await AgentModel.findById(agentId);
-        if (!agent) {
-          return reply.status(404).send({
-            error: {
-              message: `Agent with ID ${agentId} not found`,
-              type: "not_found",
-            },
-          });
-        }
-
-        const tools = await ToolModel.getToolsByAgent(agentId);
-
-        return reply.send(tools);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+    async ({ params: { agentId } }, reply) => {
+      // Validate that agent exists
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        throw new ApiError(404, `Agent with ID ${agentId} not found`);
       }
+
+      const tools = await ToolModel.getToolsByAgent(agentId);
+
+      return reply.send(tools);
     },
   );
 
@@ -340,113 +287,96 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const { id } = request.params;
-        const { credentialSourceMcpServerId, executionSourceMcpServerId } =
-          request.body;
+    async ({ params: { id }, body }, reply) => {
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
 
-        // Get the agent-tool relationship for validation (needed for both credential and execution source)
-        let agentToolForValidation:
-          | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
-          | undefined;
+      // Get the agent-tool relationship for validation (needed for both credential and execution source)
+      let agentToolForValidation:
+        | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
+        | undefined;
 
-        if (credentialSourceMcpServerId || executionSourceMcpServerId) {
-          const agentTools = await AgentToolModel.findAll();
-          agentToolForValidation = agentTools.find((at) => at.id === id);
+      if (credentialSourceMcpServerId || executionSourceMcpServerId) {
+        const agentTools = await AgentToolModel.findAll();
+        agentToolForValidation = agentTools.find((at) => at.id === id);
 
-          if (!agentToolForValidation) {
-            return reply.status(404).send({
-              error: {
-                message: `Agent-tool relationship with ID ${id} not found`,
-                type: "not_found",
-              },
-            });
-          }
-        }
-
-        // If credentialSourceMcpServerId is being updated, validate it
-        if (credentialSourceMcpServerId && agentToolForValidation) {
-          const validationError = await validateCredentialSource(
-            agentToolForValidation.agent.id,
-            credentialSourceMcpServerId,
+        if (!agentToolForValidation) {
+          throw new ApiError(
+            404,
+            `Agent-tool relationship with ID ${id} not found`,
           );
-
-          if (validationError) {
-            return reply.status(validationError.status).send(validationError);
-          }
         }
-
-        // If executionSourceMcpServerId is being updated, validate it
-        if (executionSourceMcpServerId && agentToolForValidation) {
-          const validationError = await validateExecutionSource(
-            agentToolForValidation.tool.id,
-            executionSourceMcpServerId,
-          );
-
-          if (validationError) {
-            return reply.status(validationError.status).send(validationError);
-          }
-        }
-
-        if (
-          executionSourceMcpServerId === null &&
-          agentToolForValidation &&
-          agentToolForValidation.tool.catalogId
-        ) {
-          const catalogItem = await InternalMcpCatalogModel.findById(
-            agentToolForValidation.tool.catalogId,
-          );
-          // Check if tool is from local server and executionSourceMcpServerId is being set to null
-          if (
-            catalogItem?.serverType === "local" &&
-            !executionSourceMcpServerId
-          ) {
-            return reply.status(400).send({
-              error: {
-                message:
-                  "Execution source installation is required for local MCP server tools and cannot be set to null",
-                type: "validation_error",
-              },
-            });
-          }
-          // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
-          if (
-            catalogItem?.serverType === "remote" &&
-            !credentialSourceMcpServerId
-          ) {
-            return reply.status(400).send({
-              error: {
-                message:
-                  "Credential source is required for remote MCP server tools and cannot be set to null",
-                type: "validation_error",
-              },
-            });
-          }
-        }
-
-        const agentTool = await AgentToolModel.update(id, request.body);
-
-        if (!agentTool) {
-          return reply.status(404).send({
-            error: {
-              message: `Agent-tool relationship with ID ${id} not found`,
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(agentTool);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
       }
+
+      // If credentialSourceMcpServerId is being updated, validate it
+      if (credentialSourceMcpServerId && agentToolForValidation) {
+        const validationError = await validateCredentialSource(
+          agentToolForValidation.agent.id,
+          credentialSourceMcpServerId,
+        );
+
+        if (validationError) {
+          throw new ApiError(
+            validationError.status,
+            validationError.error.message,
+          );
+        }
+      }
+
+      // If executionSourceMcpServerId is being updated, validate it
+      if (executionSourceMcpServerId && agentToolForValidation) {
+        const validationError = await validateExecutionSource(
+          agentToolForValidation.tool.id,
+          executionSourceMcpServerId,
+        );
+
+        if (validationError) {
+          throw new ApiError(
+            validationError.status,
+            validationError.error.message,
+          );
+        }
+      }
+
+      if (
+        executionSourceMcpServerId === null &&
+        agentToolForValidation &&
+        agentToolForValidation.tool.catalogId
+      ) {
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          agentToolForValidation.tool.catalogId,
+        );
+        // Check if tool is from local server and executionSourceMcpServerId is being set to null
+        if (
+          catalogItem?.serverType === "local" &&
+          !executionSourceMcpServerId
+        ) {
+          throw new ApiError(
+            400,
+            "Execution source installation is required for local MCP server tools and cannot be set to null",
+          );
+        }
+        // Check if tool is from remote server and credentialSourceMcpServerId is being set to null
+        if (
+          catalogItem?.serverType === "remote" &&
+          !credentialSourceMcpServerId
+        ) {
+          throw new ApiError(
+            400,
+            "Credential source is required for remote MCP server tools and cannot be set to null",
+          );
+        }
+      }
+
+      const agentTool = await AgentToolModel.update(id, body);
+
+      if (!agentTool) {
+        throw new ApiError(
+          404,
+          `Agent-tool relationship with ID ${id} not found`,
+        );
+      }
+
+      return reply.send(agentTool);
     },
   );
 
@@ -488,77 +418,61 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) => {
-      try {
-        const { catalogId } = request.query;
+    async ({ query: { catalogId }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          request.headers,
-        );
+      // Get all MCP servers accessible to the user
+      const allServers = await McpServerModel.findAll(user.id, isAgentAdmin);
 
-        // Get all MCP servers accessible to the user
-        const allServers = await McpServerModel.findAll(
-          request.user.id,
-          isAgentAdmin,
-        );
+      // Filter by catalogId if provided, otherwise include all
+      const filteredServers = allServers.filter(
+        (server) =>
+          (catalogId ? server.catalogId === catalogId : true) &&
+          server.authType !== null,
+      );
 
-        // Filter by catalogId if provided, otherwise include all
-        const filteredServers = allServers.filter(
-          (server) =>
-            (catalogId ? server.catalogId === catalogId : true) &&
-            server.authType !== null,
-        );
+      // Map servers to the response format
+      const mappedServers = filteredServers.map((server) => ({
+        id: server.id,
+        name: server.name,
+        authType: server.authType as "personal" | "team",
+        serverType: server.serverType as "local" | "remote",
+        catalogId: server.catalogId,
+        ownerId: server.ownerId,
+        ownerEmail: server.ownerEmail ?? null,
+        teamDetails: server.teamDetails,
+      }));
 
-        // Map servers to the response format
-        const mappedServers = filteredServers.map((server) => ({
-          id: server.id,
-          name: server.name,
-          authType: server.authType as "personal" | "team",
-          serverType: server.serverType as "local" | "remote",
-          catalogId: server.catalogId,
-          ownerId: server.ownerId,
-          ownerEmail: server.ownerEmail ?? null,
-          teamDetails: server.teamDetails,
-        }));
+      // Sort servers: current user's personal tokens first, then other personal tokens, then team tokens
+      const currentUserId = user.id;
+      const sortedServers = mappedServers.sort((a, b) => {
+        const aIsCurrentUser =
+          a.authType === "personal" && a.ownerId === currentUserId;
+        const bIsCurrentUser =
+          b.authType === "personal" && b.ownerId === currentUserId;
 
-        // Sort servers: current user's personal tokens first, then other personal tokens, then team tokens
-        const currentUserId = request.user.id;
-        const sortedServers = mappedServers.sort((a, b) => {
-          const aIsCurrentUser =
-            a.authType === "personal" && a.ownerId === currentUserId;
-          const bIsCurrentUser =
-            b.authType === "personal" && b.ownerId === currentUserId;
+        // Current user's tokens come first
+        if (aIsCurrentUser && !bIsCurrentUser) return -1;
+        if (!aIsCurrentUser && bIsCurrentUser) return 1;
 
-          // Current user's tokens come first
-          if (aIsCurrentUser && !bIsCurrentUser) return -1;
-          if (!aIsCurrentUser && bIsCurrentUser) return 1;
+        // Then other personal tokens before team tokens
+        if (a.authType === "personal" && b.authType === "team") return -1;
+        if (a.authType === "team" && b.authType === "personal") return 1;
 
-          // Then other personal tokens before team tokens
-          if (a.authType === "personal" && b.authType === "team") return -1;
-          if (a.authType === "team" && b.authType === "personal") return 1;
+        // Keep original order otherwise
+        return 0;
+      });
 
-          // Keep original order otherwise
-          return 0;
-        });
+      // Group by catalogId
+      const groupedByCatalogId = groupBy(
+        sortedServers,
+        (server) => server.catalogId,
+      );
 
-        // Group by catalogId
-        const groupedByCatalogId = groupBy(
-          sortedServers,
-          (server) => server.catalogId,
-        );
-
-        return reply.send(groupedByCatalogId);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(groupedByCatalogId);
     },
   );
 };

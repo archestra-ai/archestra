@@ -175,6 +175,13 @@ class McpToolCallModel {
       pagination,
     );
   }
+
+  static async getCount() {
+    const [result] = await db
+      .select({ total: count() })
+      .from(schema.mcpToolCallsTable);
+    return result.total;
+  }
 }
 
 export default McpToolCallModel;

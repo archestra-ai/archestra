@@ -7,7 +7,11 @@ export const SelectDualLlmConfigSchema = createSelectSchema(
 );
 export const InsertDualLlmConfigSchema = createInsertSchema(
   schema.dualLlmConfigsTable,
-);
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export type DualLlmConfig = z.infer<typeof SelectDualLlmConfigSchema>;
 export type InsertDualLlmConfig = z.infer<typeof InsertDualLlmConfigSchema>;

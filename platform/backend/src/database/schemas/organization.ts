@@ -1,5 +1,11 @@
 import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
-import { pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 import type { OrganizationLimitCleanupInterval } from "@/types";
 
 const organizationsTable = pgTable("organization", {
@@ -12,6 +18,7 @@ const organizationsTable = pgTable("organization", {
   limitCleanupInterval: varchar("limit_cleanup_interval")
     .$type<OrganizationLimitCleanupInterval>()
     .default("1h"),
+  onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   theme: text("theme")
     .$type<OrganizationTheme>()
     .notNull()

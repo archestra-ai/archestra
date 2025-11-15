@@ -2,12 +2,57 @@ import { z } from "zod";
 
 export const UuidIdSchema = z.uuidv4();
 
+export const ApiErrorTypeSchema = z.enum([
+  "api_internal_server_error",
+  "api_validation_error",
+  "api_authentication_error",
+  "api_authorization_error",
+  "api_not_found_error",
+  "unknown_api_error",
+]);
+
+/**
+ * https://stackoverflow.com/a/70765851
+ */
+export class ApiError extends Error {
+  type: z.infer<typeof ApiErrorTypeSchema>;
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+
+    switch (statusCode) {
+      case 500:
+        this.type = "api_internal_server_error";
+        break;
+      case 400:
+        this.type = "api_validation_error";
+        break;
+      case 401:
+        this.type = "api_authentication_error";
+        break;
+      case 403:
+        this.type = "api_authorization_error";
+        break;
+      case 404:
+        this.type = "api_not_found_error";
+        break;
+      default:
+        this.type = "unknown_api_error";
+        break;
+    }
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
 export const ErrorResponseSchema = z.object({
   error: z.union([
     z.string(),
     z.object({
       message: z.string(),
-      type: z.string(),
+      type: ApiErrorTypeSchema,
     }),
   ]),
 });
@@ -111,3 +156,5 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
   sortDirection?: "asc" | "desc";
 };
+
+export const DeleteObjectResponseSchema = z.object({ success: z.boolean() });

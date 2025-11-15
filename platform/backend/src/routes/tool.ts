@@ -17,23 +17,12 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, headers }, reply) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          headers,
-        );
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-        return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
     },
   );
 };

@@ -5,9 +5,11 @@ import { hasPermission } from "@/auth";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
+  DeleteObjectResponseSchema,
   InsertAgentSchema,
   PaginationQuerySchema,
   SelectAgentSchema,
@@ -45,30 +47,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { query: { name, limit, offset, sortBy, sortDirection }, user, headers },
       reply,
     ) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          headers,
-        );
-        return reply.send(
-          await AgentModel.findAllPaginated(
-            { limit, offset },
-            { sortBy, sortDirection },
-            { name },
-            user.id,
-            isAgentAdmin,
-          ),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+      return reply.send(
+        await AgentModel.findAllPaginated(
+          { limit, offset },
+          { sortBy, sortDirection },
+          { name },
+          user.id,
+          isAgentAdmin,
+        ),
+      );
     },
   );
 
@@ -82,25 +73,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async (request, reply) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          request.headers,
-        );
-        return reply.send(
-          await AgentModel.findAll(request.user.id, isAgentAdmin),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+    async ({ headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+      return reply.send(await AgentModel.findAll(user.id, isAgentAdmin));
     },
   );
 
@@ -115,19 +93,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      try {
-        const agent = await AgentModel.getAgentOrCreateDefault();
-        return reply.send(agent);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(await AgentModel.getAgentOrCreateDefault());
     },
   );
 
@@ -138,33 +104,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateAgent,
         description: "Create a new agent",
         tags: ["Agents"],
-        body: InsertAgentSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-        }),
+        body: InsertAgentSchema,
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const agent = await AgentModel.create(request.body);
-        const labelKeys = await AgentLabelModel.getAllKeys();
-        // We need to re-init metrics with the new label keys in case label keys changed.
-        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-        initializeMetrics(labelKeys);
+    async ({ body }, reply) => {
+      const agent = await AgentModel.create(body);
+      const labelKeys = await AgentLabelModel.getAllKeys();
 
-        return reply.send(agent);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      // We need to re-init metrics with the new label keys in case label keys changed.
+      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+      initializeMetrics(labelKeys);
+
+      return reply.send(agent);
     },
   );
 
@@ -181,39 +133,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { profile: ["admin"] },
-          request.headers,
-        );
+    async ({ params: { id }, headers, user }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-        const agent = await AgentModel.findById(
-          request.params.id,
-          request.user.id,
-          isAgentAdmin,
-        );
+      const agent = await AgentModel.findById(id, user.id, isAgentAdmin);
 
-        if (!agent) {
-          return reply.status(404).send({
-            error: {
-              message: "Agent not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(agent);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
       }
+
+      return reply.send(agent);
     },
   );
 
@@ -227,43 +159,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateAgentSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-        }).partial(),
+        body: UpdateAgentSchema.partial(),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      try {
-        const agent = await AgentModel.update(id, body);
+      const agent = await AgentModel.update(id, body);
 
-        if (!agent) {
-          return reply.status(404).send({
-            error: {
-              message: "Agent not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const labelKeys = await AgentLabelModel.getAllKeys();
-        // We need to re-init metrics with the new label keys in case label keys changed.
-        // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
-        initializeMetrics(labelKeys);
-
-        return reply.send(agent);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
       }
+
+      const labelKeys = await AgentLabelModel.getAllKeys();
+      // We need to re-init metrics with the new label keys in case label keys changed.
+      // Otherwise the newly added labels will not make it to metrics. The labels with new keys, that is.
+      initializeMetrics(labelKeys);
+
+      return reply.send(agent);
     },
   );
 
@@ -277,33 +189,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { id } }, reply) => {
-      try {
-        const success = await AgentModel.delete(id);
+      const success = await AgentModel.delete(id);
 
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Agent not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!success) {
+        throw new ApiError(404, "Agent not found");
       }
+
+      return reply.send({ success: true });
     },
   );
 
@@ -318,19 +214,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      try {
-        const keys = await AgentLabelModel.getAllKeys();
-        return reply.send(keys);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(await AgentLabelModel.getAllKeys());
     },
   );
 
@@ -348,22 +232,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ query: { key } }, reply) => {
-      try {
-        return reply.send(
-          key
-            ? await AgentLabelModel.getValuesByKey(key)
-            : await AgentLabelModel.getAllValues(),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(
+        key
+          ? await AgentLabelModel.getValuesByKey(key)
+          : await AgentLabelModel.getAllValues(),
+      );
     },
   );
 };

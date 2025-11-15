@@ -24,6 +24,7 @@ export const InsertOrganizationSchema = createInsertSchema(
 export const UpdateOrganizationSchema = z.object({
   ...extendedFields,
   logo: z.string().nullable(),
+  onboardingComplete: z.boolean(),
 });
 
 export type OrganizationLimitCleanupInterval = z.infer<

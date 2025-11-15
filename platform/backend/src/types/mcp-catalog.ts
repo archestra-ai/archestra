@@ -44,23 +44,41 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
   schema.internalMcpCatalogTable,
-).extend({
-  serverType: InternalMcpCatalogServerTypeSchema,
-  authFields: z.array(AuthFieldSchema).nullable().optional(),
-  userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
-  oauthConfig: OAuthConfigSchema.nullable().optional(),
-  localConfig: LocalConfigSchema.nullable().optional(),
-});
+)
+  .extend({
+    serverType: InternalMcpCatalogServerTypeSchema,
+    authFields: z.array(AuthFieldSchema).nullable().optional(),
+    userConfig: z
+      .record(z.string(), UserConfigFieldSchema)
+      .nullable()
+      .optional(),
+    oauthConfig: OAuthConfigSchema.nullable().optional(),
+    localConfig: LocalConfigSchema.nullable().optional(),
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
 
 export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
   schema.internalMcpCatalogTable,
-).extend({
-  serverType: InternalMcpCatalogServerTypeSchema,
-  authFields: z.array(AuthFieldSchema).nullable().optional(),
-  userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
-  oauthConfig: OAuthConfigSchema.nullable().optional(),
-  localConfig: LocalConfigSchema.nullable().optional(),
-});
+)
+  .extend({
+    serverType: InternalMcpCatalogServerTypeSchema,
+    authFields: z.array(AuthFieldSchema).nullable().optional(),
+    userConfig: z
+      .record(z.string(), UserConfigFieldSchema)
+      .nullable()
+      .optional(),
+    oauthConfig: OAuthConfigSchema.nullable().optional(),
+    localConfig: LocalConfigSchema.nullable().optional(),
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  });
 
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema

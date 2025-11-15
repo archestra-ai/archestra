@@ -2,7 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/dialog";
 import { useDefaultAgent } from "@/lib/agent.query";
 import {
-  useCompleteOnboarding,
-  useOnboardingLogs,
-} from "@/lib/onboarding.query";
+  useOrganizationOnboardingStatus,
+  useUpdateOrganization,
+} from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
 interface OnboardingDialogProps {
@@ -27,28 +27,45 @@ interface OnboardingDialogProps {
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const { data: defaultAgent } = useDefaultAgent();
-  const { data: logsStatus } = useOnboardingLogs(open && step === 2);
-  const completeOnboardingMutation = useCompleteOnboarding();
+  const { data: onboardingStatus } = useOrganizationOnboardingStatus(
+    open && step === 2,
+  );
+  const { mutate: completeOnboarding, isPending: completeOnboardingPending } =
+    useUpdateOrganization(
+      "Onboarding complete",
+      "Failed to complete onboarding",
+    );
 
-  const handleFinishOnboarding = async () => {
-    await completeOnboardingMutation.mutateAsync();
-  };
+  const handleFinishOnboarding = useCallback(() => {
+    completeOnboarding({
+      onboardingComplete: true,
+    });
+  }, [completeOnboarding]);
 
-  const handleNext = () => {
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        handleFinishOnboarding();
+      }
+    },
+    [handleFinishOnboarding],
+  );
+
+  const handleNext = useCallback(() => {
     setStep(2);
-  };
+  }, []);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setStep(1);
-  };
+  }, []);
 
   const bothConnected =
-    logsStatus?.hasLlmProxyLogs && logsStatus?.hasMcpGatewayLogs;
+    onboardingStatus?.hasLlmProxyLogs && onboardingStatus?.hasMcpGatewayLogs;
   const hasAnyConnection =
-    logsStatus?.hasLlmProxyLogs || logsStatus?.hasMcpGatewayLogs;
+    onboardingStatus?.hasLlmProxyLogs || onboardingStatus?.hasMcpGatewayLogs;
 
   return (
-    <Dialog open={open}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-7xl h-[80vh] flex flex-col p-0">
         <div className="flex-1 overflow-y-auto px-6 pt-6 pb-6">
           <DialogHeader className="mb-6">
@@ -94,7 +111,6 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Status Card */}
               <div
                 className={cn(
                   "rounded-lg border p-4 transition-all duration-300",
@@ -119,14 +135,14 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                     ? "Our Proxies are waiting to receive your first event"
                     : bothConnected
                       ? "Connection established!"
-                      : logsStatus?.hasLlmProxyLogs
+                      : onboardingStatus?.hasLlmProxyLogs
                         ? "LLM Proxy connected. You can also connect MCP Gateway"
                         : "MCP Gateway connected. You can also connect LLM Proxy"}
                 </div>
 
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    {logsStatus?.hasLlmProxyLogs ? (
+                    {onboardingStatus?.hasLlmProxyLogs ? (
                       <div className="relative">
                         <CheckCircle2 className="w-5 h-5 text-green-500" />
                         <div className="absolute inset-0 animate-ping">
@@ -140,7 +156,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {logsStatus?.hasMcpGatewayLogs ? (
+                    {onboardingStatus?.hasMcpGatewayLogs ? (
                       <div className="relative">
                         <CheckCircle2 className="w-5 h-5 text-green-500" />
                         <div className="absolute inset-0 animate-ping">
@@ -155,7 +171,6 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex items-center justify-between gap-4">
                 <Button onClick={handleBack} variant="outline" size="lg">
                   Back
@@ -163,13 +178,11 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 
                 <Button
                   onClick={handleFinishOnboarding}
-                  disabled={
-                    completeOnboardingMutation.isPending || !hasAnyConnection
-                  }
+                  disabled={completeOnboardingPending || !hasAnyConnection}
                   size="lg"
                   data-testid={E2eTestId.OnboardingFinishButton}
                 >
-                  {completeOnboardingMutation.isPending ? (
+                  {completeOnboardingPending ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Finishing...

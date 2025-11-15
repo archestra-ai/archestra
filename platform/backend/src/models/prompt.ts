@@ -1,34 +1,11 @@
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { PromptType } from "@/database/schemas/prompt";
-
-export interface Prompt {
-  id: string;
-  organizationId: string;
-  name: string;
-  type: PromptType;
-  content: string;
-  version: number;
-  parentPromptId: string | null;
-  isActive: boolean;
-  createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface CreatePromptInput {
-  organizationId: string;
-  name: string;
-  type: PromptType;
-  content: string;
-  createdBy: string;
-}
-
-export interface UpdatePromptInput {
-  name?: string;
-  content?: string;
-  createdBy: string; // User who created the new version
-}
+import type {
+  InsertPrompt,
+  PromptType,
+  PromptWithAgents,
+  UpdatePrompt,
+} from "@/types";
 
 /**
  * Model for managing prompts with versioning support
@@ -38,22 +15,46 @@ class PromptModel {
   /**
    * Create a new prompt
    */
-  static async create(input: CreatePromptInput): Promise<Prompt> {
+  static async create(
+    organizationId: string,
+    createdBy: string,
+    input: InsertPrompt,
+  ): Promise<PromptWithAgents> {
     const [prompt] = await db
       .insert(schema.promptsTable)
       .values({
-        organizationId: input.organizationId,
+        organizationId,
         name: input.name,
         type: input.type,
         content: input.content,
         version: 1,
         parentPromptId: null,
         isActive: true,
-        createdBy: input.createdBy,
+        createdBy,
       })
       .returning();
 
-    return prompt as Prompt;
+    return {
+      ...prompt,
+      agents: [],
+    };
+  }
+
+  static getAgentsForPrompt(
+    promptId: string,
+  ): Promise<PromptWithAgents["agents"]> {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentPromptsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+      )
+      .where(eq(schema.agentPromptsTable.promptId, promptId))
+      .orderBy(schema.agentsTable.name);
   }
 
   /**
@@ -63,11 +64,7 @@ class PromptModel {
   static async findByOrganizationId(
     organizationId: string,
     type?: PromptType,
-  ): Promise<
-    (Prompt & {
-      agents: Array<{ id: string; name: string }>;
-    })[]
-  > {
+  ): Promise<PromptWithAgents[]> {
     const baseConditions = [
       eq(schema.promptsTable.organizationId, organizationId),
       eq(schema.promptsTable.isActive, true),
@@ -86,21 +83,10 @@ class PromptModel {
     // For each prompt, fetch the agents that use it
     const promptsWithAgents = await Promise.all(
       prompts.map(async (prompt) => {
-        const agents = await db
-          .select({
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-          })
-          .from(schema.agentPromptsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
-          )
-          .where(eq(schema.agentPromptsTable.promptId, prompt.id))
-          .orderBy(schema.agentsTable.name);
+        const agents = await PromptModel.getAgentsForPrompt(prompt.id);
 
         return {
-          ...(prompt as Prompt),
+          ...prompt,
           agents,
         };
       }),
@@ -112,19 +98,26 @@ class PromptModel {
   /**
    * Find a prompt by ID
    */
-  static async findById(id: string): Promise<Prompt | null> {
+  static async findById(id: string): Promise<PromptWithAgents | null> {
     const [prompt] = await db
       .select()
       .from(schema.promptsTable)
       .where(eq(schema.promptsTable.id, id));
 
-    return prompt ? (prompt as Prompt) : null;
+    if (!prompt) {
+      return null;
+    }
+
+    return {
+      ...prompt,
+      agents: await PromptModel.getAgentsForPrompt(prompt.id),
+    };
   }
 
   /**
    * Get all versions of a prompt (finds the root prompt and all its descendants)
    */
-  static async findVersions(promptId: string): Promise<Prompt[]> {
+  static async findVersions(promptId: string): Promise<PromptWithAgents[]> {
     const currentPrompt = await PromptModel.findById(promptId);
     if (!currentPrompt) {
       return [];
@@ -143,7 +136,19 @@ class PromptModel {
       )
       .orderBy(schema.promptsTable.version);
 
-    return versions as Prompt[];
+    // For each prompt, fetch the agents that use it
+    const versionsWithAgents = await Promise.all(
+      versions.map(async (version) => {
+        const agents = await PromptModel.getAgentsForPrompt(version.id);
+
+        return {
+          ...version,
+          agents,
+        };
+      }),
+    );
+
+    return versionsWithAgents;
   }
 
   /**
@@ -152,8 +157,9 @@ class PromptModel {
    */
   static async update(
     id: string,
-    input: UpdatePromptInput,
-  ): Promise<Prompt | null> {
+    createdBy: string,
+    input: UpdatePrompt,
+  ): Promise<PromptWithAgents | null> {
     const currentPrompt = await PromptModel.findById(id);
     if (!currentPrompt) {
       return null;
@@ -176,11 +182,14 @@ class PromptModel {
         version: currentPrompt.version + 1,
         parentPromptId: id,
         isActive: true,
-        createdBy: input.createdBy,
+        createdBy,
       })
       .returning();
 
-    return newVersion as Prompt;
+    return {
+      ...newVersion,
+      agents: await PromptModel.getAgentsForPrompt(newVersion.id),
+    };
   }
 
   /**
@@ -205,28 +214,6 @@ class PromptModel {
     }
 
     return true;
-  }
-
-  /**
-   * Get active prompts by IDs
-   */
-  static async findByIds(ids: string[]): Promise<Prompt[]> {
-    if (ids.length === 0) {
-      return [];
-    }
-
-    const prompts = await db
-      .select()
-      .from(schema.promptsTable)
-      .where(
-        and(
-          eq(schema.promptsTable.isActive, true),
-          // @ts-expect-error - inArray type issue
-          db.inArray(schema.promptsTable.id, ids),
-        ),
-      );
-
-    return prompts as Prompt[];
   }
 }
 

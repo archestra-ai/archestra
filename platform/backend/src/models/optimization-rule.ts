@@ -2,44 +2,20 @@ import { and, asc, eq } from "drizzle-orm";
 import db from "@/database";
 import { optimizationRulesTable } from "@/database/schemas";
 import type {
-  ContentLengthConditions,
-  RuleConditions,
-  ToolPresenceConditions,
-} from "@/database/schemas/optimization-rule";
-
-export type OptimizationRule = typeof optimizationRulesTable.$inferSelect;
-export type NewOptimizationRule = typeof optimizationRulesTable.$inferInsert;
-
-// Allow any string for rule type and provider to support future types without migration
-export type OptimizationRuleType = string;
-export type LlmProvider = string;
+  InsertOptimizationRule,
+  OptimizationRule,
+  OptimizationRuleContentLengthConditions,
+  OptimizationRuleToolPresenceConditions,
+  SupportedProvider,
+  UpdateOptimizationRule,
+} from "@/types";
 
 class OptimizationRuleModel {
-  static async create(data: {
-    agentId: string;
-    ruleType: OptimizationRuleType;
-    conditions: RuleConditions;
-    provider: LlmProvider;
-    targetModel: string;
-    priority?: number;
-    enabled?: boolean;
-  }): Promise<OptimizationRule> {
+  static async create(data: InsertOptimizationRule): Promise<OptimizationRule> {
     const [rule] = await db
       .insert(optimizationRulesTable)
-      .values({
-        agentId: data.agentId,
-        ruleType: data.ruleType,
-        conditions: data.conditions,
-        provider: data.provider,
-        targetModel: data.targetModel,
-        priority: data.priority ?? 0,
-        enabled: data.enabled ?? true,
-      })
+      .values(data)
       .returning();
-
-    if (!rule) {
-      throw new Error("Failed to create optimization rule");
-    }
 
     return rule;
   }
@@ -56,7 +32,7 @@ class OptimizationRuleModel {
 
   static async findByAgentIdAndProvider(
     agentId: string,
-    provider: LlmProvider,
+    provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
@@ -74,7 +50,7 @@ class OptimizationRuleModel {
 
   static async findEnabledByAgentIdAndProvider(
     agentId: string,
-    provider: LlmProvider,
+    provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
@@ -93,14 +69,7 @@ class OptimizationRuleModel {
 
   static async update(
     id: string,
-    data: Partial<{
-      ruleType: OptimizationRuleType;
-      conditions: RuleConditions;
-      provider: LlmProvider;
-      targetModel: string;
-      priority: number;
-      enabled: boolean;
-    }>,
+    data: Partial<UpdateOptimizationRule>,
   ): Promise<OptimizationRule | undefined> {
     const [rule] = await db
       .update(optimizationRulesTable)
@@ -134,12 +103,14 @@ class OptimizationRuleModel {
 
       switch (rule.ruleType) {
         case "content_length": {
-          const conditions = rule.conditions as ContentLengthConditions;
+          const conditions =
+            rule.conditions as OptimizationRuleContentLengthConditions;
           matches = context.contentLength <= conditions.maxLength;
           break;
         }
         case "tool_presence": {
-          const conditions = rule.conditions as ToolPresenceConditions;
+          const conditions =
+            rule.conditions as OptimizationRuleToolPresenceConditions;
           matches = context.hasTools === conditions.hasTools;
           break;
         }

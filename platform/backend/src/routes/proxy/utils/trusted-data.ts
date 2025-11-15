@@ -1,10 +1,7 @@
 import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
+import type { SupportedProvider } from "@/types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
-import type {
-  CommonMessage,
-  SupportedProviders,
-  ToolResultUpdates,
-} from "./types";
+import type { CommonMessage, ToolResultUpdates } from "./types";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -22,7 +19,7 @@ export async function evaluateIfContextIsTrusted(
   messages: CommonMessage[],
   agentId: string,
   apiKey: string,
-  provider: SupportedProviders,
+  provider: SupportedProvider,
   considerContextUntrusted: boolean = false,
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {

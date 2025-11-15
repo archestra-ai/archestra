@@ -1,8 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import config from "@/config";
-import type { DualLlmMessage } from "@/types";
-import type { SupportedProviders } from "./types";
+import type { DualLlmMessage, SupportedProvider } from "@/types";
 
 /**
  * Abstract interface for LLM clients used in dual LLM pattern
@@ -181,7 +180,7 @@ Return only the JSON object, no other text.`;
  * Factory function to create the appropriate LLM client
  */
 export function createDualLlmClient(
-  provider: SupportedProviders,
+  provider: SupportedProvider,
   apiKey: string,
 ): DualLlmClient {
   switch (provider) {
@@ -189,5 +188,7 @@ export function createDualLlmClient(
       return new AnthropicDualLlmClient(apiKey);
     case "openai":
       return new OpenAiDualLlmClient(apiKey);
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
   }
 }

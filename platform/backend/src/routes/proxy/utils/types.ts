@@ -1,5 +1,3 @@
-export type SupportedProviders = "openai" | "anthropic";
-
 /**
  * Represents a tool call in a provider-agnostic way
  */

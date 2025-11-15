@@ -20,9 +20,13 @@ setup("authenticate", async ({ page }) => {
   // Wait until the page redirects to the authenticated area
   await page.waitForURL(`${UI_BASE_URL}/chat`);
 
-  // Create a minimal log to mark onboarding as complete
+  // Mark onboarding as complete by updating the organization
   // This prevents the onboarding dialog from appearing in tests
-  await page.request.post(`${UI_BASE_URL}/api/onboarding/complete`);
+  await page.request.patch(`${UI_BASE_URL}/api/organization`, {
+    data: {
+      onboardingComplete: true,
+    },
+  });
 
   // Wait for page to refresh after onboarding completion
   await page.waitForTimeout(1000);

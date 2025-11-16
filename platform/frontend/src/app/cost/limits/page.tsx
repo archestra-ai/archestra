@@ -793,9 +793,9 @@ export default function LimitsPage() {
                       limit={limit}
                       isEditing={editingLimitId === limit.id}
                       onEdit={() => setEditingLimitId(limit.id)}
-                      onSave={(data) => handleUpdateLimit(limit.id!, data)}
+                      onSave={(data) => handleUpdateLimit(limit.id, data)}
                       onCancel={handleCancelEdit}
-                      onDelete={() => handleDeleteLimit(limit.id!)}
+                      onDelete={() => handleDeleteLimit(limit.id)}
                       teams={teams}
                       mcpServers={mcpServers}
                       tokenPrices={tokenPrices}

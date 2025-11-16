@@ -31,7 +31,7 @@ class StatisticsModel {
     const startTime = new Date(startTimeStr);
     const endTime = new Date(endTimeStr);
 
-    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
       return null;
     }
 

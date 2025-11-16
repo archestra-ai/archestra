@@ -1,10 +1,13 @@
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
-    return await db.select().from(schema.tokenPricesTable);
+    return await db
+      .select()
+      .from(schema.tokenPricesTable)
+      .orderBy(asc(schema.tokenPricesTable.createdAt));
   }
 
   static async findById(id: string): Promise<TokenPrice | null> {

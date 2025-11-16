@@ -1,15 +1,5 @@
 import { z } from "zod";
 
-export const StatisticsTimeFrameSchema = z.enum([
-  "1h",
-  "24h",
-  "7d",
-  "30d",
-  "90d",
-  "12m",
-  "all",
-]);
-
 export const StatisticsTimeSeriesPointSchema = z.object({
   timestamp: z.string(),
   value: z.number(),
@@ -88,7 +78,6 @@ export const StatisticsTimeSeriesDataSchema = z.union([
   StatisticsModelTimeSeriesDataSchema,
 ]);
 
-export type StatisticsTimeFrame = z.infer<typeof StatisticsTimeFrameSchema>;
 export type StatisticsTimeSeriesPoint = z.infer<
   typeof StatisticsTimeSeriesPointSchema
 >;

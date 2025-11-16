@@ -1,6 +1,10 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type StatisticsTimeFrame,
+} from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
 
 const {
@@ -10,13 +14,11 @@ const {
   getOverviewStatistics,
 } = archestraApiSdk;
 
-export type TimeFrame = "1h" | "24h" | "7d" | "30d" | "90d" | "12m" | "all";
-
 export function useTeamStatistics({
   timeframe = "24h",
   initialData,
 }: {
-  timeframe?: TimeFrame;
+  timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
@@ -36,7 +38,7 @@ export function useAgentStatistics({
   timeframe = "24h",
   initialData,
 }: {
-  timeframe?: TimeFrame;
+  timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetAgentStatisticsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
@@ -56,7 +58,7 @@ export function useModelStatistics({
   timeframe = "24h",
   initialData,
 }: {
-  timeframe?: TimeFrame;
+  timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetModelStatisticsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
@@ -76,7 +78,7 @@ export function useOverviewStatistics({
   timeframe = "24h",
   initialData,
 }: {
-  timeframe?: TimeFrame;
+  timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetOverviewStatisticsResponses["200"];
 } = {}) {
   return useSuspenseQuery({

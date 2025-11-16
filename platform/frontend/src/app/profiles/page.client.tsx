@@ -653,6 +653,7 @@ function CreateAgentDialog({
       optimizeCost,
       considerContextUntrusted,
       createAgent,
+      useInChat,
     ],
   );
 
@@ -818,7 +819,8 @@ function CreateAgentDialog({
                       Enable for chat
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      If enabled, this profile will be available for usage in the chat.
+                      If enabled, this profile will be available for usage in
+                      the chat.
                     </p>
                   </div>
                 </div>
@@ -956,6 +958,7 @@ function EditAgentDialog({
       updateAgent,
       onOpenChange,
       considerContextUntrusted,
+      useInChat,
     ],
   );
 
@@ -1105,9 +1108,7 @@ function EditAgentDialog({
               <Checkbox
                 id="edit-use-in-chat"
                 checked={useInChat}
-                onCheckedChange={(checked) =>
-                  setUseInChat(checked === true)
-                }
+                onCheckedChange={(checked) => setUseInChat(checked === true)}
               />
               <div className="grid gap-1">
                 <Label
@@ -1117,7 +1118,8 @@ function EditAgentDialog({
                   Enable for chat
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  If enabled, this profile will be available for usage in the chat.
+                  If enabled, this profile will be available for usage in the
+                  chat.
                 </p>
               </div>
             </div>

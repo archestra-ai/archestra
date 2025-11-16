@@ -13,7 +13,6 @@ import {
   UpdateLimitSchema,
   UuidIdSchema,
 } from "@/types";
-import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -37,7 +36,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // Cleanup limits if needed before fetching
       if (organizationId) {
-        await cleanupLimitsIfNeeded(organizationId);
+        await LimitModel.cleanupLimitsIfNeeded(organizationId);
       }
 
       // Ensure all models from interactions have pricing records

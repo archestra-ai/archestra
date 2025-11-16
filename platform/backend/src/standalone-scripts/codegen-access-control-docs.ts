@@ -216,7 +216,7 @@ async function main() {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     logger.error("❌ Error generating documentation:", error);
-    console.error("Full error details:", error);
+    logger.error({ error }, "Full error details:");
     process.exit(1);
   });
 }

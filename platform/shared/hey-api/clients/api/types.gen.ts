@@ -2415,6 +2415,7 @@ export type GetAgentsResponses = {
             isDefault: boolean;
             optimizeCost: boolean;
             considerContextUntrusted: boolean;
+            useInChat: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2470,6 +2471,7 @@ export type CreateAgentData = {
         isDefault?: boolean;
         optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
+        useInChat?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2553,6 +2555,7 @@ export type CreateAgentResponses = {
         isDefault: boolean;
         optimizeCost: boolean;
         considerContextUntrusted: boolean;
+        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2669,6 +2672,7 @@ export type GetAllAgentsResponses = {
         isDefault: boolean;
         optimizeCost: boolean;
         considerContextUntrusted: boolean;
+        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2785,6 +2789,7 @@ export type GetDefaultAgentResponses = {
         isDefault: boolean;
         optimizeCost: boolean;
         considerContextUntrusted: boolean;
+        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2982,6 +2987,7 @@ export type GetAgentResponses = {
         isDefault: boolean;
         optimizeCost: boolean;
         considerContextUntrusted: boolean;
+        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3028,6 +3034,7 @@ export type UpdateAgentData = {
         isDefault?: boolean;
         optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
+        useInChat?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3113,6 +3120,7 @@ export type UpdateAgentResponses = {
         isDefault: boolean;
         optimizeCost: boolean;
         considerContextUntrusted: boolean;
+        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{

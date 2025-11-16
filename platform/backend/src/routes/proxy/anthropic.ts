@@ -7,8 +7,7 @@ import { get } from "lodash-es";
 import { z } from "zod";
 import config from "@/config";
 import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
-import { AgentModel, InteractionModel } from "@/models";
-import LimitValidationService from "@/services/limit-validation";
+import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 import {
   type Agent,
   Anthropic,

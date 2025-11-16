@@ -1,1 +1,0 @@
-ALTER TABLE "agents" ADD COLUMN "use_in_chat" boolean DEFAULT true NOT NULL;

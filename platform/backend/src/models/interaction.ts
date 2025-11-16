@@ -4,7 +4,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
-import UsageTrackingService from "@/services/usage-tracking";
+import logger from "@/logging";
 import type {
   InsertInteraction,
   Interaction,
@@ -12,6 +12,7 @@ import type {
   SortingQuery,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+import LimitModel from "./limit";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {
@@ -22,10 +23,13 @@ class InteractionModel {
 
     // Update usage tracking after interaction is created
     // Run in background to not block the response
-    UsageTrackingService.updateUsageAfterInteraction(
+    InteractionModel.updateUsageAfterInteraction(
       interaction as InsertInteraction & { id: string },
     ).catch((error) => {
-      console.error("Failed to update usage tracking:", error);
+      logger.error(
+        { error },
+        `Failed to update usage tracking for interaction ${interaction.id}`,
+      );
     });
 
     return interaction;
@@ -192,6 +196,109 @@ class InteractionModel {
       .select({ total: count() })
       .from(schema.interactionsTable);
     return result.total;
+  }
+
+  /**
+   * Update usage limits after an interaction is created
+   */
+  static async updateUsageAfterInteraction(
+    interaction: InsertInteraction & { id: string },
+  ): Promise<void> {
+    try {
+      // Calculate token usage for this interaction
+      const inputTokens = interaction.inputTokens || 0;
+      const outputTokens = interaction.outputTokens || 0;
+
+      if (inputTokens === 0 && outputTokens === 0) {
+        // No tokens used, nothing to update
+        return;
+      }
+
+      // Get agent's teams to update team and organization limits
+      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
+        interaction.agentId,
+      );
+
+      const updatePromises: Promise<void>[] = [];
+
+      if (agentTeamIds.length === 0) {
+        logger.warn(
+          `Agent ${interaction.agentId} has no team assignments for interaction ${interaction.id}`,
+        );
+
+        // Even if agent has no teams, we should still try to update organization limits
+        // We'll use a default organization approach - get the first organization from existing limits
+        try {
+          const existingOrgLimits = await db
+            .select({ entityId: schema.limitsTable.entityId })
+            .from(schema.limitsTable)
+            .where(eq(schema.limitsTable.entityType, "organization"))
+            .limit(1);
+
+          if (existingOrgLimits.length > 0) {
+            updatePromises.push(
+              LimitModel.updateTokenLimitUsage(
+                "organization",
+                existingOrgLimits[0].entityId,
+                inputTokens,
+                outputTokens,
+              ),
+            );
+          }
+        } catch (error) {
+          logger.error(
+            { error },
+            "Failed to find organization for agent with no teams",
+          );
+        }
+      } else {
+        // Get team details to access organizationId
+        const teams = await db
+          .select()
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, agentTeamIds));
+
+        // Update organization-level token cost limits (from first team's organization)
+        if (teams.length > 0 && teams[0].organizationId) {
+          updatePromises.push(
+            LimitModel.updateTokenLimitUsage(
+              "organization",
+              teams[0].organizationId,
+              inputTokens,
+              outputTokens,
+            ),
+          );
+        }
+
+        // Update team-level token cost limits
+        for (const team of teams) {
+          updatePromises.push(
+            LimitModel.updateTokenLimitUsage(
+              "team",
+              team.id,
+              inputTokens,
+              outputTokens,
+            ),
+          );
+        }
+      }
+
+      // Update agent-level token cost limits (if any exist)
+      updatePromises.push(
+        LimitModel.updateTokenLimitUsage(
+          "agent",
+          interaction.agentId,
+          inputTokens,
+          outputTokens,
+        ),
+      );
+
+      // Execute all updates in parallel
+      await Promise.all(updatePromises);
+    } catch (error) {
+      logger.error({ error }, "Error updating usage limits after interaction");
+      // Don't throw - usage tracking should not break interaction creation
+    }
   }
 }
 

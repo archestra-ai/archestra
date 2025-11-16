@@ -11,7 +11,7 @@ export { default as DualLlmResultModel } from "./dual-llm-result";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
-export { default as LimitModel } from "./limit";
+export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerInstallationRequestModel } from "./mcp-server-installation-request";
 export { default as McpServerTeamModel } from "./mcp-server-team";

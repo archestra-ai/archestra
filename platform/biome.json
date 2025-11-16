@@ -17,8 +17,7 @@
       "!**/dist",
       "!build",
       "!helm/**/*",
-      "!**/*.gen.ts",
-      "!shared/hey-api/clients/**/index.ts"
+      "!**/*.gen.ts"
     ]
   },
   "formatter": {

@@ -34,7 +34,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     const roleData = {
       name: `test_role_${Date.now()}`,
       permission: {
-        agent: ["read"],
+        profile: ["read"],
         tool: ["read", "create"],
       },
     };
@@ -61,7 +61,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     const roleData = {
       name: roleName,
       permission: {
-        agent: ["read"],
+        profile: ["read"],
       },
     };
 
@@ -94,7 +94,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     const roleData = {
       name: "admin",
       permission: {
-        agent: ["read"],
+        profile: ["read"],
       },
     };
 
@@ -122,7 +122,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `get_role_test_${Date.now()}`,
-        permission: { agent: ["read"] },
+        permission: { profile: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
@@ -164,7 +164,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     const response = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/roles/00000000-0000-0000-0000-000000000000",
+      urlSuffix: "/api/roles/c7528140-07b0-4870-841d-6886a6daeb36",
       ignoreStatusCheck: true,
     });
 
@@ -182,7 +182,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `update_test_${Date.now()}`,
-        permission: { agent: ["read"] },
+        permission: { profile: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
@@ -213,14 +213,14 @@ test.describe("Organization Roles API - CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `permissions_test_${Date.now()}`,
-        permission: { agent: ["read"] },
+        permission: { profile: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
 
     // Update the role permissions
     const newPermissions = {
-      agent: ["read", "create"],
+      profile: ["read", "create"],
       tool: ["read"],
     };
     const updateResponse = await makeApiRequest({
@@ -263,7 +263,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
       urlSuffix: "/api/roles",
       data: {
         name: `delete_test_${Date.now()}`,
-        permission: { agent: ["read"] },
+        permission: { profile: ["read"] },
       },
     });
     const createdRole = await createResponse.json();
@@ -295,11 +295,11 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     const response = await makeApiRequest({
       request,
       method: "delete",
-      urlSuffix: "/api/roles/00000000-0000-0000-0000-000000000000",
+      urlSuffix: "/api/roles/c7528140-07b0-4870-841d-6886a6daeb36",
       ignoreStatusCheck: true,
     });
 
-    expect(response.status()).toBe(400);
+    expect(response.status()).toBe(404);
   });
 });
 
@@ -322,7 +322,7 @@ test.describe("Organization Roles API - Permission Validation", () => {
         urlSuffix: "/api/roles",
         data: {
           name,
-          permission: { agent: ["read"] },
+          permission: { profile: ["read"] },
         },
         ignoreStatusCheck: true,
       });
@@ -349,7 +349,7 @@ test.describe("Organization Roles API - Permission Validation", () => {
         urlSuffix: "/api/roles",
         data: {
           name,
-          permission: { agent: ["read"] },
+          permission: { profile: ["read"] },
         },
       });
 
@@ -364,7 +364,7 @@ test.describe("Organization Roles API - Permission Validation", () => {
     makeApiRequest,
   }) => {
     const complexPermissions = {
-      agent: ["read", "create", "update", "delete"],
+      profile: ["read", "create", "update", "delete"],
       tool: ["read", "create"],
       policy: ["read", "create", "update", "delete"],
       interaction: ["read", "create"],
@@ -410,8 +410,8 @@ test.describe("Organization Roles API - Role Lifecycle", () => {
     makeApiRequest,
   }) => {
     const roleName = `lifecycle_test_${Date.now()}`;
-    const initialPermissions = { agent: ["read"] };
-    const updatedPermissions = { agent: ["read", "create"], tool: ["read"] };
+    const initialPermissions = { profile: ["read"] };
+    const updatedPermissions = { profile: ["read", "create"], tool: ["read"] };
 
     // 1. Create
     const createResponse = await makeApiRequest({

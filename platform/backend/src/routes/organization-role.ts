@@ -13,11 +13,7 @@ import {
 const CreateUpdateRoleNameSchema = z
   .string()
   .min(1, "Role name is required")
-  .max(50, "Role name must be less than 50 characters")
-  .regex(
-    /^[a-zA-Z0-9_-]+$/,
-    "Role name can only contain letters, numbers, hyphens, and underscores",
-  );
+  .max(50, "Role name must be less than 50 characters");
 
 const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
 const PredefinedRoleNameOrCustomRoleIdSchema = z

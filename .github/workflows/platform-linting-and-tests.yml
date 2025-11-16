@@ -53,6 +53,11 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Setup environment variables
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform
+        run: cp .env.example .env
+
       - name: Install Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0

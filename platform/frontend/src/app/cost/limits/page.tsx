@@ -91,8 +91,8 @@ function LimitInlineForm({
   teams,
   mcpServers,
   tokenPrices,
-  hasOrganizationLimit,
-  getTeamsWithLimits,
+  hasOrganizationMcpLimit,
+  getTeamsWithMcpLimits,
 }: {
   initialData?: LimitData;
   limitType: TokenCostLimitType | McpServerCallsLimitType;
@@ -101,14 +101,8 @@ function LimitInlineForm({
   teams: TeamData[];
   mcpServers: CatalogItem[];
   tokenPrices: TokenPriceData[];
-  hasOrganizationLimit: (
-    limitType: TokenCostLimitType | McpServerCallsLimitType,
-    mcpServerName?: string,
-  ) => boolean;
-  getTeamsWithLimits: (
-    limitType: TokenCostLimitType | McpServerCallsLimitType,
-    mcpServerName?: string,
-  ) => string[];
+  hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
+  getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
 }) {
   const [formData, setFormData] = useState({
     entityType: initialData?.entityType || "team",
@@ -117,13 +111,6 @@ function LimitInlineForm({
     limitValue: initialData?.limitValue?.toString() || "",
     model: initialData?.model || "",
   });
-
-  // Get teams with existing limits for this limit type and MCP server
-  const teamsWithLimits = getTeamsWithLimits(limitType, formData.mcpServerName);
-  const organizationHasLimit = hasOrganizationLimit(
-    limitType,
-    formData.mcpServerName,
-  );
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -174,10 +161,7 @@ function LimitInlineForm({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="team">Team</SelectItem>
-                  <SelectItem
-                    value="organization"
-                    disabled={organizationHasLimit}
-                  >
+                  <SelectItem value="organization">
                     The whole organization
                   </SelectItem>
                 </SelectContent>
@@ -205,11 +189,7 @@ function LimitInlineForm({
                       </div>
                     ) : (
                       teams.map((team) => (
-                        <SelectItem
-                          key={team.id}
-                          value={team.id}
-                          disabled={teamsWithLimits.includes(team.id)}
-                        >
+                        <SelectItem key={team.id} value={team.id}>
                           {team.name}
                         </SelectItem>
                       ))
@@ -250,14 +230,13 @@ function LimitInlineForm({
                         const isDisabled =
                           limitType === "mcp_server_calls" &&
                           ((formData.entityType === "organization" &&
-                            hasOrganizationLimit(limitType, server.name)) ||
+                            hasOrganizationMcpLimit?.(server.name)) ||
                             (formData.entityType === "team" &&
                               formData.entityId &&
                               formData.entityId.trim() !== "" &&
-                              getTeamsWithLimits(
-                                limitType,
-                                server.name,
-                              ).includes(formData.entityId)));
+                              getTeamsWithMcpLimits?.(server.name)?.includes(
+                                formData.entityId,
+                              )));
 
                         return (
                           <SelectItem
@@ -361,8 +340,8 @@ function LimitRow({
   tokenPrices,
   getEntityName,
   getUsageStatus,
-  hasOrganizationLimit,
-  getTeamsWithLimits,
+  hasOrganizationMcpLimit,
+  getTeamsWithMcpLimits,
 }: {
   limit: LimitData;
   isEditing: boolean;
@@ -385,14 +364,8 @@ function LimitRow({
     actualUsage: number;
     actualLimit: number;
   };
-  hasOrganizationLimit: (
-    limitType: TokenCostLimitType | McpServerCallsLimitType,
-    mcpServerName?: string,
-  ) => boolean;
-  getTeamsWithLimits: (
-    limitType: TokenCostLimitType | McpServerCallsLimitType,
-    mcpServerName?: string,
-  ) => string[];
+  hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
+  getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
 }) {
   if (isEditing) {
     return (
@@ -406,8 +379,8 @@ function LimitRow({
         teams={teams}
         mcpServers={mcpServers}
         tokenPrices={tokenPrices}
-        hasOrganizationLimit={hasOrganizationLimit}
-        getTeamsWithLimits={getTeamsWithLimits}
+        hasOrganizationMcpLimit={hasOrganizationMcpLimit}
+        getTeamsWithMcpLimits={getTeamsWithMcpLimits}
       />
     );
   }
@@ -536,45 +509,32 @@ export default function LimitsPage() {
     (limit) => limit.limitType === "mcp_server_calls",
   );
 
-  // Helper functions to detect existing limits
-  const hasOrganizationLimit = useCallback(
-    (
-      limitType: TokenCostLimitType | McpServerCallsLimitType,
-      mcpServerName?: string,
-    ) => {
+  // Helper functions for MCP limit validation only
+  const hasOrganizationMcpLimit = useCallback(
+    (mcpServerName?: string) => {
       return limits.some((limit) => {
         if (
-          limit.limitType !== limitType ||
+          limit.limitType !== "mcp_server_calls" ||
           limit.entityType !== "organization"
         ) {
           return false;
         }
-        // For LLM limits, any org limit blocks another
-        if (limitType === "token_cost") {
-          return true;
-        }
-        // For MCP limits, only block if same MCP server
         return limit.mcpServerName === mcpServerName;
       });
     },
     [limits],
   );
 
-  const getTeamsWithLimits = useCallback(
-    (
-      limitType: TokenCostLimitType | McpServerCallsLimitType,
-      mcpServerName?: string,
-    ) => {
+  const getTeamsWithMcpLimits = useCallback(
+    (mcpServerName?: string) => {
       return limits
         .filter((limit) => {
-          if (limit.limitType !== limitType || limit.entityType !== "team") {
+          if (
+            limit.limitType !== "mcp_server_calls" ||
+            limit.entityType !== "team"
+          ) {
             return false;
           }
-          // For LLM limits, any team limit blocks another
-          if (limitType === "token_cost") {
-            return true;
-          }
-          // For MCP limits, only block if same MCP server
           return limit.mcpServerName === mcpServerName;
         })
         .map((limit) => limit.entityId);
@@ -769,8 +729,8 @@ export default function LimitsPage() {
                     teams={teams}
                     mcpServers={mcpServers}
                     tokenPrices={tokenPrices}
-                    hasOrganizationLimit={hasOrganizationLimit}
-                    getTeamsWithLimits={getTeamsWithLimits}
+                    hasOrganizationMcpLimit={hasOrganizationMcpLimit}
+                    getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                   />
                 )}
                 {llmLimits.length === 0 && !isAddingLlmLimit ? (
@@ -801,8 +761,8 @@ export default function LimitsPage() {
                       tokenPrices={tokenPrices}
                       getEntityName={getEntityName}
                       getUsageStatus={getUsageStatus}
-                      hasOrganizationLimit={hasOrganizationLimit}
-                      getTeamsWithLimits={getTeamsWithLimits}
+                      hasOrganizationMcpLimit={hasOrganizationMcpLimit}
+                      getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                     />
                   ))
                 )}
@@ -863,8 +823,8 @@ export default function LimitsPage() {
                       teams={teams}
                       mcpServers={mcpServers}
                       tokenPrices={tokenPrices}
-                      hasOrganizationLimit={hasOrganizationLimit}
-                      getTeamsWithLimits={getTeamsWithLimits}
+                      hasOrganizationMcpLimit={hasOrganizationMcpLimit}
+                      getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                     />
                   )}
                   {mcpLimits.length === 0 && !isAddingMcpLimit ? (
@@ -895,8 +855,8 @@ export default function LimitsPage() {
                         tokenPrices={tokenPrices}
                         getEntityName={getEntityName}
                         getUsageStatus={getUsageStatus}
-                        hasOrganizationLimit={hasOrganizationLimit}
-                        getTeamsWithLimits={getTeamsWithLimits}
+                        hasOrganizationMcpLimit={hasOrganizationMcpLimit}
+                        getTeamsWithMcpLimits={getTeamsWithMcpLimits}
                       />
                     ))
                   )}

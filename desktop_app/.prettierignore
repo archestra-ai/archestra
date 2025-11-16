@@ -1,8 +1,0 @@
-coverage
-dist
-pnpm-lock.yaml
-CHANGELOG.md
-src/backend/database/migrations
-.claude
-resources
-src/ui/routeTree.gen.ts

@@ -65,14 +65,6 @@
     }
   ],
   "packages": {
-    "desktop_app": {
-      "component": "desktop_app",
-      "release-type": "node",
-      "prerelease": true,
-      "include-component-in-tag": false,
-      "initial-version": "0.0.1",
-      "bump-patch-for-minor-pre-major": true
-    },
     "platform": {
       "component": "platform",
       "release-type": "node",

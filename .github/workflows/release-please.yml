@@ -19,9 +19,7 @@ jobs:
       issues: write
       id-token: write
     outputs:
-      desktop_release_created: ${{ steps.release-please.outputs['desktop_app--release_created'] }}
       platform_release_created: ${{ steps.release-please.outputs['platform--release_created'] }}
-      mcp_server_docker_image_version: ${{ steps.release-please.outputs['desktop_app--version'] }}
       platform_version: ${{ steps.release-please.outputs['platform--version'] }}
     steps:
       - name: Checkout repository
@@ -55,7 +53,7 @@ jobs:
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
-    if: needs.release-please.outputs.desktop_release_created
+    if: needs.release-please.outputs.platform_release_created
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     needs:
       - release-please
@@ -64,7 +62,7 @@ jobs:
       id-token: write # Required for Workload Identity Federation
     with:
       push_to_gcr: true
-      version: ${{ needs.release-please.outputs.mcp_server_docker_image_version }}
+      version: ${{ needs.release-please.outputs.platform_version }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

@@ -1,22 +1,5 @@
 version: 2
 updates:
-  # Desktop app npm dependencies (commented out for now)
-  # - package-ecosystem: npm
-  #   directory: desktop_app
-  #   schedule:
-  #     interval: weekly
-  #   groups:
-  #     frontend-dependencies:
-  #       patterns:
-  #         - "*"
-  #       update-types:
-  #         - minor
-  #         - patch
-  #   labels:
-  #     - dependencies
-  #   commit-message:
-  #     prefix: deps(frontend)
-
   - package-ecosystem: npm
     directory: platform
     schedule:

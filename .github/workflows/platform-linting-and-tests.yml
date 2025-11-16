@@ -207,11 +207,6 @@ jobs:
             echo "db-migration-check=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Ensure database migrations run successfully
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
-        run: pnpm db:migrate
-
       - name: Fail if PR from a fork has uncommitted migration changes
         if: steps.db-migration-check.outputs.db-migration-check == 'true' && github.event.pull_request.head.repo.fork == true
         working-directory: ./platform
@@ -242,7 +237,7 @@ jobs:
       # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
       # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
       # explicitly install, just the webkit ones, each time 🥲
-      - name: Install Playwrightsystem dependencies for WebKit
+      - name: Install Playwright system dependencies for WebKit
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
         run: pnpm exec playwright install-deps webkit

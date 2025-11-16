@@ -29,7 +29,7 @@ interface McpLogsDialogProps {
   command: string;
   isLoading: boolean;
   error?: Error | null;
-  onRefresh?: () => void | Promise<void>;
+  onRefresh: () => unknown;
 }
 
 export function McpLogsDialog({
@@ -209,6 +209,18 @@ export function McpLogsDialog({
     }
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+      toast.success("Logs refreshed");
+    } catch (_error) {
+      toast.error("Failed to refresh logs");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [onRefresh]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
@@ -243,23 +255,7 @@ export function McpLogsDialog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (onRefresh) {
-                          setIsRefreshing(true);
-                          try {
-                            await onRefresh();
-                            toast.success("Logs refreshed");
-                          } catch (_error) {
-                            toast.error("Failed to refresh logs");
-                          } finally {
-                            setIsRefreshing(false);
-                          }
-                        } else {
-                          console.warn("onRefresh callback not provided");
-                        }
-                      }}
+                      onClick={handleRefresh}
                       disabled={displayIsLoading || isRefreshing}
                     >
                       <RefreshCw

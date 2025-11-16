@@ -135,7 +135,7 @@ jobs:
       # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
       - name: Check drizzle-kit migrations consistency
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform
+        working-directory: ./platform/backend
         run: pnpm drizzle-kit check
 
       - name: Check for codegen'd changes
@@ -143,7 +143,7 @@ jobs:
         working-directory: ./platform
         run: |
           pnpm codegen:api-client
-          pnpm lint
+          pnpm lint:fix
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then

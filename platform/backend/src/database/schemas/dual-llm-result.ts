@@ -6,16 +6,8 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { DualLlmMessage } from "@/types";
 import agentsTable from "./agent";
-
-/**
- * Simple message format used in dual LLM Q&A conversation
- * Provider-agnostic format for storing conversations
- */
-export type DualLlmMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
 
 /**
  * Stores results from the Dual LLM Quarantine Pattern

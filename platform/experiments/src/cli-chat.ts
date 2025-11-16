@@ -894,7 +894,9 @@ const cliChatWithAnthropic = async (options: {
             }
           } else if (chunk.type === "message_stop") {
             if (debug) {
-              console.log("[DEBUG] Received message_stop, creating assistantMessage");
+              console.log(
+                "[DEBUG] Received message_stop, creating assistantMessage",
+              );
             }
             // Message complete
             assistantMessage = {

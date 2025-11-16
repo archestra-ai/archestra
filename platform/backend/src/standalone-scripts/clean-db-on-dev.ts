@@ -51,7 +51,28 @@ export const clearDb = async (): Promise<void> => {
     sql.raw("DROP TABLE IF EXISTS public.__drizzle_migrations CASCADE;"),
   );
 
-  logger.info("✅ Database completely cleared (all tables dropped)!");
+  // Drop all enum types in public schema
+  logger.info("🗑️  Dropping all enum types in public schema...");
+  const enumQuery = sql<string>`SELECT typname
+      FROM pg_type
+      WHERE typtype = 'e'
+        AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public');
+    `;
+
+  const enumResult = await db.execute(enumQuery);
+  const enums = enumResult.rows as Array<{ typname: string }>;
+
+  logger.info(`📋 Found ${enums.length} enum types to drop`);
+
+  for (const enumType of enums) {
+    logger.info(`  🗑️  Dropping enum type: ${enumType.typname}`);
+    const dropEnumQuery = sql.raw(
+      `DROP TYPE IF EXISTS "public"."${enumType.typname}" CASCADE;`,
+    );
+    await db.execute(dropEnumQuery);
+  }
+
+  logger.info("✅ Database completely cleared (all tables and enums dropped)!");
   logger.info("💡 Run 'pnpm db:migrate' to recreate tables from migrations");
 };
 

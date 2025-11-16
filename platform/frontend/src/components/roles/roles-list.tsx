@@ -168,9 +168,21 @@ export function RolesList() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Roles & Permissions</CardTitle>
-              <CardDescription>
+              <CardDescription className="pt-2">
                 Manage roles and their permissions. Custom roles can be created
                 with specific permission sets.
+                <br />
+                See documentation{" "}
+                <a
+                  href="https://www.archestra.ai/docs/platform-access-control"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline inline-flex items-center gap-1 block"
+                >
+                  here
+                </a>{" "}
+                for more information, including a complete list of available
+                permissions.
               </CardDescription>
             </div>
             <Button onClick={() => setCreateDialogOpen(true)}>

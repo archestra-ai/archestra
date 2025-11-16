@@ -5,6 +5,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { AgentModel, TokenPriceModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
 import openAiProxyRoutes from "./openai";
@@ -55,6 +56,61 @@ describe("OpenAI proxy streaming", () => {
   test("last chunk has finish reason", () => {
     const lastChunk = chunks[chunks.length - 1];
     expect(lastChunk.choices[0]).toHaveProperty("finish_reason");
+  });
+});
+
+describe("OpenAI cost tracking", () => {
+  test("stores cost and baselineCost in interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "gpt-4o",
+      pricePerMillionInput: "2.50",
+      pricePerMillionOutput: "10.00",
+    });
+
+    // Create a test agent with cost optimization enabled
+    const agent = await AgentModel.create({
+      name: "Test Cost Agent",
+      teams: [],
+      optimizeCost: true,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Find the created interaction
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForAgent(
+      agent.id,
+    );
+    expect(interactions.length).toBeGreaterThan(0);
+
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
   });
 });
 

@@ -1,6 +1,7 @@
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { LimitModel } from "@/models";
 
 export async function cleanupLimitsIfNeeded(
   organizationId: string,
@@ -66,20 +67,10 @@ export async function cleanupLimitsIfNeeded(
     );
 
     // Find limits that need cleanup (last_cleanup is null or older than cutoff)
-    const limitsToCleanup = await db
-      .select()
-      .from(schema.limitsTable)
-      .where(
-        and(
-          eq(schema.limitsTable.entityType, "organization"),
-          eq(schema.limitsTable.entityId, organizationId),
-          // Either never cleaned up OR last cleanup was before cutoff
-          or(
-            isNull(schema.limitsTable.lastCleanup),
-            lt(schema.limitsTable.lastCleanup, cutoffTime),
-          ),
-        ),
-      );
+    const limitsToCleanup = await LimitModel.findLimitsNeedingCleanup(
+      organizationId,
+      cutoffTime,
+    );
 
     logger.info(
       `[LimitsCleanup] Found ${limitsToCleanup.length} limits that need cleanup for organization: ${organizationId}`,
@@ -98,15 +89,7 @@ export async function cleanupLimitsIfNeeded(
           `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, current usage: in=${limit.currentUsageTokensIn}, out=${limit.currentUsageTokensOut}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
         );
 
-        await db
-          .update(schema.limitsTable)
-          .set({
-            currentUsageTokensIn: 0,
-            currentUsageTokensOut: 0,
-            lastCleanup: now,
-            updatedAt: now,
-          })
-          .where(eq(schema.limitsTable.id, limit.id));
+        await LimitModel.resetLimitUsage(limit.id);
 
         logger.info(
           `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset usage to 0 and set lastCleanup to ${now.toISOString()}`,

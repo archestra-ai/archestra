@@ -8,7 +8,14 @@ import { schema } from "@/database";
 
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
-);
+).extend({
+  agent: z.object({
+    id: z.string(),
+    name: z.string(),
+  }),
+  messages: z.array(z.any()), // UIMessage[] from AI SDK
+});
+
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,
 ).omit({
@@ -27,26 +34,3 @@ export const UpdateConversationSchema = createUpdateSchema(
 export type Conversation = z.infer<typeof SelectConversationSchema>;
 export type InsertConversation = z.infer<typeof InsertConversationSchema>;
 export type UpdateConversation = z.infer<typeof UpdateConversationSchema>;
-
-// Conversation with messages
-export const SelectConversationWithMessagesSchema =
-  SelectConversationSchema.extend({
-    messages: z.array(z.any()), // UIMessage[] from AI SDK
-  });
-
-export type ConversationWithMessages = z.infer<
-  typeof SelectConversationWithMessagesSchema
->;
-
-// Conversation with agent details
-export const SelectConversationWithAgentSchema =
-  SelectConversationSchema.extend({
-    agent: z.object({
-      id: z.string(),
-      name: z.string(),
-    }),
-  });
-
-export type ConversationWithAgent = z.infer<
-  typeof SelectConversationWithAgentSchema
->;

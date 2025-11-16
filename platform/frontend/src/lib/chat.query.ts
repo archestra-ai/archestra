@@ -3,33 +3,39 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   getChatConversations,
+  getChatConversation,
   getChatAgentMcpTools,
   createChatConversation,
+  updateChatConversation,
   deleteChatConversation,
 } = archestraApiSdk;
 
-export interface ConversationWithAgent {
-  id: string;
-  title: string | null;
-  selectedModel: string;
-  userId: string;
-  organizationId: string;
-  agentId: string;
-  agent: {
-    id: string;
-    name: string;
-  };
-  createdAt: string;
-  updatedAt: string;
+export function useConversation(conversationId?: string) {
+  return useQuery({
+    queryKey: ["conversation", conversationId],
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const { data, error } = await getChatConversation({
+        path: { id: conversationId },
+      });
+      if (error) throw new Error("Failed to fetch conversation");
+      return data;
+    },
+    enabled: !!conversationId,
+    staleTime: 0, // Always refetch to ensure we have the latest messages
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    retry: false, // Don't retry on error to avoid multiple 404s
+  });
 }
 
 export function useConversations() {
-  return useQuery<ConversationWithAgent[]>({
+  return useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      const response = await getChatConversations();
-      if (response.error) throw new Error("Failed to fetch conversations");
-      return response.data as ConversationWithAgent[];
+      const { data, error } = await getChatConversations();
+      if (error) throw new Error("Failed to fetch conversations");
+      return data;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
@@ -42,14 +48,41 @@ export function useCreateConversation() {
 
   return useMutation({
     mutationFn: async (agentId: string) => {
-      const response = await createChatConversation({
+      const { data, error } = await createChatConversation({
         body: { agentId },
       });
-      if (response.error) throw new Error("Failed to create conversation");
-      return response.data;
+      if (error) throw new Error("Failed to create conversation");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useUpdateConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      title,
+    }: {
+      id: string;
+      title?: string | null;
+    }) => {
+      const { data, error } = await updateChatConversation({
+        path: { id },
+        body: { title },
+      });
+      if (error) throw new Error("Failed to update conversation");
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }
@@ -59,11 +92,11 @@ export function useDeleteConversation() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await deleteChatConversation({
+      const { data, error } = await deleteChatConversation({
         path: { id },
       });
-      if (response.error) throw new Error("Failed to delete conversation");
-      return response.data;
+      if (error) throw new Error("Failed to delete conversation");
+      return data;
     },
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -72,22 +105,16 @@ export function useDeleteConversation() {
   });
 }
 
-export interface McpTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown> | null;
-}
-
 export function useChatAgentMcpTools(agentId: string | undefined) {
-  return useQuery<McpTool[]>({
+  return useQuery({
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
     queryFn: async () => {
       if (!agentId) return [];
-      const response = await getChatAgentMcpTools({
+      const { data, error } = await getChatAgentMcpTools({
         path: { agentId },
       });
-      if (response.error) throw new Error("Failed to fetch MCP tools");
-      return response.data as McpTool[];
+      if (error) throw new Error("Failed to fetch MCP tools");
+      return data;
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes

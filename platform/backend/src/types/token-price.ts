@@ -1,7 +1,6 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import type { z } from "zod";
 import { schema } from "@/database";
-import { UuidIdSchema } from "./api";
 
 /**
  * Base database schema derived from Drizzle
@@ -32,9 +31,7 @@ export const CreateTokenPriceSchema = InsertTokenPriceSchema.omit({
   },
 );
 
-export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial().extend({
-  id: UuidIdSchema,
-});
+export const UpdateTokenPriceSchema = CreateTokenPriceSchema.partial();
 
 /**
  * Exported types

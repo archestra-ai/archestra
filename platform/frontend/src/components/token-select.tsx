@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useAgentAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import { LoadingSpinner } from "./loading";
 
 interface TokenSelectProps {
   value?: string | null;
@@ -20,16 +22,14 @@ interface TokenSelectProps {
   className?: string;
   /** Catalog ID to filter tokens - only shows tokens for the same catalog item */
   catalogId: string;
-  /** Agent IDs to filter tokens - only shows tokens that can be used with the specified agents */
-  agentIds: string[];
+  shouldSetDefaultValue: boolean;
 }
 
 /**
  * Self-contained component for selecting credential source for MCP tool execution.
  * Shows team tokens (authType=team) and user tokens (authType=personal) with owner emails.
  *
- * If catalogId is provided, only shows tokens for that specific catalog item.
- * If agentId is provided, only shows tokens that can be used with the specified agents (validates team membership).
+ * Fetches all tokens for the specified catalogId (no agent filtering).
  */
 export function TokenSelect({
   value,
@@ -37,22 +37,42 @@ export function TokenSelect({
   disabled,
   className,
   catalogId,
-  agentIds,
+  shouldSetDefaultValue,
 }: TokenSelectProps) {
-  const { data: mcpServers, isLoading } = useAgentAvailableTokens({
-    agentIds: agentIds ?? null,
-    catalogId: catalogId ?? null,
+  const { data: groupedTokens, isLoading } = useAgentAvailableTokens({
+    catalogId,
   });
 
+  // Get tokens for this catalogId from the grouped response
+  const mcpServers = groupedTokens?.[catalogId] ?? [];
+
   // Separate team and personal tokens
-  const teamTokens = mcpServers?.filter((server) => server.authType === "team");
-  const userTokens = mcpServers?.filter(
+  const teamTokens = mcpServers.filter((server) => server.authType === "team");
+  const userTokens = mcpServers.filter(
     (server) => server.authType === "personal",
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
+  useEffect(() => {
+    if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
+      onValueChange(mcpServers[0].id);
+    }
+  }, [mcpServers.length]);
+
+  if (!mcpServers || mcpServers.length === 0) {
+    return (
+      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+        No tokens available
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
   return (
     <Select
-      value={value || undefined}
+      value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
     >

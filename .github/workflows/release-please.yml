@@ -86,8 +86,6 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      EASTER_EGG_TARGET_SEQUENCE: ${{ secrets.EASTER_EGG_TARGET_SEQUENCE }}
-      EASTER_EGG_VIDEO_URL: ${{ secrets.EASTER_EGG_VIDEO_URL }}
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart

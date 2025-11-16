@@ -14,20 +14,20 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { fastifyAuthPlugin } from "@/auth";
-import { initializeInternalJwt } from "@/auth/internal-jwt";
 import config from "@/config";
 import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { AgentLabelModel } from "@/models";
 import {
   Anthropic,
+  ApiError,
   Gemini,
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 
 const {
@@ -71,13 +71,60 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 /**
  * Sets up logging and zod type provider + request validation & response serialization
  */
-const createFastifyInstance = () =>
+export const createFastifyInstance = () =>
   Fastify({
     loggerInstance: logger,
   })
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
-    .setSerializerCompiler(serializerCompiler);
+    .setSerializerCompiler(serializerCompiler)
+    // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
+    .setErrorHandler<ApiError | Error>(function (error, _request, reply) {
+      // Handle ApiError objects
+      if (error instanceof ApiError) {
+        const { statusCode, message, type } = error;
+
+        if (statusCode >= 500) {
+          this.log.error(
+            { error: message, statusCode },
+            "HTTP 50x request error occurred",
+          );
+        } else if (statusCode >= 400) {
+          this.log.info(
+            { error: message, statusCode },
+            "HTTP 40x request error occurred",
+          );
+        } else {
+          this.log.error(
+            { error: message, statusCode },
+            "HTTP request error occurred",
+          );
+        }
+
+        return reply.status(statusCode).send({
+          error: {
+            message,
+            type,
+          },
+        });
+      }
+
+      // Handle standard Error objects
+      const message = error.message || "Internal server error";
+      const statusCode = 500;
+
+      this.log.error(
+        { error: message, statusCode },
+        "HTTP 50x request error occurred",
+      );
+
+      return reply.status(statusCode).send({
+        error: {
+          message,
+          type: "api_internal_server_error",
+        },
+      });
+    });
 
 /**
  * Helper function to register the metrics plugin on a fastify instance.
@@ -154,6 +201,42 @@ const startMetricsServer = async () => {
   );
 };
 
+const startMcpServerRuntime = async (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  // Initialize MCP Server Runtime (K8s-based)
+  if (McpServerRuntimeManager.isEnabled) {
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
+  } else {
+    fastify.log.info(
+      "MCP Server Runtime is disabled as there is no K8s config available. Local MCP servers will not be available.",
+    );
+  }
+};
+
 const start = async () => {
   const fastify = createFastifyInstance();
 
@@ -180,35 +263,7 @@ const start = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
-    // Initialize internal JWT for backend-to-backend auth
-    await initializeInternalJwt();
-    logger.info("Internal JWT initialized for /mcp_proxy authentication");
-
-    // Initialize MCP Server Runtime (K8s-based)
-    try {
-      // Set up callbacks for runtime initialization
-      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
-        fastify.log.info("MCP Server Runtime initialized successfully");
-      };
-
-      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
-        fastify.log.error(
-          `MCP Server Runtime failed to initialize: ${error.message}`,
-        );
-        // Don't exit the process, allow the server to continue
-        // MCP servers can be started manually later
-      };
-
-      // Start the runtime in the background (non-blocking)
-      McpServerRuntimeManager.start().catch((error) => {
-        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
-      });
-    } catch (error) {
-      fastify.log.error(
-        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-      // Continue server startup even if MCP runtime fails
-    }
+    startMcpServerRuntime(fastify);
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics

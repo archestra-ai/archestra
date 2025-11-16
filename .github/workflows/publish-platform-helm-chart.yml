@@ -46,6 +46,7 @@ jobs:
       - name: helm package
         env:
           IMAGE_TAG: ${{ inputs.version }}
+          ARCHESTRA_ANALYTICS: disabled
         run: |
           helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
 

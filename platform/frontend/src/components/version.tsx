@@ -1,9 +1,16 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useHealth } from "@/lib/health.query";
 
 export function Version() {
   const { data } = useHealth();
+  const pathname = usePathname();
+
+  if (pathname.startsWith("/chat")) {
+    return null;
+  }
+
   return (
     <>
       {data?.version && (

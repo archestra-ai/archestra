@@ -3,7 +3,7 @@ import type { archestraApiTypes } from "@shared";
 export function ToolReadonlyDetails({
   agentTool,
 }: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }) {
   const tool = agentTool.tool;
 

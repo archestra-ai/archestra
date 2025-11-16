@@ -117,7 +117,7 @@ function McpToolCallsTable({
       cell: ({ row }) => (
         <div className="font-mono text-xs">
           {formatDate({
-            date: new Date(row.original.createdAt).toLocaleDateString(),
+            date: row.original.createdAt,
           })}
         </div>
       ),
@@ -182,7 +182,10 @@ function McpToolCallsTable({
       cell: ({ row }) => {
         return (
           <Badge variant="secondary" className="text-xs whitespace-normal">
-            {row.original.mcpServerName}
+            <TruncatedText
+              message={row.original.mcpServerName}
+              maxLength={15}
+            />
           </Badge>
         );
       },

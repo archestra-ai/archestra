@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { InsertInteraction } from "@/types/interaction";
+import type { InsertInteraction } from "@/types";
 import { randomBool, randomElement, randomInt } from "./utils";
 
 export interface ConversationTemplate {

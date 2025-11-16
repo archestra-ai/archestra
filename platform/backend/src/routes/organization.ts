@@ -1,9 +1,13 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
-import { OrganizationModel } from "@/models";
 import {
+  InteractionModel,
+  McpToolCallModel,
+  OrganizationModel,
+} from "@/models";
+import {
+  ApiError,
   constructResponseSchema,
   SelectOrganizationSchema,
   UpdateOrganizationSchema,
@@ -17,52 +21,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetOrganization,
         description: "Get organization details",
         tags: ["Organization"],
-        response: constructResponseSchema(
-          SelectOrganizationSchema.extend({
-            onboardingComplete: z.boolean(),
-          }),
-        ),
+        response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId }, reply) => {
-      try {
-        const organization = await OrganizationModel.getById(organizationId);
+      const organization = await OrganizationModel.getById(organizationId);
 
-        if (!organization) {
-          return reply.status(404).send({
-            error: {
-              message: "Organization not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Check if onboarding is complete by checking if there are any logs
-        const [interaction] = await db
-          .select()
-          .from(schema.interactionsTable)
-          .limit(1);
-        const [mcpToolCall] = await db
-          .select()
-          .from(schema.mcpToolCallsTable)
-          .limit(1);
-
-        const onboardingComplete = !!(interaction || mcpToolCall);
-
-        return reply.send({
-          ...organization,
-          onboardingComplete,
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
       }
+
+      return reply.send(organization);
     },
   );
 
@@ -78,35 +47,40 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
-      try {
-        const organization = await OrganizationModel.patch(
-          organizationId,
-          body,
-        );
+      const organization = await OrganizationModel.patch(organizationId, body);
 
-        if (!organization) {
-          return reply.status(404).send({
-            error: {
-              message: "Organization not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        if ("logo" in body) {
-        }
-
-        return reply.send(organization);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
       }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.get(
+    "/api/organization/onboarding-status",
+    {
+      schema: {
+        operationId: RouteId.GetOnboardingStatus,
+        description: "Check if organization onboarding is complete",
+        tags: ["Organization"],
+        response: constructResponseSchema(
+          z.object({
+            hasLlmProxyLogs: z.boolean(),
+            hasMcpGatewayLogs: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      // Check if onboarding is complete by checking if there are any logs
+      const interactionCount = await InteractionModel.getCount();
+      const mcpToolCallCount = await McpToolCallModel.getCount();
+
+      return reply.send({
+        hasLlmProxyLogs: interactionCount > 0,
+        hasMcpGatewayLogs: mcpToolCallCount > 0,
+      });
     },
   );
 };

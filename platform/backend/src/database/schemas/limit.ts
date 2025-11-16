@@ -7,18 +7,15 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { LimitEntityType, LimitType } from "@/types";
 
 const limitsTable = pgTable(
   "limits",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    entityType: varchar("entity_type", {
-      enum: ["organization", "team", "agent"],
-    }).notNull(),
+    entityType: varchar("entity_type").$type<LimitEntityType>().notNull(),
     entityId: text("entity_id").notNull(),
-    limitType: varchar("limit_type", {
-      enum: ["token_cost", "mcp_server_calls", "tool_calls"],
-    }).notNull(),
+    limitType: varchar("limit_type").$type<LimitType>().notNull(),
     limitValue: integer("limit_value").notNull(),
     currentUsageTokensIn: integer("current_usage_tokens_in")
       .notNull()

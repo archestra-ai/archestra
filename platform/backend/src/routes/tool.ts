@@ -17,49 +17,12 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, headers }, reply) => {
-      try {
-        const { success: isAgentAdmin } = await hasPermission(
-          { agent: ["admin"] },
-          headers,
-        );
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
 
-        return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  fastify.get(
-    "/api/tools/unassigned",
-    {
-      schema: {
-        operationId: RouteId.GetUnassignedTools,
-        description: "Get all tools that have no agent relationships",
-        tags: ["Tools"],
-        response: constructResponseSchema(z.array(ExtendedSelectToolSchema)),
-      },
-    },
-    async (_request, reply) => {
-      try {
-        return reply.send(await ToolModel.findUnassigned());
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(await ToolModel.findAll(user.id, isAgentAdmin));
     },
   );
 };

@@ -1,5 +1,6 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { get } from "lodash-es";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 
@@ -124,6 +125,15 @@ class TrustedDataPolicyModel {
     shouldSanitizeWithDualLlm: boolean;
     reason: string;
   }> {
+    if (isArchestraMcpServerTool(toolName)) {
+      return {
+        isTrusted: true,
+        isBlocked: false,
+        shouldSanitizeWithDualLlm: false,
+        reason: "Archestra MCP server tool",
+      };
+    }
+
     /**
      * Get policies for the agent's tools that match the tool name,
      * along with the tool's configuration.
@@ -158,8 +168,8 @@ class TrustedDataPolicyModel {
         ? applicablePoliciesForAgent[0].toolResultTreatment
         : null;
 
-    // If no policies exist for this tool, check the tool's result treatment configuration
     if (toolResultTreatment === null) {
+      // If no policies exist for this tool, check the tool's result treatment configuration
       // Fetch the agent-tool relationship configuration
       const [agentTool] = await db
         .select({
@@ -326,8 +336,8 @@ class TrustedDataPolicyModel {
       }
     }
 
-    // No policies matched, use the tool's default treatment
     if (toolResultTreatment === "trusted") {
+      // No policies matched, use the tool's default treatment
       return {
         isTrusted: true,
         isBlocked: false,

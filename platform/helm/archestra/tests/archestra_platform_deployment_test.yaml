@@ -953,10 +953,10 @@ tests:
           path: spec.template.spec.containers[0].startupProbe
       - equal:
           path: spec.template.spec.containers[0].startupProbe.httpGet.path
-          value: /
+          value: /health
       - equal:
           path: spec.template.spec.containers[0].startupProbe.httpGet.port
-          value: frontend
+          value: backend
       - equal:
           path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
           value: 5
@@ -977,10 +977,10 @@ tests:
           path: spec.template.spec.containers[0].livenessProbe
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /
+          value: /health
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.port
-          value: frontend
+          value: backend
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.periodSeconds
           value: 10
@@ -998,10 +998,10 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /
+          value: /health
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
-          value: frontend
+          value: backend
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.periodSeconds
           value: 10

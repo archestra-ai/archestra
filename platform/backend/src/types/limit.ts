@@ -1,11 +1,15 @@
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { UuidIdSchema } from "./api";
 
 /**
  * Entity types that can have limits applied
  */
+// TODO: need to make a database migration to migrate agent -> profile
 export const LimitEntityTypeSchema = z.enum(["organization", "team", "agent"]);
 export type LimitEntityType = z.infer<typeof LimitEntityTypeSchema>;
 
@@ -22,10 +26,23 @@ export type LimitType = z.infer<typeof LimitTypeSchema>;
 /**
  * Base database schema derived from Drizzle
  */
-export const SelectLimitSchema = createSelectSchema(schema.limitsTable);
+export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
+  entityType: LimitEntityTypeSchema,
+  limitType: LimitTypeSchema,
+});
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
+});
+export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
+  entityType: LimitEntityTypeSchema,
+  limitType: LimitTypeSchema,
+}).omit({
+  id: true,
+  currentUsageTokensIn: true,
+  currentUsageTokensOut: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 /**
@@ -72,10 +89,6 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
     message: "Invalid limit configuration for the specified limit type",
   },
 );
-
-export const UpdateLimitSchema = CreateLimitSchema.partial().extend({
-  id: UuidIdSchema,
-});
 
 /**
  * Exported types

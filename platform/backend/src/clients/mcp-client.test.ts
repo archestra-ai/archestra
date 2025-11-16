@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import { initializeInternalJwt } from "@/auth/internal-jwt";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -151,6 +150,7 @@ describe("McpClient", () => {
             },
           ],
           isError: false,
+          name: "github-mcp-server__test_tool",
         });
       });
 
@@ -186,6 +186,7 @@ describe("McpClient", () => {
           id: "call_1",
           content: { formatted: true, data: "test data" },
           isError: false,
+          name: "github-mcp-server__json_tool",
         });
       });
 
@@ -234,6 +235,7 @@ describe("McpClient", () => {
             "3550391199": 'ERROR: role "postgres" already exists',
           },
           isError: false,
+          name: "github-mcp-server__github_issues",
         });
       });
 
@@ -306,6 +308,7 @@ describe("McpClient", () => {
           id: "call_1",
           content: originalContent,
           isError: false,
+          name: "github-mcp-server__bad_template",
         });
       });
 
@@ -374,6 +377,7 @@ describe("McpClient", () => {
           id: "call_1",
           content: originalContent,
           isError: false,
+          name: "github-mcp-server__no_template",
         });
       });
 
@@ -434,11 +438,13 @@ describe("McpClient", () => {
           id: "call_1",
           content: [{ type: "text", text: "Template 1: Response 1" }],
           isError: false,
+          name: "github-mcp-server__tool1",
         });
         expect(result2).toEqual({
           id: "call_2",
           content: [{ type: "text", text: "Template 2: Response 2" }],
           isError: false,
+          name: "github-mcp-server__tool2",
         });
       });
     });
@@ -456,9 +462,6 @@ describe("McpClient", () => {
           email: "test@example.com",
           emailVerified: true,
         });
-
-        // Initialize internal JWT for stdio transport tests
-        await initializeInternalJwt();
 
         // Create catalog entry for local streamable-http server
         const localCatalog = await InternalMcpCatalogModel.create({
@@ -539,6 +542,7 @@ describe("McpClient", () => {
           id: "call_1",
           content: [{ type: "text", text: "Success from HTTP transport" }],
           isError: false,
+          name: "local-streamable-http-server__test_tool",
         });
       });
 
@@ -573,6 +577,7 @@ describe("McpClient", () => {
           content: null,
           isError: true,
           error: expect.stringContaining("No HTTP endpoint URL found"),
+          name: "local-streamable-http-server__test_tool",
         });
       });
 
@@ -615,6 +620,7 @@ describe("McpClient", () => {
           id: "call_1",
           content: [{ type: "text", text: "Result: Original content" }],
           isError: false,
+          name: "local-streamable-http-server__formatted_tool",
         });
       });
 

@@ -1,13 +1,77 @@
+import Fastify, { type FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import config from "@/config";
+import { AgentModel, TokenPriceModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import anthropicProxyRoutes from "./anthropic";
+
+describe("Anthropic cost tracking", () => {
+  test("stores cost and baselineCost in interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "claude-opus-4-20250514",
+      pricePerMillionInput: "15.00",
+      pricePerMillionOutput: "75.00",
+    });
+
+    // Create a test agent with cost optimization enabled
+    const agent = await AgentModel.create({
+      name: "Test Cost Agent",
+      teams: [],
+      optimizeCost: true,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Find the created interaction
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForAgent(
+      agent.id,
+    );
+    expect(interactions.length).toBeGreaterThan(0);
+
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
+  });
+});
 
 describe("Anthropic proxy routing", () => {
-  let app: import("fastify").FastifyInstance;
-  let mockUpstream: import("fastify").FastifyInstance;
+  let app: FastifyInstance;
+  let mockUpstream: FastifyInstance;
   let upstreamPort: number;
 
   beforeEach(async () => {
-    const Fastify = (await import("fastify")).default;
-
     // Create a mock upstream server
     mockUpstream = Fastify();
 

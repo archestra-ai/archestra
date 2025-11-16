@@ -28,8 +28,8 @@ describe("ToolModel", () => {
       });
 
       const tools = await ToolModel.findAll(admin.id, true);
-      // Expects 4 tools total: 2 Archestra built-in tools + 2 proxy-discovered tools
-      expect(tools).toHaveLength(4);
+      // Expects 25 tools total: 23 Archestra built-in tools + 2 proxy-discovered tools
+      expect(tools).toHaveLength(25);
     });
 
     test("member only sees tools for accessible agents", async ({

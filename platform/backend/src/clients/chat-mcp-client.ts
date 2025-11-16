@@ -16,6 +16,52 @@ const MCP_GATEWAY_URL = "http://localhost:9000/v1/mcp";
 const clientCache = new Map<string, Client>();
 
 /**
+ * Clear cached client for a specific agent
+ * Should be called when MCP Gateway sessions are cleared
+ *
+ * @param agentId - The agent ID whose client should be cleared
+ */
+export function clearChatMcpClient(agentId: string): void {
+  logger.info(
+    { agentId, hasCachedClient: clientCache.has(agentId) },
+    "clearChatMcpClient() called - checking for cached client",
+  );
+
+  const client = clientCache.get(agentId);
+  if (client) {
+    logger.info(
+      { agentId },
+      "Found cached MCP client - closing connection and removing from cache",
+    );
+
+    // Close the client connection if possible
+    try {
+      client.close();
+      logger.info({ agentId }, "Successfully closed MCP client connection");
+    } catch (error) {
+      logger.warn(
+        { agentId, error },
+        "Error closing MCP client connection (non-fatal, continuing with cache removal)",
+      );
+    }
+
+    clientCache.delete(agentId);
+    logger.info(
+      {
+        agentId,
+        remainingCachedClients: clientCache.size,
+      },
+      "Removed MCP client from cache",
+    );
+  } else {
+    logger.info(
+      { agentId },
+      "No cached MCP client found for agent (already cleared or never created)",
+    );
+  }
+}
+
+/**
  * Get or create MCP client for the specified agent
  * Connects to internal MCP Gateway with agent-based authentication
  *
@@ -28,13 +74,20 @@ export async function getChatMcpClient(
   // Check cache first
   const cachedClient = clientCache.get(agentId);
   if (cachedClient) {
-    logger.debug({ agentId }, "Returning cached MCP client for agent");
+    logger.info(
+      { agentId },
+      "✅ Returning cached MCP client for agent (existing session will be reused)",
+    );
     return cachedClient;
   }
 
   logger.info(
-    { agentId, url: MCP_GATEWAY_URL },
-    "Creating new MCP client for agent via gateway",
+    {
+      agentId,
+      url: MCP_GATEWAY_URL,
+      totalCachedClients: clientCache.size,
+    },
+    "🔄 No cached client found - creating new MCP client for agent via gateway (will initialize new session)",
   );
 
   try {
@@ -67,10 +120,21 @@ export async function getChatMcpClient(
     logger.info({ agentId }, "Connecting to MCP Gateway...");
     await client.connect(transport);
 
-    logger.info({ agentId }, "Successfully connected to MCP Gateway");
+    logger.info(
+      { agentId },
+      "Successfully connected to MCP Gateway (new session initialized)",
+    );
 
     // Cache the client
     clientCache.set(agentId, client);
+
+    logger.info(
+      {
+        agentId,
+        totalCachedClients: clientCache.size,
+      },
+      "✅ MCP client cached - subsequent requests will reuse this session",
+    );
 
     return client;
   } catch (error) {

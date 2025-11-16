@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { InsertAgent } from "@/types/agent";
-import { randomBool, randomDate, randomElement } from "./utils";
+import type { InsertAgent } from "@/types";
+import { randomBool, randomElement } from "./utils";
 
 const AGENT_NAME_TEMPLATES = [
   "Data Analyst",
@@ -50,30 +50,20 @@ function generateAgentName(index: number): string {
   return `${template}${suffix}`;
 }
 
+type MockAgent = InsertAgent & { id: string };
+
 /**
  * Generate mock agent data
  * @param count - Number of agents to generate (defaults to 90)
  */
-export function generateMockAgents(count = 90): InsertAgent[] {
-  const agents: InsertAgent[] = [];
-  const now = new Date();
-  const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+export function generateMockAgents(count = 90): MockAgent[] {
+  const agents: MockAgent[] = [];
 
   for (let i = 0; i < count; i++) {
-    const createdAt = randomDate(sixMonthsAgo, now);
-    // updatedAt should be >= createdAt, and typically close to or after createdAt
-    const maxUpdatedAt = new Date(
-      createdAt.getTime() +
-        Math.random() * (now.getTime() - createdAt.getTime()),
-    );
-    const updatedAt = randomDate(createdAt, maxUpdatedAt);
-
     agents.push({
       id: randomUUID(),
       name: generateAgentName(i),
       isDemo: randomBool(0.3), // 30% chance of being a demo agent
-      createdAt,
-      updatedAt,
       teams: [],
     });
   }

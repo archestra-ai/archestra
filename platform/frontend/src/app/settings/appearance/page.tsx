@@ -10,6 +10,7 @@ import {
 } from "@/lib/organization.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 import { FontSelector } from "./_components/font-selector";
+import { LightDarkToggle } from "./_components/light-dark-toggle";
 import { LogoUpload } from "./_components/logo-upload";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -73,6 +74,7 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
+        <LightDarkToggle />
         <LogoUpload currentLogo={logo} onLogoChange={handleLogoChange} />
         <ThemeSelector
           selectedTheme={currentUITheme}

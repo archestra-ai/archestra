@@ -7,9 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import InvitationModel from "@/models/invitation";
-import MemberModel from "@/models/member";
-import SessionModel from "@/models/session";
+import { InvitationModel, MemberModel, SessionModel } from "@/models";
 
 const APP_NAME = "Archestra";
 const {
@@ -169,7 +167,8 @@ export const auth = betterAuth({
         // Check if invitation is expired
         if (expiresAt && expiresAt < new Date()) {
           throw new APIError("BAD_REQUEST", {
-            message: "This invitation has expired",
+            message:
+              "The invitation link has expired, please contact your admin for a new invitation",
           });
         }
 

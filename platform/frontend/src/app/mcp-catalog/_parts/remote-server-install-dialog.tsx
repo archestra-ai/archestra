@@ -45,7 +45,7 @@ type UserConfigType = Record<
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onInstall: (
+  onConfirm: (
     catalogItem: CatalogItem,
     metadata: Record<string, unknown>,
     teams: string[],
@@ -58,7 +58,7 @@ interface RemoteServerInstallDialogProps {
 export function RemoteServerInstallDialog({
   isOpen,
   onClose,
-  onInstall,
+  onConfirm,
   catalogItem,
   isInstalling,
   isTeamMode = false,
@@ -88,7 +88,7 @@ export function RemoteServerInstallDialog({
     return teams?.find((team) => team.id === teamId);
   };
 
-  const handleInstall = async () => {
+  const handleConfirm = async () => {
     if (!catalogItem) {
       return;
     }
@@ -125,7 +125,7 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      await onInstall(catalogItem, metadata, assignedTeamIds);
+      await onConfirm(catalogItem, metadata, assignedTeamIds);
       setConfigValues({});
       setAssignedTeamIds([]);
       setSelectedTeamId("");
@@ -354,7 +354,7 @@ export function RemoteServerInstallDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleInstall} disabled={!isValid || isInstalling}>
+          <Button onClick={handleConfirm} disabled={!isValid || isInstalling}>
             {isInstalling ? "Installing..." : "Install"}
           </Button>
         </DialogFooter>

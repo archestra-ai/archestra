@@ -182,7 +182,7 @@ test.describe("MCP Server Installation Requests API - CRUD Operations", () => {
       request,
       method: "get",
       urlSuffix:
-        "/api/mcp_server_installation_requests/00000000-0000-0000-0000-000000000000",
+        "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb32",
       ignoreStatusCheck: true,
     });
 
@@ -376,7 +376,7 @@ test.describe("MCP Server Installation Requests API - Approve/Decline", () => {
       request,
       method: "post",
       urlSuffix:
-        "/api/mcp_server_installation_requests/00000000-0000-0000-0000-000000000000/approve",
+        "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb33/approve",
       data: {},
       ignoreStatusCheck: true,
     });
@@ -392,7 +392,7 @@ test.describe("MCP Server Installation Requests API - Approve/Decline", () => {
       request,
       method: "post",
       urlSuffix:
-        "/api/mcp_server_installation_requests/00000000-0000-0000-0000-000000000000/decline",
+        "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb34/decline",
       data: {},
       ignoreStatusCheck: true,
     });
@@ -492,7 +492,7 @@ test.describe("MCP Server Installation Requests API - Notes", () => {
       request,
       method: "post",
       urlSuffix:
-        "/api/mcp_server_installation_requests/00000000-0000-0000-0000-000000000000/notes",
+        "/api/mcp_server_installation_requests/c7528140-07b0-4870-841d-6886a6daeb35/notes",
       data: { content: "Test note" },
       ignoreStatusCheck: true,
     });

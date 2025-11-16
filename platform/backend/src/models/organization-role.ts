@@ -229,6 +229,16 @@ class OrganizationRoleModel {
   }
 
   /**
+   * Get only custom roles for an organization (excludes predefined roles)
+   */
+  static async getAllCustomRoles(organizationId: string) {
+    return await db
+      .select()
+      .from(schema.organizationRolesTable)
+      .where(eq(schema.organizationRolesTable.organizationId, organizationId));
+  }
+
+  /**
    * List all roles for an organization (including predefined)
    */
   static async getAll(

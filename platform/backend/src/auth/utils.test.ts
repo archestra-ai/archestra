@@ -14,20 +14,43 @@ import { hasPermission } from "./utils";
 vi.mock("./better-auth", () => ({
   auth: {
     api: {
-      hasPermission: vi.fn(),
+      getSession: vi.fn(),
       verifyApiKey: vi.fn(),
     },
   },
 }));
 
+// Mock the model modules
+vi.mock("@/models", () => ({
+  MemberModel: {
+    getByUserAndOrganization: vi.fn(),
+  },
+  OrganizationRoleModel: {
+    getAllCustomRoles: vi.fn(),
+  },
+}));
+
+import { MemberModel, OrganizationRoleModel } from "@/models";
 import { auth as betterAuth } from "./better-auth";
 
 // Type the mocked functions
 const mockBetterAuth = betterAuth as unknown as {
   api: {
-    hasPermission: MockedFunction<typeof betterAuth.api.hasPermission>;
+    getSession: MockedFunction<typeof betterAuth.api.getSession>;
     verifyApiKey: MockedFunction<typeof betterAuth.api.verifyApiKey>;
   };
+};
+
+const mockMemberModel = MemberModel as unknown as {
+  getByUserAndOrganization: MockedFunction<
+    typeof MemberModel.getByUserAndOrganization
+  >;
+};
+
+const mockOrganizationRoleModel = OrganizationRoleModel as unknown as {
+  getAllCustomRoles: MockedFunction<
+    typeof OrganizationRoleModel.getAllCustomRoles
+  >;
 };
 
 type ApiKey = Awaited<ReturnType<typeof betterAuth.api.verifyApiKey>>["key"];
@@ -38,36 +61,100 @@ describe("hasPermission", () => {
   });
 
   describe("session-based authentication", () => {
-    test("should return success when user has required permissions", async () => {
+    test("should return success when admin user has required permissions", async () => {
       const permissions: Permissions = { profile: ["read"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
       };
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: true,
-        error: null,
+      // Mock successful session
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: {
+          id: "user-1",
+          email: "admin@test.com",
+          name: "Admin User",
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        session: {
+          id: "session-1",
+          userId: "user-1",
+          activeOrganizationId: "org-1",
+          token: "session-token",
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: Required for mocking better-auth session types
+      } as any);
+
+      // Mock member record with admin role
+      mockMemberModel.getByUserAndOrganization.mockResolvedValue({
+        id: "member-1",
+        userId: "user-1",
+        organizationId: "org-1",
+        role: "admin",
+        createdAt: new Date(),
       });
+
+      // Mock no custom roles
+      mockOrganizationRoleModel.getAllCustomRoles.mockResolvedValue([]);
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
+      expect(mockBetterAuth.api.getSession).toHaveBeenCalledWith({
         headers: expect.any(Headers),
-        body: { permissions },
       });
+      expect(mockMemberModel.getByUserAndOrganization).toHaveBeenCalledWith(
+        "user-1",
+        "org-1",
+      );
+      expect(mockOrganizationRoleModel.getAllCustomRoles).toHaveBeenCalledWith(
+        "org-1",
+      );
     });
 
-    test("should return failure when user lacks required permissions", async () => {
+    test("should return failure when member user lacks required permissions", async () => {
       const permissions: Permissions = { profile: ["admin"] };
       const headers: IncomingHttpHeaders = {
         cookie: "session-cookie",
       };
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: false,
-        error: null,
+      // Mock successful session
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: {
+          id: "user-2",
+          email: "member@test.com",
+          name: "Member User",
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        session: {
+          id: "session-2",
+          userId: "user-2",
+          activeOrganizationId: "org-1",
+          token: "session-token-2",
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: Required for mocking better-auth session types
+      } as any);
+
+      // Mock member record with member role (lacks admin permissions)
+      mockMemberModel.getByUserAndOrganization.mockResolvedValue({
+        id: "member-2",
+        userId: "user-2",
+        organizationId: "org-1",
+        role: "member",
+        createdAt: new Date(),
       });
+
+      // Mock no custom roles
+      mockOrganizationRoleModel.getAllCustomRoles.mockResolvedValue([]);
 
       const result = await hasPermission(permissions, headers);
 
@@ -75,10 +162,10 @@ describe("hasPermission", () => {
         success: false,
         error: null,
       });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: { permissions },
-      });
+      expect(mockMemberModel.getByUserAndOrganization).toHaveBeenCalledWith(
+        "user-2",
+        "org-1",
+      );
     });
   });
 
@@ -89,10 +176,9 @@ describe("hasPermission", () => {
         authorization: "Bearer api-key-123",
       };
 
-      // Mock hasPermission to throw (simulating no active session/organization)
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      // Mock getSession to return undefined (triggers API key fallback)
+      // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+      mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
       // Mock API key verification to succeed
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
@@ -115,10 +201,9 @@ describe("hasPermission", () => {
         authorization: "Bearer invalid-key",
       };
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      // Mock getSession to return undefined (triggers API key fallback)
+      // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+      mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
       // Mock API key verification to fail
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
@@ -143,10 +228,9 @@ describe("hasPermission", () => {
         authorization: "Bearer some-key",
       };
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      // Mock getSession to return undefined (triggers API key fallback)
+      // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+      mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
       // Mock API key verification to throw
       mockBetterAuth.api.verifyApiKey.mockRejectedValue(
@@ -167,10 +251,9 @@ describe("hasPermission", () => {
       const permissions: Permissions = { profile: ["read"] };
       const headers: IncomingHttpHeaders = {};
 
-      // Mock hasPermission to throw
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No active organization"),
-      );
+      // Mock getSession to return undefined (triggers API key fallback)
+      // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+      mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
       const result = await hasPermission(permissions, headers);
 
@@ -191,21 +274,46 @@ describe("hasPermission", () => {
         cookie: "session-cookie",
       };
 
-      mockBetterAuth.api.hasPermission.mockResolvedValue({
-        success: true,
-        error: null,
+      // Mock successful session
+      mockBetterAuth.api.getSession.mockResolvedValue({
+        user: {
+          id: "user-1",
+          email: "admin@test.com",
+          name: "Admin User",
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        session: {
+          id: "session-1",
+          userId: "user-1",
+          activeOrganizationId: "org-1",
+          token: "session-token",
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: Required for mocking better-auth session types
+      } as any);
+
+      // Mock member record with admin role
+      mockMemberModel.getByUserAndOrganization.mockResolvedValue({
+        id: "member-1",
+        userId: "user-1",
+        organizationId: "org-1",
+        role: "admin",
+        createdAt: new Date(),
       });
+
+      // Mock no custom roles
+      mockOrganizationRoleModel.getAllCustomRoles.mockResolvedValue([]);
 
       const result = await hasPermission(permissions, headers);
 
       expect(result).toEqual({ success: true, error: null });
-      expect(mockBetterAuth.api.hasPermission).toHaveBeenCalledWith({
-        headers: expect.any(Headers),
-        body: { permissions: {} },
-      });
     });
 
-    test("should handle complex permissions object", async () => {
+    test("should handle complex permissions object with API key", async () => {
       const permissions: Permissions = {
         profile: ["read", "create", "update", "delete"],
         mcpServer: ["admin"],
@@ -215,10 +323,9 @@ describe("hasPermission", () => {
         authorization: "Bearer api-key-complex",
       };
 
-      // Mock hasPermission to throw (API key fallback)
-      mockBetterAuth.api.hasPermission.mockRejectedValue(
-        new Error("No session"),
-      );
+      // Mock getSession to return undefined (triggers API key fallback)
+      // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+      mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
       mockBetterAuth.api.verifyApiKey.mockResolvedValue({
         valid: true,
@@ -249,9 +356,9 @@ describe("hasPermission", () => {
           authorization: authHeader,
         };
 
-        mockBetterAuth.api.hasPermission.mockRejectedValue(
-          new Error("No session"),
-        );
+        // Mock getSession to return undefined (triggers API key fallback)
+        // biome-ignore lint/suspicious/noExplicitAny: Required for mocking undefined session
+        mockBetterAuth.api.getSession.mockResolvedValue(undefined as any);
 
         mockBetterAuth.api.verifyApiKey.mockResolvedValue({
           valid: true,

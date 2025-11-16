@@ -1,7 +1,6 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { hasPermission } from "./auth.utils";
 
 /**
  * Fetch current session
@@ -30,7 +29,15 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
   return useQuery({
     queryKey: ["auth", "hasPermission", JSON.stringify(permissionsToCheck)],
     queryFn: async () => {
-      return hasPermission(permissionsToCheck);
+      const { data } = await archestraApiSdk.hasPermission({
+        body: { permissions: permissionsToCheck },
+      });
+
+      if (!data?.success) {
+        return false;
+      }
+
+      return true;
     },
   });
 }

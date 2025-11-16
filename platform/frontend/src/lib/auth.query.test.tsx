@@ -8,7 +8,6 @@ import {
   useHasPermissions,
   useSession,
 } from "./auth.query";
-import { hasPermission } from "./auth.utils";
 import { authClient } from "./clients/auth/auth-client";
 
 // Mock the auth client and SDK
@@ -27,13 +26,10 @@ vi.mock("@shared", async () => {
     ...actual,
     archestraApiSdk: {
       getDefaultCredentialsStatus: vi.fn(),
+      hasPermission: vi.fn(),
     },
   };
 });
-
-vi.mock("./auth.utils", () => ({
-  hasPermission: vi.fn(),
-}));
 
 // Helper to wrap hooks with QueryClient
 const createWrapper = () => {
@@ -98,7 +94,9 @@ describe("useHasPermissions", () => {
   it("should return permission check result", async () => {
     const mockPermissions: Permissions = { organization: ["read"] };
 
-    vi.mocked(hasPermission).mockResolvedValue(true);
+    vi.mocked(archestraApiSdk.hasPermission).mockResolvedValue({
+      data: { success: true },
+    } as Awaited<ReturnType<typeof archestraApiSdk.hasPermission>>);
 
     const { result } = renderHook(() => useHasPermissions(mockPermissions), {
       wrapper: createWrapper(),
@@ -109,7 +107,9 @@ describe("useHasPermissions", () => {
     });
 
     expect(result.current.data).toBe(true);
-    expect(hasPermission).toHaveBeenCalledWith(mockPermissions);
+    expect(archestraApiSdk.hasPermission).toHaveBeenCalledWith({
+      body: { permissions: mockPermissions },
+    });
   });
 });
 

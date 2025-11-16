@@ -1,10 +1,12 @@
-import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
+import { DEFAULT_ADMIN_EMAIL, PermissionsSchema, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
+import { hasPermission } from "@/auth/utils";
 import config from "@/config";
 import { AccountModel, UserModel } from "@/models";
+import { constructResponseSchema } from "@/types";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -101,6 +103,30 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send(response.body ? await response.text() : null);
     },
   });
+
+  // Custom permission checking endpoint using our fixed logic
+  fastify.post(
+    "/api/auth/has-permission",
+    {
+      schema: {
+        operationId: "hasPermission",
+        description: "Check if current user has required permissions",
+        tags: ["auth"],
+        body: z.object({
+          permissions: PermissionsSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async ({ body: { permissions }, headers }, reply) => {
+      const { success } = await hasPermission(permissions, headers);
+      return reply.send({ success });
+    },
+  );
 };
 
 export default authRoutes;

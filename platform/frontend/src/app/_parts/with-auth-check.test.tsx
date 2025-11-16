@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { hasPermission } from "@/lib/auth.utils";
+import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { WithAuthCheck } from "./with-auth-check";
 
@@ -18,9 +18,9 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
-// Mock auth utils
-vi.mock("@/lib/auth.utils", () => ({
-  hasPermission: vi.fn(),
+// Mock auth query
+vi.mock("@/lib/auth.query", () => ({
+  useHasPermissions: vi.fn(),
 }));
 
 // Mock shared module
@@ -42,7 +42,10 @@ describe("WithAuthCheck", () => {
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(hasPermission).mockResolvedValue(true);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
   });
 
   describe("when user is not authenticated", () => {

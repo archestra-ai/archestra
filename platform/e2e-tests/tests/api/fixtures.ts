@@ -23,6 +23,8 @@ export interface TestFixtures {
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
+  createRole: typeof createRole;
+  deleteRole: typeof deleteRole;
 }
 
 const makeApiRequest = async ({
@@ -268,6 +270,35 @@ const uninstallMcpServer = async (
     urlSuffix: `/api/mcp_server/${serverId}`,
   });
 
+/**
+ * Create a custom role
+ * (authnz is handled by the authenticated session)
+ */
+const createRole = async (
+  request: APIRequestContext,
+  roleData: {
+    name: string;
+    permission: Record<string, string[]>;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/roles",
+    data: roleData,
+  });
+
+/**
+ * Delete a role by ID
+ * (authnz is handled by the authenticated session)
+ */
+const deleteRole = async (request: APIRequestContext, roleId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/roles/${roleId}`,
+  });
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -308,5 +339,11 @@ export const test = base.extend<TestFixtures>({
   },
   uninstallMcpServer: async ({}, use) => {
     await use(uninstallMcpServer);
+  },
+  createRole: async ({}, use) => {
+    await use(createRole);
+  },
+  deleteRole: async ({}, use) => {
+    await use(deleteRole);
   },
 });

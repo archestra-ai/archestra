@@ -4233,6 +4233,87 @@ export type PostApiAuthBy__Responses = {
     200: unknown;
 };
 
+export type HasPermissionData = {
+    body: {
+        permissions: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/auth/has-permission';
+};
+
+export type HasPermissionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type HasPermissionError = HasPermissionErrors[keyof HasPermissionErrors];
+
+export type HasPermissionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type HasPermissionResponse = HasPermissionResponses[keyof HasPermissionResponses];
+
 export type GetOperatorsData = {
     body?: never;
     path?: never;
@@ -12183,9 +12264,9 @@ export type UpdateRoleData = {
     };
     path: {
         /**
-         * Custom role ID
+         * Predefined role name or custom role ID
          */
-        roleId: string;
+        roleId: 'admin' | 'member' | string;
     };
     query?: never;
     url: '/api/roles/{roleId}';

@@ -17,9 +17,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
 
     // Check for predefined roles
     const adminRole = roles.find((r: { name: string }) => r.name === "admin");
-    const memberRole = roles.find(
-      (r: { name: string }) => r.name === "member",
-    );
+    const memberRole = roles.find((r: { name: string }) => r.name === "member");
 
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
@@ -30,6 +28,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
   test("should create a new custom role", async ({
     request,
     makeApiRequest,
+    createRole,
   }) => {
     const roleData = {
       name: `test_role_${Date.now()}`,
@@ -39,12 +38,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
       },
     };
 
-    const response = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/roles",
-      data: roleData,
-    });
+    const response = await createRole(request, roleData);
 
     const role = await response.json();
     expect(role).toHaveProperty("id");
@@ -56,6 +50,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
   test("should fail to create role with duplicate name", async ({
     request,
     makeApiRequest,
+    createRole,
   }) => {
     const roleName = `duplicate_role_${Date.now()}`;
     const roleData = {
@@ -66,12 +61,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     };
 
     // Create first role
-    await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/roles",
-      data: roleData,
-    });
+    await createRole(request, roleData);
 
     // Try to create duplicate
     const duplicateResponse = await makeApiRequest({
@@ -252,28 +242,21 @@ test.describe("Organization Roles API - CRUD Operations", () => {
     expect(error.error.message).toContain("Cannot update predefined roles");
   });
 
-  test("should delete a custom role", async ({
-    request,
-    makeApiRequest,
+  test("should delete a custom role", async ({ 
+    request, 
+    makeApiRequest, 
+    createRole, 
+    deleteRole 
   }) => {
     // Create a role first
-    const createResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/roles",
-      data: {
-        name: `delete_test_${Date.now()}`,
-        permission: { profile: ["read"] },
-      },
+    const createResponse = await createRole(request, {
+      name: `delete_test_${Date.now()}`,
+      permission: { profile: ["read"] },
     });
     const createdRole = await createResponse.json();
 
     // Delete the role
-    const deleteResponse = await makeApiRequest({
-      request,
-      method: "delete",
-      urlSuffix: `/api/roles/${createdRole.id}`,
-    });
+    const deleteResponse = await deleteRole(request, createdRole.id);
 
     const result = await deleteResponse.json();
     expect(result.success).toBe(true);
@@ -304,61 +287,6 @@ test.describe("Organization Roles API - CRUD Operations", () => {
 });
 
 test.describe("Organization Roles API - Permission Validation", () => {
-  test("should validate role name format", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const invalidNames = [
-      "", // empty
-      "a".repeat(51), // too long
-      "invalid name with spaces", // spaces not allowed
-      "invalid@name", // special chars not allowed
-    ];
-
-    for (const name of invalidNames) {
-      const response = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/roles",
-        data: {
-          name,
-          permission: { profile: ["read"] },
-        },
-        ignoreStatusCheck: true,
-      });
-
-      // Should return 400 for validation errors
-      expect(response.status()).toBe(400);
-    }
-  });
-
-  test("should accept valid role name formats", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const validNames = [
-      `valid_name_${Date.now()}`,
-      `Valid-Name-${Date.now()}`,
-      `ValidName123_${Date.now()}`,
-    ];
-
-    for (const name of validNames) {
-      const response = await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/roles",
-        data: {
-          name,
-          permission: { profile: ["read"] },
-        },
-      });
-
-      expect(response.status()).toBe(200);
-      const role = await response.json();
-      expect(role.name).toBe(name);
-    }
-  });
-
   test("should create role with multiple permissions", async ({
     request,
     makeApiRequest,

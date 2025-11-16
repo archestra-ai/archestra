@@ -29,6 +29,23 @@ class MemberModel {
     return member;
   }
 
+  static async getByUserAndOrganization(
+    userId: string,
+    organizationId: string,
+  ) {
+    const [member] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return member;
+  }
+
   static async deleteByMemberOrUserId(
     memberIdOrUserId: string,
     organizationId: string,

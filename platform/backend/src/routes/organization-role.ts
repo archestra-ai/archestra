@@ -127,7 +127,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: CustomRoleIdSchema,
+          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
@@ -211,6 +211,12 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
+      // Check if role exists first
+      const role = await OrganizationRoleModel.getById(roleId, organizationId);
+      if (!role) {
+        throw new ApiError(404, "Role not found");
+      }
+
       // Check if role can be deleted
       const deleteCheck = await OrganizationRoleModel.canDelete(
         roleId,

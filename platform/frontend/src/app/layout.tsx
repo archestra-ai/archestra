@@ -66,15 +66,15 @@ export default function RootLayout({
       <body
         className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} font-sans antialiased`}
       >
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <PostHogProviderWrapper>
-              <ArchestraQueryClientProvider>
+        <ArchestraQueryClientProvider>
+          <AuthProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <PostHogProviderWrapper>
                 <OrgThemeLoader />
                 <WithAuthCheck>
                   <SidebarProvider>
@@ -92,10 +92,10 @@ export default function RootLayout({
                     <OnboardingDialogWrapper />
                   </SidebarProvider>
                 </WithAuthCheck>
-              </ArchestraQueryClientProvider>
-            </PostHogProviderWrapper>
-          </ThemeProvider>
-        </AuthProvider>
+              </PostHogProviderWrapper>
+            </ThemeProvider>
+          </AuthProvider>
+        </ArchestraQueryClientProvider>
       </body>
     </html>
   );

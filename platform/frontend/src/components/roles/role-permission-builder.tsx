@@ -38,6 +38,7 @@ const resourceCategories: Record<string, Resource[]> = {
   "Dual LLM": ["dualLlmConfig", "dualLlmResult"],
   Organization: [
     "organization",
+    "ac",
     "member",
     "invitation",
     "team",
@@ -67,6 +68,7 @@ const resourceLabels: Record<Resource, string> = {
   tokenPrice: "Token Prices",
   chatSettings: "Chat Settings",
   prompt: "Prompts",
+  ac: "Access Control",
 };
 
 // Human-readable labels for actions
@@ -76,6 +78,7 @@ const actionLabels: Record<Action, string> = {
   update: "Update",
   delete: "Delete",
   admin: "Admin",
+  cancel: "Cancel",
 };
 
 export function RolePermissionBuilder({

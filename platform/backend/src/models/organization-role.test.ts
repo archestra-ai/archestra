@@ -452,4 +452,68 @@ describe("OrganizationRoleModel", () => {
       });
     });
   });
+
+  describe("getAllCustomRoles", () => {
+    test("should return empty array when no custom roles exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.getAllCustomRoles(org.id);
+
+      expect(result).toEqual([]);
+    });
+
+    test("should return only custom roles for organization", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+
+      // Create custom role in org1
+      const customRole1 = await makeCustomRole(org1.id, {
+        name: "Custom Role 1",
+        permission: { profile: ["read"] },
+      });
+
+      // Create custom role in org2 (should not appear in org1 results)
+      await makeCustomRole(org2.id, {
+        name: "Custom Role 2",
+        permission: { tool: ["read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllCustomRoles(org1.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: customRole1.id,
+        name: "Custom Role 1",
+        organizationId: org1.id,
+        permission: { profile: ["read"] },
+      });
+    });
+
+    test("should return multiple custom roles for same organization", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+
+      const _customRole1 = await makeCustomRole(org.id, {
+        name: "Role 1",
+        permission: { profile: ["read"] },
+      });
+
+      const _customRole2 = await makeCustomRole(org.id, {
+        name: "Role 2",
+        permission: { tool: ["create", "read"] },
+      });
+
+      const result = await OrganizationRoleModel.getAllCustomRoles(org.id);
+
+      expect(result).toHaveLength(2);
+      const roleNames = result.map((r) => r.name).sort();
+      expect(roleNames).toEqual(["Role 1", "Role 2"]);
+    });
+  });
 });

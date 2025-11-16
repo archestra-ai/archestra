@@ -4236,7 +4236,7 @@ export type PostApiAuthBy__Responses = {
 export type HasPermissionData = {
     body: {
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
     };
     path?: never;
@@ -11983,7 +11983,7 @@ export type GetRolesResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -11997,7 +11997,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
     };
     path?: never;
@@ -12073,7 +12073,7 @@ export type CreateRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -12245,7 +12245,7 @@ export type GetRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -12259,7 +12259,7 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
     };
     path: {
@@ -12340,7 +12340,7 @@ export type UpdateRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;

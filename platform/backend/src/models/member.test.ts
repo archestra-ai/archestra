@@ -92,4 +92,70 @@ describe("MemberModel", () => {
       expect(member).toBeUndefined();
     });
   });
+
+  describe("getByUserAndOrganization", () => {
+    test("should return member when user belongs to organization", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(org.id, user.id, { role: "admin" });
+
+      const member = await MemberModel.getByUserAndOrganization(
+        user.id,
+        org.id,
+      );
+      expect(member).toBeDefined();
+      expect(member?.userId).toBe(user.id);
+      expect(member?.organizationId).toBe(org.id);
+      expect(member?.role).toBe("admin");
+    });
+
+    test("should return undefined when user is not a member of specific organization", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+
+      // User is member of org1 but not org2
+      await makeMember(org1.id, user.id, { role: "member" });
+
+      const member = await MemberModel.getByUserAndOrganization(
+        user.id,
+        org2.id,
+      );
+      expect(member).toBeUndefined();
+    });
+
+    test("should return undefined when user doesn't exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const nonExistentUserId = crypto.randomUUID();
+
+      const member = await MemberModel.getByUserAndOrganization(
+        nonExistentUserId,
+        org.id,
+      );
+      expect(member).toBeUndefined();
+    });
+
+    test("should return undefined when organization doesn't exist", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const nonExistentOrgId = crypto.randomUUID();
+
+      const member = await MemberModel.getByUserAndOrganization(
+        user.id,
+        nonExistentOrgId,
+      );
+      expect(member).toBeUndefined();
+    });
+  });
 });

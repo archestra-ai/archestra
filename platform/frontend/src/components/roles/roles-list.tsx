@@ -394,7 +394,7 @@ export function RolesList() {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Role</DialogTitle>
             <DialogDescription>

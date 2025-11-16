@@ -1,5 +1,6 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 /**
@@ -34,6 +35,17 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
       });
 
       if (!data?.success) {
+        // Create a readable list of missing permissions
+        const permissionsList = Object.entries(permissionsToCheck)
+          .flatMap(([resource, actions]) =>
+            actions.map((action) => `${resource}:${action}`),
+          )
+          .join(", ");
+
+        toast.error("Permission Denied", {
+          description: `You are missing required permissions: ${permissionsList}`,
+        });
+
         return false;
       }
 

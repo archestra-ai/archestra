@@ -9,6 +9,7 @@ const agentsTable = pgTable("agents", {
   considerContextUntrusted: boolean("consider_context_untrusted")
     .notNull()
     .default(false),
+  useInChat: boolean("use_in_chat").notNull().default(true),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

@@ -80,6 +80,9 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [];
 
+    // Filter by use_in_chat = true
+    whereConditions.push(eq(schema.agentsTable.useInChat, true));
+
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(

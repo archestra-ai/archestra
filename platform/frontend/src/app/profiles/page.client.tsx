@@ -236,6 +236,7 @@ function Agents() {
     labels: AgentLabel[];
     optimizeCost?: boolean;
     considerContextUntrusted: boolean;
+    useInChat?: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -569,6 +570,7 @@ function CreateAgentDialog({
   const [optimizeCost, setOptimizeCost] = useState<boolean>(false);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
+  const [useInChat, setUseInChat] = useState(true);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -633,6 +635,7 @@ function CreateAgentDialog({
           labels: updatedLabels,
           optimizeCost,
           considerContextUntrusted,
+          useInChat,
         });
         if (!agent) {
           throw new Error("Failed to create profile");
@@ -661,6 +664,7 @@ function CreateAgentDialog({
     setSelectedTeamId("");
     setCreatedAgent(null);
     setConsiderContextUntrusted(false);
+    setUseInChat(true);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -797,6 +801,27 @@ function CreateAgentDialog({
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="use-in-chat"
+                    checked={useInChat}
+                    onCheckedChange={(checked) =>
+                      setUseInChat(checked === true)
+                    }
+                  />
+                  <div className="grid gap-1">
+                    <Label
+                      htmlFor="use-in-chat"
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      Enable for chat
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      If enabled, this profile will be available for usage in the chat.
+                    </p>
+                  </div>
+                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -846,6 +871,7 @@ function EditAgentDialog({
     labels: AgentLabel[];
     optimizeCost?: boolean;
     considerContextUntrusted: boolean;
+    useInChat?: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -861,6 +887,7 @@ function EditAgentDialog({
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
   );
+  const [useInChat, setUseInChat] = useState(agent.useInChat ?? true);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -911,6 +938,7 @@ function EditAgentDialog({
             labels: updatedLabels,
             optimizeCost,
             considerContextUntrusted,
+            useInChat,
           },
         });
         toast.success("Profile updated successfully");
@@ -1069,6 +1097,27 @@ function EditAgentDialog({
                 <p className="text-sm text-muted-foreground">
                   Enable when user prompts may contain untrusted and sensitive
                   data.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-use-in-chat"
+                checked={useInChat}
+                onCheckedChange={(checked) =>
+                  setUseInChat(checked === true)
+                }
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="edit-use-in-chat"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Enable for chat
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  If enabled, this profile will be available for usage in the chat.
                 </p>
               </div>
             </div>

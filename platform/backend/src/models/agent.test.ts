@@ -898,4 +898,65 @@ describe("AgentModel", () => {
       expect(testAgent?.tools).toHaveLength(0);
     });
   });
+
+  describe("use_in_chat filtering", () => {
+    test("findAll only returns agents with use_in_chat=true", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create agents with use_in_chat=true (default)
+      await AgentModel.create({ name: "Chat Agent 1", teams: [] });
+      await AgentModel.create({ name: "Chat Agent 2", teams: [] });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      const agents = await AgentModel.findAll(admin.id, true);
+
+      // Should only return agents with use_in_chat=true
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(false);
+      expect(agents.some((a) => a.name === "Chat Agent 1")).toBe(true);
+      expect(agents.some((a) => a.name === "Chat Agent 2")).toBe(true);
+    });
+
+    test("findAll with team filtering respects use_in_chat", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, admin.id);
+
+      await TeamModel.addMember(team.id, user.id);
+
+      // Create agent with use_in_chat=true
+      const chatAgent = await AgentModel.create({
+        name: "Chat Agent",
+        teams: [team.id],
+        useInChat: true,
+      });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [team.id],
+        useInChat: false,
+      });
+
+      const agents = await AgentModel.findAll(user.id, false);
+
+      // User should only see the chat agent
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(chatAgent.id);
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(false);
+    });
+  });
 });

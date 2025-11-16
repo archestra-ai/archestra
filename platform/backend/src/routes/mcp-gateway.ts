@@ -15,6 +15,7 @@ import {
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "@/archestra-mcp-server";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -28,6 +29,7 @@ interface SessionData {
   server: Server;
   transport: StreamableHTTPServerTransport;
   lastAccess: number;
+  agentId: string;
 }
 
 /**
@@ -86,10 +88,6 @@ async function createAgentServer(
     throw new Error(`Agent not found: ${agentId}`);
   }
 
-  // Get MCP tools (from connected MCP servers + Archestra built-in tools)
-  // Excludes proxy-discovered tools
-  const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
-
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
@@ -98,6 +96,11 @@ async function createAgentServer(
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Get MCP tools (from connected MCP servers + Archestra built-in tools)
+    // Excludes proxy-discovered tools
+    // Fetch fresh on every request to ensure we get newly assigned tools
+    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+
     const toolsList = mcpTools.map(({ name, description, parameters }) => ({
       name,
       title: archestraToolTitles.get(name) || name,
@@ -145,7 +148,7 @@ async function createAgentServer(
 
           // Handle Archestra tools directly
           const archestraResponse = await executeArchestraTool(name, args, {
-            agent,
+            profile: agent,
           });
 
           logger.info(
@@ -291,6 +294,39 @@ function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
 }
 
 /**
+ * Clear all active sessions for a specific agent
+ */
+export function clearAgentSessions(agentId: string): void {
+  const sessionsToClear: string[] = [];
+
+  // Find all sessions for this agent
+  for (const [sessionId, sessionData] of activeSessions.entries()) {
+    if (sessionData.agentId === agentId) {
+      sessionsToClear.push(sessionId);
+    }
+  }
+
+  // Delete all matching sessions
+  for (const sessionId of sessionsToClear) {
+    logger.info({ agentId, sessionId }, "Clearing agent session");
+    activeSessions.delete(sessionId);
+  }
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "All sessions cleared, now clearing cached MCP client",
+  );
+
+  // Also clear the cached MCP client so it will reconnect with a new session
+  clearChatMcpClient(agentId);
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "✅ Cleared agent sessions and client cache - next request will create fresh session",
+  );
+}
+
+/**
  * Fastify route plugin for MCP gateway
  */
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -425,48 +461,46 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         } else if (isInitialize) {
           // Initialize request - create new session
-          // Use client-provided session ID if available
+          // Generate session ID upfront if not provided by client
+          // This prevents race condition where notifications/initialized arrives
+          // before session is stored
+          const effectiveSessionId =
+            sessionId || `session-${Date.now()}-${randomUUID()}`;
+
           fastify.log.info(
             {
               agentId,
-              clientProvidedSessionId: sessionId,
-              hasSessionId: !!sessionId,
-              sessionExists: sessionId ? activeSessions.has(sessionId) : false,
+              sessionId: effectiveSessionId,
+              clientProvided: !!sessionId,
+              sessionExists: activeSessions.has(effectiveSessionId),
               activeSessions: Array.from(activeSessions.keys()),
             },
             "Initialize request - creating NEW session",
           );
           server = await createAgentServer(agentId, fastify.log);
-          transport = createTransport(agentId, sessionId, fastify.log);
+          transport = createTransport(agentId, effectiveSessionId, fastify.log);
 
           // Connect server to transport (this also starts the transport)
           fastify.log.info({ agentId }, "Connecting server to transport");
           await server.connect(transport);
           fastify.log.info({ agentId }, "Server connected to transport");
 
-          // Store session using client-provided ID if available
-          // If no client ID, we'll need to get it from transport after the request
-          if (sessionId) {
-            activeSessions.set(sessionId, {
-              server,
-              transport,
-              lastAccess: Date.now(),
-            });
-            fastify.log.info(
-              {
-                agentId,
-                storedSessionId: sessionId,
-              },
-              "Session stored with client-provided ID",
-            );
-          } else {
-            // No client ID - will need to store after transport generates one
-            // We'll do this after handleRequest completes
-            fastify.log.info(
-              { agentId },
-              "No client session ID - will store after transport initializes",
-            );
-          }
+          // Store session immediately before handleRequest
+          // This ensures the session exists when notifications/initialized arrives
+          activeSessions.set(effectiveSessionId, {
+            server,
+            transport,
+            lastAccess: Date.now(),
+            agentId,
+          });
+          fastify.log.info(
+            {
+              agentId,
+              sessionId: effectiveSessionId,
+              clientProvided: !!sessionId,
+            },
+            "Session stored before handleRequest",
+          );
         } else {
           // Non-initialize request without a valid session
           fastify.log.error(
@@ -535,22 +569,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // If this was an initialize request without a client session ID,
-        // store the transport's generated session ID now
-        if (isInitialize && !sessionId) {
-          const generatedSessionId = transport.sessionId;
-          if (generatedSessionId) {
-            activeSessions.set(generatedSessionId, {
-              server,
-              transport,
-              lastAccess: Date.now(),
-            });
-            fastify.log.info(
-              { agentId, generatedSessionId },
-              "Session stored with server-generated ID",
-            );
-          }
-        }
+        // Session was already stored before handleRequest to prevent race condition
+        // No need to store again here
 
         fastify.log.info(
           { agentId, sessionId },
@@ -581,6 +601,107 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
         }
       }
+    },
+  );
+
+  // DELETE endpoint to clear sessions for an agent
+  fastify.delete(
+    `${endpoint}/sessions`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        response: {
+          200: z.object({
+            message: z.string(),
+            clearedCount: z.number(),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const agentId = extractAgentIdFromAuth(
+        request.headers.authorization as string | undefined,
+      );
+
+      fastify.log.info(
+        {
+          agentId,
+          totalActiveSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - Request received",
+      );
+
+      if (!agentId) {
+        fastify.log.warn("DELETE /v1/mcp/sessions - Unauthorized request");
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+        };
+      }
+
+      const sessionsToClear: string[] = [];
+      const allAgentIds: string[] = [];
+
+      // Find all sessions for this agent
+      for (const [sessionId, sessionData] of activeSessions.entries()) {
+        allAgentIds.push(sessionData.agentId);
+        if (sessionData.agentId === agentId) {
+          sessionsToClear.push(sessionId);
+        }
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          allAgentIds,
+          sessionsToClear,
+          totalSessions: activeSessions.size,
+          matchingSessionsCount: sessionsToClear.length,
+        },
+        "DELETE /v1/mcp/sessions - Found sessions to clear",
+      );
+
+      // Delete all matching sessions
+      for (const sessionId of sessionsToClear) {
+        fastify.log.info(
+          { agentId, sessionId },
+          "DELETE /v1/mcp/sessions - Clearing session",
+        );
+        activeSessions.delete(sessionId);
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - All sessions cleared, now clearing cached MCP client",
+      );
+
+      // Also clear the cached MCP client so it will reconnect with a new session
+      clearChatMcpClient(agentId);
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - ✅ Sessions and client cache cleared successfully",
+      );
+
+      reply.type("application/json");
+      return {
+        message: "Sessions cleared successfully",
+        clearedCount: sessionsToClear.length,
+      };
     },
   );
 };

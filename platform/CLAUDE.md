@@ -18,8 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: <http://localhost:3000/>
 - **Backend**: <http://localhost:9000/> (Fastify API server)
-- **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools)
-- **Tools Inspector**: <http://localhost:3000/tools>
+- **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations in main sidebar)
+- **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
 - **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
@@ -39,6 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **Backend Metrics**: <http://localhost:9050/metrics> (Prometheus metrics endpoint, separate from main API)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
+- **Profile Tools API**: <http://localhost:9000/api/profile-tools> (GET paginated profile-tool relationships with filtering/sorting)
 
 ## Common Commands
 
@@ -54,6 +55,13 @@ pnpm test:e2e                           # Run e2e tests with Playwright (chromiu
 # Database
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
+
+# Database Connection
+# PostgreSQL is running in Kubernetes (managed by Tilt)
+# Connect to database:
+kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_password psql -U archestra -d archestra_dev
+
+# Common queries: \dt (list tables), \d table_name (describe table), SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
 
 # Logs
 tilt logs pnpm-dev                   # Get logs for frontend + backend
@@ -95,6 +103,9 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
+# Feature Flags
+NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH=false  # Enable team-based authentication/installation for MCP servers (disabled by default)
+
 # Authentication Secret (auto-generated in Helm/Docker if not set)
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
@@ -105,8 +116,9 @@ ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct 
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805
 
 # Kubernetes (for MCP server runtime)
+# Local MCP servers require EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG OR ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
 ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
-ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
+ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Path to kubeconfig file
 ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
 ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
 NEXT_PUBLIC_ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Frontend display of base image
@@ -124,7 +136,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), agent-based chat with MCP tools, built-in Archestra MCP tools (whoami, search_private_mcp_registry, create_mcp_server_installation_request)
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
 
 **Workspaces**:
 
@@ -155,9 +167,9 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 ## Observability
 
-**Tracing**: LLM proxy routes add agent data via `startActiveLlmSpan()`. Traces include `agent.id`, `agent.name` and dynamic `agent.<label>` attributes. Agent label keys are fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo.
+**Tracing**: LLM proxy routes add profile data via `startActiveLlmSpan()`. Traces include `agent.id`, `agent.name` and dynamic `agent.<label>` attributes. Profile label keys are fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo.
 
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic agent labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic profile labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
@@ -182,19 +194,24 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Backend**:
 
 - Use Drizzle ORM for database operations through MODELS ONLY!
-- Table exports: Use plural names with "Table" suffix (e.g., `agentLabelsTable`, `sessionsTable`)
+- Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - Route permissions: Add to `requiredEndpointPermissionsMap` in `shared/access-control.ts`
 - Only export public APIs
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
+- **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
+- **Error Handling**: Throw `ApiError` instances with appropriate status codes - handled centrally by Fastify error handler
+- **Type Organization**: Keep database schemas in `database/schemas/`, extract business types to dedicated `types/` files
+- **Pagination**: Use `PaginationQuerySchema` and `createPaginatedResponseSchema` for consistent pagination across APIs
+- **Sorting**: Use `SortingQuerySchema` or `createSortingQuerySchema` for standardized sorting parameters
 
 **Team-based Access Control**:
 
-- Agents and MCP servers use team-based authorization
+- Profiles and MCP servers use team-based authorization
 - Teams managed via better-auth organization plugin
-- Junction tables: `agent_team` and `mcp_server_team`
+- Junction tables: `profile_team` and `mcp_server_team`
 - Breaking change: `usersWithAccess[]` replaced with `teams[]`
 - Admin-only team CRUD via `/api/teams/*`
 - Members can read teams and access assigned resources
@@ -210,14 +227,14 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - Database: `organizationRolesTable`
 - UI: Admin-only roles management at `/settings/roles`
 
-**Agent Labels**:
+**Profile Labels**:
 
-- Agents support key-value labels for organization/categorization
-- Database schema: `label_keys`, `label_values`, `agent_labels` tables
+- Profiles support key-value labels for organization/categorization
+- Database schema: `label_keys`, `label_values`, `profile_labels` tables
 - Keys and values stored separately for consistency and reuse
-- One value per key per agent (updating same key replaces value)
+- One value per key per profile (updating same key replaces value)
 - Labels returned in alphabetical order by key for consistency
-- API endpoints: GET `/api/agents/labels/keys`, GET `/api/agents/labels/values?key=<key>` (key param filters values by key)
+- API endpoints: GET `/api/profiles/labels/keys`, GET `/api/profiles/labels/values?key=<key>` (key param filters values by key)
 
 **MCP Server Installation Requests**:
 
@@ -228,7 +245,10 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 **MCP Server Runtime**:
 
-- Local MCP servers run in K8s pods (one pod per server)
+- Local MCP servers run in K8s pods (one pod per server) when K8s is configured
+- Feature flag `orchestrator-k8s-runtime` returned by `/api/features` endpoint
+- Feature enabled when EITHER ARCHESTRA_ORCHESTRATOR_KUBECONFIG or ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER is configured
+- Frontend disables local MCP server functionality when feature is off (shows tooltip explaining orchestrator-k8s-runtime requirement)
 - Automatic pod lifecycle management (start/restart/stop)
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
@@ -271,27 +291,38 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 **Chat Feature**:
 
-- Agent-based conversations: Each conversation is tied to a specific agent
-- Agent selection via dropdown: Users select an agent when creating a new conversation
-- MCP tool integration: Chat automatically uses the agent's assigned MCP tools via MCP Gateway
+- Profile-based conversations: Each conversation is tied to a specific profile
+- Profile selection via dropdown: Users select a profile when creating a new conversation
+- Profile visibility control: Profiles can be hidden from chat via `use_in_chat` field (default: true)
+- MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
 - LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
-- Agent authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
+- Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
 - Database schema: Conversations table includes `agentId` foreign key to agents table
-- UI components: `AgentSelector` dropdown, `ConversationList` with agent badges
+- UI components: `AgentSelector` dropdown (filtered by `use_in_chat=true`), `ChatSidebarSection` for conversation navigation in main sidebar
+- Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)
+- Hide tool calls toggle: Located in chat messages header, persisted in localStorage
+- Conversation management: Select, edit (inline rename), delete conversations directly in sidebar sub-navigation
+- Smart visibility: Shows first 10 conversations by default with "Show N more" toggle for better UX when many conversations exist
+- Full-width chat interface: Chat page uses entire width without separate conversation sidebar
 - Tool execution: Routes through MCP Gateway, includes response modifiers and logging
 - No manual configuration: Deprecated `ARCHESTRA_CHAT_MCP_SERVER_URL` and `ARCHESTRA_CHAT_MCP_SERVER_HEADERS`
 - Required env var: `ARCHESTRA_CHAT_ANTHROPIC_API_KEY` (used by LLM Proxy for Anthropic calls)
 
 **Archestra MCP Server**:
 
-- Built-in tools automatically injected into all agents
-- Tools prefixed with `archestra__` to avoid conflicts
+- Built-in tools automatically injected into all profiles
+- Tools prefixed with `archestra__` to avoid conflicts  
 - Available tools:
-  - `archestra__whoami`: Returns agent name and ID
-  - `archestra__search_private_mcp_registry`: Search internal MCP catalog
-- Planned tool (temporarily disabled):
-  - `archestra__create_mcp_server_installation_request`: Request MCP server installation (disabled pending user context availability)
+  - Profile management: `whoami`, `create_profile`, `get_profile`
+  - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_profile_token_usage`
+  - Policies: `get/create/update/delete_tool_invocation_policy`, `get/create/update/delete_trusted_data_policy`
+  - MCP servers: `search_private_mcp_registry`, `get_mcp_servers`, `get_mcp_server_tools`
+  - Tool assignment: `bulk_assign_tools_to_profiles`
+  - Operators: `get_autonomy_policy_operators`
 - Implementation: `backend/src/archestra-mcp-server.ts`
+- Note: `create_mcp_server_installation_request` temporarily disabled pending user context support
+- Security: Archestra tools are always trusted and bypass tool invocation/trusted data policies
+- UI: Hidden from tools management interface (use `excludeArchestraTools: true` query param)
 
 **Testing**:
 

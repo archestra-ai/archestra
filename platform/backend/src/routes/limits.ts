@@ -1,19 +1,18 @@
 import { RouteId } from "@shared";
-import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
-import TokenPriceModel from "@/models/token-price";
+import { LimitModel, TokenPriceModel } from "@/models";
 import {
+  ApiError,
   CreateLimitSchema,
   constructResponseSchema,
+  DeleteObjectResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
   SelectLimitSchema,
   UpdateLimitSchema,
   UuidIdSchema,
 } from "@/types";
-import { cleanupLimitsIfNeeded } from "@/utils/limits-cleanup";
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -35,44 +34,16 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { query: { entityType, entityId, limitType }, organizationId },
       reply,
     ) => {
-      try {
-        // Cleanup limits if needed before fetching
-        if (organizationId) {
-          await cleanupLimitsIfNeeded(organizationId);
-        }
-
-        // Ensure all models from interactions have pricing records
-        await TokenPriceModel.ensureAllModelsHavePricing();
-
-        const conditions = [];
-
-        if (entityType) {
-          conditions.push(eq(schema.limitsTable.entityType, entityType));
-        }
-
-        if (entityId) {
-          conditions.push(eq(schema.limitsTable.entityId, entityId));
-        }
-
-        if (limitType) {
-          conditions.push(eq(schema.limitsTable.limitType, limitType));
-        }
-
-        const limits = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined);
-        return reply.send(limits);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      // Cleanup limits if needed before fetching
+      if (organizationId) {
+        await LimitModel.cleanupLimitsIfNeeded(organizationId);
       }
+
+      // Ensure all models from interactions have pricing records
+      await TokenPriceModel.ensureAllModelsHavePricing();
+
+      const limits = await LimitModel.findAll(entityType, entityId, limitType);
+      return reply.send(limits);
     },
   );
 
@@ -87,24 +58,8 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const [limit] = await db
-          .insert(schema.limitsTable)
-          .values(request.body)
-          .returning();
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+    async ({ body }, reply) => {
+      return reply.send(await LimitModel.create(body));
     },
   );
 
@@ -121,37 +76,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const [limit] = await db
-          .select()
-          .from(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+    async ({ params: { id } }, reply) => {
+      const limit = await LimitModel.findById(id);
 
-        if (!limit) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send(limit);
     },
   );
 
-  fastify.put(
+  fastify.patch(
     "/api/limits/:id",
     {
       schema: {
@@ -161,38 +97,18 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateLimitSchema.omit({ id: true }),
+        body: UpdateLimitSchema.partial(),
         response: constructResponseSchema(SelectLimitSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const [limit] = await db
-          .update(schema.limitsTable)
-          .set({ ...request.body, updatedAt: new Date() })
-          .where(eq(schema.limitsTable.id, request.params.id))
-          .returning();
+    async ({ params: { id }, body }, reply) => {
+      const limit = await LimitModel.patch(id, body);
 
-        if (!limit) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(limit);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!limit) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send(limit);
     },
   );
 
@@ -206,35 +122,17 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      try {
-        const result = await db
-          .delete(schema.limitsTable)
-          .where(eq(schema.limitsTable.id, request.params.id));
+    async ({ params: { id } }, reply) => {
+      const deleted = await LimitModel.delete(id);
 
-        if (result.rowCount === 0) {
-          return reply.status(404).send({
-            error: {
-              message: "Limit not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!deleted) {
+        throw new ApiError(404, "Limit not found");
       }
+
+      return reply.send({ success: true });
     },
   );
 };

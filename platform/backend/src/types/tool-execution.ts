@@ -1,45 +1,31 @@
-export interface CommonMcpToolDefinition {
+import { z } from "zod";
+
+export const CommonToolCallSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    arguments: z.record(z.string(), z.unknown()),
+  })
+  .describe("Represents a tool call in a provider-agnostic way");
+
+export type CommonMcpToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
-}
+};
 
 /**
  * Provider-agnostic representation of a tool call from an LLM
  */
-export interface CommonToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
+export type CommonToolCall = z.infer<typeof CommonToolCallSchema>;
 
 /**
  * Provider-agnostic representation of a tool execution result
  */
-export interface CommonToolResult {
+export type CommonToolResult = {
   id: string;
+  name: string;
   content: unknown;
   isError: boolean;
   error?: string;
-}
-
-/**
- * MCP server configuration needed for tool execution
- *
- * NOTE: for right now this really only supports remote MCP servers and will of course need to be expanded out...
- */
-export interface McpServerConfig {
-  id: string;
-  name: string;
-  url: string;
-  headers: Record<string, string>;
-}
-
-/**
- * Tool information with associated MCP server details
- */
-export interface ToolWithServer {
-  toolId: string;
-  toolName: string;
-  mcpServer: McpServerConfig;
-}
+};

@@ -58,19 +58,45 @@ export const SelectMcpServerInstallationRequestSchema = createSelectSchema(
 
 export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
   schema.mcpServerInstallationRequestsTable,
-).extend({
-  notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
-  status: McpServerInstallationRequestStatusSchema.optional(),
-  customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
-});
+)
+  .extend({
+    notes: z
+      .array(McpServerInstallationRequestNoteSchema)
+      .nullable()
+      .optional(),
+    status: McpServerInstallationRequestStatusSchema.optional(),
+    customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+    requestedBy: true,
+    status: true,
+    reviewedBy: true,
+    reviewedAt: true,
+    adminResponse: true,
+    notes: true,
+  });
 
 export const UpdateMcpServerInstallationRequestSchema = createUpdateSchema(
   schema.mcpServerInstallationRequestsTable,
-).extend({
-  notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
-  status: McpServerInstallationRequestStatusSchema.optional(),
-  customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
-});
+)
+  .extend({
+    notes: z
+      .array(McpServerInstallationRequestNoteSchema)
+      .nullable()
+      .optional(),
+    status: McpServerInstallationRequestStatusSchema.optional(),
+    customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
+  })
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+    externalCatalogId: true,
+    requestedBy: true,
+  });
 
 export type McpServerInstallationRequestStatus = z.infer<
   typeof McpServerInstallationRequestStatusSchema

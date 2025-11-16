@@ -1,10 +1,13 @@
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
-    return await db.select().from(schema.tokenPricesTable);
+    return await db
+      .select()
+      .from(schema.tokenPricesTable)
+      .orderBy(asc(schema.tokenPricesTable.createdAt));
   }
 
   static async findById(id: string): Promise<TokenPrice | null> {
@@ -68,11 +71,17 @@ class TokenPriceModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    // First check if the token price exists
+    const existing = await TokenPriceModel.findById(id);
+    if (!existing) {
+      return false;
+    }
+
+    await db
       .delete(schema.tokenPricesTable)
       .where(eq(schema.tokenPricesTable.id, id));
 
-    return (result.rowCount ?? 0) > 0;
+    return true;
   }
 
   /**

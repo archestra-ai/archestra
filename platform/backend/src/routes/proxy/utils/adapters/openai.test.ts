@@ -97,6 +97,7 @@ describe("OpenAI MCP Adapters", () => {
       const results = [
         {
           id: "call_123",
+          name: "test_tool",
           content: { result: "success", data: [1, 2, 3] },
           isError: false,
         },
@@ -117,6 +118,7 @@ describe("OpenAI MCP Adapters", () => {
       const results = [
         {
           id: "call_456",
+          name: "test_tool",
           content: null,
           isError: true,
           error: "Tool execution failed",
@@ -138,11 +140,13 @@ describe("OpenAI MCP Adapters", () => {
       const results = [
         {
           id: "call_1",
+          name: "test_tool",
           content: "simple text",
           isError: false,
         },
         {
           id: "call_2",
+          name: "test_tool",
           content: null,
           isError: true,
           error: "Network timeout",

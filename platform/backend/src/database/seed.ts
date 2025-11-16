@@ -6,6 +6,7 @@ import {
   MemberModel,
   OrganizationModel,
   PromptModel,
+  ToolModel,
   UserModel,
 } from "@/models";
 import type { InsertDualLlmConfig } from "@/types";
@@ -317,12 +318,10 @@ return $input.all().map(item => ({
 
 **Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
-    await PromptModel.create({
-      organizationId: org.id,
+    await PromptModel.create(org.id, user.id, {
       name: "n8n Expert",
       type: "system",
       content: n8nSystemPromptContent,
-      createdBy: user.id,
     });
     logger.info("✓ Seeded n8n Expert system prompt");
   } else {
@@ -364,12 +363,10 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   for (const promptData of defaultPrompts) {
     const exists = existingPrompts.find((p) => p.name === promptData.name);
     if (!exists) {
-      await PromptModel.create({
-        organizationId: org.id,
+      await PromptModel.create(org.id, user.id, {
         name: promptData.name,
         type: "regular",
         content: promptData.content,
-        createdBy: user.id,
       });
       logger.info(`✓ Seeded regular prompt: ${promptData.name}`);
     } else {
@@ -380,10 +377,26 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   }
 }
 
+/**
+ * Creates and assigns Archestra MCP tools to all agents
+ */
+async function seedArchestraTools(): Promise<void> {
+  const agents = await AgentModel.findAll();
+
+  for (const agent of agents) {
+    // Assigns Archestra MCP tools, while also creating them in the database if they are missing.
+    await ToolModel.assignArchestraToolsToAgent(agent.id);
+    logger.info(
+      `✓ Assigned Archestra MCP tools to agent: ${agent.name} (${agent.id})`,
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await AgentModel.getAgentOrCreateDefault();
+  await seedArchestraTools();
 }

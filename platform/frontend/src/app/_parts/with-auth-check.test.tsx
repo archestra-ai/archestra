@@ -65,19 +65,6 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/auth/sign-in");
     });
 
-    it("should allow access to public pages", () => {
-      vi.mocked(usePathname).mockReturnValue("/test-agent");
-
-      render(
-        <WithAuthCheck>
-          <MockChild />
-        </WithAuthCheck>,
-      );
-
-      expect(mockRouterPush).not.toHaveBeenCalled();
-      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
-    });
-
     it("should allow access to auth pages", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
 

@@ -2,26 +2,82 @@ import { z } from "zod";
 
 export const UuidIdSchema = z.uuidv4();
 
-export const ErrorResponseSchema = z.object({
-  error: z.union([
-    z.string(),
-    z.object({
-      message: z.string(),
-      type: z.string(),
-    }),
-  ]),
-});
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export const ApiErrorTypeSchema = z.enum([
+  "api_internal_server_error",
+  "api_validation_error",
+  "api_authentication_error",
+  "api_authorization_error",
+  "api_not_found_error",
+  "unknown_api_error",
+  "api_conflict_error",
+]);
 
-export const ErrorResponsesSchema: Record<
-  400 | 401 | 403 | 404 | 500,
-  typeof ErrorResponseSchema
-> = {
-  400: ErrorResponseSchema,
-  401: ErrorResponseSchema,
-  403: ErrorResponseSchema,
-  404: ErrorResponseSchema,
-  500: ErrorResponseSchema,
+/**
+ * https://stackoverflow.com/a/70765851
+ */
+export class ApiError extends Error {
+  type: z.infer<typeof ApiErrorTypeSchema>;
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+
+    switch (statusCode) {
+      case 500:
+        this.type = "api_internal_server_error";
+        break;
+      case 400:
+        this.type = "api_validation_error";
+        break;
+      case 401:
+        this.type = "api_authentication_error";
+        break;
+      case 403:
+        this.type = "api_authorization_error";
+        break;
+      case 404:
+        this.type = "api_not_found_error";
+        break;
+      case 409:
+        this.type = "api_conflict_error";
+        break;
+      default:
+        this.type = "unknown_api_error";
+        break;
+    }
+
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
+  {
+    error: {
+      message: string;
+      type: T;
+    };
+  };
+
+export const generateErrorResponseSchema = <
+  T extends z.infer<typeof ApiErrorTypeSchema>,
+>(
+  errorType: T,
+) =>
+  z.object({
+    error: z.object({
+      message: z.string(),
+      type: z.literal(errorType),
+    }),
+  });
+
+export const ErrorResponsesSchema = {
+  400: generateErrorResponseSchema("api_validation_error"),
+  401: generateErrorResponseSchema("api_authentication_error"),
+  403: generateErrorResponseSchema("api_authorization_error"),
+  404: generateErrorResponseSchema("api_not_found_error"),
+  409: generateErrorResponseSchema("api_conflict_error"),
+  500: generateErrorResponseSchema("api_internal_server_error"),
 };
 
 export const constructResponseSchema = <T extends z.ZodTypeAny>(
@@ -111,3 +167,5 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
   sortDirection?: "asc" | "desc";
 };
+
+export const DeleteObjectResponseSchema = z.object({ success: z.boolean() });

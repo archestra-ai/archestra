@@ -87,8 +87,12 @@ export function DataTable<TData, TValue>({
       onRowSelectionChange(newSelection);
     },
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    // Only use client-side pagination when not using manual pagination
+    ...(manualPagination
+      ? {}
+      : { getPaginationRowModel: getPaginationRowModel() }),
+    // Only use client-side sorting when not using manual sorting
+    ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     manualPagination,

@@ -19,7 +19,7 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
 export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
-export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";
+export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -27,7 +27,5 @@ export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
 
-/**
- * NOTE: THIS IS ABSOLUTELY TEMPORARY.. remove this once we have full/generic support for MCP servers.
- */
-export const GITHUB_MCP_SERVER_NAME = "githubcopilot__remote-mcp";
+export const MCP_CATALOG_API_BASE_URL =
+  "https://www.archestra.ai/mcp-catalog/api";

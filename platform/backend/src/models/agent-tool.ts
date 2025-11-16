@@ -1,6 +1,28 @@
-import { and, eq, getTableColumns, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AgentTool, InsertAgentTool, UpdateAgentTool } from "@/types";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  AgentTool,
+  AgentToolFilters,
+  AgentToolSortBy,
+  AgentToolSortDirection,
+  InsertAgentTool,
+  PaginationQuery,
+  UpdateAgentTool,
+} from "@/types";
 import AgentTeamModel from "./agent-team";
 
 class AgentToolModel {
@@ -112,6 +134,82 @@ class AgentToolModel {
     return null;
   }
 
+  /**
+   * Creates a new agent-tool assignment or updates credentials if it already exists.
+   * Returns the status: "created", "updated", or "unchanged".
+   */
+  static async createOrUpdateCredentials(
+    agentId: string,
+    toolId: string,
+    credentialSourceMcpServerId?: string | null,
+    executionSourceMcpServerId?: string | null,
+  ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+    // Check if assignment already exists
+    const [existing] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      // Create new assignment
+      const options: Partial<
+        Pick<
+          InsertAgentTool,
+          | "allowUsageWhenUntrustedDataIsPresent"
+          | "toolResultTreatment"
+          | "responseModifierTemplate"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+        >
+      > = {};
+
+      if (credentialSourceMcpServerId) {
+        options.credentialSourceMcpServerId = credentialSourceMcpServerId;
+      }
+
+      if (executionSourceMcpServerId) {
+        options.executionSourceMcpServerId = executionSourceMcpServerId;
+      }
+
+      await AgentToolModel.create(agentId, toolId, options);
+      return { status: "created" };
+    }
+
+    // Check if credentials need updating
+    const needsUpdate =
+      existing.credentialSourceMcpServerId !==
+        (credentialSourceMcpServerId ?? null) ||
+      existing.executionSourceMcpServerId !==
+        (executionSourceMcpServerId ?? null);
+
+    if (needsUpdate) {
+      // Update credentials
+      const updateData: Partial<
+        Pick<
+          UpdateAgentTool,
+          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+        >
+      > = {};
+
+      // Always set both fields to ensure they're updated correctly
+      updateData.credentialSourceMcpServerId =
+        credentialSourceMcpServerId ?? null;
+      updateData.executionSourceMcpServerId =
+        executionSourceMcpServerId ?? null;
+
+      await AgentToolModel.update(existing.id, updateData);
+      return { status: "updated" };
+    }
+
+    return { status: "unchanged" };
+  }
+
   static async update(
     id: string,
     data: Partial<
@@ -193,6 +291,168 @@ class AgentToolModel {
     }
 
     return query;
+  }
+
+  /**
+   * Find all agent-tool relationships with pagination, sorting, and filtering support
+   */
+  static async findAllPaginated(
+    pagination: PaginationQuery,
+    sorting?: {
+      sortBy?: AgentToolSortBy;
+      sortDirection?: AgentToolSortDirection;
+    },
+    filters?: AgentToolFilters,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<PaginatedResult<AgentTool>> {
+    // Build WHERE conditions
+    const whereConditions: SQL[] = [];
+
+    // Apply access control filtering for users that are not agent admins
+    if (userId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+
+      whereConditions.push(
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    // Filter by search query (tool name)
+    if (filters?.search) {
+      whereConditions.push(
+        sql`LOWER(${schema.toolsTable.name}) LIKE ${`%${filters.search.toLowerCase()}%`}`,
+      );
+    }
+
+    // Filter by agent
+    if (filters?.agentId) {
+      whereConditions.push(eq(schema.agentToolsTable.agentId, filters.agentId));
+    }
+
+    // Filter by origin (either "llm-proxy" or a catalogId)
+    if (filters?.origin) {
+      if (filters.origin === "llm-proxy") {
+        // LLM Proxy tools have null catalogId
+        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NULL`);
+      } else {
+        // MCP tools have a catalogId
+        whereConditions.push(eq(schema.toolsTable.catalogId, filters.origin));
+      }
+    }
+
+    // Filter by credential source
+    if (filters?.credentialSourceMcpServerId) {
+      whereConditions.push(
+        eq(
+          schema.agentToolsTable.credentialSourceMcpServerId,
+          filters.credentialSourceMcpServerId,
+        ),
+      );
+    }
+
+    // Exclude Archestra built-in tools for test isolation
+    if (filters?.excludeArchestraTools) {
+      whereConditions.push(
+        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
+      );
+    }
+
+    const whereClause =
+      whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+    // Determine the ORDER BY clause based on sorting params
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+    let orderByClause: SQL;
+
+    switch (sorting?.sortBy) {
+      case "name":
+        orderByClause = direction(schema.toolsTable.name);
+        break;
+      case "agent":
+        orderByClause = direction(schema.agentsTable.name);
+        break;
+      case "origin":
+        // Sort by catalogId (null values last for LLM Proxy)
+        orderByClause = direction(
+          sql`CASE WHEN ${schema.toolsTable.catalogId} IS NULL THEN '2-llm-proxy' ELSE '1-mcp' END`,
+        );
+        break;
+      case "allowUsageWhenUntrustedDataIsPresent":
+        orderByClause = direction(
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        );
+        break;
+      default:
+        orderByClause = direction(schema.agentToolsTable.createdAt);
+        break;
+    }
+
+    // Run both queries in parallel
+    const [data, [{ total }]] = await Promise.all([
+      db
+        .select({
+          ...getTableColumns(schema.agentToolsTable),
+          agent: {
+            id: schema.agentsTable.id,
+            name: schema.agentsTable.name,
+          },
+          tool: {
+            id: schema.toolsTable.id,
+            name: schema.toolsTable.name,
+            description: schema.toolsTable.description,
+            parameters: schema.toolsTable.parameters,
+            createdAt: schema.toolsTable.createdAt,
+            updatedAt: schema.toolsTable.updatedAt,
+            catalogId: schema.toolsTable.catalogId,
+            mcpServerId: schema.toolsTable.mcpServerId,
+            mcpServerName: schema.mcpServersTable.name,
+            mcpServerCatalogId: schema.mcpServersTable.catalogId,
+          },
+        })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .leftJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(whereClause)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .leftJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(whereClause),
+    ]);
+
+    return createPaginatedResult(data, Number(total), pagination);
   }
 
   static async getSecurityConfig(

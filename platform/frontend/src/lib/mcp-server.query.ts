@@ -54,6 +54,8 @@ export function useInstallMcpServer() {
           queryKey: ["mcp-servers", installedServer.id, "tools"],
         });
       }
+      // Invalidate all chat MCP tools (new tools may be available)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
     onError: (_error, variables) => {
       toast.error(`Failed to install ${variables.name}`);
@@ -75,6 +77,8 @@ export function useDeleteMcpServer() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate all chat MCP tools (tools are now unavailable)
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       toast.success(`Successfully uninstalled ${variables.name}`);
     },
     onError: (error, variables) => {
@@ -257,38 +261,23 @@ export function useMcpServerInstallationStatus(
 }
 
 /**
- * Get MCP servers (tokens) available for use with specific agents' tools.
- * Filters based on team membership and admin status.
+ * Get MCP servers (tokens) available for use with agents' tools.
+ * Returns data grouped by catalogId.
  *
- * @param agentIds - Array of agent IDs to filter tokens for. If null/empty, returns all servers.
- * @param catalogId - Optional catalog ID to further filter tokens.
+ * @param catalogId - Optional catalog ID to filter tokens. If not provided, returns tokens for all catalog items.
  */
-export function useAgentAvailableTokens(params: {
-  agentIds: string[];
-  catalogId: string;
-}) {
-  const { agentIds, catalogId } = params;
+export function useAgentAvailableTokens(params: { catalogId?: string }) {
+  const { catalogId } = params;
 
   return useQuery({
-    queryKey: ["agent-available-tokens", { agentIds, catalogId }],
+    queryKey: ["agent-available-tokens", { catalogId }],
     queryFn: async () => {
-      if (!agentIds || agentIds.length === 0) {
-        // If no agentIds, fallback to fetching all servers
-        const response = await getMcpServers({});
-        const servers = response.data ?? [];
-        return catalogId
-          ? servers.filter((server) => server.catalogId === catalogId)
-          : servers;
-      }
-
-      // Use dedicated endpoint when agentIds are provided
       const response = await getAgentAvailableTokens({
         query: {
-          agentIds: agentIds.join(","),
           ...(catalogId ? { catalogId } : {}),
         },
       });
-      return response.data ?? [];
+      return response.data ?? {};
     },
   });
 }

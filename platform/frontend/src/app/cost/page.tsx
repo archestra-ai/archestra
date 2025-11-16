@@ -96,6 +96,7 @@ ChartJS.register(
 );
 
 import type { archestraApiTypes } from "@shared";
+import { OptimizationRulesTab } from "@/app/cost/optimization-rules-tab";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
   AlertDialog,
@@ -146,6 +147,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAgents, useDefaultAgent } from "@/lib/agent.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
@@ -153,6 +155,7 @@ import {
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
+import { useOptimizationRules } from "@/lib/optimization-rule.query";
 import {
   useOrganization,
   useUpdateOrganization,
@@ -803,6 +806,7 @@ export default function CostPage() {
     null,
   );
   const [isAddingTokenPrice, setIsAddingTokenPrice] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
@@ -811,6 +815,17 @@ export default function CostPage() {
   const { data: organizationDetails } = useOrganization();
   const { data: tokenPrices = [], isLoading: tokenPricesLoading } =
     useTokenPrices();
+  const { data: agents = [] } = useAgents();
+  const { data: defaultAgent } = useDefaultAgent();
+  const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
+    useOptimizationRules(selectedAgentId);
+
+  // Set default agent as selected when it loads
+  useEffect(() => {
+    if (defaultAgent && !selectedAgentId) {
+      setSelectedAgentId(defaultAgent.id);
+    }
+  }, [defaultAgent, selectedAgentId]);
 
   // Statistics data fetching hooks
   const currentTimeframe = timeframe.startsWith("custom:")
@@ -891,7 +906,7 @@ export default function CostPage() {
     if (limit.entityType === "organization") {
       return "The whole organization";
     }
-    return "Unknown Agent";
+    return "Unknown Profile";
   };
 
   // Helper function to calculate real cost for token limits
@@ -1017,7 +1032,12 @@ export default function CostPage() {
     const tab = searchParams.get("tab");
     const tf = searchParams.get("timeframe");
 
-    if (tab && ["statistics", "limits", "token-price"].includes(tab)) {
+    if (
+      tab &&
+      ["statistics", "limits", "token-price", "optimization-rules"].includes(
+        tab,
+      )
+    ) {
       setActiveTab(tab);
     }
 
@@ -1209,7 +1229,7 @@ export default function CostPage() {
           labels: ["No Data"],
           datasets: [
             {
-              label: "No agents found",
+              label: "No profiles found",
               data: [0],
               borderColor: "#9ca3af",
               backgroundColor: "rgba(156, 163, 175, 0.1)",
@@ -1344,7 +1364,7 @@ export default function CostPage() {
             Cost & Limits
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor and manage your AI model usage costs across all agents and
+            Monitor and manage your AI model usage costs across all profiles and
             teams.
           </p>
         </div>
@@ -1360,6 +1380,9 @@ export default function CostPage() {
             <TabsTrigger value="statistics">Statistics</TabsTrigger>
             <TabsTrigger value="limits">Limits</TabsTrigger>
             <TabsTrigger value="token-price">Token Price</TabsTrigger>
+            <TabsTrigger value="optimization-rules">
+              Optimization Rules
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="statistics" className="mt-0 space-y-6">
@@ -1525,7 +1548,7 @@ export default function CostPage() {
                         <TableRow>
                           <TableHead>Team Name</TableHead>
                           <TableHead>Members</TableHead>
-                          <TableHead>Agents</TableHead>
+                          <TableHead>Profiles</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
                           <TableHead className="text-right">Cost</TableHead>
@@ -1572,7 +1595,7 @@ export default function CostPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Agents</CardTitle>
+                <CardTitle>Profiles</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1588,7 +1611,7 @@ export default function CostPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Agent Name</TableHead>
+                          <TableHead>Profile Name</TableHead>
                           <TableHead>Team</TableHead>
                           <TableHead>Requests</TableHead>
                           <TableHead>Tokens</TableHead>
@@ -1602,7 +1625,8 @@ export default function CostPage() {
                               colSpan={5}
                               className="text-center py-8 text-muted-foreground"
                             >
-                              No agent data available for the selected timeframe
+                              No profile data available for the selected
+                              timeframe
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -2000,6 +2024,14 @@ export default function CostPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <OptimizationRulesTab
+            selectedAgentId={selectedAgentId}
+            setSelectedAgentId={setSelectedAgentId}
+            agents={agents}
+            optimizationRules={optimizationRules}
+            optimizationRulesLoading={optimizationRulesLoading}
+          />
         </Tabs>
       </div>
     </div>

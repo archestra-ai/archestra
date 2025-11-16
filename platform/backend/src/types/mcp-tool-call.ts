@@ -1,15 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-
-/**
- * Schema for CommonToolCall
- */
-const CommonToolCallSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  arguments: z.record(z.string(), z.unknown()),
-});
+import { CommonToolCallSchema } from "./tool-execution";
 
 /**
  * Select schema for MCP tool calls

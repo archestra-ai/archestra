@@ -21,7 +21,11 @@ export const InsertToolInvocationPolicySchema = createInsertSchema(
     operator: SupportedOperatorSchema,
     action: ToolInvocationPolicyActionSchema,
   },
-);
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export type ToolInvocationPolicy = z.infer<
   typeof SelectToolInvocationPolicySchema

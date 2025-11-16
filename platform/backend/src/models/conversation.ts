@@ -1,9 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   Conversation,
-  ConversationWithAgent,
-  ConversationWithMessages,
   InsertConversation,
   UpdateConversation,
 } from "@/types";
@@ -15,43 +13,36 @@ class ConversationModel {
       .values(data)
       .returning();
 
-    return conversation;
+    const conversationWithAgent = (await ConversationModel.findById(
+      conversation.id,
+      data.userId,
+      data.organizationId,
+    )) as Conversation;
+
+    return conversationWithAgent;
   }
 
   static async findAll(
     userId: string,
     organizationId: string,
   ): Promise<Conversation[]> {
-    const conversations = await db
-      .select()
-      .from(schema.conversationsTable)
-      .where(
-        and(
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
-        ),
-      )
-      .orderBy(desc(schema.conversationsTable.updatedAt));
-
-    return conversations;
-  }
-
-  static async findAllWithAgent(
-    userId: string,
-    organizationId: string,
-  ): Promise<ConversationWithAgent[]> {
     const rows = await db
       .select({
-        conversation: schema.conversationsTable,
+        conversation: getTableColumns(schema.conversationsTable),
+        message: getTableColumns(schema.messagesTable),
         agent: {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
         },
       })
       .from(schema.conversationsTable)
-      .leftJoin(
+      .innerJoin(
         schema.agentsTable,
         eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.messagesTable,
+        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
       )
       .where(
         and(
@@ -59,12 +50,29 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(desc(schema.conversationsTable.updatedAt));
+      .orderBy(desc(schema.conversationsTable.createdAt));
 
-    return rows.map((row) => ({
-      ...row.conversation,
-      agent: row.agent || { id: "", name: "Unknown" },
-    }));
+    // Group messages by conversation
+    const conversationMap = new Map<string, Conversation>();
+
+    for (const row of rows) {
+      const conversationId = row.conversation.id;
+
+      if (!conversationMap.has(conversationId)) {
+        conversationMap.set(conversationId, {
+          ...row.conversation,
+          agent: row.agent,
+          messages: [],
+        });
+      }
+
+      const conversation = conversationMap.get(conversationId);
+      if (conversation && row?.message?.content) {
+        conversation.messages.push(row.message.content);
+      }
+    }
+
+    return Array.from(conversationMap.values());
   }
 
   static async findById(
@@ -72,9 +80,24 @@ class ConversationModel {
     userId: string,
     organizationId: string,
   ): Promise<Conversation | null> {
-    const [conversation] = await db
-      .select()
+    const rows = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        message: getTableColumns(schema.messagesTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+      })
       .from(schema.conversationsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.messagesTable,
+        eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
+      )
       .where(
         and(
           eq(schema.conversationsTable.id, id),
@@ -83,33 +106,23 @@ class ConversationModel {
         ),
       );
 
-    return conversation || null;
-  }
-
-  static async findByIdWithMessages(
-    id: string,
-    userId: string,
-    organizationId: string,
-  ): Promise<ConversationWithMessages | null> {
-    const conversation = await ConversationModel.findById(
-      id,
-      userId,
-      organizationId,
-    );
-
-    if (!conversation) {
+    if (rows.length === 0) {
       return null;
     }
 
-    const messages = await db
-      .select()
-      .from(schema.messagesTable)
-      .where(eq(schema.messagesTable.conversationId, id))
-      .orderBy(schema.messagesTable.createdAt);
+    const firstRow = rows[0];
+    const messages = [];
+
+    for (const row of rows) {
+      if (row.message?.content) {
+        messages.push(row.message.content);
+      }
+    }
 
     return {
-      ...conversation,
-      messages: messages.map((msg) => msg.content),
+      ...firstRow.conversation,
+      agent: firstRow.agent,
+      messages,
     };
   }
 
@@ -131,7 +144,17 @@ class ConversationModel {
       )
       .returning();
 
-    return updated || null;
+    if (!updated) {
+      return null;
+    }
+
+    const updatedWithAgent = (await ConversationModel.findById(
+      updated.id,
+      userId,
+      organizationId,
+    )) as Conversation;
+
+    return updatedWithAgent;
   }
 
   static async delete(

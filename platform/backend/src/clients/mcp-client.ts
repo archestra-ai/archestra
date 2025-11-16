@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -17,6 +18,7 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
+import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
  * Type for MCP tool with server metadata returned from database
@@ -284,7 +286,6 @@ class McpClient {
         throw new Error("Pod not found for MCP server");
       }
 
-      const { K8sAttachTransport } = await import("./k8s-attach-transport.js");
       return new K8sAttachTransport({
         k8sAttach: k8sPod.k8sAttachClient,
         namespace: k8sPod.k8sNamespace,
@@ -313,13 +314,15 @@ class McpClient {
   }
 
   /**
-   * Strip server prefix from tool name
+   * Strip server prefix from tool name (case-insensitive)
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
-    const serverPrefix = `${prefixName}__`;
-    return toolName.startsWith(serverPrefix)
-      ? toolName.substring(serverPrefix.length)
-      : toolName;
+    const serverPrefix = `${prefixName}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+    // Case-insensitive comparison
+    if (toolName.toLowerCase().startsWith(serverPrefix.toLowerCase())) {
+      return toolName.substring(serverPrefix.length);
+    }
+    return toolName;
   }
 
   /**
@@ -356,6 +359,7 @@ class McpClient {
   ): Promise<CommonToolResult> {
     const errorResult: CommonToolResult = {
       id: toolCall.id,
+      name: toolCall.name,
       content: null,
       isError: true,
       error,
@@ -384,6 +388,7 @@ class McpClient {
 
     const toolResult: CommonToolResult = {
       id: toolCall.id,
+      name: toolCall.name,
       content: modifiedContent,
       isError,
     };
@@ -457,55 +462,82 @@ class McpClient {
   }): Promise<CommonMcpToolDefinition[]> {
     const { catalogItem, mcpServerId, secrets } = params;
 
-    try {
-      // Get the appropriate transport using the existing helper
-      const transport = await this.getTransport(
-        catalogItem,
-        mcpServerId,
-        secrets,
-      );
+    // For local servers, retry connection a few times since the MCP server process
+    // may need time to initialize even after the pod is ready
+    const maxRetries = catalogItem.serverType === "local" ? 3 : 1;
+    const retryDelayMs = 5000; // 5 seconds between retries
 
-      // Create client with transport
-      const client = new Client(
-        {
-          name: "archestra-platform",
-          version: "1.0.0",
-        },
-        {
-          capabilities: {
-            tools: {},
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Get the appropriate transport using the existing helper
+        const transport = await this.getTransport(
+          catalogItem,
+          mcpServerId,
+          secrets,
+        );
+
+        // Create client with transport
+        const client = new Client(
+          {
+            name: "archestra-platform",
+            version: "1.0.0",
           },
-        },
-      );
+          {
+            capabilities: {
+              tools: {},
+            },
+          },
+        );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        this.createTimeout(30000, "Connection timeout after 30 seconds"),
-      ]);
+        // Connect with timeout
+        await Promise.race([
+          client.connect(transport),
+          this.createTimeout(30000, "Connection timeout after 30 seconds"),
+        ]);
 
-      // List tools with timeout
-      const toolsResult = await Promise.race([
-        client.listTools(),
-        this.createTimeout(30000, "List tools timeout after 30 seconds"),
-      ]);
+        // List tools with timeout
+        const toolsResult = await Promise.race([
+          client.listTools(),
+          this.createTimeout(30000, "List tools timeout after 30 seconds"),
+        ]);
 
-      // Close connection (we just needed the tools)
-      await client.close();
+        // Close connection (we just needed the tools)
+        await client.close();
 
-      // Transform tools to our format
-      return toolsResult.tools.map((tool: Tool) => ({
-        name: tool.name,
-        description: tool.description || `Tool: ${tool.name}`,
-        inputSchema: tool.inputSchema as Record<string, unknown>,
-      }));
-    } catch (error) {
-      throw new Error(
-        `Failed to connect to MCP server ${catalogItem.name}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      );
+        // Transform tools to our format
+        return toolsResult.tools.map((tool: Tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema as Record<string, unknown>,
+        }));
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // If this is not the last attempt, log and retry
+        if (attempt < maxRetries) {
+          logger.warn(
+            { attempt, maxRetries, err: error },
+            `Failed to connect to MCP server ${catalogItem.name} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelayMs}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+
+        // Last attempt failed, throw error
+        throw new Error(
+          `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
+        );
+      }
     }
+
+    // Should never reach here, but TypeScript needs it
+    throw new Error(
+      `Failed to connect to MCP server ${catalogItem.name}: ${
+        lastError?.message || "Unknown error"
+      }`,
+    );
   }
 
   /**

@@ -1,6 +1,6 @@
 import { asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AgentLabelWithDetails } from "@/types/label";
+import type { AgentLabelWithDetails } from "@/types";
 
 class AgentLabelModel {
   /**

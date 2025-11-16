@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useAgentAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import { LoadingSpinner } from "./loading";
 
 interface InstallationSelectProps {
   value?: string | null;
@@ -20,18 +22,14 @@ interface InstallationSelectProps {
   className?: string;
   /** Catalog ID to filter installations - only shows local installations for the same catalog item */
   catalogId: string;
-  /** Agent IDs to filter installations - only shows installations that can be used with the specified agents */
-  agentIds: string[];
+  shouldSetDefaultValue: boolean;
 }
 
 /**
  * Self-contained component for selecting execution source (pod) for local MCP tool execution.
- * Shows local MCP server installations for a given catalog item with team-based filtering.
+ * Shows local MCP server installations for a given catalog item.
  *
- * Filtering logic:
- * - Personal installations: shown if user is owner AND shares team with agent
- * - Team installations: shown if any installation team matches agent teams
- * - Admins: see all installations
+ * Fetches all installations for the specified catalogId (no agent filtering).
  */
 export function InstallationSelect({
   value,
@@ -39,29 +37,49 @@ export function InstallationSelect({
   disabled,
   className,
   catalogId,
-  agentIds,
+  shouldSetDefaultValue,
 }: InstallationSelectProps) {
-  const { data: mcpServers, isLoading } = useAgentAvailableTokens({
-    agentIds: agentIds ?? null,
-    catalogId: catalogId ?? null,
+  const { data: groupedTokens, isLoading } = useAgentAvailableTokens({
+    catalogId,
   });
 
-  // Filter to local servers only (check serverType exists since hook returns different types)
-  const installations = mcpServers?.filter(
-    (server) => "serverType" in server && server.serverType === "local",
+  // Get tokens for this catalogId from the grouped response
+  const mcpServers = groupedTokens?.[catalogId] ?? [];
+
+  // Filter to local servers only
+  const installations = mcpServers.filter(
+    (server) => server.serverType === "local",
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
+  useEffect(() => {
+    if (shouldSetDefaultValue && installations.length > 0 && !value) {
+      onValueChange(installations[0].id);
+    }
+  }, [installations.length]);
+
   // Separate team and personal installations
-  const teamInstallations = installations?.filter(
+  const teamInstallations = installations.filter(
     (server) => server.authType === "team",
   );
-  const personalInstallations = installations?.filter(
+  const personalInstallations = installations.filter(
     (server) => server.authType === "personal",
   );
 
+  if (!installations || installations.length === 0) {
+    return (
+      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+        No installations available
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
   return (
     <Select
-      value={value || undefined}
+      value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
     >

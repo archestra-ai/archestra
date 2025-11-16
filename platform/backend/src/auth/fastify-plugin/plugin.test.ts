@@ -25,12 +25,7 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@/auth/internal-jwt", () => ({
-  verifyInternalJwt: vi.fn(),
-}));
-
 import { betterAuth, hasPermission } from "@/auth";
-import { verifyInternalJwt } from "@/auth/internal-jwt";
 import { UserModel } from "@/models";
 
 // Type the mocked functions
@@ -46,10 +41,6 @@ const mockHasPermission = hasPermission as MockedFunction<typeof hasPermission>;
 const mockUserModel = UserModel as unknown as {
   getById: MockedFunction<typeof UserModel.getById>;
 };
-
-const mockVerifyInternalJwt = verifyInternalJwt as MockedFunction<
-  typeof verifyInternalJwt
->;
 
 import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
@@ -159,15 +150,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Unauthenticated",
-          type: "unauthenticated",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
 
     test("should return 401 for invalid API key", async () => {
@@ -192,9 +177,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
   });
 
@@ -204,6 +189,11 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
       mockHasPermission.mockResolvedValue({
         success: false,
         error: null,
@@ -223,15 +213,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Forbidden",
-          type: "forbidden",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Forbidden",
+      );
     });
 
     test("should return 403 for routes without operationId", async () => {
@@ -239,6 +223,11 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/unknown",
@@ -254,15 +243,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Forbidden, routeId not found",
-          type: "forbidden",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Forbidden",
+      );
     });
 
     test("should check specific permissions for configured routes", async () => {
@@ -292,7 +275,7 @@ describe("authPlugin integration", () => {
       await authnz.handle(mockRequest, mockReply);
 
       expect(mockHasPermission).toHaveBeenCalledWith(
-        { agent: ["create"] },
+        { profile: ["create"] },
         expect.objectContaining({}),
       );
     });
@@ -372,54 +355,6 @@ describe("authPlugin integration", () => {
     });
   });
 
-  describe("MCP proxy authentication", () => {
-    test("should allow valid internal JWT for MCP proxy endpoints", async () => {
-      mockVerifyInternalJwt.mockResolvedValue({ userId: "system" });
-
-      const mockRequest = {
-        url: "/mcp_proxy/server1",
-        method: "POST",
-        headers: { authorization: "Bearer internal-jwt-token" },
-        routeOptions: {
-          schema: { operationId: "mcpProxy" },
-        },
-      } as unknown as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(verifyInternalJwt).toHaveBeenCalledWith("internal-jwt-token");
-      expect(mockReply.status).not.toHaveBeenCalled();
-    });
-
-    test("should reject invalid internal JWT for MCP proxy endpoints", async () => {
-      mockVerifyInternalJwt.mockResolvedValue(null);
-      mockBetterAuth.api.getSession.mockResolvedValue(null);
-
-      const mockRequest = {
-        url: "/mcp_proxy/server1",
-        method: "POST",
-        headers: { authorization: "Bearer invalid-jwt" },
-        routeOptions: {
-          schema: { operationId: "mcpProxy" },
-        },
-      } as unknown as FastifyRequest;
-
-      const mockReply = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      } as unknown as FastifyReply;
-
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-    });
-  });
-
   describe("edge cases", () => {
     test("should handle auth service errors gracefully", async () => {
       mockBetterAuth.api.getSession.mockRejectedValue(
@@ -443,9 +378,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
 
     test("should handle user population errors gracefully", async () => {

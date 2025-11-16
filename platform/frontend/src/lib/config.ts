@@ -34,10 +34,6 @@ export default {
     baseUrl: "",
   },
   debug: process.env.NODE_ENV !== "production",
-  easterEgg: {
-    targetSequence: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE"),
-    videoUrl: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL"),
-  },
   posthog: {
     // Analytics is enabled by default, disabled only when explicitly set to "disabled"
     enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled",
@@ -54,5 +50,12 @@ export default {
     baseMcpServerDockerImage:
       env("NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE") ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+  },
+  features: {
+    /**
+     * Enable team-based authentication/installation for MCP servers.
+     * Disabled by default.
+     */
+    enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
   },
 };

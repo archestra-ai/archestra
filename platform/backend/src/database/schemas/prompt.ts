@@ -7,8 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const promptTypeEnum = ["system", "regular"] as const;
-export type PromptType = (typeof promptTypeEnum)[number];
+import type { PromptType } from "@/types";
 
 const promptsTable = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),

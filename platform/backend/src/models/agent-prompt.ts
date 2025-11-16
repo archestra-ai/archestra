@@ -1,25 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import db, { schema } from "@/database";
-
-export interface AgentPrompt {
-  id: string;
-  agentId: string;
-  promptId: string;
-  order: number;
-  createdAt: Date;
-}
-
-export interface CreateAgentPromptInput {
-  agentId: string;
-  promptId: string;
-  order?: number;
-}
-
-export interface AssignPromptsInput {
-  agentId: string;
-  systemPromptId?: string | null;
-  regularPromptIds?: string[];
-}
+import type {
+  AgentPrompt,
+  AssignAgentPrompts,
+  InsertAgentPrompt,
+} from "@/types";
 
 /**
  * Model for managing agent-prompt relationships
@@ -29,7 +14,7 @@ class AgentPromptModel {
   /**
    * Assign a single prompt to an agent
    */
-  static async create(input: CreateAgentPromptInput): Promise<AgentPrompt> {
+  static async create(input: InsertAgentPrompt): Promise<AgentPrompt> {
     const [agentPrompt] = await db
       .insert(schema.agentPromptsTable)
       .values({
@@ -39,7 +24,7 @@ class AgentPromptModel {
       })
       .returning();
 
-    return agentPrompt as AgentPrompt;
+    return agentPrompt;
   }
 
   /**
@@ -53,7 +38,7 @@ class AgentPromptModel {
       .where(eq(schema.agentPromptsTable.agentId, agentId))
       .orderBy(asc(schema.agentPromptsTable.order));
 
-    return agentPrompts as AgentPrompt[];
+    return agentPrompts;
   }
 
   /**
@@ -62,24 +47,8 @@ class AgentPromptModel {
   static async findByAgentIdWithPrompts(agentId: string) {
     const agentPrompts = await db
       .select({
-        id: schema.agentPromptsTable.id,
-        agentId: schema.agentPromptsTable.agentId,
-        promptId: schema.agentPromptsTable.promptId,
-        order: schema.agentPromptsTable.order,
-        createdAt: schema.agentPromptsTable.createdAt,
-        prompt: {
-          id: schema.promptsTable.id,
-          organizationId: schema.promptsTable.organizationId,
-          name: schema.promptsTable.name,
-          type: schema.promptsTable.type,
-          content: schema.promptsTable.content,
-          version: schema.promptsTable.version,
-          parentPromptId: schema.promptsTable.parentPromptId,
-          isActive: schema.promptsTable.isActive,
-          createdBy: schema.promptsTable.createdBy,
-          createdAt: schema.promptsTable.createdAt,
-          updatedAt: schema.promptsTable.updatedAt,
-        },
+        ...getTableColumns(schema.agentPromptsTable),
+        prompt: getTableColumns(schema.promptsTable),
       })
       .from(schema.agentPromptsTable)
       .innerJoin(
@@ -124,17 +93,18 @@ class AgentPromptModel {
    * Removes existing prompts and assigns new ones
    */
   static async replacePrompts(
-    input: AssignPromptsInput,
+    agentId: string,
+    input: AssignAgentPrompts,
   ): Promise<AgentPrompt[]> {
     // Delete all existing prompts for this agent
-    await AgentPromptModel.deleteAllByAgentId(input.agentId);
+    await AgentPromptModel.deleteAllByAgentId(agentId);
 
     const newAgentPrompts: AgentPrompt[] = [];
 
     // Add system prompt if provided (order 0)
     if (input.systemPromptId) {
       const systemPrompt = await AgentPromptModel.create({
-        agentId: input.agentId,
+        agentId,
         promptId: input.systemPromptId,
         order: 0,
       });
@@ -145,7 +115,7 @@ class AgentPromptModel {
     if (input.regularPromptIds && input.regularPromptIds.length > 0) {
       for (let i = 0; i < input.regularPromptIds.length; i++) {
         const regularPrompt = await AgentPromptModel.create({
-          agentId: input.agentId,
+          agentId,
           promptId: input.regularPromptIds[i],
           order: i + 1,
         });

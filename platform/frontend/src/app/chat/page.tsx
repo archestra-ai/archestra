@@ -1,8 +1,10 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -14,10 +16,9 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { Shimmer } from "@/components/ai-elements/shimmer";
+import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { ConversationList } from "@/components/chat/conversation-list";
-import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,18 +34,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  type ConversationWithAgent,
   useChatAgentMcpTools,
-  useConversations,
+  useConversation,
   useCreateConversation,
-  useDeleteConversation,
-  useUpdateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
-interface ConversationWithMessages extends ConversationWithAgent {
-  messages: UIMessage[];
-}
+const CONVERSATION_QUERY_PARAM = "conversation";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -53,17 +49,32 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
-  const [hideToolCalls, setHideToolCalls] = useState(false);
+  const [hideToolCalls, setHideToolCalls] = useState(() => {
+    // Initialize from localStorage
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("archestra-chat-hide-tool-calls") === "true";
+    }
+    return false;
+  });
+  const [hasInitialized, setHasInitialized] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
+  const pendingPromptRef = useRef<string | undefined>(undefined);
+  const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
 
-  // Initialize conversation ID from URL on mount
+  // Initialize
   useEffect(() => {
-    const conversationParam = searchParams.get("conversation");
-    if (conversationParam && conversationParam !== conversationId) {
-      setConversationId(conversationParam);
+    if (hasInitialized) return;
+    setHasInitialized(true);
+  }, [hasInitialized]);
+
+  // Sync conversation ID with URL
+  useEffect(() => {
+    const conversationParam = searchParams.get(CONVERSATION_QUERY_PARAM);
+    if (conversationParam !== conversationId) {
+      setConversationId(conversationParam || undefined);
     }
   }, [searchParams, conversationId]);
 
@@ -71,53 +82,61 @@ export default function ChatPage() {
   const selectConversation = (id: string | undefined) => {
     setConversationId(id);
     if (id) {
-      router.push(`${pathname}?conversation=${id}`);
+      router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
     } else {
       router.push(pathname);
     }
   };
 
-  // Fetch conversations with agent details
-  const { data: conversations = [] } = useConversations();
-
   // Fetch conversation with messages
-  const { data: conversation } = useQuery<ConversationWithMessages>({
-    queryKey: ["conversation", conversationId],
-    queryFn: async () => {
-      if (!conversationId) return null;
-      const res = await fetch(`/api/chat/conversations/${conversationId}`);
-      if (!res.ok) {
-        // If conversation was deleted (404), clear the selection gracefully
-        if (res.status === 404) {
-          selectConversation(undefined);
-          return null;
-        }
-        throw new Error("Failed to fetch conversation");
-      }
-      return res.json();
-    },
-    enabled: !!conversationId,
-    staleTime: 0, // Always refetch to ensure we have the latest messages
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-    retry: false, // Don't retry on error to avoid multiple 404s
-  });
+  const { data: conversation } = useConversation(conversationId);
 
   // Get current agent info
-  const currentAgent =
-    conversation?.agent ||
-    conversations.find((c) => c.id === conversationId)?.agent;
+  const currentAgentId = conversation?.agentId;
+
+  // Clear MCP Gateway sessions when opening a NEW conversation
+  useEffect(() => {
+    // Only clear sessions if this is a newly created conversation
+    if (
+      currentAgentId &&
+      conversationId &&
+      newlyCreatedConversationRef.current === conversationId
+    ) {
+      // Clear sessions for this agent to ensure fresh MCP state
+      fetch("/v1/mcp/sessions", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${currentAgentId}`,
+        },
+      })
+        .then(async () => {
+          // Clear the ref after clearing sessions
+          newlyCreatedConversationRef.current = undefined;
+        })
+        .catch((error) => {
+          console.error("[Chat] Failed to clear MCP sessions:", {
+            conversationId,
+            agentId: currentAgentId,
+            error,
+          });
+          // Clear the ref even on error to avoid retry loops
+          newlyCreatedConversationRef.current = undefined;
+        });
+    }
+  }, [conversationId, currentAgentId]);
 
   // Fetch MCP tools from gateway (same as used in chat backend)
-  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgent?.id);
+  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = mcpTools.reduce(
     (acc, tool) => {
-      const parts = tool.name.split("__");
+      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
       // Last part is tool name, everything else is server name
       const serverName =
-        parts.length > 1 ? parts.slice(0, -1).join("__") : "default";
+        parts.length > 1
+          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+          : "default";
       if (!acc[serverName]) {
         acc[serverName] = [];
       }
@@ -129,36 +148,34 @@ export default function ChatPage() {
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
-  const handleSelectAgent = async (agentId: string) => {
+
+  // Handle prompt selection from all agents view
+  const handleSelectPromptFromAllAgents = async (
+    agentId: string,
+    prompt: string,
+  ) => {
+    // Store the pending prompt to send after conversation loads
+    // Empty string means "free chat" - don't send a message
+    pendingPromptRef.current = prompt || undefined;
+    // Create conversation for the selected agent
     const newConversation =
       await createConversationMutation.mutateAsync(agentId);
     if (newConversation) {
+      // Mark this as a newly created conversation
+      newlyCreatedConversationRef.current = newConversation.id;
       selectConversation(newConversation.id);
     }
   };
 
-  // Update conversation mutation
-  const updateConversationMutation = useUpdateConversation();
-  const handleUpdateConversation = async (id: string, title: string) => {
-    await updateConversationMutation.mutateAsync({ id, title });
-  };
-
-  // Delete conversation mutation
-  const deleteConversationMutation = useDeleteConversation();
-  const handleDeleteConversation = async (id: string) => {
-    // If we're deleting the selected conversation, clear the selection first
-    // to prevent the query from trying to refetch a deleted conversation
-    if (conversationId === id) {
-      setConversationId(undefined);
-      setMessages([]);
-      router.push(pathname);
-    }
-
-    await deleteConversationMutation.mutateAsync(id);
+  // Persist hide tool calls preference
+  const toggleHideToolCalls = () => {
+    const newValue = !hideToolCalls;
+    setHideToolCalls(newValue);
+    localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   };
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages, stop } = useChat({
+  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat", // Must match backend route
       credentials: "include", // Send cookies for authentication
@@ -187,13 +204,28 @@ export default function ChatPage() {
       conversation.id === conversationId &&
       loadedConversationRef.current !== conversationId
     ) {
-      setMessages(conversation.messages);
+      setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
+
+      // If there's a pending prompt and the conversation is empty, send it
+      if (
+        pendingPromptRef.current &&
+        conversation.messages.length === 0 &&
+        status !== "submitted" &&
+        status !== "streaming"
+      ) {
+        const promptToSend = pendingPromptRef.current;
+        pendingPromptRef.current = undefined;
+        sendMessage({
+          role: "user",
+          parts: [{ type: "text", text: promptToSend }],
+        });
+      }
     } else if (conversationId && !conversation) {
       // Clear messages when switching to a conversation that's loading
       setMessages([]);
     }
-  }, [conversationId, conversation, setMessages]);
+  }, [conversationId, conversation, setMessages, sendMessage, status]);
 
   const handleSubmit = (
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
@@ -212,18 +244,6 @@ export default function ChatPage() {
     sendMessage({
       role: "user",
       parts: [{ type: "text", text: message.text }],
-    });
-  };
-
-  const handleSelectPrompt = (prompt: string) => {
-    // Send the message directly instead of just filling the input
-    if (status === "submitted" || status === "streaming") {
-      return;
-    }
-
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: prompt }],
     });
   };
 
@@ -253,42 +273,67 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar - Conversation List */}
-      <ConversationList
-        conversations={conversations}
-        selectedConversationId={conversationId}
-        onSelectConversation={selectConversation}
-        onSelectAgent={handleSelectAgent}
-        onUpdateConversation={handleUpdateConversation}
-        onDeleteConversation={handleDeleteConversation}
-        isCreatingConversation={createConversationMutation.isPending}
-        hideToolCalls={hideToolCalls}
-        onToggleHideToolCalls={setHideToolCalls}
-      />
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+    <div className="flex h-screen w-full">
+      <div className="flex-1 flex flex-col w-full">
         {!conversationId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Shimmer as="h1" className="text-2xl" duration={3} spread={3}>
-              Create a new chat to get started
-            </Shimmer>
-          </div>
+          <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
-          <>
-            {messages.length === 0 ? (
-              <PromptSuggestions
-                agentId={currentAgent?.id}
-                agentName={currentAgent?.name}
-                onSelectPrompt={handleSelectPrompt}
-              />
-            ) : (
-              <ChatMessages messages={messages} hideToolCalls={hideToolCalls} />
+          <div className="flex flex-col h-full">
+            {error && (
+              <div className="border-b p-4 bg-destructive/5">
+                <Alert variant="destructive" className="max-w-3xl mx-auto">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error.message}</AlertDescription>
+                </Alert>
+              </div>
             )}
-            <div className="border-t p-4">
+
+            {/* Sticky top bar with agent name and toggle */}
+            <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
+              <div className="flex-1" />
+              {conversation?.agent?.name && (
+                <div className="flex-1 text-center">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {conversation.agent.name}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleHideToolCalls}
+                  className="text-xs"
+                >
+                  {hideToolCalls ? (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show tool calls
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide tool calls
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Scrollable messages area */}
+            <div className="flex-1 overflow-y-auto">
+              <ChatMessages
+                messages={messages}
+                hideToolCalls={hideToolCalls}
+                status={status}
+              />
+            </div>
+
+            {/* Sticky bottom input area */}
+            <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
-                {currentAgent && Object.keys(groupedTools).length > 0 && (
+                {currentAgentId && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
                       <div className="flex flex-wrap gap-2">
@@ -312,7 +357,9 @@ export default function ChatPage() {
                               >
                                 <div className="space-y-1">
                                   {tools.map((tool) => {
-                                    const parts = tool.name.split("__");
+                                    const parts = tool.name.split(
+                                      MCP_SERVER_TOOL_NAME_SEPARATOR,
+                                    );
                                     const toolName =
                                       parts.length > 1
                                         ? parts[parts.length - 1]
@@ -348,12 +395,15 @@ export default function ChatPage() {
                   </PromptInputBody>
                   <PromptInputToolbar>
                     <PromptInputTools />
-                    <PromptInputSubmit status={status} onStop={stop} />
+                    <PromptInputSubmit
+                      status={status === "error" ? "ready" : status}
+                      onStop={stop}
+                    />
                   </PromptInputToolbar>
                 </PromptInput>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

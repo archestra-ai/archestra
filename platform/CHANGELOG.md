@@ -1,5 +1,136 @@
 # Changelog
 
+## [0.5.0](https://github.com/archestra-ai/archestra/compare/platform-v0.4.1...platform-v0.5.0) (2025-11-14)
+
+
+### Features
+
+* add more filtering to tools table (+ polish `/tools` UX) ([#1079](https://github.com/archestra-ai/archestra/issues/1079)) ([8349630](https://github.com/archestra-ai/archestra/commit/834963087d8ea6ecc1e38fa05c8edfcab031278b))
+* trust archestra mcp server tools by default + don't show in tools table ([#1114](https://github.com/archestra-ai/archestra/issues/1114)) ([06cc33b](https://github.com/archestra-ai/archestra/commit/06cc33b828c1dad1872c8a8c6e3486d3ce1fe6df))
+
+
+### Bug Fixes
+
+* "Failed to create K8s Secret" on backend initialization ([#1091](https://github.com/archestra-ai/archestra/issues/1091)) ([954d337](https://github.com/archestra-ai/archestra/commit/954d337ef66d9fff08c4fa81bdae2c537bb330e6))
+* 400 error due to agent tool filtering by archestra tools ([#1118](https://github.com/archestra-ai/archestra/issues/1118)) ([62fde5e](https://github.com/archestra-ai/archestra/commit/62fde5e7c60d5ad448ffa74e877f429884cb627a))
+* fix mcp ([#1121](https://github.com/archestra-ai/archestra/issues/1121)) ([334f444](https://github.com/archestra-ai/archestra/commit/334f444e1e058a5d488c035f6c8f01c73ab6b78b))
+* fix refetching local mcp server logs ([#1115](https://github.com/archestra-ai/archestra/issues/1115)) ([6b0a068](https://github.com/archestra-ai/archestra/commit/6b0a06861e5a4f710cb2b7767c793c3db8a49a4d))
+* fix sorting of catalog items ([#1098](https://github.com/archestra-ai/archestra/issues/1098)) ([c2a7c8c](https://github.com/archestra-ai/archestra/commit/c2a7c8c16ecd56188904c3f3cd29beca7528bfa6))
+* fix tools filtering on the frontend ([#1096](https://github.com/archestra-ai/archestra/issues/1096)) ([3cbe42b](https://github.com/archestra-ai/archestra/commit/3cbe42b586979715cbaea319554ce2d366b2eb0c))
+* mcp client sessions ([#1122](https://github.com/archestra-ai/archestra/issues/1122)) ([417bdb5](https://github.com/archestra-ai/archestra/commit/417bdb5f6081a22eb34017e2c0d770d996f7ffbf))
+* mcp server tools don't exist in the chat ([#1120](https://github.com/archestra-ai/archestra/issues/1120)) ([4be837c](https://github.com/archestra-ai/archestra/commit/4be837c74ed3a059e62ef66887fd8e0c28927074))
+* polish MCP Gateway logs table ([#1100](https://github.com/archestra-ai/archestra/issues/1100)) ([da8f2a5](https://github.com/archestra-ai/archestra/commit/da8f2a5abf09bb89506482e3d735f2a365c00551))
+* show reinstall only if current user has connected to mcp server ([#1099](https://github.com/archestra-ai/archestra/issues/1099)) ([f5df4c1](https://github.com/archestra-ai/archestra/commit/f5df4c125877701e93050255eacd337a1c786b02))
+* vertical scrolling bug affecting many pages ([#1089](https://github.com/archestra-ai/archestra/issues/1089)) ([fcd2b07](https://github.com/archestra-ai/archestra/commit/fcd2b07a50bcc83c97212dbf5fe9eaea21333e75))
+
+## [0.4.1](https://github.com/archestra-ai/archestra/compare/platform-v0.4.0...platform-v0.4.1) (2025-11-13)
+
+
+### Bug Fixes
+
+* fix mcp installation counters ([#1081](https://github.com/archestra-ai/archestra/issues/1081)) ([c920bd1](https://github.com/archestra-ai/archestra/commit/c920bd1469826855afd052f419c14ec4c1f7a4df))
+* fix policy evaluation ([#1086](https://github.com/archestra-ai/archestra/issues/1086)) ([5c32dbe](https://github.com/archestra-ai/archestra/commit/5c32dbee6d9701d849f0f717a482577fb6918cdb))
+* fix showing authenticated users ([#1078](https://github.com/archestra-ai/archestra/issues/1078)) ([46463ed](https://github.com/archestra-ai/archestra/commit/46463edc6d2531cc02c742abc1e2bd9ffceb0e31))
+* newly assigned tools not in chat ([#1083](https://github.com/archestra-ai/archestra/issues/1083)) ([dc1d364](https://github.com/archestra-ai/archestra/commit/dc1d364e352244869805a2c6c34b0c8603da49d8))
+* no optimization rules in seed ([#1068](https://github.com/archestra-ai/archestra/issues/1068)) ([162458e](https://github.com/archestra-ai/archestra/commit/162458ea686e3c8079ff36f0ca103c1df4f0bfad))
+* protect route by default ([#1063](https://github.com/archestra-ai/archestra/issues/1063)) ([3385ff0](https://github.com/archestra-ai/archestra/commit/3385ff07c2221cb4c1c1f0d1ac9fabe92ccb6440))
+* require agent selection to pick the credential ([#1080](https://github.com/archestra-ai/archestra/issues/1080)) ([744c176](https://github.com/archestra-ai/archestra/commit/744c17619db18947c0cee7a309f8331856e53e8f))
+* seed Archestra MCP tools and assign ([#1073](https://github.com/archestra-ai/archestra/issues/1073)) ([8bec6df](https://github.com/archestra-ai/archestra/commit/8bec6dfd5a1f006e45af88d9ab5bba7ab0c34de2))
+* show all action buttons in agent table ([#1074](https://github.com/archestra-ai/archestra/issues/1074)) ([6aa7265](https://github.com/archestra-ai/archestra/commit/6aa7265db313c7fc303d5f262d3fc4a19007d10d))
+* show loading indicator when streaming ([#1065](https://github.com/archestra-ai/archestra/issues/1065)) ([79ac80d](https://github.com/archestra-ai/archestra/commit/79ac80d1916a098aa142f46bbc230d9caaaaf0a0))
+
+## [0.4.0](https://github.com/archestra-ai/archestra/compare/platform-v0.3.2...platform-v0.4.0) (2025-11-12)
+
+
+### Features
+
+* agent setting to treat user prompts as untrusted ([#1067](https://github.com/archestra-ai/archestra/issues/1067)) ([6557c61](https://github.com/archestra-ai/archestra/commit/6557c61a354629cbe2aeeceba3cc300ae29d4910))
+* LLM cost optimization, OpenAI & Anthropic ([#1017](https://github.com/archestra-ai/archestra/issues/1017)) ([16930c1](https://github.com/archestra-ai/archestra/commit/16930c1bcf0002858e85e1a952ff57e768669873))
+
+
+### Bug Fixes
+
+* chat prompts assignment UI state management bug ([#1055](https://github.com/archestra-ai/archestra/issues/1055)) ([4e5f393](https://github.com/archestra-ai/archestra/commit/4e5f39351781418b72c65de46a0192877c19cd5a))
+* don't throw from api client ([#1033](https://github.com/archestra-ai/archestra/issues/1033)) ([28b818f](https://github.com/archestra-ai/archestra/commit/28b818f8c8fe73f3017b568e0ccc69a2c47dbaa0))
+* if just 1 token select by default ([#1066](https://github.com/archestra-ai/archestra/issues/1066)) ([41c57cb](https://github.com/archestra-ai/archestra/commit/41c57cb1f1d7a58803cb6bdf8fe9607e7b8bb105))
+* show vercel ai errors ([#1064](https://github.com/archestra-ai/archestra/issues/1064)) ([3b767a2](https://github.com/archestra-ai/archestra/commit/3b767a2731331b32e19469195c0f68733e02145b))
+
+## [0.3.2](https://github.com/archestra-ai/archestra/compare/platform-v0.3.1...platform-v0.3.2) (2025-11-11)
+
+
+### Bug Fixes
+
+* tool calling doesn't work when server name is uppercase ([#1052](https://github.com/archestra-ai/archestra/issues/1052)) ([e19b938](https://github.com/archestra-ai/archestra/commit/e19b9386e96a897a00c5b6a61abc4ae3bf14ecc2))
+
+## [0.3.1](https://github.com/archestra-ai/archestra/compare/platform-v0.3.0...platform-v0.3.1) (2025-11-11)
+
+
+### Bug Fixes
+
+* add secret to role in helm ([#1050](https://github.com/archestra-ai/archestra/issues/1050)) ([034ba9e](https://github.com/archestra-ai/archestra/commit/034ba9ec4a3b403caf3c7c01534a420a9dcaa333))
+* bulk assign tools 2 agent endpoint ([#1045](https://github.com/archestra-ai/archestra/issues/1045)) ([825f513](https://github.com/archestra-ai/archestra/commit/825f51302e7d1fb8b48e29fdf1e4c73d723fb3b6))
+
+## [0.3.0](https://github.com/archestra-ai/archestra/compare/platform-v0.2.1...platform-v0.3.0) (2025-11-11)
+
+
+### Features
+
+* `archestra__create_agent` MCP gateway tool ([#1041](https://github.com/archestra-ai/archestra/issues/1041)) ([440013e](https://github.com/archestra-ai/archestra/commit/440013e139ce00e91714bac08a1c83a7b9299974))
+* add cost limit token-usage Archestra MCP server tools ([#1044](https://github.com/archestra-ai/archestra/issues/1044)) ([ce55edb](https://github.com/archestra-ai/archestra/commit/ce55edbab426d04775c9ead98ef12a043dcf643d))
+* add orchestrator-k8s-runtime feature flag ([#1031](https://github.com/archestra-ai/archestra/issues/1031)) ([0164614](https://github.com/archestra-ai/archestra/commit/01646149d01f175fcfde25de8c322995bc372bdd))
+
+
+### Bug Fixes
+
+* cleanup ([#1038](https://github.com/archestra-ai/archestra/issues/1038)) ([b7cb8bf](https://github.com/archestra-ai/archestra/commit/b7cb8bf62c92c83c5d155ba5042292c3a372dc84))
+* update Helm health checks to use backend `/health` endpoint ([#1042](https://github.com/archestra-ai/archestra/issues/1042)) ([3f49b68](https://github.com/archestra-ai/archestra/commit/3f49b68c823f4bf3a2a4f1342b5c310776dd818e))
+
+
+### Dependencies
+
+* **platform:** bump the platform-dependencies group in /platform with 25 updates ([#1032](https://github.com/archestra-ai/archestra/issues/1032)) ([22397c5](https://github.com/archestra-ai/archestra/commit/22397c5dc89f95b241bd9b0d8fbcf30804dfea63))
+
+## [0.2.1](https://github.com/archestra-ai/archestra/compare/platform-v0.2.0...platform-v0.2.1) (2025-11-10)
+
+
+### Bug Fixes
+
+* agents table pagination issue  ([#1030](https://github.com/archestra-ai/archestra/issues/1030)) ([252d76f](https://github.com/archestra-ai/archestra/commit/252d76f06000269e2e2b13bd06fe59a480e8284a))
+* comment out onboarding for now ([#1028](https://github.com/archestra-ai/archestra/issues/1028)) ([2448c03](https://github.com/archestra-ai/archestra/commit/2448c032223ec367bc5bb3fecd7c71f25b5ef5e6))
+* improve prompts ([#1034](https://github.com/archestra-ai/archestra/issues/1034)) ([fc4fb0a](https://github.com/archestra-ai/archestra/commit/fc4fb0a620547df5cf0cebef2dc5c0247d50f62c))
+* initial state of chat promt suggestions ([#1027](https://github.com/archestra-ai/archestra/issues/1027)) ([151d53a](https://github.com/archestra-ai/archestra/commit/151d53a811b25ce883f8c391b11e41d1f6115181))
+* mcp server type migration ([#1024](https://github.com/archestra-ai/archestra/issues/1024)) ([23e209b](https://github.com/archestra-ai/archestra/commit/23e209b43127a41f1f639d0294e1fb8341ca5f05))
+* mcp tools discovery fix ([#1035](https://github.com/archestra-ai/archestra/issues/1035)) ([c5d5a6f](https://github.com/archestra-ai/archestra/commit/c5d5a6f074ab0a1ba26419226785b7ae16744b34))
+* show more actionable error message for expired invitation links ([#1026](https://github.com/archestra-ai/archestra/issues/1026)) ([aa3d2c5](https://github.com/archestra-ai/archestra/commit/aa3d2c5e1c63366e71cfcbf4640b611f4b84fdf5))
+
+## [0.2.0](https://github.com/archestra-ai/archestra/compare/platform-v0.1.0...platform-v0.2.0) (2025-11-10)
+
+
+### Features
+
+* add onboarding and log all mcp gateway calls ([#965](https://github.com/archestra-ai/archestra/issues/965)) ([826d592](https://github.com/archestra-ai/archestra/commit/826d59245038649a7ee7cb4c094f5edd4d127cfb))
+* add per agent chat ([#1008](https://github.com/archestra-ai/archestra/issues/1008)) ([fbadc6f](https://github.com/archestra-ai/archestra/commit/fbadc6ff075bf7f56e6bcae940e063d7e29e8291))
+* custom RBAC roles ([#988](https://github.com/archestra-ai/archestra/issues/988)) ([8bd43b6](https://github.com/archestra-ai/archestra/commit/8bd43b6fc982df4fed6cf42dc10303cc42961bd8))
+* prompt library and chat settings ([#1011](https://github.com/archestra-ai/archestra/issues/1011)) ([94a860c](https://github.com/archestra-ai/archestra/commit/94a860c125947f0472a26e3eeded27cb0abb7690))
+* remove LLM proxy auto-execution, fix bugs around mcp tool calling ([#1000](https://github.com/archestra-ai/archestra/issues/1000)) ([f8d8742](https://github.com/archestra-ai/archestra/commit/f8d8742b1310847bfe8256b379546a376495e5ed))
+
+
+### Bug Fixes
+
+* add feature flag to disable teams auth ([#1022](https://github.com/archestra-ai/archestra/issues/1022)) ([0fafd4a](https://github.com/archestra-ai/archestra/commit/0fafd4af27838035b10d609db7c76c8b8de8203b))
+* add new permissions to chat routes ([#1009](https://github.com/archestra-ai/archestra/issues/1009)) ([83bc70c](https://github.com/archestra-ai/archestra/commit/83bc70c7e87a6f7aa6ea71225fc56d8fc4561c6e))
+* clean up internal JWT removal ([#1015](https://github.com/archestra-ai/archestra/issues/1015)) ([5afb093](https://github.com/archestra-ai/archestra/commit/5afb093103c2acfcd9907503121f4b1e348002dc))
+* fix agents table pagination bug ([#1020](https://github.com/archestra-ai/archestra/issues/1020)) ([23e4d42](https://github.com/archestra-ai/archestra/commit/23e4d42d382409730b2ede16c69513bc810c7031))
+* n8n server tool discovery and other minor improvements ([#1018](https://github.com/archestra-ai/archestra/issues/1018)) ([a74db71](https://github.com/archestra-ai/archestra/commit/a74db715ec7cb6777bbddaa4d8eee640a8161314))
+* small chat bugs ([#1014](https://github.com/archestra-ai/archestra/issues/1014)) ([3d9e1e8](https://github.com/archestra-ai/archestra/commit/3d9e1e80cd8ddde92557a94f72d9684d56db9de7))
+
+
+### Code Refactoring
+
+* change executeToolCalls to executeToolCall ([#1001](https://github.com/archestra-ai/archestra/issues/1001)) ([32d426b](https://github.com/archestra-ai/archestra/commit/32d426b8ddca5ec13ad8df8ad9575d2740520441))
+* cleanup unused code after mcp client refactoring ([#1007](https://github.com/archestra-ai/archestra/issues/1007)) ([d6d978b](https://github.com/archestra-ai/archestra/commit/d6d978bc1192fa14b80e734abe8c65b9564fe3aa))
+* mcp client ([#1005](https://github.com/archestra-ai/archestra/issues/1005)) ([6a290ab](https://github.com/archestra-ai/archestra/commit/6a290abb006f58e623f2db361022f0a3b1d2999c))
+
 ## [0.1.0](https://github.com/archestra-ai/archestra/compare/platform-v0.0.30...platform-v0.1.0) (2025-11-07)
 
 

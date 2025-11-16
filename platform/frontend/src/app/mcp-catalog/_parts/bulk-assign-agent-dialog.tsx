@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAgents } from "@/lib/agent.query";
-import { useAssignTool } from "@/lib/agent-tools.query";
+import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 
 interface BulkAssignAgentDialogProps {
@@ -41,7 +41,7 @@ export function BulkAssignAgentDialog({
   catalogId,
 }: BulkAssignAgentDialogProps) {
   const { data: agents } = useAgents({});
-  const assignMutation = useAssignTool();
+  const bulkAssignMutation = useBulkAssignTools();
   const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
@@ -67,88 +67,74 @@ export function BulkAssignAgentDialog({
   const handleAssign = useCallback(async () => {
     if (!tools || tools.length === 0 || selectedAgentIds.length === 0) return;
 
-    // Helper function to check if an error is a duplicate key error
-    const isDuplicateError = (error: unknown): boolean => {
-      if (!error) return false;
-      const errorStr = JSON.stringify(error).toLowerCase();
-      return (
-        errorStr.includes("duplicate key") ||
-        errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
-        errorStr.includes("already assigned")
-      );
-    };
-
     // Assign each tool to each selected agent
     const assignments = tools.flatMap((tool) =>
       selectedAgentIds.map((agentId) => ({
         agentId,
         toolId: tool.id,
-        toolName: tool.name,
+        credentialSourceMcpServerId: isLocalServer
+          ? null
+          : credentialSourceMcpServerId,
+        executionSourceMcpServerId: isLocalServer
+          ? executionSourceMcpServerId
+          : null,
       })),
     );
 
-    const results = await Promise.allSettled(
-      assignments.map((assignment) =>
-        assignMutation.mutateAsync({
-          agentId: assignment.agentId,
-          toolId: assignment.toolId,
-          credentialSourceMcpServerId: isLocalServer
-            ? null
-            : credentialSourceMcpServerId,
-          executionSourceMcpServerId: isLocalServer
-            ? executionSourceMcpServerId
-            : null,
-        }),
-      ),
-    );
+    try {
+      const result = await bulkAssignMutation.mutateAsync({
+        assignments,
+        mcpServerId: mcpServer?.id,
+      });
 
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const totalAttempted = results.length;
+      if (!result) {
+        toast.error("Failed to assign tools");
+        return;
+      }
 
-    // Check if failures are due to duplicates
-    const duplicates = results.filter(
-      (r) => r.status === "rejected" && isDuplicateError(r.reason),
-    ).length;
+      const { succeeded, failed, duplicates } = result;
 
-    const actualFailures = failed - duplicates;
-
-    if (succeeded > 0) {
-      if (duplicates > 0 && actualFailures === 0) {
-        toast.success(
-          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
-        );
-      } else if (actualFailures > 0) {
-        toast.warning(
-          `Assigned ${succeeded} of ${totalAttempted} tool${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+      if (succeeded.length > 0) {
+        if (duplicates.length > 0 && failed.length === 0) {
+          toast.success(
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}. ${duplicates.length} ${duplicates.length === 1 ? "was" : "were"} already assigned.`,
+          );
+        } else if (failed.length > 0) {
+          toast.warning(
+            `Assigned ${succeeded.length} of ${assignments.length} tool${assignments.length !== 1 ? "s" : ""}. ${failed.length} failed.`,
+          );
+        } else {
+          toast.success(
+            `Successfully assigned ${succeeded.length} tool assignment${succeeded.length !== 1 ? "s" : ""}`,
+          );
+        }
+      } else if (duplicates.length === assignments.length) {
+        toast.info(
+          "All selected tools are already assigned to the selected profiles",
         );
       } else {
-        toast.success(
-          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}`,
-        );
+        toast.error("Failed to assign tools");
+        console.error("Bulk assignment errors:", failed);
       }
-    } else if (duplicates === failed) {
-      toast.info(
-        "All selected tools are already assigned to the selected agents",
-      );
-    } else {
-      toast.error("Failed to assign tools");
-      console.error("Bulk assignment errors:", results);
-    }
 
-    setSelectedAgentIds([]);
-    setSearchQuery("");
-    setCredentialSourceMcpServerId(null);
-    setExecutionSourceMcpServerId(null);
-    onOpenChange(false);
+      setSelectedAgentIds([]);
+      setSearchQuery("");
+      setCredentialSourceMcpServerId(null);
+      setExecutionSourceMcpServerId(null);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Failed to assign tools");
+      console.error("Bulk assignment error:", error);
+    }
   }, [
     tools,
     selectedAgentIds,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     isLocalServer,
-    assignMutation,
+    bulkAssignMutation,
     onOpenChange,
+    mcpServer?.id,
   ]);
 
   const toggleAgent = useCallback((agentId: string) => {
@@ -174,9 +160,9 @@ export function BulkAssignAgentDialog({
     >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Bulk Assign Tools to Agents</DialogTitle>
+          <DialogTitle>Bulk Assign Tools to Profiles</DialogTitle>
           <DialogDescription>
-            Select one or more agents to assign {tools?.length || 0} tool
+            Select one or more profiles to assign {tools?.length || 0} tool
             {tools && tools.length !== 1 ? "s" : ""} to.
           </DialogDescription>
         </DialogHeader>
@@ -186,7 +172,7 @@ export function BulkAssignAgentDialog({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search agents..."
+                placeholder="Search profiles..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -198,8 +184,8 @@ export function BulkAssignAgentDialog({
             {!filteredAgents || filteredAgents.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
-                  ? "No agents match your search"
-                  : "No agents available"}
+                  ? "No profiles match your search"
+                  : "No profiles available"}
               </div>
             ) : (
               <div className="divide-y">
@@ -236,7 +222,7 @@ export function BulkAssignAgentDialog({
                   onValueChange={setExecutionSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
-                  agentIds={selectedAgentIds}
+                  shouldSetDefaultValue
                 />
               </>
             ) : (
@@ -248,7 +234,7 @@ export function BulkAssignAgentDialog({
                   Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when agents execute these
+                  Select which token will be used when profiles execute these
                   tools
                 </p>
                 <TokenSelect
@@ -256,7 +242,7 @@ export function BulkAssignAgentDialog({
                   onValueChange={setCredentialSourceMcpServerId}
                   className="w-full"
                   catalogId={catalogId}
-                  agentIds={selectedAgentIds}
+                  shouldSetDefaultValue
                 />
               </>
             )}
@@ -280,14 +266,14 @@ export function BulkAssignAgentDialog({
             onClick={handleAssign}
             disabled={
               selectedAgentIds.length === 0 ||
-              assignMutation.isPending ||
+              bulkAssignMutation.isPending ||
               (isLocalServer && !executionSourceMcpServerId) ||
               (!isLocalServer && !credentialSourceMcpServerId)
             }
           >
-            {assignMutation.isPending
+            {bulkAssignMutation.isPending
               ? "Assigning..."
-              : `Assign to ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? "s" : ""}`}
+              : `Assign to ${selectedAgentIds.length} profile${selectedAgentIds.length !== 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

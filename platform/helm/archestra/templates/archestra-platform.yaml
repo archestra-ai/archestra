@@ -92,8 +92,8 @@ spec:
           # Checks every 10 seconds for up to 5 minutes (30 failures * 10s)
           startupProbe:
             httpGet:
-              path: /
-              port: frontend
+              path: /health
+              port: backend
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
@@ -101,16 +101,16 @@ spec:
           # Liveness probe - restarts the container if it becomes unresponsive
           livenessProbe:
             httpGet:
-              path: /
-              port: frontend
+              path: /health
+              port: backend
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           # Readiness probe - marks the container as ready to receive traffic
           readinessProbe:
             httpGet:
-              path: /
-              port: frontend
+              path: /health
+              port: backend
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

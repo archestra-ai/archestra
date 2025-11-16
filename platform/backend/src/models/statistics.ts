@@ -1,94 +1,20 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type {
+  AgentStatistics,
+  ModelStatistics,
+  OverviewStatistics,
+  StatisticsTimeFrame,
+  StatisticsTimeSeriesData,
+  TeamStatistics,
+} from "@/types";
 import AgentTeamModel from "./agent-team";
-
-export type TimeFrame = "1h" | "24h" | "7d" | "30d" | "90d" | "12m" | "all";
-
-export interface TimeSeriesPoint {
-  timestamp: string;
-  value: number;
-}
-
-export interface TeamStatistics {
-  teamId: string;
-  teamName: string;
-  members: number;
-  agents: number;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface AgentStatistics {
-  agentId: string;
-  agentName: string;
-  teamName: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface ModelStatistics {
-  model: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  percentage: number;
-  timeSeries: TimeSeriesPoint[];
-}
-
-export interface OverviewStatistics {
-  totalRequests: number;
-  totalTokens: number;
-  totalCost: number;
-  topTeam: string;
-  topAgent: string;
-  topModel: string;
-}
-
-// Base time series interface
-export interface BaseTimeSeriesData {
-  timeBucket: string;
-  requests: number;
-  inputTokens: number;
-  outputTokens: number;
-}
-
-// Team-specific time series data
-export interface TeamTimeSeriesData extends BaseTimeSeriesData {
-  teamId: string;
-  teamName: string;
-}
-
-// Agent-specific time series data
-export interface AgentTimeSeriesData extends BaseTimeSeriesData {
-  agentId: string;
-  agentName: string;
-  teamName: string | null;
-}
-
-// Model-specific time series data
-export interface ModelTimeSeriesData extends BaseTimeSeriesData {
-  model: string | null;
-}
-
-// Union type for all time series data
-export type TimeSeriesData =
-  | BaseTimeSeriesData
-  | TeamTimeSeriesData
-  | AgentTimeSeriesData
-  | ModelTimeSeriesData;
 
 class StatisticsModel {
   /**
    * Convert timeframe to SQL interval
    */
-  private static getTimeframeInterval(timeframe: TimeFrame): string {
+  private static getTimeframeInterval(timeframe: StatisticsTimeFrame): string {
     switch (timeframe) {
       case "1h":
         return "1 hour";
@@ -112,7 +38,7 @@ class StatisticsModel {
   /**
    * Get time bucket size for aggregation
    */
-  private static getTimeBucket(timeframe: TimeFrame): string {
+  private static getTimeBucket(timeframe: StatisticsTimeFrame): string {
     switch (timeframe) {
       case "1h":
         return "minute"; // We'll round to 5-minute intervals in post-processing
@@ -136,7 +62,9 @@ class StatisticsModel {
   /**
    * Get time bucket interval in minutes for custom grouping
    */
-  private static getBucketIntervalMinutes(timeframe: TimeFrame): number {
+  private static getBucketIntervalMinutes(
+    timeframe: StatisticsTimeFrame,
+  ): number {
     switch (timeframe) {
       case "1h":
         return 5; // 5-minute buckets
@@ -198,9 +126,9 @@ class StatisticsModel {
   /**
    * Group time series data by custom bucket intervals
    */
-  private static groupTimeSeries<T extends BaseTimeSeriesData>(
+  private static groupTimeSeries<T extends StatisticsTimeSeriesData>(
     timeSeriesData: T[],
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
   ): T[] {
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
 
@@ -280,7 +208,7 @@ class StatisticsModel {
    * Get team statistics
    */
   static async getTeamStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<TeamStatistics[]> {
@@ -437,7 +365,7 @@ class StatisticsModel {
    * Get agent statistics
    */
   static async getAgentStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<AgentStatistics[]> {
@@ -559,7 +487,7 @@ class StatisticsModel {
    * Get model statistics
    */
   static async getModelStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<ModelStatistics[]> {
@@ -672,7 +600,7 @@ class StatisticsModel {
    * Get overview statistics
    */
   static async getOverviewStatistics(
-    timeframe: TimeFrame,
+    timeframe: StatisticsTimeFrame,
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<OverviewStatistics> {

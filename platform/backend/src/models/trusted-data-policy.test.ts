@@ -886,4 +886,113 @@ describe("TrustedDataPolicyModel", () => {
       });
     });
   });
+
+  describe("Archestra MCP server tools", () => {
+    test("always trusts Archestra MCP server tools regardless of policies", async () => {
+      // Test with a tool that starts with "archestra__"
+      const archestraToolName = "archestra__whoami";
+
+      const result = await TrustedDataPolicyModel.evaluate(
+        agentId,
+        archestraToolName,
+        {
+          value: { any: "data", dangerous: "content" },
+        },
+      );
+
+      expect(result.isTrusted).toBe(true);
+      expect(result.isBlocked).toBe(false);
+      expect(result.shouldSanitizeWithDualLlm).toBe(false);
+      expect(result.reason).toBe("Archestra MCP server tool");
+    });
+
+    test("trusts Archestra MCP server tools with different tool names", async () => {
+      const archestraTools = [
+        "archestra__get_agent",
+        "archestra__create_limit",
+        "archestra__get_mcp_servers",
+        "archestra__bulk_assign_tools_to_agents",
+      ];
+
+      for (const toolName of archestraTools) {
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { untrusted: "data", source: "malicious" },
+          },
+        );
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.isBlocked).toBe(false);
+        expect(result.shouldSanitizeWithDualLlm).toBe(false);
+        expect(result.reason).toBe("Archestra MCP server tool");
+      }
+    });
+
+    test("trusts Archestra tools even with blocking policies in place", async ({
+      makeTrustedDataPolicy,
+    }) => {
+      // Create a blocking policy that would normally block this data
+      await makeTrustedDataPolicy(agentToolId, {
+        attributePath: "source",
+        operator: "equal",
+        value: "malicious",
+        action: "block_always",
+        description: "Block malicious sources",
+      });
+
+      const result = await TrustedDataPolicyModel.evaluate(
+        agentId,
+        "archestra__create_agent",
+        {
+          value: { source: "malicious", data: "would normally be blocked" },
+        },
+      );
+
+      expect(result.isTrusted).toBe(true);
+      expect(result.isBlocked).toBe(false);
+      expect(result.shouldSanitizeWithDualLlm).toBe(false);
+      expect(result.reason).toBe("Archestra MCP server tool");
+    });
+
+    test("does not affect evaluation of non-Archestra tools", async ({
+      makeTrustedDataPolicy,
+    }) => {
+      // Test that regular tools still follow normal evaluation
+      await makeTrustedDataPolicy(agentToolId, {
+        attributePath: "source",
+        operator: "equal",
+        value: "trusted",
+        action: "mark_as_trusted",
+        description: "Trust specific source",
+      });
+
+      // Test regular tool with trusted data
+      const trustedResult = await TrustedDataPolicyModel.evaluate(
+        agentId,
+        toolName,
+        {
+          value: { source: "trusted" },
+        },
+      );
+
+      expect(trustedResult.isTrusted).toBe(true);
+      expect(trustedResult.reason).toContain("Trust specific source");
+
+      // Test regular tool with untrusted data
+      const untrustedResult = await TrustedDataPolicyModel.evaluate(
+        agentId,
+        toolName,
+        {
+          value: { source: "untrusted" },
+        },
+      );
+
+      expect(untrustedResult.isTrusted).toBe(false);
+      expect(untrustedResult.reason).toContain(
+        "does not match any trust policies",
+      );
+    });
+  });
 });

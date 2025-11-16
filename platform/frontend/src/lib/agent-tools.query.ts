@@ -1,40 +1,83 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   assignToolToAgent,
-  getAgentTools,
+  bulkAssignTools,
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
 
+type GetAllAgentToolsQueryParams = NonNullable<
+  archestraApiTypes.GetAllAgentToolsData["query"]
+>;
+
 export function useAllAgentTools({
   initialData,
+  pagination,
+  sorting,
+  filters,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
+  pagination?: {
+    limit?: number;
+    offset?: number;
+  };
+  sorting?: {
+    sortBy?: NonNullable<GetAllAgentToolsQueryParams["sortBy"]>;
+    sortDirection?: NonNullable<GetAllAgentToolsQueryParams["sortDirection"]>;
+  };
+  filters?: {
+    search?: string;
+    agentId?: string;
+    origin?: string;
+    credentialSourceMcpServerId?: string;
+  };
 }) {
-  return useSuspenseQuery({
-    queryKey: ["agent-tools"],
+  return useQuery({
+    queryKey: [
+      "agent-tools",
+      {
+        limit: pagination?.limit,
+        offset: pagination?.offset,
+        sortBy: sorting?.sortBy,
+        sortDirection: sorting?.sortDirection,
+        search: filters?.search,
+        agentId: filters?.agentId,
+        origin: filters?.origin,
+        credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+      },
+    ],
     queryFn: async () => {
-      const result = await getAllAgentTools();
-      return result.data ?? [];
+      const result = await getAllAgentTools({
+        query: {
+          limit: pagination?.limit,
+          offset: pagination?.offset,
+          sortBy: sorting?.sortBy,
+          sortDirection: sorting?.sortDirection,
+          search: filters?.search,
+          agentId: filters?.agentId,
+          origin: filters?.origin,
+          credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+          excludeArchestraTools: true,
+        },
+      });
+      return (
+        result.data ?? {
+          data: [],
+          pagination: {
+            currentPage: 1,
+            limit: 20,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }
+      );
     },
     initialData,
-  });
-}
-
-export function useAgentTools(agentId: string) {
-  return useSuspenseQuery({
-    queryKey: ["agents", agentId, "tools"],
-    queryFn: async () => {
-      const { data } = await getAgentTools({ path: { agentId } });
-      return data || [];
-    },
   });
 }
 
@@ -75,6 +118,69 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate chat MCP tools for this agent
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
+    },
+  });
+}
+
+export function useBulkAssignTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assignments,
+      mcpServerId,
+    }: {
+      assignments: Array<{
+        agentId: string;
+        toolId: string;
+        credentialSourceMcpServerId?: string | null;
+        executionSourceMcpServerId?: string | null;
+      }>;
+      mcpServerId?: string | null;
+    }) => {
+      const { data } = await bulkAssignTools({
+        body: { assignments },
+      });
+      if (!data) return null;
+      return { ...data, mcpServerId };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+
+      // Invalidate specific agent tools queries for agents that had successful assignments
+      const agentIds = result.succeeded.map((a) => a.agentId);
+      const uniqueAgentIds = new Set(agentIds);
+      for (const agentId of uniqueAgentIds) {
+        queryClient.invalidateQueries({
+          queryKey: ["agents", agentId, "tools"],
+        });
+        // Invalidate chat MCP tools for each affected agent
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "agents", agentId, "mcp-tools"],
+        });
+      }
+
+      // Invalidate global queries (only once, exact match to prevent nested invalidation)
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+
+      // Invalidate the MCP servers list
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-servers"],
+        exact: true,
+      });
+
+      // Invalidate the specific MCP server's tools if we know which server
+      if (result.mcpServerId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", result.mcpServerId, "tools"],
+        });
+      }
     },
   });
 }
@@ -102,6 +208,10 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate chat MCP tools for this agent
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", agentId, "mcp-tools"],
+      });
     },
   });
 }
@@ -120,26 +230,10 @@ export function useAgentToolPatchMutation() {
       });
       return result.data ?? null;
     },
-    onSuccess: (data) => {
-      // Update the cache directly without invalidating
-      queryClient.setQueryData<
-        archestraApiTypes.GetAllAgentToolsResponses["200"]
-      >(["agent-tools"], (old) => {
-        if (!old || !data) return old;
-
-        // Find and update the agent-tool with the response data
-        const agentToolIndex = old.findIndex((at) => at.id === data.id);
-        if (agentToolIndex === -1) {
-          return old;
-        }
-
-        // Create a new array with the updated agent-tool from the server response
-        const newAgentTools = [...old];
-        newAgentTools[agentToolIndex] = {
-          ...newAgentTools[agentToolIndex],
-          ...data,
-        };
-        return newAgentTools;
+    onSuccess: () => {
+      // Invalidate all agent-tools queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
       });
     },
   });

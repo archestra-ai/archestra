@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Log } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
+import { vi } from "vitest";
 import type { z } from "zod";
 import { describe, expect, test } from "@/test";
 import type { McpServer } from "@/types";
@@ -971,5 +972,311 @@ describe("K8sPod.generatePodSpec", () => {
         protocol: "TCP",
       },
     ]);
+  });
+});
+
+describe("K8sPod.createK8sSecret", () => {
+  // Helper function to create a K8sPod instance with mocked K8s API
+  function createK8sPodWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+    secretData?: Record<string, string>,
+  ): K8sPod {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      authType: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sPod(
+      mockMcpServer,
+      mockK8sApi as k8s.CoreV1Api,
+      {} as Attach,
+      {} as Log,
+      "default",
+      null,
+      undefined,
+      secretData,
+    );
+  }
+
+  test("creates K8s secret successfully", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+      DATABASE_URL: "postgresql://localhost:5432/db",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledWith({
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: {
+          API_KEY: Buffer.from("secret-123").toString("base64"),
+          DATABASE_URL: Buffer.from("postgresql://localhost:5432/db").toString(
+            "base64",
+          ),
+        },
+      },
+    });
+  });
+
+  test("skips secret creation when no secret data provided", async () => {
+    const mockCreateSecret = vi.fn();
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi);
+    await k8sPod.createK8sSecret({});
+
+    expect(mockCreateSecret).not.toHaveBeenCalled();
+  });
+
+  test("updates existing secret when creation fails with 409 conflict (statusCode)", async () => {
+    const conflictError = {
+      statusCode: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "updated-secret-456",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledWith({
+      name: "mcp-server-test-server-id-secrets",
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: {
+          API_KEY: Buffer.from("updated-secret-456").toString("base64"),
+        },
+      },
+    });
+  });
+
+  test("updates existing secret when creation fails with 409 conflict (code)", async () => {
+    const conflictError = {
+      code: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockResolvedValue({});
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      DATABASE_PASSWORD: "new-password",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledTimes(1);
+  });
+
+  test("throws error for non-conflict errors during creation", async () => {
+    const networkError = {
+      statusCode: 500,
+      message: "Internal server error",
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(networkError);
+    const mockReplaceSecret = vi.fn();
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+
+    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+      networkError,
+    );
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).not.toHaveBeenCalled();
+  });
+
+  test("throws error when replace operation fails", async () => {
+    const conflictError = {
+      statusCode: 409,
+      message: 'secrets "mcp-server-test-server-id-secrets" already exists',
+    };
+
+    const replaceError = {
+      statusCode: 403,
+      message: "Forbidden",
+    };
+
+    const mockCreateSecret = vi.fn().mockRejectedValue(conflictError);
+    const mockReplaceSecret = vi.fn().mockRejectedValue(replaceError);
+
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+      replaceNamespacedSecret: mockReplaceSecret,
+    };
+
+    const secretData = {
+      API_KEY: "secret-123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+
+    await expect(k8sPod.createK8sSecret(secretData)).rejects.toEqual(
+      replaceError,
+    );
+    expect(mockCreateSecret).toHaveBeenCalledTimes(1);
+    expect(mockReplaceSecret).toHaveBeenCalledTimes(1);
+  });
+
+  test("handles multiple secret data fields correctly", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "key-123",
+      DATABASE_URL: "postgres://localhost:5432",
+      SECRET_TOKEN: "token-456",
+      PASSWORD: "password123",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    const expectedData = {
+      API_KEY: Buffer.from("key-123").toString("base64"),
+      DATABASE_URL: Buffer.from("postgres://localhost:5432").toString("base64"),
+      SECRET_TOKEN: Buffer.from("token-456").toString("base64"),
+      PASSWORD: Buffer.from("password123").toString("base64"),
+    };
+
+    expect(mockCreateSecret).toHaveBeenCalledWith({
+      namespace: "default",
+      body: {
+        metadata: {
+          name: "mcp-server-test-server-id-secrets",
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            "mcp-server-name": "test-server",
+          },
+        },
+        type: "Opaque",
+        data: expectedData,
+      },
+    });
+  });
+
+  test("handles empty string values in secret data", async () => {
+    const mockCreateSecret = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      createNamespacedSecret: mockCreateSecret,
+    };
+
+    const secretData = {
+      API_KEY: "",
+      DATABASE_URL: "postgres://localhost:5432",
+      EMPTY_SECRET: "",
+    };
+
+    const k8sPod = createK8sPodWithMockedApi(mockK8sApi, secretData);
+    await k8sPod.createK8sSecret(secretData);
+
+    const expectedData = {
+      API_KEY: Buffer.from("").toString("base64"),
+      DATABASE_URL: Buffer.from("postgres://localhost:5432").toString("base64"),
+      EMPTY_SECRET: Buffer.from("").toString("base64"),
+    };
+
+    expect(mockCreateSecret).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          data: expectedData,
+        }),
+      }),
+    );
+  });
+});
+
+describe("K8sPod.constructK8sSecretName", () => {
+  test.each([
+    {
+      testName: "constructs secret name with valid UUID",
+      mcpServerId: "123e4567-e89b-12d3-a456-426614174000",
+      expected: "mcp-server-123e4567-e89b-12d3-a456-426614174000-secrets",
+    },
+    {
+      testName: "constructs secret name with simple ID",
+      mcpServerId: "simple-id",
+      expected: "mcp-server-simple-id-secrets",
+    },
+    {
+      testName: "constructs secret name with numeric ID",
+      mcpServerId: "12345",
+      expected: "mcp-server-12345-secrets",
+    },
+    {
+      testName: "constructs secret name with alphanumeric ID",
+      mcpServerId: "abc123def456",
+      expected: "mcp-server-abc123def456-secrets",
+    },
+  ])("$testName", ({ mcpServerId, expected }) => {
+    const result = K8sPod.constructK8sSecretName(mcpServerId);
+    expect(result).toBe(expected);
+    expect(result).toMatch(/^mcp-server-.+-secrets$/);
   });
 });

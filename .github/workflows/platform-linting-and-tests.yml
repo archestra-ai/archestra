@@ -143,7 +143,6 @@ jobs:
         working-directory: ./platform
         run: |
           pnpm codegen:api-client
-          pnpm lint:fix
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then

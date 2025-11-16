@@ -1,1 +1,0 @@
-ALTER TABLE `tools` DROP COLUMN `idempotent`;

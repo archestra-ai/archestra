@@ -5,7 +5,7 @@ import type { LocalConfigSchema } from "@shared";
 import type z from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import { InternalMcpCatalogModel } from "@/models";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
 
@@ -121,7 +121,7 @@ export default class K8sPod {
   }
 
   /**
-   * Create a Kubernetes Secret for environment variables marked as "secret" type
+   * Create or update a Kubernetes Secret for environment variables marked as "secret" type
    */
   async createK8sSecret(secretData: Record<string, string>): Promise<void> {
     const k8sSecretName = K8sPod.constructK8sSecretName(this.mcpServer.id);
@@ -154,19 +154,58 @@ export default class K8sPod {
         data,
       };
 
-      await this.k8sApi.createNamespacedSecret({
-        namespace: this.namespace,
-        body: secret,
-      });
-
-      logger.info(
-        {
-          mcpServerId: this.mcpServer.id,
-          secretName: k8sSecretName,
+      try {
+        // Try to create the secret
+        await this.k8sApi.createNamespacedSecret({
           namespace: this.namespace,
-        },
-        "Created K8s Secret for MCP server",
-      );
+          body: secret,
+        });
+
+        logger.info(
+          {
+            mcpServerId: this.mcpServer.id,
+            secretName: k8sSecretName,
+            namespace: this.namespace,
+          },
+          "Created K8s Secret for MCP server",
+        );
+      } catch (createError: unknown) {
+        // If secret already exists (409), update it instead
+        const isConflict =
+          createError &&
+          typeof createError === "object" &&
+          (("statusCode" in createError && createError.statusCode === 409) ||
+            ("code" in createError && createError.code === 409));
+
+        if (isConflict) {
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "K8s Secret already exists, updating it",
+          );
+
+          await this.k8sApi.replaceNamespacedSecret({
+            name: k8sSecretName,
+            namespace: this.namespace,
+            body: secret,
+          });
+
+          logger.info(
+            {
+              mcpServerId: this.mcpServer.id,
+              secretName: k8sSecretName,
+              namespace: this.namespace,
+            },
+            "Updated existing K8s Secret for MCP server",
+          );
+        } else {
+          // Re-throw other errors
+          throw createError;
+        }
+      }
     } catch (error) {
       logger.error(
         {
@@ -174,7 +213,7 @@ export default class K8sPod {
           mcpServerId: this.mcpServer.id,
           secretName: k8sSecretName,
         },
-        "Failed to create K8s Secret",
+        "Failed to create or update K8s Secret",
       );
       throw error;
     }
@@ -714,15 +753,47 @@ export default class K8sPod {
         name: this.podName,
         namespace: this.namespace,
       });
+
+      // Wait for pod to actually terminate (up to 30 seconds)
+      const maxWaitTime = 30000; // 30 seconds
+      const pollInterval = 1000; // 1 second
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        try {
+          // Try to get the pod - if it doesn't exist, we're done
+          await this.k8sApi.readNamespacedPod({
+            name: this.podName,
+            namespace: this.namespace,
+          });
+          // Pod still exists, wait and retry
+          await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        } catch (error: unknown) {
+          // Pod not found (404) means it's been deleted
+          if (error instanceof Error && error.message.includes("404")) {
+            logger.info(`Pod ${this.podName} successfully terminated`);
+            this.state = "not_created";
+            return;
+          }
+          // Other errors, rethrow
+          throw error;
+        }
+      }
+
+      // Timeout reached but pod still exists
+      logger.warn(
+        `Pod ${this.podName} deletion timeout after ${maxWaitTime}ms, may still be terminating`,
+      );
       this.state = "not_created";
-      logger.info(`Pod ${this.podName} stopped`);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {
-        logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
-        throw error;
+        // Pod already doesn't exist, that's fine
+        logger.info(`Pod ${this.podName} already deleted`);
+        this.state = "not_created";
+        return;
       }
-      // Pod doesn't exist, that's fine
-      this.state = "not_created";
+      logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
+      throw error;
     }
   }
 

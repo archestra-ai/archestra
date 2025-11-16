@@ -32,7 +32,7 @@ type CatalogItem =
 interface LocalServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onInstall: (
+  onConfirm: (
     userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
@@ -45,7 +45,7 @@ interface LocalServerInstallDialogProps {
 export function LocalServerInstallDialog({
   isOpen,
   onClose,
-  onInstall,
+  onConfirm,
   catalogItem,
   isInstalling,
   authType = "personal",
@@ -122,7 +122,7 @@ export function LocalServerInstallDialog({
       return;
     }
 
-    await onInstall(
+    await onConfirm(
       userConfigValues,
       environmentValues,
       authType === "team" ? selectedTeamIds : undefined,

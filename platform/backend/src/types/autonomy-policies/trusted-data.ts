@@ -22,7 +22,11 @@ export const InsertTrustedDataPolicySchema = createInsertSchema(
     operator: SupportedOperatorSchema,
     action: TrustedDataPolicyActionSchema,
   },
-);
+).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export type TrustedDataPolicy = z.infer<typeof SelectTrustedDataPolicySchema>;
 export type InsertTrustedDataPolicy = z.infer<

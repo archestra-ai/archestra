@@ -4,6 +4,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { McpToolCallModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
   createSortingQuerySchema,
@@ -101,12 +102,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!mcpToolCall) {
-        return reply.status(404).send({
-          error: {
-            message: "MCP tool call not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "MCP tool call not found");
       }
 
       return reply.send(mcpToolCall);

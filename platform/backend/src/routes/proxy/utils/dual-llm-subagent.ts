@@ -1,12 +1,12 @@
 import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig } from "@/types";
-import {
-  createDualLlmClient,
-  type DualLlmClient,
-  type DualLlmMessage,
-} from "./dual-llm-client";
-import type { CommonDualLlmParams, SupportedProviders } from "./types";
+import type {
+  CommonDualLlmParams,
+  DualLlmConfig,
+  DualLlmMessage,
+  SupportedProvider,
+} from "@/types";
+import { createDualLlmClient, type DualLlmClient } from "./dual-llm-client";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -45,7 +45,7 @@ export class DualLlmSubagent {
     params: CommonDualLlmParams,
     agentId: string,
     apiKey: string,
-    provider: SupportedProviders,
+    provider: SupportedProvider,
   ): Promise<DualLlmSubagent> {
     return new DualLlmSubagent(
       await DualLlmConfigModel.getDefault(),

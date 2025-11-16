@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_NAME } from "@shared";
+import { DEFAULT_PROFILE_NAME } from "@shared";
 import {
   and,
   asc,
@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -78,6 +79,9 @@ class AgentModel {
 
     // Build where conditions
     const whereConditions: SQL[] = [];
+
+    // Filter by use_in_chat = true
+    whereConditions.push(eq(schema.agentsTable.useInChat, true));
 
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
@@ -189,6 +193,11 @@ class AgentModel {
           toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
         })
         .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .where(sql`NOT ${schema.toolsTable.name} LIKE 'archestra__%'`)
         .groupBy(schema.agentToolsTable.agentId)
         .as("toolsCounts");
 
@@ -277,8 +286,8 @@ class AgentModel {
         });
       }
 
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
+      // Add tool if it exists and is not an Archestra MCP tool (leftJoin returns null for agents with no tools)
+      if (tool && !isArchestraMcpServerTool(tool.name)) {
         agentsMap.get(agent.id)?.tools.push(tool);
       }
     }
@@ -388,7 +397,7 @@ class AgentModel {
 
     // No default agent exists, create one
     return AgentModel.create({
-      name: name || DEFAULT_AGENT_NAME,
+      name: name || DEFAULT_PROFILE_NAME,
       isDefault: true,
       teams: [],
       labels: [],

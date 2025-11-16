@@ -148,7 +148,7 @@ function AttributePathExamples() {
 export function ToolResultPolicies({
   agentTool,
 }: {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();

@@ -3,42 +3,28 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import { UserModel } from "@/models";
-import type { ErrorResponse } from "@/types";
-
-const prepareErrorResponse = (
-  error: ErrorResponse["error"],
-): ErrorResponse => ({ error });
+import { ApiError } from "@/types";
 
 export class Authnz {
-  public handle = async (request: FastifyRequest, reply: FastifyReply) => {
+  public handle = async (request: FastifyRequest, _reply: FastifyReply) => {
     // custom logic to skip auth check
     if (await this.shouldSkipAuthCheck(request)) return;
 
     // return 401 if unauthenticated
     if (!(await this.isAuthenticated(request))) {
-      return reply.status(401).send(
-        prepareErrorResponse({
-          message: "Unauthenticated",
-          type: "unauthenticated",
-        }),
-      );
+      throw new ApiError(401, "Unauthenticated");
     }
 
     // Populate request.user and request.organizationId after successful authentication
     await this.populateUserInfo(request);
 
-    const { success, error } = await this.isAuthorized(request);
+    const { success } = await this.isAuthorized(request);
     if (success) {
       return;
     }
 
     // return 403 if unauthorized
-    return reply.status(403).send(
-      prepareErrorResponse({
-        message: error?.message ?? "Forbidden",
-        type: "forbidden",
-      }),
-    );
+    throw new ApiError(403, "Forbidden");
   };
 
   private shouldSkipAuthCheck = async ({
@@ -104,14 +90,18 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    if (!routeId) {
+    const requiredPermissions = routeId
+      ? requiredEndpointPermissionsMap[routeId]
+      : undefined;
+
+    if (requiredPermissions === undefined) {
       return {
         success: false,
-        error: new Error("Forbidden, routeId not found"),
+        error: new Error(
+          "Forbidden, the route is not configured in auth middleware and is protected by default",
+        ),
       };
     }
-
-    const requiredPermissions = requiredEndpointPermissionsMap[routeId] ?? {};
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {

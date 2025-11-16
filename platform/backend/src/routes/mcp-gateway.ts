@@ -15,6 +15,7 @@ import {
   getArchestraMcpTools,
   MCP_SERVER_NAME,
 } from "@/archestra-mcp-server";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -28,6 +29,7 @@ interface SessionData {
   server: Server;
   transport: StreamableHTTPServerTransport;
   lastAccess: number;
+  agentId: string;
 }
 
 /**
@@ -146,7 +148,7 @@ async function createAgentServer(
 
           // Handle Archestra tools directly
           const archestraResponse = await executeArchestraTool(name, args, {
-            agent,
+            profile: agent,
           });
 
           logger.info(
@@ -289,6 +291,39 @@ function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Clear all active sessions for a specific agent
+ */
+export function clearAgentSessions(agentId: string): void {
+  const sessionsToClear: string[] = [];
+
+  // Find all sessions for this agent
+  for (const [sessionId, sessionData] of activeSessions.entries()) {
+    if (sessionData.agentId === agentId) {
+      sessionsToClear.push(sessionId);
+    }
+  }
+
+  // Delete all matching sessions
+  for (const sessionId of sessionsToClear) {
+    logger.info({ agentId, sessionId }, "Clearing agent session");
+    activeSessions.delete(sessionId);
+  }
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "All sessions cleared, now clearing cached MCP client",
+  );
+
+  // Also clear the cached MCP client so it will reconnect with a new session
+  clearChatMcpClient(agentId);
+
+  logger.info(
+    { agentId, clearedCount: sessionsToClear.length },
+    "✅ Cleared agent sessions and client cache - next request will create fresh session",
+  );
 }
 
 /**
@@ -456,6 +491,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             server,
             transport,
             lastAccess: Date.now(),
+            agentId,
           });
           fastify.log.info(
             {
@@ -565,6 +601,107 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
         }
       }
+    },
+  );
+
+  // DELETE endpoint to clear sessions for an agent
+  fastify.delete(
+    `${endpoint}/sessions`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        response: {
+          200: z.object({
+            message: z.string(),
+            clearedCount: z.number(),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const agentId = extractAgentIdFromAuth(
+        request.headers.authorization as string | undefined,
+      );
+
+      fastify.log.info(
+        {
+          agentId,
+          totalActiveSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - Request received",
+      );
+
+      if (!agentId) {
+        fastify.log.warn("DELETE /v1/mcp/sessions - Unauthorized request");
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+        };
+      }
+
+      const sessionsToClear: string[] = [];
+      const allAgentIds: string[] = [];
+
+      // Find all sessions for this agent
+      for (const [sessionId, sessionData] of activeSessions.entries()) {
+        allAgentIds.push(sessionData.agentId);
+        if (sessionData.agentId === agentId) {
+          sessionsToClear.push(sessionId);
+        }
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          allAgentIds,
+          sessionsToClear,
+          totalSessions: activeSessions.size,
+          matchingSessionsCount: sessionsToClear.length,
+        },
+        "DELETE /v1/mcp/sessions - Found sessions to clear",
+      );
+
+      // Delete all matching sessions
+      for (const sessionId of sessionsToClear) {
+        fastify.log.info(
+          { agentId, sessionId },
+          "DELETE /v1/mcp/sessions - Clearing session",
+        );
+        activeSessions.delete(sessionId);
+      }
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - All sessions cleared, now clearing cached MCP client",
+      );
+
+      // Also clear the cached MCP client so it will reconnect with a new session
+      clearChatMcpClient(agentId);
+
+      fastify.log.info(
+        {
+          agentId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - ✅ Sessions and client cache cleared successfully",
+      );
+
+      reply.type("application/json");
+      return {
+        message: "Sessions cleared successfully",
+        clearedCount: sessionsToClear.length,
+      };
     },
   );
 };

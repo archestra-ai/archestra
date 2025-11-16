@@ -1,5 +1,10 @@
-import type { Anthropic, CommonToolCall, CommonToolResult } from "@/types";
-import type { CommonMessage, ToolResultUpdates } from "../types";
+import type {
+  Anthropic,
+  CommonMessage,
+  CommonToolCall,
+  CommonToolResult,
+  ToolResultUpdates,
+} from "@/types";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -16,7 +21,7 @@ export function toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
 
     // Handle user messages that may contain tool results
     if (message.role === "user" && Array.isArray(message.content)) {
-      const toolCalls = [];
+      const toolCalls: CommonToolResult[] = [];
 
       for (const contentBlock of message.content) {
         if (contentBlock.type === "tool_result") {
@@ -42,7 +47,8 @@ export function toCommonFormat(messages: AnthropicMessages): CommonMessage[] {
             toolCalls.push({
               id: contentBlock.tool_use_id,
               name: toolName,
-              result: toolResult,
+              content: toolResult,
+              isError: false,
             });
           }
         }

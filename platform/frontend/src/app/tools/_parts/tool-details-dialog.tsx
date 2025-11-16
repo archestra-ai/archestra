@@ -23,7 +23,9 @@ import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
 
 interface ToolDetailsDialogProps {
-  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number] | null;
+  agentTool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

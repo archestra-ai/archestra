@@ -4,8 +4,7 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getObservableGenAI } from "@/llm-metrics";
-import { AgentModel, InteractionModel } from "@/models";
-import LimitValidationService from "@/services/limit-validation";
+import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 
 import {
   type Agent,

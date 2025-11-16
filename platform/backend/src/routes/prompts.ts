@@ -1,42 +1,17 @@
 import { RouteId } from "@shared";
-import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
-import type { PromptType } from "@/database/schemas/prompt";
 import { PromptModel } from "@/models";
-import { constructResponseSchema, UuidIdSchema } from "@/types";
-
-const PromptSchema = z.object({
-  id: z.string(),
-  organizationId: z.string(),
-  name: z.string(),
-  type: z.enum(["system", "regular"]),
-  content: z.string(),
-  version: z.number(),
-  parentPromptId: z.string().nullable(),
-  isActive: z.boolean(),
-  createdBy: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  agents: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-    }),
-  ),
-});
-
-const CreatePromptSchema = z.object({
-  name: z.string().min(1),
-  type: z.enum(["system", "regular"]),
-  content: z.string().min(1),
-});
-
-const UpdatePromptSchema = z.object({
-  name: z.string().min(1).optional(),
-  content: z.string().min(1).optional(),
-});
+import {
+  ApiError,
+  constructResponseSchema,
+  DeleteObjectResponseSchema,
+  InsertPromptSchema,
+  PromptTypeSchema,
+  SelectPromptWithAgentsSchema,
+  UpdatePromptSchema,
+  UuidIdSchema,
+} from "@/types";
 
 const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -47,28 +22,17 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all prompts for the organization",
         tags: ["Prompts"],
         querystring: z.object({
-          type: z.enum(["system", "regular"]).optional(),
+          type: PromptTypeSchema.optional(),
         }),
-        response: constructResponseSchema(z.array(PromptSchema)),
+        response: constructResponseSchema(
+          z.array(SelectPromptWithAgentsSchema),
+        ),
       },
     },
     async ({ organizationId, query }, reply) => {
-      try {
-        const prompts = await PromptModel.findByOrganizationId(
-          organizationId,
-          query.type as PromptType | undefined,
-        );
-        return reply.send(prompts);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      return reply.send(
+        await PromptModel.findByOrganizationId(organizationId, query.type),
+      );
     },
   );
 
@@ -79,30 +43,18 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreatePrompt,
         description: "Create a new prompt",
         tags: ["Prompts"],
-        body: CreatePromptSchema,
-        response: constructResponseSchema(PromptSchema),
+        body: InsertPromptSchema,
+        response: constructResponseSchema(SelectPromptWithAgentsSchema),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
-      try {
-        const prompt = await PromptModel.create({
-          organizationId,
-          name: body.name,
-          type: body.type as PromptType,
-          content: body.content,
-          createdBy: user.id,
-        });
-        return reply.send({ ...prompt, agents: [] });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+    async ({ body: { name, type, content }, organizationId, user }, reply) => {
+      return reply.send(
+        await PromptModel.create(organizationId, user.id, {
+          name,
+          type,
+          content,
+        }),
+      );
     },
   );
 
@@ -116,47 +68,17 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(PromptSchema),
+        response: constructResponseSchema(SelectPromptWithAgentsSchema),
       },
     },
-    async ({ params }, reply) => {
-      try {
-        const prompt = await PromptModel.findById(params.id);
+    async ({ params: { id } }, reply) => {
+      const prompt = await PromptModel.findById(id);
 
-        if (!prompt) {
-          return reply.status(404).send({
-            error: {
-              message: "Prompt not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Fetch agents that use this prompt
-        const agents = await db
-          .select({
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-          })
-          .from(schema.agentPromptsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
-          )
-          .where(eq(schema.agentPromptsTable.promptId, prompt.id))
-          .orderBy(schema.agentsTable.name);
-
-        return reply.send({ ...prompt, agents });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!prompt) {
+        throw new ApiError(404, "Prompt not found");
       }
+
+      return reply.send(prompt);
     },
   );
 
@@ -170,53 +92,19 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.array(PromptSchema)),
+        response: constructResponseSchema(
+          z.array(SelectPromptWithAgentsSchema),
+        ),
       },
     },
-    async ({ params }, reply) => {
-      try {
-        const versions = await PromptModel.findVersions(params.id);
+    async ({ params: { id } }, reply) => {
+      const versions = await PromptModel.findVersions(id);
 
-        if (versions.length === 0) {
-          return reply.status(404).send({
-            error: {
-              message: "Prompt not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Add agents to each version
-        const versionsWithAgents = await Promise.all(
-          versions.map(async (version) => {
-            const agents = await db
-              .select({
-                id: schema.agentsTable.id,
-                name: schema.agentsTable.name,
-              })
-              .from(schema.agentPromptsTable)
-              .innerJoin(
-                schema.agentsTable,
-                eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
-              )
-              .where(eq(schema.agentPromptsTable.promptId, version.id))
-              .orderBy(schema.agentsTable.name);
-
-            return { ...version, agents };
-          }),
-        );
-
-        return reply.send(versionsWithAgents);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (versions.length === 0) {
+        throw new ApiError(404, "Prompt not found");
       }
+
+      return reply.send(versions);
     },
   );
 
@@ -232,51 +120,20 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdatePromptSchema,
-        response: constructResponseSchema(PromptSchema),
+        response: constructResponseSchema(SelectPromptWithAgentsSchema),
       },
     },
-    async ({ params, body, user }, reply) => {
-      try {
-        const updated = await PromptModel.update(params.id, {
-          name: body.name,
-          content: body.content,
-          createdBy: user.id,
-        });
+    async ({ params, body: { name, content }, user }, reply) => {
+      const updated = await PromptModel.update(params.id, user.id, {
+        name,
+        content,
+      });
 
-        if (!updated) {
-          return reply.status(404).send({
-            error: {
-              message: "Prompt not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Fetch agents that use this prompt (for updated version)
-        const agents = await db
-          .select({
-            id: schema.agentsTable.id,
-            name: schema.agentsTable.name,
-          })
-          .from(schema.agentPromptsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
-          )
-          .where(eq(schema.agentPromptsTable.promptId, updated.id))
-          .orderBy(schema.agentsTable.name);
-
-        return reply.send({ ...updated, agents });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!updated) {
+        throw new ApiError(404, "Prompt not found");
       }
+
+      return reply.send(updated);
     },
   );
 
@@ -290,33 +147,17 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params }, reply) => {
-      try {
-        const success = await PromptModel.delete(params.id);
+    async ({ params: { id } }, reply) => {
+      const success = await PromptModel.delete(id);
 
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Prompt not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success: true });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!success) {
+        throw new ApiError(404, "Prompt not found");
       }
+
+      return reply.send({ success: true });
     },
   );
 };

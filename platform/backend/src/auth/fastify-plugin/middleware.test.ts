@@ -130,10 +130,10 @@ describe("Authnz", () => {
           send: vi.fn(),
         } as unknown as FastifyReply;
 
-        await authnz.handle(mockRequest, mockReply);
-
-        // Should return 401 for unauthenticated requests to protected paths
-        expect(mockReply.status).toHaveBeenCalledWith(401);
+        // Should throw ApiError for unauthenticated requests to protected paths
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
       }
     });
   });

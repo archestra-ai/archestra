@@ -1,8 +1,7 @@
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { Tool } from "@/types";
+import type { CommonMessage, Tool } from "@/types";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
-import type { CommonMessage } from "./types";
 
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
@@ -71,12 +70,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_456",
               name: "get_emails",
-              result: {
+              content: {
                 emails: [
                   { from: "user@company.com", subject: "Normal" },
                   { from: "hacker@evil.com", subject: "Malicious" },
                 ],
               },
+              isError: false,
             },
           ],
         },
@@ -117,12 +117,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_123",
               name: "get_emails",
-              result: {
+              content: {
                 emails: [
                   { from: "user@trusted.com", subject: "Hello" },
                   { from: "admin@trusted.com", subject: "Update" },
                 ],
               },
+              isError: false,
             },
           ],
         },
@@ -158,9 +159,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_789",
               name: "get_emails",
-              result: {
+              content: {
                 emails: [{ from: "user@untrusted.com", subject: "Hello" }],
               },
+              isError: false,
             },
           ],
         },
@@ -206,17 +208,20 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_001",
               name: "get_emails",
-              result: { source: "trusted", data: "good data" },
+              content: { source: "trusted", data: "good data" },
+              isError: false,
             },
             {
               id: "call_002",
               name: "get_emails",
-              result: { source: "malicious", data: "bad data" },
+              content: { source: "malicious", data: "bad data" },
+              isError: false,
             },
             {
               id: "call_003",
               name: "get_emails",
-              result: { source: "unknown", data: "some data" },
+              content: { source: "unknown", data: "some data" },
+              isError: false,
             },
           ],
         },
@@ -245,7 +250,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_unknown",
               name: "unknown_tool",
-              result: { data: "some data" },
+              content: { data: "some data" },
+              isError: false,
             },
           ],
         },
@@ -271,7 +277,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_123",
               name: "get_emails",
-              result: "plain text result",
+              content: "plain text result",
+              isError: false,
             },
           ],
         },
@@ -333,7 +340,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_trusted",
               name: "trusted_tool",
-              result: { data: "any data" },
+              content: { data: "any data" },
+              isError: false,
             },
           ],
         },
@@ -390,7 +398,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_blocked",
               name: "default_trusted_tool",
-              result: { dangerous: "true", other: "data" },
+              content: { dangerous: "true", other: "data" },
+              isError: false,
             },
           ],
         },
@@ -418,12 +427,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             {
               id: "call_1",
               name: "get_emails",
-              result: { from: "user1@example.com" },
+              content: { from: "user1@example.com" },
+              isError: false,
             },
             {
               id: "call_2",
               name: "get_emails",
-              result: { from: "user2@example.com" },
+              content: { from: "user2@example.com" },
+              isError: false,
             },
           ],
         },

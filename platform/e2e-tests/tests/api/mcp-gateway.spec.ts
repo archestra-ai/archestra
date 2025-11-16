@@ -5,20 +5,23 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("MCP Gateway - Archestra Tools", () => {
-  let agentId: string;
+  let profileId: string;
 
   test.beforeAll(async ({ request, createAgent }) => {
-    const createResponse = await createAgent(request, "MCP Gateway Test Agent");
-    const agent = await createResponse.json();
-    agentId = agent.id;
+    const createResponse = await createAgent(
+      request,
+      "MCP Gateway Test Profile",
+    );
+    const profile = await createResponse.json();
+    profileId = profile.id;
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
-    await deleteAgent(request, agentId);
+    await deleteAgent(request, profileId);
   });
 
   const makeMcpGatewayRequestHeaders = (sessionId?: string) => ({
-    Authorization: `Bearer ${agentId}`,
+    Authorization: `Bearer ${profileId}`,
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
     ...(sessionId && { "mcp-session-id": sessionId }),
@@ -95,7 +98,7 @@ test.describe("MCP Gateway - Archestra Tools", () => {
     expect(archestraWhoami).toBeDefined();
     expect(archestraWhoami.title).toBe("Who Am I");
     expect(archestraWhoami.description).toContain(
-      "name and ID of the current agent",
+      "name and ID of the current profile",
     );
 
     // Verify search_private_mcp_registry tool

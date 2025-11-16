@@ -34,10 +34,6 @@ export default {
     baseUrl: "",
   },
   debug: process.env.NODE_ENV !== "production",
-  easterEgg: {
-    targetSequence: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_TARGET_SEQUENCE"),
-    videoUrl: env("NEXT_PUBLIC_ARCHESTRA_EASTER_EGG_VIDEO_URL"),
-  },
   posthog: {
     // Analytics is enabled by default, disabled only when explicitly set to "disabled"
     enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled",

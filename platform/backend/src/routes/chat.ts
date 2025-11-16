@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { RouteId } from "@shared";
 import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { get } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -15,18 +16,17 @@ import {
   SecretModel,
 } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
+  DeleteObjectResponseSchema,
   ErrorResponsesSchema,
   InsertConversationSchema,
   SelectConversationSchema,
-  SelectConversationWithAgentSchema,
-  SelectConversationWithMessagesSchema,
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // ========== Streaming (useChat format) ==========
   fastify.post(
     "/api/chat",
     {
@@ -55,12 +55,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       // Get MCP tools for the agent via MCP Gateway
@@ -134,13 +129,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (!anthropicApiKey) {
-        return reply.status(400).send({
-          error: {
-            message:
-              "Anthropic API key not configured. Please configure it in Chat Settings.",
-            type: "bad_request",
-          },
-        });
+        throw new ApiError(
+          400,
+          "Anthropic API key not configured. Please configure it in Chat Settings.",
+        );
       }
 
       // Create Anthropic client pointing to LLM Proxy
@@ -178,7 +170,53 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          return JSON.stringify(error);
+          fastify.log.error(
+            { error, conversationId, agentId: conversation.agentId },
+            "Chat stream error occurred",
+          );
+
+          // Extract error message as string for frontend using lodash get
+          // Try different nested paths: error.message or error.error.message
+          const directMessage = get(error, "message");
+          if (typeof directMessage === "string") {
+            fastify.log.info(
+              { extractedMessage: directMessage },
+              "Extracted error message from direct property",
+            );
+            return directMessage;
+          }
+
+          const nestedMessage = get(error, "error.message");
+          if (typeof nestedMessage === "string") {
+            fastify.log.info(
+              { extractedMessage: nestedMessage },
+              "Extracted error message from nested SSE error",
+            );
+            return nestedMessage;
+          }
+
+          // Fallback to generic message for empty objects
+          if (
+            error &&
+            typeof error === "object" &&
+            Object.keys(error).length === 0
+          ) {
+            return "An unknown error occurred (empty error object)";
+          }
+
+          if (error == null) return "An unknown error occurred";
+          if (typeof error === "string") return error;
+          if (error instanceof Error) return error.message;
+
+          // Last resort - try to stringify but provide fallback
+          try {
+            const stringified = JSON.stringify(error);
+            return stringified !== "{}"
+              ? stringified
+              : "An unknown error occurred";
+          } catch {
+            return "An unknown error occurred";
+          }
         },
         onFinish: async ({ messages: finalMessages }) => {
           if (!conversationId) return;
@@ -239,12 +277,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Send the Response body stream directly
       if (!response.body) {
-        return reply.status(400).send({
-          error: {
-            message: "No response body",
-            type: "bad_request",
-          },
-        });
+        throw new ApiError(400, "No response body");
       }
       // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
       return reply.send(response.body as any);
@@ -259,14 +292,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List all conversations for current user with agent details",
         tags: ["Chat"],
-        response: constructResponseSchema(
-          z.array(SelectConversationWithAgentSchema),
-        ),
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
       },
     },
     async (request, reply) => {
       return reply.send(
-        await ConversationModel.findAllWithAgent(
+        await ConversationModel.findAll(
           request.user.id,
           request.organizationId,
         ),
@@ -282,23 +313,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get conversation with messages",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectConversationWithMessagesSchema),
+        response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      const conversation = await ConversationModel.findByIdWithMessages(
+      const conversation = await ConversationModel.findById(
         id,
         user.id,
         organizationId,
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       return reply.send(conversation);
@@ -327,7 +353,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { agentId }, user, headers }, reply) => {
       // Check if user is an agent admin
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 
@@ -335,12 +361,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
-        return reply.status(404).send({
-          error: {
-            message: "Agent not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Agent not found");
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
@@ -387,7 +408,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // Check if user is an agent admin
       const { success: isAgentAdmin } = await hasPermission(
-        { agent: ["admin"] },
+        { profile: ["admin"] },
         headers,
       );
 
@@ -395,12 +416,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
-        return reply.status(404).send({
-          error: {
-            message: "Agent not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Agent not found");
       }
 
       // Create conversation with agent
@@ -437,12 +453,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!conversation) {
-        return reply.status(404).send({
-          error: {
-            message: "Conversation not found",
-            type: "not_found",
-          },
-        });
+        throw new ApiError(404, "Conversation not found");
       }
 
       return reply.send(conversation);
@@ -457,7 +468,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Delete a conversation",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {

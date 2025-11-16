@@ -3,7 +3,9 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
+  DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
   UuidIdSchema,
 } from "@/types";
@@ -36,19 +38,8 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      try {
-        // Get all roles including predefined ones
-        return reply.send(await OrganizationRoleModel.getAll(organizationId));
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
-      }
+      // Get all roles including predefined ones
+      return reply.send(await OrganizationRoleModel.getAll(organizationId));
     },
   );
 
@@ -67,59 +58,41 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { name, permission }, user, organizationId }, reply) => {
-      try {
-        // Check role name uniqueness
-        const isUnique = await OrganizationRoleModel.isNameUnique(
-          name,
-          organizationId,
-        );
+      // Check role name uniqueness
+      const isUnique = await OrganizationRoleModel.isNameUnique(
+        name,
+        organizationId,
+      );
 
-        if (!isUnique) {
-          return reply.status(400).send({
-            error: {
-              message: "Role name already exists or is reserved",
-              type: "validation_error",
-            },
-          });
-        }
-
-        // Get user's permissions to validate they can grant these permissions
-        const userPermissions = await UserModel.getUserPermissions(
-          user.id,
-          organizationId,
-        );
-
-        const validation = OrganizationRoleModel.validateRolePermissions(
-          userPermissions,
-          permission,
-        );
-
-        if (!validation.valid) {
-          return reply.status(403).send({
-            error: {
-              message: `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
-              type: "forbidden",
-            },
-          });
-        }
-
-        return reply.send(
-          await OrganizationRoleModel.create({
-            name,
-            permission,
-            organizationId,
-          }),
-        );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!isUnique) {
+        throw new ApiError(400, "Role name already exists or is reserved");
       }
+
+      // Get user's permissions to validate they can grant these permissions
+      const userPermissions = await UserModel.getUserPermissions(
+        user.id,
+        organizationId,
+      );
+
+      const validation = OrganizationRoleModel.validateRolePermissions(
+        userPermissions,
+        permission,
+      );
+
+      if (!validation.valid) {
+        throw new ApiError(
+          403,
+          `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
+        );
+      }
+
+      return reply.send(
+        await OrganizationRoleModel.create({
+          name,
+          permission,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -137,32 +110,16 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
-      try {
-        const result = await OrganizationRoleModel.getById(
-          roleId,
-          organizationId,
-        );
+      const result = await OrganizationRoleModel.getById(
+        roleId,
+        organizationId,
+      );
 
-        if (!result) {
-          return reply.status(404).send({
-            error: {
-              message: "Role not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(result);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!result) {
+        throw new ApiError(404, "Role not found");
       }
+
+      return reply.send(result);
     },
   );
 
@@ -187,88 +144,60 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { roleId }, body: { name, permission }, user, organizationId },
       reply,
     ) => {
-      try {
-        // Cannot update predefined roles
-        if (OrganizationRoleModel.isPredefinedRole(roleId)) {
-          return reply.status(403).send({
-            error: {
-              message: "Cannot update predefined roles",
-              type: "forbidden",
-            },
-          });
-        }
+      // Cannot update predefined roles
+      if (OrganizationRoleModel.isPredefinedRole(roleId)) {
+        throw new ApiError(403, "Cannot update predefined roles");
+      }
 
-        // Check if role exists
-        const existingRole = await OrganizationRoleModel.getById(
+      // Check if role exists
+      const existingRole = await OrganizationRoleModel.getById(
+        roleId,
+        organizationId,
+      );
+
+      if (!existingRole) {
+        throw new ApiError(404, "Role not found");
+      }
+
+      // Check name uniqueness if name is being changed
+      if (name) {
+        const isUnique = await OrganizationRoleModel.isNameUnique(
+          name,
+          organizationId,
           roleId,
+        );
+
+        if (!isUnique) {
+          throw new ApiError(400, "Role name already exists or is reserved");
+        }
+      }
+
+      // Validate permissions if being changed
+      if (permission) {
+        const userPermissions = await UserModel.getUserPermissions(
+          user.id,
           organizationId,
         );
 
-        if (!existingRole) {
-          return reply.status(404).send({
-            error: {
-              message: "Role not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        // Check name uniqueness if name is being changed
-        if (name) {
-          const isUnique = await OrganizationRoleModel.isNameUnique(
-            name,
-            organizationId,
-            roleId,
-          );
-
-          if (!isUnique) {
-            return reply.status(400).send({
-              error: {
-                message: "Role name already exists or is reserved",
-                type: "validation_error",
-              },
-            });
-          }
-        }
-
-        // Validate permissions if being changed
-        if (permission) {
-          const userPermissions = await UserModel.getUserPermissions(
-            user.id,
-            organizationId,
-          );
-
-          const validation = OrganizationRoleModel.validateRolePermissions(
-            userPermissions,
-            permission,
-          );
-
-          if (!validation.valid) {
-            return reply.status(403).send({
-              error: {
-                message: `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
-                type: "forbidden",
-              },
-            });
-          }
-        }
-
-        return reply.send(
-          await OrganizationRoleModel.update(roleId, {
-            name,
-            permission: permission ?? existingRole.permission,
-          }),
+        const validation = OrganizationRoleModel.validateRolePermissions(
+          userPermissions,
+          permission,
         );
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+
+        if (!validation.valid) {
+          throw new ApiError(
+            403,
+            `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
+          );
+        }
       }
+
+      return reply.send(
+        await OrganizationRoleModel.update(roleId, {
+          name,
+          permission: permission ?? existingRole.permission,
+        }),
+      );
     },
   );
 
@@ -282,39 +211,23 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           roleId: CustomRoleIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
-      try {
-        // Check if role can be deleted
-        const deleteCheck = await OrganizationRoleModel.canDelete(
-          roleId,
-          organizationId,
-        );
+      // Check if role can be deleted
+      const deleteCheck = await OrganizationRoleModel.canDelete(
+        roleId,
+        organizationId,
+      );
 
-        if (!deleteCheck.canDelete) {
-          return reply.status(400).send({
-            error: {
-              message: deleteCheck.reason || "Cannot delete role",
-              type: "validation_error",
-            },
-          });
-        }
-
-        return reply.send({
-          success: await OrganizationRoleModel.delete(roleId),
-        });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!deleteCheck.canDelete) {
+        throw new ApiError(400, deleteCheck.reason || "Cannot delete role");
       }
+
+      return reply.send({
+        success: await OrganizationRoleModel.delete(roleId),
+      });
     },
   );
 };

@@ -4,7 +4,9 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
+  DeleteObjectResponseSchema,
   InsertMcpServerInstallationRequestSchema,
   type McpServerInstallationRequest,
   McpServerInstallationRequestStatusSchema,
@@ -35,38 +37,27 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async ({ query: { status }, user, headers }, reply) => {
-      try {
-        const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServer: ["admin"] },
-          headers,
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
+      );
+
+      let requests: McpServerInstallationRequest[];
+      if (isMcpServerAdmin) {
+        // MCP server admins can see all requests
+        requests = status
+          ? await McpServerInstallationRequestModel.findByStatus(status)
+          : await McpServerInstallationRequestModel.findAll();
+      } else {
+        requests = await McpServerInstallationRequestModel.findByRequestedBy(
+          user.id,
         );
-
-        let requests: McpServerInstallationRequest[];
-        if (isMcpServerAdmin) {
-          // MCP server admins can see all requests
-          requests = status
-            ? await McpServerInstallationRequestModel.findByStatus(status)
-            : await McpServerInstallationRequestModel.findAll();
-        } else {
-          requests = await McpServerInstallationRequestModel.findByRequestedBy(
-            user.id,
-          );
-          if (status) {
-            requests = requests.filter((r) => r.status === status);
-          }
+        if (status) {
+          requests = requests.filter((r) => r.status === status);
         }
-
-        return reply.send(requests);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
       }
+
+      return reply.send(requests);
     },
   );
 
@@ -77,61 +68,37 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         operationId: RouteId.CreateMcpServerInstallationRequest,
         description: "Create a new MCP server installation request",
         tags: ["MCP Server Installation Requests"],
-        body: InsertMcpServerInstallationRequestSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-          requestedBy: true,
-          status: true,
-          reviewedBy: true,
-          reviewedAt: true,
-          adminResponse: true,
-          notes: true,
-        }),
+        body: InsertMcpServerInstallationRequestSchema,
         response: constructResponseSchema(
           SelectMcpServerInstallationRequestSchema,
         ),
       },
     },
     async ({ body, user }, reply) => {
-      try {
-        // Check if there's already a pending request for this external catalog item
-        if (body.externalCatalogId) {
-          const existingExternalRequests =
-            await McpServerInstallationRequestModel.findAll();
-          const duplicateRequest = existingExternalRequests.find(
-            (req) =>
-              req.status === "pending" &&
-              req.externalCatalogId === body.externalCatalogId,
+      // Check if there's already a pending request for this external catalog item
+      if (body.externalCatalogId) {
+        const existingExternalRequests =
+          await McpServerInstallationRequestModel.findAll();
+        const duplicateRequest = existingExternalRequests.find(
+          (req) =>
+            req.status === "pending" &&
+            req.externalCatalogId === body.externalCatalogId,
+        );
+
+        if (duplicateRequest) {
+          throw new ApiError(
+            400,
+            "A pending installation request already exists for this external MCP server",
           );
-
-          if (duplicateRequest) {
-            return reply.status(400).send({
-              error: {
-                message:
-                  "A pending installation request already exists for this external MCP server",
-                type: "bad_request",
-              },
-            });
-          }
         }
-
-        const newRequest = await McpServerInstallationRequestModel.create({
-          ...body,
-          requestedBy: user.id,
-        });
-
-        return reply.send(newRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
       }
+
+      const newRequest = await McpServerInstallationRequestModel.create(
+        user.id,
+        body,
+      );
+
+      return reply.send(newRequest);
     },
   );
 
@@ -151,45 +118,24 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async ({ params: { id }, user, headers }, reply) => {
-      try {
-        const installationRequest =
-          await McpServerInstallationRequestModel.findById(id);
+      const installationRequest =
+        await McpServerInstallationRequestModel.findById(id);
 
-        if (!installationRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServer: ["admin"] },
-          headers,
-        );
-
-        // MCP server admins can view all requests, non-MCP server admins can only view their own requests
-        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
-          return reply.status(403).send({
-            error: {
-              message: "Forbidden",
-              type: "forbidden",
-            },
-          });
-        }
-
-        return reply.send(installationRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!installationRequest) {
+        throw new ApiError(404, "Installation request not found");
       }
+
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
+      );
+
+      // MCP server admins can view all requests, non-MCP server admins can only view their own requests
+      if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
+        throw new ApiError(403, "Forbidden");
+      }
+
+      return reply.send(installationRequest);
     },
   );
 
@@ -203,79 +149,46 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateMcpServerInstallationRequestSchema.omit({
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-          externalCatalogId: true,
-          requestedBy: true,
-        }).partial(),
+        body: UpdateMcpServerInstallationRequestSchema.partial(),
         response: constructResponseSchema(
           SelectMcpServerInstallationRequestSchema,
         ),
       },
     },
     async ({ params: { id }, body, headers }, reply) => {
-      try {
-        const installationRequest =
-          await McpServerInstallationRequestModel.findById(id);
+      const { status, adminResponse, reviewedBy, reviewedAt } = body;
+      const installationRequest =
+        await McpServerInstallationRequestModel.findById(id);
 
-        if (!installationRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
+      if (!installationRequest) {
+        throw new ApiError(404, "Installation request not found");
+      }
 
-        // MCP server admins can update status, non-MCP server admins can only update their own requests
-        if (
-          body.status ||
-          body.adminResponse ||
-          body.reviewedBy ||
-          body.reviewedAt
-        ) {
-          const { success: isMcpServerAdmin } = await hasPermission(
-            { mcpServer: ["admin"] },
-            headers,
-          );
-
-          if (!isMcpServerAdmin) {
-            return reply.status(403).send({
-              error: {
-                message: "Only admins can approve or decline requests",
-                type: "forbidden",
-              },
-            });
-          }
-        }
-
-        const updatedRequest = await McpServerInstallationRequestModel.update(
-          id,
-          body,
+      // MCP server admins can update status, non-MCP server admins can only update their own requests
+      if (status || adminResponse || reviewedBy || reviewedAt) {
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServer: ["admin"] },
+          headers,
         );
 
-        if (!updatedRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
+        if (!isMcpServerAdmin) {
+          throw new ApiError(
+            403,
+            "Only admins can approve or decline requests",
+          );
         }
-
-        return reply.send(updatedRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
       }
+
+      const updatedRequest = await McpServerInstallationRequestModel.update(
+        id,
+        body,
+      );
+
+      if (!updatedRequest) {
+        throw new ApiError(404, "Installation request not found");
+      }
+
+      return reply.send(updatedRequest);
     },
   );
 
@@ -298,45 +211,24 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async ({ params: { id }, body, user }, reply) => {
-      try {
-        const installationRequest =
-          await McpServerInstallationRequestModel.findById(id);
+      const installationRequest =
+        await McpServerInstallationRequestModel.findById(id);
 
-        if (!installationRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const updatedRequest = await McpServerInstallationRequestModel.approve(
-          id,
-          user.id,
-          body.adminResponse,
-        );
-
-        if (!updatedRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(updatedRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!installationRequest) {
+        throw new ApiError(404, "Installation request not found");
       }
+
+      const updatedRequest = await McpServerInstallationRequestModel.approve(
+        id,
+        user.id,
+        body.adminResponse,
+      );
+
+      if (!updatedRequest) {
+        throw new ApiError(404, "Installation request not found");
+      }
+
+      return reply.send(updatedRequest);
     },
   );
 
@@ -358,46 +250,25 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ params: { id }, body, user }, reply) => {
-      try {
-        const installationRequest =
-          await McpServerInstallationRequestModel.findById(id);
+    async ({ params: { id }, body: { adminResponse }, user }, reply) => {
+      const installationRequest =
+        await McpServerInstallationRequestModel.findById(id);
 
-        if (!installationRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const updatedRequest = await McpServerInstallationRequestModel.decline(
-          id,
-          user.id,
-          body.adminResponse,
-        );
-
-        if (!updatedRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(updatedRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!installationRequest) {
+        throw new ApiError(404, "Installation request not found");
       }
+
+      const updatedRequest = await McpServerInstallationRequestModel.decline(
+        id,
+        user.id,
+        adminResponse,
+      );
+
+      if (!updatedRequest) {
+        throw new ApiError(404, "Installation request not found");
+      }
+
+      return reply.send(updatedRequest);
     },
   );
 
@@ -419,62 +290,36 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         ),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
-      try {
-        const installationRequest =
-          await McpServerInstallationRequestModel.findById(id);
+    async ({ params: { id }, body: { content }, user, headers }, reply) => {
+      const installationRequest =
+        await McpServerInstallationRequestModel.findById(id);
 
-        if (!installationRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServer: ["admin"] },
-          headers,
-        );
-
-        // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
-        if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
-          return reply.status(403).send({
-            error: {
-              message: "Forbidden",
-              type: "forbidden",
-            },
-          });
-        }
-
-        const updatedRequest = await McpServerInstallationRequestModel.addNote(
-          id,
-          user.id,
-          user.name,
-          body.content,
-        );
-
-        if (!updatedRequest) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send(updatedRequest);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!installationRequest) {
+        throw new ApiError(404, "Installation request not found");
       }
+
+      const { success: isMcpServerAdmin } = await hasPermission(
+        { mcpServer: ["admin"] },
+        headers,
+      );
+
+      // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
+      if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
+        throw new ApiError(403, "Forbidden");
+      }
+
+      const updatedRequest = await McpServerInstallationRequestModel.addNote(
+        id,
+        user.id,
+        user.name,
+        content,
+      );
+
+      if (!updatedRequest) {
+        throw new ApiError(404, "Installation request not found");
+      }
+
+      return reply.send(updatedRequest);
     },
   );
 
@@ -488,33 +333,17 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async ({ params: { id } }, reply) => {
-      try {
-        const success = await McpServerInstallationRequestModel.delete(id);
+      const success = await McpServerInstallationRequestModel.delete(id);
 
-        if (!success) {
-          return reply.status(404).send({
-            error: {
-              message: "Installation request not found",
-              type: "not_found",
-            },
-          });
-        }
-
-        return reply.send({ success });
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
-            type: "api_error",
-          },
-        });
+      if (!success) {
+        throw new ApiError(404, "Installation request not found");
       }
+
+      return reply.send({ success });
     },
   );
 };

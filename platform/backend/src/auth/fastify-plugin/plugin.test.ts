@@ -150,15 +150,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Unauthenticated",
-          type: "unauthenticated",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
 
     test("should return 401 for invalid API key", async () => {
@@ -183,9 +177,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
   });
 
@@ -195,6 +189,11 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
       mockHasPermission.mockResolvedValue({
         success: false,
         error: null,
@@ -214,15 +213,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Forbidden",
-          type: "forbidden",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Forbidden",
+      );
     });
 
     test("should return 403 for routes without operationId", async () => {
@@ -230,6 +223,11 @@ describe("authPlugin integration", () => {
         user: { id: "user1" },
         session: { activeOrganizationId: "org1" },
       } as Session);
+      mockUserModel.getById.mockResolvedValue({
+        id: "user1",
+        name: "Test User",
+        organizationId: "org1",
+      } as User);
 
       const mockRequest = {
         url: "/api/unknown",
@@ -245,15 +243,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(403);
-      expect(mockReply.send).toHaveBeenCalledWith({
-        error: {
-          message: "Forbidden, routeId not found",
-          type: "forbidden",
-        },
-      });
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Forbidden",
+      );
     });
 
     test("should check specific permissions for configured routes", async () => {
@@ -283,7 +275,7 @@ describe("authPlugin integration", () => {
       await authnz.handle(mockRequest, mockReply);
 
       expect(mockHasPermission).toHaveBeenCalledWith(
-        { agent: ["create"] },
+        { profile: ["create"] },
         expect.objectContaining({}),
       );
     });
@@ -386,9 +378,9 @@ describe("authPlugin integration", () => {
         send: vi.fn(),
       } as unknown as FastifyReply;
 
-      await authnz.handle(mockRequest, mockReply);
-
-      expect(mockReply.status).toHaveBeenCalledWith(401);
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
 
     test("should handle user population errors gracefully", async () => {

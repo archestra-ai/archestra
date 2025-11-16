@@ -17,6 +17,7 @@ interface ReinstallConfirmationDialogProps {
   onConfirm: () => void;
   serverName: string;
   isReinstalling: boolean;
+  isRemoteServer: boolean;
 }
 
 export function ReinstallConfirmationDialog({
@@ -25,20 +26,19 @@ export function ReinstallConfirmationDialog({
   onConfirm,
   serverName,
   isReinstalling,
+  isRemoteServer,
 }: ReinstallConfirmationDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Reinstall Required</DialogTitle>
+          <DialogTitle>
+            {isRemoteServer ? "Reconnect" : "Reinstall"} Required
+          </DialogTitle>
           <DialogDescription className="py-4">
             The configuration for <strong>{serverName}</strong> has been
             updated. The server needs to be reinstalled for the changes to take
             effect.
-            <span className="text-sm text-muted-foreground block mt-2">
-              Reinstalling will uninstall the current server instance and
-              install it again with the updated configuration.
-            </span>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -49,12 +49,12 @@ export function ReinstallConfirmationDialog({
             {isReinstalling ? (
               <>
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Reinstalling...
+                {isRemoteServer ? "Reconnecting..." : "Reinstalling..."}
               </>
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Reinstall Now
+                {isRemoteServer ? "Reconnect Now" : "Reinstall Now"}
               </>
             )}
           </Button>

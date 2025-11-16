@@ -1,5 +1,6 @@
 "use client";
 
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,9 @@ export function McpToolsDialog({
     // - "huggingface__remote-mcp__hf_doc_fetch" -> "hf_doc_fetch"
 
     // Find the last occurrence of "__" and take everything after it
-    const lastDoubleUnderscore = toolName.lastIndexOf("__");
+    const lastDoubleUnderscore = toolName.lastIndexOf(
+      MCP_SERVER_TOOL_NAME_SEPARATOR,
+    );
 
     if (lastDoubleUnderscore !== -1) {
       return toolName.substring(lastDoubleUnderscore + 2);

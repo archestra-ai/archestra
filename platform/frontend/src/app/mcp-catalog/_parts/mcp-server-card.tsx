@@ -92,14 +92,13 @@ export type McpServerCardProps = {
     | "idle"
     | "discovering-tools"
     | null;
-  onInstall: () => void;
-  onInstallTeam: () => void;
+  onInstallRemoteServer: () => void;
+  onInstallRemoteServerTeam: () => void;
   onInstallLocalServer: () => void;
   onInstallLocalServerTeam: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  localServerInstallationCount?: number; // For local servers: count of all personal installations
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
   currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
   currentUserLocalServerInstallation?: InstalledServer; // For local servers: the current user's specific installation
@@ -117,14 +116,13 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installationStatus,
-  onInstall,
-  onInstallTeam,
+  onInstallRemoteServer,
+  onInstallRemoteServerTeam,
   onInstallLocalServer,
   onInstallLocalServerTeam,
   onReinstall,
   onEdit,
   onDelete,
-  localServerInstallationCount = 0,
   currentUserInstalledLocalServer = false,
   currentUserHasLocalTeamInstallation = false,
   currentUserLocalServerInstallation,
@@ -169,7 +167,7 @@ export function McpServerCard({
     refetch: refetchLogs,
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
-  const needsReinstall = installedServer?.reinstallRequired ?? false;
+  const needsReinstall = installedServer?.reinstallRequired;
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
 
@@ -268,9 +266,7 @@ export function McpServerCard({
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
           Users authenticated:{" "}
-          <span className="font-medium text-foreground">
-            {localServerInstallationCount}
-          </span>
+          <span className="font-medium text-foreground">{userCount}</span>
           {currentUserInstalledLocalServer && (
             <Badge
               variant="secondary"
@@ -281,7 +277,7 @@ export function McpServerCard({
           )}
         </span>
       </div>
-      {localServerInstallationCount > 0 && (
+      {userCount > 0 && (
         <Button
           onClick={() => setIsManageLocalInstallationsDialogOpen(true)}
           size="sm"
@@ -390,7 +386,7 @@ export function McpServerCard({
           ))}
         </div>
       )}
-      {needsReinstall && (
+      {isCurrentUserAuthenticated && needsReinstall && (
         <Button
           onClick={onReinstall}
           size="sm"
@@ -399,7 +395,7 @@ export function McpServerCard({
           disabled={isInstalling}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
-          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+          {isInstalling ? "Reconnecting..." : "Reconnect Required"}
         </Button>
       )}
       {requiresAuth && !isCurrentUserAuthenticated && (
@@ -407,7 +403,7 @@ export function McpServerCard({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                onClick={onInstall}
+                onClick={onInstallRemoteServer}
                 disabled={isInstalling}
                 size="sm"
                 variant="outline"
@@ -453,7 +449,7 @@ export function McpServerCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  onClick={onInstallTeam}
+                  onClick={onInstallRemoteServerTeam}
                   disabled={isInstalling}
                   size="sm"
                   variant="outline"
@@ -492,7 +488,7 @@ export function McpServerCard({
           ))}
         </div>
       )}
-      {needsReinstall && (
+      {isCurrentUserAuthenticated && needsReinstall && (
         <Button
           onClick={onReinstall}
           size="sm"
@@ -662,6 +658,11 @@ export function McpServerCard({
           selectedToolForAssignment
             ? {
                 id: selectedToolForAssignment.id,
+                allowUsageWhenUntrustedDataIsPresent: false,
+                toolResultTreatment: "untrusted" as const,
+                responseModifierTemplate: null,
+                credentialSourceMcpServerId: null,
+                executionSourceMcpServerId: null,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,
@@ -672,8 +673,9 @@ export function McpServerCard({
                   mcpServerId: selectedToolForAssignment.mcpServerId,
                   mcpServerName: selectedToolForAssignment.mcpServerName,
                   catalogId: item.id,
+                  mcpServerCatalogId: null,
                 },
-                agent: null,
+                agent: { id: "", name: "" },
                 createdAt: selectedToolForAssignment.createdAt,
                 updatedAt: selectedToolForAssignment.createdAt,
               }

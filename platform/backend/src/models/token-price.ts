@@ -71,11 +71,17 @@ class TokenPriceModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    // First check if the token price exists
+    const existing = await TokenPriceModel.findById(id);
+    if (!existing) {
+      return false;
+    }
+
+    await db
       .delete(schema.tokenPricesTable)
       .where(eq(schema.tokenPricesTable.id, id));
 
-    return (result.rowCount ?? 0) > 0;
+    return true;
   }
 
   /**

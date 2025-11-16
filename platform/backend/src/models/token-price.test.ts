@@ -493,9 +493,8 @@ describe("TokenPriceModel", () => {
       await TokenPriceModel.ensureAllModelsHavePricing();
 
       // Verify existing pricing was not changed
-      const withPricing = await TokenPriceModel.findByModel(
-        "model-with-pricing",
-      );
+      const withPricing =
+        await TokenPriceModel.findByModel("model-with-pricing");
       expect(withPricing?.pricePerMillionInput).toBe("15.00");
       expect(withPricing?.pricePerMillionOutput).toBe("25.00");
 

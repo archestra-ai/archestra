@@ -55,6 +55,7 @@ pnpm test:e2e                           # Run e2e tests with Playwright (chromiu
 # Database
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
+pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
 
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)
@@ -77,6 +78,7 @@ pnpm test:e2e                        # Run Playwright tests
 #   - kind config: .github/kind.yaml
 #   - helm values: .github/values-ci.yaml
 #   - NodePort services: frontend:3000, backend:9000, metrics:9050
+#   - Includes DB migration and codegen checks in e2e job
 
 # Observability
 tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)

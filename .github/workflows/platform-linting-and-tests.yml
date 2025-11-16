@@ -53,6 +53,11 @@ jobs:
         with:
           working-directory: ./platform
 
+      - name: Setup environment variables
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform
+        run: cp .env.example .env
+
       - name: Install Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
@@ -130,6 +135,91 @@ jobs:
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
           echo "All services are ready"
 
+      # Check migration consistency using drizzle-kit check
+      # https://orm.drizzle.team/docs/drizzle-kit-check
+      # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
+      - name: Check drizzle-kit migrations consistency
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform/backend
+        run: pnpm drizzle-kit check
+
+      - name: Check for codegen'd changes
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform
+        run: |
+          pnpm codegen:api-client
+          # Ensure generated files are properly formatted and linted
+          pnpm lint:fix
+
+          # Check both unstaged and staged changes
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            echo "::error::Generated code is not up to date. Please run 'pnpm codegen:api-client && pnpm lint:fix' locally and commit the changes."
+            exit 1
+          else
+            echo "Generated code is up to date"
+            echo "codegen-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify no pending database migrations
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        id: db-migration-check
+        working-directory: ./platform
+        run: |
+          # Run db generate with timeout to prevent hanging on interactive prompts
+          set +e  # Don't exit on command failure
+
+          echo "Running pnpm db:generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
+
+          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
+          # user input to continue
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
+            # Command completed successfully within timeout
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "Output from pnpm db:generate:"
+            echo "$output"
+
+            # Check if there's an interactive prompt in the output (shouldn't happen if it completed)
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "❌ Interactive prompt detected - there are pending database migrations that need to be committed"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
+              exit 1
+            fi
+          else
+            # Command timed out or failed
+            exit_code=$?
+            output=$(cat /tmp/db_generate_output.txt 2>/dev/null || echo "No output captured")
+
+            echo "Output from pnpm db:generate (before timeout/failure):"
+            echo "$output"
+
+            if [ $exit_code -eq 124 ]; then
+              # Timeout occurred - likely waiting for interactive input
+              echo "❌ Command timed out - likely waiting for interactive input about pending database migrations"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
+            else
+              echo "❌ pnpm db:generate failed with exit code $exit_code"
+            fi
+            exit 1
+          fi
+
+          set -e  # Re-enable exit on error
+
+          # Check both unstaged and staged changes
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            echo "New migration files were generated - committing changes"
+            echo "db-migration-check=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new migration files were generated"
+            echo "db-migration-check=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fail if PR from a fork has uncommitted migration changes
+        if: steps.db-migration-check.outputs.db-migration-check == 'true' && github.event.pull_request.head.repo.fork == true
+        working-directory: ./platform
+        run: |
+          echo "::error::Database migrations need to be generated. Please run 'pnpm db:generate' locally and commit the changes."
+          exit 1
+
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
@@ -153,7 +243,7 @@ jobs:
       # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
       # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
       # explicitly install, just the webkit ones, each time 🥲
-      - name: Install Playwrightsystem dependencies for WebKit
+      - name: Install Playwright system dependencies for WebKit
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
         run: pnpm exec playwright install-deps webkit

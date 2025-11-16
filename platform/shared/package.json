@@ -12,7 +12,7 @@
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
-    "codegen:api-client": "tsx hey-api/openapi-ts.ts",
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
     "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
     "check:ci": "pnpm type-check && biome ci"
   },

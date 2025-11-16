@@ -1,10 +1,10 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import type { StatisticsTimeFrame } from "@shared";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentStatistics,
   ModelStatistics,
   OverviewStatistics,
-  StatisticsTimeFrame,
   StatisticsTimeSeriesData,
   TeamStatistics,
 } from "@/types";
@@ -12,9 +12,42 @@ import AgentTeamModel from "./agent-team";
 
 class StatisticsModel {
   /**
-   * Convert timeframe to SQL interval
+   * Parse custom timeframe to get start and end dates
    */
-  private static getTimeframeInterval(timeframe: StatisticsTimeFrame): string {
+  private static parseCustomTimeframe(
+    timeframe: string,
+  ): { startTime: Date; endTime: Date } | null {
+    if (!timeframe.startsWith("custom:")) {
+      return null;
+    }
+
+    const timeframeValue = timeframe.replace("custom:", "");
+    const [startTimeStr, endTimeStr] = timeframeValue.split("_");
+
+    if (!startTimeStr || !endTimeStr) {
+      return null;
+    }
+
+    const startTime = new Date(startTimeStr);
+    const endTime = new Date(endTimeStr);
+
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      return null;
+    }
+
+    return { startTime, endTime };
+  }
+
+  /**
+   * Convert timeframe to SQL interval or return null for custom timeframes
+   */
+  private static getTimeframeInterval(
+    timeframe: StatisticsTimeFrame,
+  ): string | null {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      return null; // Custom timeframes use date range filtering instead
+    }
+
     switch (timeframe) {
       case "1h":
         return "1 hour";
@@ -39,6 +72,20 @@ class StatisticsModel {
    * Get time bucket size for aggregation
    */
   private static getTimeBucket(timeframe: StatisticsTimeFrame): string {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+      if (!customRange) return "hour";
+
+      const durationMs =
+        customRange.endTime.getTime() - customRange.startTime.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      if (durationHours <= 2) return "minute";
+      if (durationHours <= 48) return "hour";
+      if (durationHours <= 720) return "day"; // 30 days
+      return "week";
+    }
+
     switch (timeframe) {
       case "1h":
         return "minute"; // We'll round to 5-minute intervals in post-processing
@@ -65,6 +112,20 @@ class StatisticsModel {
   private static getBucketIntervalMinutes(
     timeframe: StatisticsTimeFrame,
   ): number {
+    if (typeof timeframe === "string" && timeframe.startsWith("custom:")) {
+      const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+      if (!customRange) return 60;
+
+      const durationMs =
+        customRange.endTime.getTime() - customRange.startTime.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      if (durationHours <= 2) return 5; // 5-minute buckets for short periods
+      if (durationHours <= 48) return 60; // 1-hour buckets for up to 2 days
+      if (durationHours <= 720) return 1440; // 1-day buckets for up to 30 days
+      return 10080; // 1-week buckets for longer periods
+    }
+
     switch (timeframe) {
       case "1h":
         return 5; // 5-minute buckets
@@ -254,10 +315,29 @@ class StatisticsModel {
       )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -411,10 +491,29 @@ class StatisticsModel {
       )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -524,10 +623,29 @@ class StatisticsModel {
       )
       .where(
         and(
-          gte(
-            schema.interactionsTable.createdAt,
-            sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
-          ),
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
           ...(accessibleAgentIds.length > 0
             ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
             : []),
@@ -621,19 +739,25 @@ class StatisticsModel {
     const totalCost = teamStats.reduce((sum, team) => sum + team.cost, 0);
 
     const topTeam =
-      teamStats.reduce((top, team) =>
-        team.cost > (top?.cost || 0) ? team : top,
-      )?.teamName || "";
+      teamStats.length > 0
+        ? teamStats.reduce((top, team) =>
+            team.cost > (top?.cost || 0) ? team : top,
+          )?.teamName || ""
+        : "";
 
     const topAgent =
-      agentStats.reduce((top, agent) =>
-        agent.cost > (top?.cost || 0) ? agent : top,
-      )?.agentName || "";
+      agentStats.length > 0
+        ? agentStats.reduce((top, agent) =>
+            agent.cost > (top?.cost || 0) ? agent : top,
+          )?.agentName || ""
+        : "";
 
     const topModel =
-      modelStats.reduce((top, model) =>
-        model.cost > (top?.cost || 0) ? model : top,
-      )?.model || "";
+      modelStats.length > 0
+        ? modelStats.reduce((top, model) =>
+            model.cost > (top?.cost || 0) ? model : top,
+          )?.model || ""
+        : "";
 
     return {
       totalRequests,

@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TabsContent } from "@/components/ui/tabs";
+import { useAgents, useDefaultAgent } from "@/lib/agent.query";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
@@ -46,21 +46,9 @@ import type {
 import {
   useCreateOptimizationRule,
   useDeleteOptimizationRule,
+  useOptimizationRules,
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
-
-interface Agent {
-  id: string;
-  name: string;
-}
-
-interface OptimizationRulesTabProps {
-  selectedAgentId: string | null;
-  setSelectedAgentId: (id: string | null) => void;
-  agents: Agent[];
-  optimizationRules: OptimizationRule[];
-  optimizationRulesLoading: boolean;
-}
 
 // Form data type for inline editing - uses strings for number inputs
 type RuleFormData = {
@@ -121,9 +109,9 @@ function OptimizationRuleInlineForm({
     enabled: initialData?.enabled ?? true,
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     onSave(formData);
-  };
+  }, [formData, onSave]);
 
   const isValid =
     formData.ruleType &&
@@ -380,168 +368,182 @@ function OptimizationRuleRow({
   );
 }
 
-export function OptimizationRulesTab({
-  selectedAgentId,
-  setSelectedAgentId,
-  agents,
-  optimizationRules,
-  optimizationRulesLoading,
-}: OptimizationRulesTabProps) {
+export default function OptimizationRulesPage() {
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [isAddingRule, setIsAddingRule] = useState(false);
+
+  const { data: agents = [] } = useAgents();
+  const { data: defaultAgent } = useDefaultAgent();
+  const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
+    useOptimizationRules(selectedAgentId);
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  const handleCreateRule = async (data: RuleFormData) => {
-    try {
-      await createRule.mutateAsync({
-        agentId: data.agentId,
-        ruleType: data.ruleType,
-        conditions: formDataToConditions(data),
-        provider: data.provider,
-        targetModel: data.targetModel,
-        priority: Number(data.priority),
-        enabled: data.enabled,
-      });
-      setIsAddingRule(false);
-    } catch (error) {
-      console.error("Failed to create optimization rule:", error);
+  // Set default agent as selected when it loads
+  useEffect(() => {
+    if (defaultAgent && !selectedAgentId) {
+      setSelectedAgentId(defaultAgent.id);
     }
-  };
+  }, [defaultAgent, selectedAgentId]);
 
-  const handleUpdateRule = async (id: string, data: RuleFormData) => {
-    try {
-      await updateRule.mutateAsync({
-        id,
-        ruleType: data.ruleType,
-        conditions: formDataToConditions(data),
-        provider: data.provider,
-        targetModel: data.targetModel,
-        priority: Number(data.priority),
-        enabled: data.enabled,
-      });
-      setEditingRuleId(null);
-    } catch (error) {
-      console.error("Failed to update optimization rule:", error);
-    }
-  };
+  const handleCreateRule = useCallback(
+    async (data: RuleFormData) => {
+      try {
+        await createRule.mutateAsync({
+          agentId: data.agentId,
+          ruleType: data.ruleType,
+          conditions: formDataToConditions(data),
+          provider: data.provider,
+          targetModel: data.targetModel,
+          priority: Number(data.priority),
+          enabled: data.enabled,
+        });
+        setIsAddingRule(false);
+      } catch (error) {
+        console.error("Failed to create optimization rule:", error);
+      }
+    },
+    [createRule],
+  );
 
-  const handleDeleteRule = async (id: string) => {
-    try {
-      await deleteRule.mutateAsync(id);
-    } catch (error) {
-      console.error("Failed to delete optimization rule:", error);
-    }
-  };
+  const handleUpdateRule = useCallback(
+    async (id: string, data: RuleFormData) => {
+      try {
+        await updateRule.mutateAsync({
+          id,
+          ruleType: data.ruleType,
+          conditions: formDataToConditions(data),
+          provider: data.provider,
+          targetModel: data.targetModel,
+          priority: Number(data.priority),
+          enabled: data.enabled,
+        });
+        setEditingRuleId(null);
+      } catch (error) {
+        console.error("Failed to update optimization rule:", error);
+      }
+    },
+    [updateRule],
+  );
 
-  const handleCancelEdit = () => {
+  const handleDeleteRule = useCallback(
+    async (id: string) => {
+      try {
+        await deleteRule.mutateAsync(id);
+      } catch (error) {
+        console.error("Failed to delete optimization rule:", error);
+      }
+    },
+    [deleteRule],
+  );
+
+  const handleCancelEdit = useCallback(() => {
     setEditingRuleId(null);
     setIsAddingRule(false);
-  };
+  }, []);
 
   return (
-    <TabsContent value="optimization-rules" className="mt-0">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Optimization Rules</CardTitle>
-              <CardDescription>
-                Add rules to select a cheaper model if content is short or there
-                are no tools
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select
-                value={selectedAgentId || ""}
-                onValueChange={setSelectedAgentId}
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select a profile" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedAgentId && !isAddingRule && (
-                <Button
-                  onClick={() => setIsAddingRule(true)}
-                  size="sm"
-                  variant="outline"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Rule
-                </Button>
-              )}
-            </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Optimization Rules</CardTitle>
+            <CardDescription>
+              Add rules to select a cheaper model if content is short or there
+              are no tools
+            </CardDescription>
           </div>
-        </CardHeader>
-        <CardContent>
-          {optimizationRulesLoading ? (
-            <LoadingSkeleton count={3} prefix="optimization-rules" />
-          ) : (
-            <Table>
-              <TableHeader>
+          <div className="flex items-center gap-2">
+            <Select
+              value={selectedAgentId || ""}
+              onValueChange={setSelectedAgentId}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select a profile" />
+              </SelectTrigger>
+              <SelectContent>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedAgentId && !isAddingRule && (
+              <Button
+                onClick={() => setIsAddingRule(true)}
+                size="sm"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Rule
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {optimizationRulesLoading ? (
+          <LoadingSkeleton count={3} prefix="optimization-rules" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Rule Type</TableHead>
+                <TableHead>Conditions</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Target Model</TableHead>
+                <TableHead className="w-20">Priority</TableHead>
+                <TableHead className="w-48">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isAddingRule && selectedAgentId && (
+                <OptimizationRuleInlineForm
+                  initialData={{
+                    agentId: selectedAgentId,
+                    ruleType: "content_length",
+                    provider: "anthropic",
+                    targetModel: "",
+                    priority: "1",
+                    enabled: true,
+                  }}
+                  onSave={handleCreateRule}
+                  onCancel={handleCancelEdit}
+                />
+              )}
+              {optimizationRules.length === 0 && !isAddingRule ? (
                 <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Rule Type</TableHead>
-                  <TableHead>Conditions</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Target Model</TableHead>
-                  <TableHead className="w-20">Priority</TableHead>
-                  <TableHead className="w-48">Actions</TableHead>
+                  <TableCell
+                    colSpan={7}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    {selectedAgentId
+                      ? "No optimization rules configured for this profile"
+                      : "Select a profile to view optimization rules"}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isAddingRule && selectedAgentId && (
-                  <OptimizationRuleInlineForm
-                    initialData={{
-                      agentId: selectedAgentId,
-                      ruleType: "content_length",
-                      provider: "anthropic",
-                      targetModel: "",
-                      priority: "1",
-                      enabled: true,
-                    }}
-                    onSave={handleCreateRule}
+              ) : (
+                optimizationRules.map((rule) => (
+                  <OptimizationRuleRow
+                    key={rule.id}
+                    rule={rule}
+                    isEditing={editingRuleId === rule.id}
+                    onEdit={() => setEditingRuleId(rule.id)}
+                    onSave={(data) => handleUpdateRule(rule.id, data)}
                     onCancel={handleCancelEdit}
+                    onDelete={() => handleDeleteRule(rule.id)}
                   />
-                )}
-                {optimizationRules.length === 0 && !isAddingRule ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      {selectedAgentId
-                        ? "No optimization rules configured for this profile"
-                        : "Select a profile to view optimization rules"}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  optimizationRules.map((rule) => (
-                    <OptimizationRuleRow
-                      key={rule.id}
-                      rule={rule}
-                      isEditing={editingRuleId === rule.id}
-                      onEdit={() => setEditingRuleId(rule.id)}
-                      onSave={(data) => handleUpdateRule(rule.id, data)}
-                      onCancel={handleCancelEdit}
-                      onDelete={() => handleDeleteRule(rule.id)}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </TabsContent>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -13159,7 +13159,7 @@ export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/teams';
 };
@@ -13249,7 +13249,7 @@ export type GetAgentStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/agents';
 };
@@ -13338,7 +13338,7 @@ export type GetModelStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/models';
 };
@@ -13426,7 +13426,7 @@ export type GetOverviewStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all';
+        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/overview';
 };

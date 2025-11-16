@@ -43,8 +43,8 @@ jobs:
       - name: Build Docker image
         uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
-          context: ./desktop_app/mcp_server_docker_image
-          file: ./desktop_app/mcp_server_docker_image/Dockerfile
+          context: ./platform/mcp_server_docker_image
+          file: ./platform/mcp_server_docker_image/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ inputs.push_to_gcr }}
           tags: |

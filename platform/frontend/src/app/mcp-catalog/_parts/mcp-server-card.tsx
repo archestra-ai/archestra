@@ -99,6 +99,7 @@ export type McpServerCardProps = {
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCancelInstallation?: (serverId: string) => void;
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
   currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
   currentUserLocalServerInstallation?: InstalledServer; // For local servers: the current user's specific installation
@@ -123,6 +124,7 @@ export function McpServerCard({
   onReinstall,
   onEdit,
   onDelete,
+  onCancelInstallation,
   currentUserInstalledLocalServer = false,
   currentUserHasLocalTeamInstallation = false,
   currentUserLocalServerInstallation,
@@ -168,6 +170,8 @@ export function McpServerCard({
   } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
 
   const needsReinstall = installedServer?.reinstallRequired;
+  const hasError = installedServer?.localInstallationStatus === "error";
+  const errorMessage = installedServer?.localInstallationError;
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
 
@@ -386,7 +390,12 @@ export function McpServerCard({
           ))}
         </div>
       )}
-      {isCurrentUserAuthenticated && needsReinstall && (
+      {isCurrentUserAuthenticated && hasError && errorMessage && (
+        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
+          {errorMessage}
+        </div>
+      )}
+      {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
         <Button
           onClick={onReinstall}
           size="sm"
@@ -488,6 +497,11 @@ export function McpServerCard({
           ))}
         </div>
       )}
+      {isCurrentUserAuthenticated && hasError && errorMessage && (
+        <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
+          {errorMessage}
+        </div>
+      )}
       {isCurrentUserAuthenticated && needsReinstall && (
         <Button
           onClick={onReinstall}
@@ -548,14 +562,14 @@ export function McpServerCard({
           variant="outline"
           className="w-full"
         >
-          {installationStatus === "discovering-tools"
-            ? "Discovering tools..."
-            : "Uninstall"}
+          Uninstall
         </Button>
       )}
-      {isInstalling && (
-        <Button size="sm" variant="outline" className="w-full" disabled>
-          {localInstalllingLabel}
+      {(installationStatus === "discovering-tools" || isInstalling) && (
+        <Button size="sm" variant={"outline"} className="w-full" disabled>
+          {installationStatus === "discovering-tools"
+            ? "Discovering tools..."
+            : "Installing..."}
         </Button>
       )}
       {config.features.enableTeamAuth &&
@@ -709,6 +723,8 @@ export function McpServerCard({
       <UninstallServerDialog
         server={uninstallingServer}
         onClose={() => setUninstallingServer(null)}
+        isCancelingInstallation={isInstalling}
+        onCancelInstallation={onCancelInstallation}
       />
     </>
   );

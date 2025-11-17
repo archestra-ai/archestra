@@ -544,10 +544,9 @@ export default class K8sPod {
         ),
       });
 
-      logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);
-
-      // Wait for pod to be ready
-      await this.waitForPodReady();
+      logger.info(
+        `Pod ${this.podName} created, will check status asynchronously`,
+      );
 
       // For HTTP servers, create a K8s Service and set endpoint URL
       if (needsHttp) {
@@ -701,16 +700,40 @@ export default class K8sPod {
   /**
    * Wait for pod to be in running state
    */
-  private async waitForPodReady(
-    maxAttempts = 60,
-    intervalMs = 2000,
-  ): Promise<void> {
+  async waitForPodReady(maxAttempts = 60, intervalMs = 2000): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const pod = await this.k8sApi.readNamespacedPod({
           name: this.podName,
           namespace: this.namespace,
         });
+
+        // Check for failure states in container statuses
+        if (pod.status?.containerStatuses) {
+          for (const containerStatus of pod.status.containerStatuses) {
+            const waitingReason = containerStatus.state?.waiting?.reason;
+            if (waitingReason) {
+              const failureStates = [
+                "CrashLoopBackOff",
+                "ImagePullBackOff",
+                "ErrImagePull",
+                "CreateContainerConfigError",
+                "CreateContainerError",
+                "RunContainerError",
+              ];
+              if (failureStates.includes(waitingReason)) {
+                const message =
+                  containerStatus.state?.waiting?.message ||
+                  `Container in ${waitingReason} state`;
+                this.state = "failed";
+                this.errorMessage = message;
+                throw new Error(
+                  `Pod ${this.podName} failed: ${waitingReason} - ${message}`,
+                );
+              }
+            }
+          }
+        }
 
         if (pod.status?.phase === "Running") {
           // Check if all containers are ready
@@ -723,16 +746,19 @@ export default class K8sPod {
         }
 
         if (pod.status?.phase === "Failed") {
+          this.state = "failed";
+          this.errorMessage = `Pod phase is Failed`;
           throw new Error(`Pod ${this.podName} failed to start`);
         }
       } catch (error: unknown) {
         if (
           error instanceof Error &&
-          error.message.includes("failed to start")
+          (error.message.includes("failed to start") ||
+            error.message.includes("failed:"))
         ) {
           throw error;
         }
-        // Continue waiting for other errors
+        // Continue waiting for other errors (e.g., network issues)
       }
 
       await new Promise((resolve) => setTimeout(resolve, intervalMs));

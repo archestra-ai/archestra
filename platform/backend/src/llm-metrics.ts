@@ -20,6 +20,7 @@ type Fetch = (
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
+let llmBlockedToolCounter: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -40,7 +41,12 @@ export function initializeMetrics(labelKeys: string[]): void {
   const labelKeysChanged =
     JSON.stringify(nextLabelKeys) !== JSON.stringify(currentLabelKeys);
 
-  if (!labelKeysChanged && llmRequestDuration && llmTokensCounter) {
+  if (
+    !labelKeysChanged &&
+    llmRequestDuration &&
+    llmTokensCounter &&
+    llmBlockedToolCounter
+  ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
     );
@@ -57,23 +63,20 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
     }
+    if (llmBlockedToolCounter) {
+      client.register.removeSingleMetric("llm_blocked_tools_total");
+    }
   } catch (_error) {
     // Ignore errors if metrics don't exist
   }
 
   // Create new metrics with updated label names
   const baseLabelNames = ["provider", "agent_id", "agent_name"];
-  const durationLabelNames = [
-    ...baseLabelNames,
-    "status_code",
-    ...nextLabelKeys,
-  ];
-  const tokensLabelNames = [...baseLabelNames, "type", ...nextLabelKeys]; // type: input|output
 
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
     help: "LLM request duration in seconds",
-    labelNames: durationLabelNames,
+    labelNames: [...baseLabelNames, "status_code", ...nextLabelKeys],
     // Same bucket style as http_request_duration_seconds but adjusted for LLM latency
     buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
   });
@@ -81,7 +84,13 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmTokensCounter = new client.Counter({
     name: "llm_tokens_total",
     help: "Total tokens used",
-    labelNames: tokensLabelNames,
+    labelNames: [...baseLabelNames, "type", ...nextLabelKeys], // type: input|output
+  });
+
+  llmBlockedToolCounter = new client.Counter({
+    name: "llm_blocked_tools_total",
+    help: "Blocked tool count",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
   });
 
   logger.info(
@@ -139,6 +148,25 @@ export function reportLLMTokens(
       usage.output,
     );
   }
+}
+
+/**
+ * Increases the blocked tool counter by count.
+ * Count can be more than 1, because when one tool call from an LLM response call is blocked,
+ * all other calls in a response are blocked too.
+ */
+export function reportBlockedTools(
+  provider: SupportedProvider,
+  agent: Agent,
+  count: number,
+) {
+  if (!llmBlockedToolCounter) {
+    logger.warn(
+      "LLM metrics not initialized, skipping blocked tools reporting",
+    );
+    return;
+  }
+  llmBlockedToolCounter.inc(buildMetricLabels(agent, { provider }), count);
 }
 
 /**

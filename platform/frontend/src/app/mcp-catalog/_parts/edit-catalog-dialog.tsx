@@ -1,5 +1,4 @@
 import type { archestraApiTypes } from "@shared";
-import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +20,6 @@ interface EditCatalogDialogProps {
 
 export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleClose = () => {
     onClose();
@@ -60,21 +58,18 @@ export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
             mode="edit"
             initialValues={item}
             onSubmit={onSubmit}
-            submitButtonRef={submitButtonRef}
+            footer={
+              <DialogFooter>
+                <Button variant="outline" onClick={handleClose} type="button">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            }
           />
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} type="button">
-            Cancel
-          </Button>
-          <Button
-            onClick={() => submitButtonRef.current?.click()}
-            disabled={updateMutation.isPending}
-          >
-            {updateMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

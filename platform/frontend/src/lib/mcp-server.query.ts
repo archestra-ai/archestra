@@ -19,11 +19,13 @@ const {
 
 export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
+  hasInstallingServers?: boolean;
 }) {
   return useSuspenseQuery({
     queryKey: ["mcp-servers"],
     queryFn: async () => (await getMcpServers()).data ?? [],
     initialData: params?.initialData,
+    refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }
 
@@ -35,13 +37,23 @@ export function useInstallMcpServer() {
         dontShowToast?: boolean;
       },
     ) => {
-      const { data: installedServer } = await installMcpServer({ body: data });
-      if (!data.dontShowToast) {
-        toast.success(`Successfully installed ${data.name}`);
+      const { data: installedServer, error } = await installMcpServer({
+        body: data,
+      });
+      if (error) {
+        const msg =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Unknown error";
+        toast.error(`Failed to install ${data.name}: ${msg}`);
       }
-      return installedServer;
+      return { installedServer, dontShowToast: data.dontShowToast };
     },
-    onSuccess: async (installedServer) => {
+    onSuccess: async ({ installedServer, dontShowToast }, variables) => {
+      // Show success toast for remote servers (local servers show toast after async tool fetch completes)
+      if (!dontShowToast && installedServer) {
+        toast.success(`Successfully installed ${variables.name}`);
+      }
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server installation creates new tools
@@ -240,6 +252,7 @@ export function useMcpServerInstallationStatus(
         toast.success(`Successfully installed server`);
       }
       if (result === "error") {
+        await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
         toast.error("Failed to install server");
       }
       return result;

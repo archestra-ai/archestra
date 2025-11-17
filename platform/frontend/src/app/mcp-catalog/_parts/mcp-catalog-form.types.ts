@@ -51,8 +51,9 @@ export const formSchema = z
       return true;
     },
     {
-      message: "Either command or Docker image must be provided.",
-      path: [],
+      message:
+        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
+      path: ["localConfig", "command"],
     },
   );
 

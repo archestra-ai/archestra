@@ -58,4 +58,10 @@ export default {
      */
     enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
   },
+  sentry: {
+    /**
+     * Sentry DSN for error tracking (empty to disable).
+     */
+    dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_DSN") || "",
+  },
 };

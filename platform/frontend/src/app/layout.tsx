@@ -13,6 +13,8 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+// Import Sentry for client-side error tracking
+import "../../sentry.client.config";
 import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";

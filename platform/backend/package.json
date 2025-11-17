@@ -45,6 +45,8 @@
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/sdk-node": "^0.208.0",
     "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@sentry/nextjs": "^10.25.0",
+    "@sentry/node": "^10.25.0",
     "@shared": "workspace:*",
     "ai": "^5.0.90",
     "better-auth": "^1.3.34",

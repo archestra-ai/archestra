@@ -237,6 +237,9 @@ export default {
       port: 9050,
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
+    sentry: {
+      dsn: process.env.ARCHESTRA_SENTRY_DSN || "",
+    },
   },
   debug: isDevelopment,
   production: isProduction,

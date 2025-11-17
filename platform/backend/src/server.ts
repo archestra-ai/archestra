@@ -1,5 +1,7 @@
 // Import tracing first to ensure auto-instrumentation works properly
 import "./tracing";
+// Import sentry for error tracking
+import "./sentry";
 
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";

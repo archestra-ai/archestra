@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
     },
     incomingRequests: true
   },
+  experimental: {
+    proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+  },
+  httpAgentOptions: {
+    keepAlive: true,
+  },
   async rewrites() {
     const backendUrl = process.env.ARCHESTRA_API_BASE_URL || 'http://localhost:9000';
     return [

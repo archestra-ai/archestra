@@ -99,6 +99,19 @@ const colors = [
   "#8b5cf6", // violet
 ];
 
+type ChartInstance = {
+  data: {
+    datasets: unknown[];
+  };
+  isDatasetVisible: (index: number) => boolean;
+};
+
+type ChartEventArgs = {
+  event: {
+    type: string;
+  };
+};
+
 function createVisibilitySyncPlugin<T>(
   id: string,
   data: T[],
@@ -107,11 +120,11 @@ function createVisibilitySyncPlugin<T>(
 ) {
   return {
     id,
-    afterEvent: (chart: any, args: any) => {
+    afterEvent: (chart: ChartInstance, args: ChartEventArgs) => {
       if (args.event.type === "click") {
         setTimeout(() => {
           const newHidden = new Set<string>();
-          chart.data.datasets.forEach((dataset: any, index: number) => {
+          chart.data.datasets.forEach((_, index: number) => {
             if (!chart.isDatasetVisible(index)) {
               const item = data[index];
               if (item) {
@@ -414,6 +427,11 @@ export default function StatisticsPage() {
           ],
         };
 
+  // Chart keys to force remount when data changes
+  const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;
+  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenAgents.size}`;
+  const modelChartKey = `model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`;
+
   // Chart options with default legend behavior (strikethrough on click)
   const chartOptions = useMemo(
     () => ({
@@ -695,7 +713,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
-                  key={`team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`}
+                  key={teamChartKey}
                   data={teamChartData}
                   options={chartOptions}
                   plugins={[teamChartPlugin]}
@@ -763,7 +781,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
-                  key={`agent-${timeframe}-${agentStatistics.length}-${hiddenAgents.size}`}
+                  key={agentChartKey}
                   data={agentChartData}
                   options={chartOptions}
                   plugins={[agentChartPlugin]}
@@ -829,7 +847,7 @@ export default function StatisticsPage() {
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
-                  key={`model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`}
+                  key={modelChartKey}
                   data={modelChartData}
                   options={chartOptions}
                   plugins={[modelChartPlugin]}

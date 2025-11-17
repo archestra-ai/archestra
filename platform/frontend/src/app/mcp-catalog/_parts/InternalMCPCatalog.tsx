@@ -141,8 +141,7 @@ export function InternalMCPCatalog({
         setInstallingServerIds(new Set(pendingServers.map((s) => s.id)));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [installedServers]); // Only run once on mount to restore polling state
+  }, [installedServers]);
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,

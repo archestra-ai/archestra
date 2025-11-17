@@ -606,6 +606,9 @@ export default function StatisticsPage() {
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="5m">5 Minutes</SelectItem>
+              <SelectItem value="15m">15 Minutes</SelectItem>
+              <SelectItem value="30m">30 Minutes</SelectItem>
               <SelectItem value="1h">Last hour</SelectItem>
               <SelectItem value="24h">Last 24 hours</SelectItem>
               <SelectItem value="7d">Last 7 days</SelectItem>

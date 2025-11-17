@@ -25,6 +25,8 @@ on:
         required: false
       DOCKER_PASSWORD:
         required: false
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+        required: false
 
 jobs:
   # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3
@@ -72,6 +74,8 @@ jobs:
           platforms: ${{ matrix.os_and_arch }}
           build-args: |
             VERSION=${{ inputs.version }}
+          secrets: |
+            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
 
       - name: Export digest

@@ -46,6 +46,8 @@ jobs:
           platforms: linux/amd64
           build-args: |
             VERSION=${{ github.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           push: true
           tags: |
             europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}

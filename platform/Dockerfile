@@ -36,7 +36,13 @@ COPY shared ./shared
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build
+# Use Docker secret to securely pass Sentry auth token during build
+# The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
+RUN --mount=type=secret,id=sentry_auth_token \
+    if [ -f /run/secrets/sentry_auth_token ]; then \
+        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    fi && \
+    pnpm build
 
 # <----- Final unified stage ----->
 FROM base AS unified

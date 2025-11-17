@@ -119,6 +119,10 @@ NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH=false  # Enable team-based authentication
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
 ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
 
+# Permission Checking
+# Frontend uses /api/auth/has-permission endpoint for dynamic permission checks
+# Custom RBAC roles are loaded from database at runtime for authorization
+
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
 ARCHESTRA_CHAT_DEFAULT_MODEL=claude-opus-4-1-20250805  # Optional, defaults to claude-opus-4-1-20250805

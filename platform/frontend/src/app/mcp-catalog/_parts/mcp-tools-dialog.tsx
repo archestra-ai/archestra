@@ -63,8 +63,8 @@ interface McpToolsDialogProps {
 const formatToolName = (toolName: string) => {
   // Remove the MCP server name prefix from the tool name
   // For example:
-  // - "github_mcp_server__update_pull_request_branch" -> "update_pull_request_branch"
   // - "huggingface__remote-mcp__hf_doc_fetch" -> "hf_doc_fetch"
+  // - "github_mcp_server__update_pull_request_branch" -> "update_pull_request_branch"
 
   // Find the last occurrence of "__" and take everything after it
   const lastDoubleUnderscore = toolName.lastIndexOf(

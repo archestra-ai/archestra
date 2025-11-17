@@ -11,11 +11,6 @@ import dotenv from "dotenv";
 import logger from "@/logging";
 import packageJson from "../../package.json";
 
-const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
-const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
-const isProduction = ["production", "prod"].includes(environment);
-const isDevelopment = !isProduction;
-
 /**
  * Load .env from platform root
  *
@@ -23,6 +18,11 @@ const isDevelopment = !isProduction;
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+
+const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const isProduction = ["production", "prod"].includes(environment);
+const isDevelopment = !isProduction;
 
 /**
  * Determines OTLP authentication headers based on environment variables

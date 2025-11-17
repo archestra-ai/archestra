@@ -24,6 +24,7 @@ const {
   api: { name, version },
   observability: {
     otel: { traceExporter: traceExporterConfig },
+    sentry: { enabled: sentryEnabled },
   },
 } = config;
 
@@ -38,17 +39,26 @@ const resource = defaultResource().merge(
   }),
 );
 
-// Create the base SDK configuration
-const sdkConfig: ConstructorParameters<typeof NodeSDK>[0] = {
+// Initialize the OpenTelemetry SDK with auto-instrumentations
+const sdk = new NodeSDK({
   resource,
   traceExporter,
   instrumentations: [
-    new FastifyOtelInstrumentation({
-      registerOnInitialization: true,
-      ignorePaths: (opts) => {
-        return opts.url.startsWith(config.observability.metrics.endpoint);
-      },
-    }),
+    /**
+     * If Sentry is configured, we don't need to instrument Fastify
+     * as Sentry already instruments Fastify automatically
+     * https://docs.sentry.io/platforms/javascript/guides/fastify/migration/v7-to-v8/v8-opentelemetry/
+     */
+    ...(sentryEnabled
+      ? []
+      : [
+          new FastifyOtelInstrumentation({
+            registerOnInitialization: true,
+            ignorePaths: (opts) => {
+              return opts.url.startsWith(config.observability.metrics.endpoint);
+            },
+          }),
+        ]),
     getNodeAutoInstrumentations({
       // Disable instrumentation for specific packages if needed
       "@opentelemetry/instrumentation-fs": {
@@ -56,21 +66,15 @@ const sdkConfig: ConstructorParameters<typeof NodeSDK>[0] = {
       },
     }),
   ],
-};
-
-// If Sentry is configured, add Sentry components for proper integration
-if (sentryClient) {
-  // Add Sentry's context manager, sampler, and propagator for proper integration
-  sdkConfig.contextManager = new Sentry.SentryContextManager();
-  sdkConfig.sampler = new SentrySampler(sentryClient);
-  sdkConfig.textMapPropagator = new SentryPropagator();
-
-  // Add Sentry span processor to send spans to Sentry
-  sdkConfig.spanProcessors = [new SentrySpanProcessor()];
-}
-
-// Initialize the OpenTelemetry SDK with auto-instrumentations
-const sdk = new NodeSDK(sdkConfig);
+  /**
+   * If Sentry is configured, add Sentry components for proper integration
+   */
+  contextManager: sentryEnabled ? new Sentry.SentryContextManager() : undefined,
+  sampler:
+    sentryEnabled && sentryClient ? new SentrySampler(sentryClient) : undefined,
+  textMapPropagator: sentryEnabled ? new SentryPropagator() : undefined,
+  spanProcessors: sentryEnabled ? [new SentrySpanProcessor()] : undefined,
+});
 
 // Start the SDK
 sdk.start();

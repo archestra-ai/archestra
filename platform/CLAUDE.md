@@ -138,6 +138,10 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
+
+# Sentry Error Tracking (optional - leave empty to disable)
+ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN
+ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 ```
 
 ## Architecture

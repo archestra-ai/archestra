@@ -127,10 +127,30 @@ class McpClient {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
-      return existingClient;
+      // Health check: ping the client to verify connection is still alive
+      try {
+        await existingClient.ping();
+        logger.debug(
+          { connectionKey },
+          "Client ping successful, reusing cached client",
+        );
+        return existingClient;
+      } catch (error) {
+        // Connection is dead, invalidate cache and create fresh client
+        logger.warn(
+          {
+            connectionKey,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Client ping failed, creating fresh client",
+        );
+        this.activeConnections.delete(connectionKey);
+        // Fall through to create new client
+      }
     }
 
     // Create new client
+    logger.info({ connectionKey }, "Creating new MCP client");
     const client = new Client(
       {
         name: "archestra-platform",

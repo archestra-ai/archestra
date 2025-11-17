@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0](https://github.com/archestra-ai/archestra/compare/platform-v0.5.0...platform-v0.6.0) (2025-11-17)
+
+
+### Features
+
+* add `use_in_chat` checkbox to agent profile create/edit forms ([#1129](https://github.com/archestra-ai/archestra/issues/1129)) ([0fa6817](https://github.com/archestra-ai/archestra/commit/0fa68177cdf63804d9e81e526a848c55280047b1))
+* add refresh functionality to McpLogsDialog ([#1043](https://github.com/archestra-ai/archestra/issues/1043)) ([ef3c140](https://github.com/archestra-ai/archestra/commit/ef3c1405825e51e83afe020632a47eb8eeb5ea14))
+
+
+### Bug Fixes
+
+* fix form validation that blocks adding remote server ([#1140](https://github.com/archestra-ai/archestra/issues/1140)) ([a90c965](https://github.com/archestra-ai/archestra/commit/a90c96585c4dc437857923083eda8a66b151ff4a))
+* RBAC issues ([#1138](https://github.com/archestra-ai/archestra/issues/1138)) ([b2d990a](https://github.com/archestra-ai/archestra/commit/b2d990a8bc1949924594ad2d4eef24a29403c881)), closes [#1103](https://github.com/archestra-ai/archestra/issues/1103)
+* remove unnecessary limit check from frontend ([#1133](https://github.com/archestra-ai/archestra/issues/1133)) ([ac25c34](https://github.com/archestra-ai/archestra/commit/ac25c34744bf6b0be8ccf3c9f544de7bd415f12d))
+* token pricing rule update ordering behavior ([#1127](https://github.com/archestra-ai/archestra/issues/1127)) ([db25141](https://github.com/archestra-ai/archestra/commit/db251411147ffd200d568318bc0067f18283fcf6))
+
 ## [0.5.0](https://github.com/archestra-ai/archestra/compare/platform-v0.4.1...platform-v0.5.0) (2025-11-14)
 
 

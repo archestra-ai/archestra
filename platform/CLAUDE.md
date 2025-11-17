@@ -141,7 +141,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN
-ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
+NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN (requires NEXT_PUBLIC_ prefix)
 ```
 
 ## Architecture

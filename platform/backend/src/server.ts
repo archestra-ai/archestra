@@ -1,8 +1,15 @@
-// Import tracing first to ensure auto-instrumentation works properly
+/**
+ * Import sentry for error-tracking
+ *
+ * THEN import tracing to ensure auto-instrumentation works properly (must import sentry before tracing as
+ * some of Sentry's auto-instrumentations rely on the sentry client being initialized)
+ */
+import "./sentry";
 import "./tracing";
 
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
+import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
@@ -29,8 +36,6 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import * as routes from "./routes";
-// Import sentry for error tracking
-import Sentry from "./sentry";
 
 const {
   api: {
@@ -248,7 +253,7 @@ const start = async () => {
    * Setup Sentry error handler for Fastify
    * This should be done after creating the instance but before registering routes
    */
-  if (observability.sentry.dsn) {
+  if (observability.sentry.enabled) {
     Sentry.setupFastifyErrorHandler(fastify);
   }
 

@@ -12,6 +12,7 @@ const dsn = process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
 if (dsn) {
   Sentry.init({
     dsn,
+    serverName: process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME,
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
     tracesSampleRate: 1,

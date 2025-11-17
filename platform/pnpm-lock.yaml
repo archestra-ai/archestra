@@ -83,6 +83,12 @@ importers:
       '@sentry/node':
         specifier: ^10.25.0
         version: 10.25.0
+      '@sentry/opentelemetry':
+        specifier: ^10.25.0
+        version: 10.25.0(@opentelemetry/api@1.9.0)(@opentelemetry/context-async-hooks@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/semantic-conventions@1.38.0)
+      '@sentry/profiling-node':
+        specifier: ^10.25.0
+        version: 10.25.0
       '@shared':
         specifier: workspace:*
         version: link:../shared
@@ -3151,6 +3157,10 @@ packages:
     resolution: {integrity: sha512-qlbT4tOd+WRyKpLdsbi26rkynGBoVabnY8/9rFnTxZ0WIUG5EFhJFqEeRLMyv+uk0uRFF3H0I9+u+qP/BKxIcQ==}
     engines: {node: '>=18'}
 
+  '@sentry-internal/node-cpu-profiler@2.2.0':
+    resolution: {integrity: sha512-oLHVYurqZfADPh5hvmQYS5qx8t0UZzT2u6+/68VXsFruQEOnYJTODKgU3BVLmemRs3WE6kCJjPeFdHVYOQGSzQ==}
+    engines: {node: '>=18'}
+
   '@sentry-internal/replay-canvas@10.25.0':
     resolution: {integrity: sha512-zuj5jVNswZ/aA1nPPbU+VIFkQG0695lbyIfS1Skq+5o2FdRIS3MGnBXw1abI9h4pft8GLQWcKiBxISM7UpSz6w==}
     engines: {node: '>=18'}
@@ -3258,6 +3268,11 @@ packages:
       '@opentelemetry/core': ^1.30.1 || ^2.1.0
       '@opentelemetry/sdk-trace-base': ^1.30.1 || ^2.1.0
       '@opentelemetry/semantic-conventions': ^1.37.0
+
+  '@sentry/profiling-node@10.25.0':
+    resolution: {integrity: sha512-rv/93gPEGTm20+bL7qKCCakkRUmYvyXR27393z0F+uCcMzd0NtZpGrFzZ5Wbbl6X4k2RA4mvadoSFfVil+AC3g==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@sentry/react@10.25.0':
     resolution: {integrity: sha512-LBQHgyPAFzuy99mEJF8ZF2AOxxJiGAmtu10eQhglhFgfJsU7JJVsee0h+vTSmvHMDtFrIwhZi3i1X5snZ/kzoA==}
@@ -5936,6 +5951,10 @@ packages:
         optional: true
       sass:
         optional: true
+
+  node-abi@3.85.0:
+    resolution: {integrity: sha512-zsFhmbkAzwhTft6nd3VxcG0cvJsT70rL+BIGHWVq5fi6MwGrHwzqKaxXE+Hl2GmnGItnDKPPkO5/LQqjVkIdFg==}
+    engines: {node: '>=10'}
 
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
@@ -10313,6 +10332,11 @@ snapshots:
     dependencies:
       '@sentry/core': 10.25.0
 
+  '@sentry-internal/node-cpu-profiler@2.2.0':
+    dependencies:
+      detect-libc: 2.1.2
+      node-abi: 3.85.0
+
   '@sentry-internal/replay-canvas@10.25.0':
     dependencies:
       '@sentry-internal/replay': 10.25.0
@@ -10483,6 +10507,14 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/semantic-conventions': 1.38.0
       '@sentry/core': 10.25.0
+
+  '@sentry/profiling-node@10.25.0':
+    dependencies:
+      '@sentry-internal/node-cpu-profiler': 2.2.0
+      '@sentry/core': 10.25.0
+      '@sentry/node': 10.25.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@sentry/react@10.25.0(react@19.2.0)':
     dependencies:
@@ -13503,6 +13535,10 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
+
+  node-abi@3.85.0:
+    dependencies:
+      semver: 7.7.3
 
   node-domexception@1.0.0: {}
 

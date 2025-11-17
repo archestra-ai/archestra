@@ -5,10 +5,15 @@
 import * as Sentry from "@sentry/nextjs";
 import config from "@/lib/config";
 
+const {
+  sentry: { dsn, serverName },
+} = config;
+
 // Only initialize Sentry if DSN is configured
-if (config.sentry.dsn) {
+if (dsn) {
   Sentry.init({
-    dsn: config.sentry.dsn,
+    dsn,
+    serverName,
 
     // Add optional integrations for additional features
     integrations: [Sentry.replayIntegration()],

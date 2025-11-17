@@ -11,6 +11,11 @@ import dotenv from "dotenv";
 import logger from "@/logging";
 import packageJson from "../../package.json";
 
+const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const isProduction = ["production", "prod"].includes(environment);
+const isDevelopment = !isProduction;
+
 /**
  * Load .env from platform root
  *
@@ -71,11 +76,6 @@ export const getDatabaseUrl = (): string => {
   }
   return databaseUrl;
 };
-
-const isProduction = ["production", "prod"].includes(
-  process.env.NODE_ENV?.toLowerCase() ?? "",
-);
-const isDevelopment = !isProduction;
 
 /**
  * Parse port from ARCHESTRA_API_BASE_URL if provided
@@ -238,11 +238,14 @@ export default {
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
     sentry: {
-      dsn: process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "",
+      enabled: sentryDsn !== "",
+      dsn: sentryDsn,
+      serverName: process.env.ARCHESTRA_SENTRY_SERVER_NAME,
     },
   },
   debug: isDevelopment,
   production: isProduction,
+  environment,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

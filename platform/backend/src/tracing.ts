@@ -10,8 +10,15 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import * as Sentry from "@sentry/node";
+import {
+  SentryPropagator,
+  SentrySampler,
+  SentrySpanProcessor,
+} from "@sentry/opentelemetry";
 import config from "@/config";
 import logger from "@/logging";
+import sentryClient from "@/sentry";
 
 const {
   api: { name, version },
@@ -31,8 +38,8 @@ const resource = defaultResource().merge(
   }),
 );
 
-// Initialize the OpenTelemetry SDK with auto-instrumentations
-const sdk = new NodeSDK({
+// Create the base SDK configuration
+const sdkConfig: ConstructorParameters<typeof NodeSDK>[0] = {
   resource,
   traceExporter,
   instrumentations: [
@@ -49,10 +56,34 @@ const sdk = new NodeSDK({
       },
     }),
   ],
-});
+};
+
+// If Sentry is configured, add Sentry components for proper integration
+if (sentryClient) {
+  // Add Sentry's context manager, sampler, and propagator for proper integration
+  sdkConfig.contextManager = new Sentry.SentryContextManager();
+  sdkConfig.sampler = new SentrySampler(sentryClient);
+  sdkConfig.textMapPropagator = new SentryPropagator();
+
+  // Add Sentry span processor to send spans to Sentry
+  sdkConfig.spanProcessors = [new SentrySpanProcessor()];
+}
+
+// Initialize the OpenTelemetry SDK with auto-instrumentations
+const sdk = new NodeSDK(sdkConfig);
 
 // Start the SDK
 sdk.start();
+
+// Validate Sentry + OpenTelemetry integration if Sentry is configured
+if (sentryClient) {
+  try {
+    Sentry.validateOpenTelemetrySetup();
+    logger.info("Sentry + OpenTelemetry integration validated successfully");
+  } catch (error) {
+    logger.warn({ error }, "Sentry + OpenTelemetry validation warning");
+  }
+}
 
 // Gracefully shutdown the SDK on process exit
 process.on("SIGTERM", () => {

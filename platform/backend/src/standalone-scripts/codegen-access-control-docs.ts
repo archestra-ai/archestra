@@ -37,7 +37,7 @@ function getResourceDescription(resource: Resource): string {
     tokenPrice: "Token pricing configuration",
     chatSettings: "Chat feature configuration and settings",
     prompt: "Reusable prompt templates and system prompts",
-    ac: "Access control and role management",
+    ac: "RBAC roles",
   };
   return descriptions[resource] || "";
 }
@@ -90,7 +90,8 @@ function generateCustomRolesPermissionsTable(): string {
     for (const action of actions) {
       const permission = `${resource}:${action}`;
       const actionDesc = getActionDescription(action);
-      const fullDescription = `${actionDesc} ${description.toLowerCase()}`;
+      // don't lowercase "RBAC roles"
+      const fullDescription = `${actionDesc} ${resource === "ac" ? description : description.toLowerCase()}`;
 
       table += `| \`${permission}\` | ${fullDescription} |\n`;
     }

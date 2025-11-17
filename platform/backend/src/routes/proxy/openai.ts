@@ -5,7 +5,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
+import {
+  getObservableFetch,
+  reportBlockedTools,
+  reportLLMTokens,
+} from "@/llm-metrics";
 import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 import {
   type Agent,
@@ -468,6 +472,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ],
             };
             reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+            reportBlockedTools(
+              "openai",
+              resolvedAgent,
+              accumulatedToolCalls.length,
+            );
           } else {
             // Tool calls are allowed
             // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
@@ -645,6 +654,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (toolInvocationRefusal) {
           const [refusalMessage, contentMessage] = toolInvocationRefusal;
+
+          // Count blocked tool calls before overwriting message
+          const blockedCount = assistantMessage.tool_calls?.length || 0;
+
           assistantMessage = {
             role: "assistant",
             refusal: refusalMessage,
@@ -658,6 +671,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               logprobs: null,
             },
           ];
+
+          reportBlockedTools("openai", resolvedAgent, blockedCount);
         }
         // Tool calls are allowed - return response with tool_calls to client
         // Client is responsible for executing tools via MCP Gateway and sending results back

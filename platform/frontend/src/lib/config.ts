@@ -62,6 +62,6 @@ export default {
     /**
      * Sentry DSN for error tracking (empty to disable).
      */
-    dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_DSN") || "",
+    dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
   },
 };

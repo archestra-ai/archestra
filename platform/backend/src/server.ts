@@ -1,7 +1,7 @@
 // Import tracing first to ensure auto-instrumentation works properly
 import "./tracing";
 // Import sentry for error tracking
-import "./sentry";
+import Sentry from "./sentry";
 
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
@@ -241,6 +241,12 @@ const startMcpServerRuntime = async (
 
 const start = async () => {
   const fastify = createFastifyInstance();
+
+  // Setup Sentry error handler for Fastify
+  // This should be done after creating the instance but before registering routes
+  if (config.observability.sentry.dsn) {
+    Sentry.setupFastifyErrorHandler(fastify);
+  }
 
   /**
    * The auth plugin is responsible for authentication and authorization checks

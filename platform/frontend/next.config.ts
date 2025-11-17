@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 import { MCP_CATALOG_API_BASE_URL } from "@shared";
 
 const nextConfig: NextConfig = {
@@ -36,4 +37,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap the config with Sentry configuration
+export default withSentryConfig(nextConfig, {
+  org: "archestra",
+  project: "archestra-platform-frontend",
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
+  // Automatically tree-shake Sentry logger statements to reduce bundle size
+  disableLogger: true,
+});

@@ -238,7 +238,7 @@ export default {
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
     sentry: {
-      dsn: process.env.ARCHESTRA_SENTRY_DSN || "",
+      dsn: process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "",
     },
   },
   debug: isDevelopment,

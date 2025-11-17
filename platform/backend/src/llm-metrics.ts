@@ -64,7 +64,7 @@ export function initializeMetrics(labelKeys: string[]): void {
       client.register.removeSingleMetric("llm_tokens_total");
     }
     if (llmBlockedToolCounter) {
-      client.register.removeSingleMetric("llm_blocked_tool_total");
+      client.register.removeSingleMetric("llm_blocked_tools_total");
     }
   } catch (_error) {
     // Ignore errors if metrics don't exist
@@ -88,7 +88,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   });
 
   llmBlockedToolCounter = new client.Counter({
-    name: "llm_blocked_tool_total",
+    name: "llm_blocked_tools_total",
     help: "Blocked tool count",
     labelNames: [...baseLabelNames, ...nextLabelKeys],
   });

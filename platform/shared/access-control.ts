@@ -168,6 +168,13 @@ export const RouteId = {
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+  /**
+   * NOTE: the following two endpoints are a 💩 hack to get around a bug in better-auth's
+   * usage of dynamic access control within the organization plugin
+   *
+   * See https://github.com/better-auth/better-auth/issues/5860
+   */
+  HasPermission: "hasPermission",
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",

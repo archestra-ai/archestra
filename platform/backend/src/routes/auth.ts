@@ -6,7 +6,11 @@ import { betterAuth } from "@/auth";
 import { hasPermission } from "@/auth/utils";
 import config from "@/config";
 import { AccountModel, UserModel } from "@/models";
-import { constructResponseSchema } from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
+
+const HasPermissionsResponseSchema = z.object({
+  success: z.boolean(),
+});
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -104,22 +108,53 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
-  // Custom permission checking endpoint using our fixed logic
+  /**
+   * NOTE: the following two endpoints are a 💩 hack to get around a bug in better-auth's
+   * usage of dynamic access control within the organization plugin
+   *
+   * See https://github.com/better-auth/better-auth/issues/5860
+   */
+  fastify.post(
+    "/api/auth/organization/has-permission",
+    {
+      schema: {
+        body: z.object({
+          organizationId: z.string(),
+          /**
+           * NOTE: for some reason, some better-auth-ui components are (internally)
+           * calling POST /api/auth/organization/has-permission with permission in the
+           * request body, while other requests are using permissions...
+           */
+          permissions: PermissionsSchema.optional(),
+          permission: PermissionsSchema.optional(),
+        }),
+        response: constructResponseSchema(HasPermissionsResponseSchema),
+      },
+    },
+    async ({ body: { permissions, permission }, headers }, reply) => {
+      if (!permissions && !permission) {
+        throw new ApiError(400, "Missing permissions or permission");
+      }
+
+      const { success } = await hasPermission(
+        permission || permissions || {},
+        headers,
+      );
+      return reply.send({ success });
+    },
+  );
+
   fastify.post(
     "/api/auth/has-permission",
     {
       schema: {
-        operationId: "hasPermission",
+        operationId: RouteId.HasPermission,
         description: "Check if current user has required permissions",
         tags: ["auth"],
         body: z.object({
           permissions: PermissionsSchema,
         }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-          }),
-        ),
+        response: constructResponseSchema(HasPermissionsResponseSchema),
       },
     },
     async ({ body: { permissions }, headers }, reply) => {

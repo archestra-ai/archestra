@@ -8122,10 +8122,16 @@ export type GetLimitsResponses = {
         currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
     }>;
 };
 
@@ -8139,7 +8145,7 @@ export type CreateLimitData = {
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -8220,7 +8226,7 @@ export type CreateLimitResponses = {
         currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8390,7 +8396,7 @@ export type GetLimitResponses = {
         currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8407,7 +8413,7 @@ export type UpdateLimitData = {
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path: {
@@ -8490,7 +8496,7 @@ export type UpdateLimitResponses = {
         currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;

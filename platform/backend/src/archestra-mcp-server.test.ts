@@ -345,7 +345,7 @@ describe("executeArchestraTool", () => {
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -399,7 +399,7 @@ describe("executeArchestraTool", () => {
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -422,7 +422,7 @@ describe("executeArchestraTool", () => {
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -458,7 +458,7 @@ describe("executeArchestraTool", () => {
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -521,7 +521,7 @@ describe("executeArchestraTool", () => {
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );

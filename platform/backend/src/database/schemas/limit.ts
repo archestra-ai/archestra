@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -25,7 +26,12 @@ const limitsTable = pgTable(
       .default(0),
     mcpServerName: varchar("mcp_server_name", { length: 255 }),
     toolName: varchar("tool_name", { length: 255 }),
-    model: varchar("model", { length: 255 }),
+    // JSONB array stores multiple models for a single limit (e.g., ["gpt-4o", "claude-3-5-sonnet"])
+    // This is the "source of truth" for which models a limit covers, enabling:
+    // 1. Fast lookups: WHERE model ? 'gpt-4o' to find limits covering this model
+    // 2. Initialization: Create limit_model_usage records for each model on limit creation
+    // 3. Validation: Check if incoming interaction's model is within limit scope
+    model: jsonb("model").$type<string[] | null>(),
     lastCleanup: timestamp("last_cleanup", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

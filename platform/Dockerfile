@@ -38,6 +38,7 @@ COPY shared ./shared
 ENV NEXT_TELEMETRY_DISABLED=1
 # Use Docker secret to securely pass Sentry auth token during build
 # The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
+# https://docs.docker.com/build/building/secrets/#using-build-secrets
 RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \

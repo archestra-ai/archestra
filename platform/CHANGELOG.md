@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/archestra-ai/archestra/compare/platform-v0.6.0...platform-v0.6.1) (2025-11-17)
+
+
+### Bug Fixes
+
+* show mcp installation failures ([#1144](https://github.com/archestra-ai/archestra/issues/1144)) ([62fcfb7](https://github.com/archestra-ai/archestra/commit/62fcfb78542e6b4d69af589f23229cbd6fb0cf3f))
+
 ## [0.6.0](https://github.com/archestra-ai/archestra/compare/platform-v0.5.0...platform-v0.6.0) (2025-11-17)
 
 

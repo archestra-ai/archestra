@@ -38,8 +38,35 @@ export function ToolsClient() {
 }
 
 function ToolsList() {
+  const queryClient = useQueryClient();
   const [selectedToolForDialog, setSelectedToolForDialog] =
     useState<AgentToolData | null>(null);
+
+  // Sync selected tool with cache updates
+  useEffect(() => {
+    if (!selectedToolForDialog) return;
+
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        event.query.queryKey[0] === "agent-tools"
+      ) {
+        const cachedData = queryClient.getQueryData<
+          archestraApiTypes.GetAllAgentToolsResponses["200"]
+        >(event.query.queryKey);
+
+        const updatedTool = cachedData?.data.find(
+          (tool) => tool.id === selectedToolForDialog.id,
+        );
+
+        if (updatedTool) {
+          setSelectedToolForDialog(updatedTool);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [queryClient, selectedToolForDialog]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">

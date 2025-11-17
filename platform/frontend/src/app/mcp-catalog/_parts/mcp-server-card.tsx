@@ -559,7 +559,7 @@ export function McpServerCard({
             }
           }}
           size="sm"
-          variant={"outline"}
+          variant="outline"
           className="w-full"
         >
           Uninstall

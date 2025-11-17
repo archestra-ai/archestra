@@ -250,6 +250,13 @@ export async function getChatMcpTools(
                 })
                 .join("\n");
 
+              // Check if MCP tool returned an error
+              // When isError is true, throw to signal AI SDK that tool execution failed
+              // This allows AI SDK to create a tool-error part and continue the conversation
+              if (result.isError) {
+                throw new Error(content);
+              }
+
               return content;
             } catch (error) {
               logger.error(

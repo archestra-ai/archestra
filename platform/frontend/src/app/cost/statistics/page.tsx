@@ -99,6 +99,46 @@ const colors = [
   "#8b5cf6", // violet
 ];
 
+type ChartInstance = {
+  data: {
+    datasets: unknown[];
+  };
+  isDatasetVisible: (index: number) => boolean;
+};
+
+type ChartEventArgs = {
+  event: {
+    type: string;
+  };
+};
+
+function createVisibilitySyncPlugin<T>(
+  id: string,
+  data: T[],
+  getKey: (item: T) => string,
+  setHidden: React.Dispatch<React.SetStateAction<Set<string>>>,
+) {
+  return {
+    id,
+    afterEvent: (chart: ChartInstance, args: ChartEventArgs) => {
+      if (args.event.type === "click") {
+        setTimeout(() => {
+          const newHidden = new Set<string>();
+          chart.data.datasets.forEach((_, index: number) => {
+            if (!chart.isDatasetVisible(index)) {
+              const item = data[index];
+              if (item) {
+                newHidden.add(getKey(item));
+              }
+            }
+          });
+          setHidden(newHidden);
+        }, 10);
+      }
+    },
+  };
+}
+
 export default function StatisticsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -108,6 +148,11 @@ export default function StatisticsPage() {
   const [fromTime, setFromTime] = useState("00:00");
   const [toTime, setToTime] = useState("23:59");
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
+
+  // Track hidden items for each category
+  const [hiddenTeams, setHiddenTeams] = useState<Set<string>>(new Set());
+  const [hiddenAgents, setHiddenAgents] = useState<Set<string>>(new Set());
+  const [hiddenModels, setHiddenModels] = useState<Set<string>>(new Set());
 
   // Statistics data fetching hooks
   const currentTimeframe = timeframe.startsWith("custom:") ? "all" : timeframe;
@@ -223,13 +268,15 @@ export default function StatisticsPage() {
 
   // Helper function to convert statistics to chart format
   const convertStatsToChartData = useCallback(
-    (
-      statistics: StatisticsData[],
+    <T extends StatisticsData>(
+      statistics: T[],
       labelKey:
         | keyof Pick<TeamStatisticsData, "teamName">
         | keyof Pick<AgentStatisticsData, "agentName">
         | keyof Pick<ModelStatisticsData, "model">,
       colors: string[],
+      hiddenIds: Set<string>,
+      getKey: (stat: T) => string,
     ) => {
       // Get unique time points across all datasets
       const allTimestamps = [
@@ -273,6 +320,7 @@ export default function StatisticsPage() {
           pointBorderWidth: 2,
           pointRadius: 5,
           pointHoverRadius: 8,
+          hidden: hiddenIds.has(getKey(stat)),
         };
       });
 
@@ -295,10 +343,27 @@ export default function StatisticsPage() {
     [timeframe],
   );
 
-  // Chart.js data configuration with teams as separate lines
+  // Filter statistics based on hidden items (for table only)
+  const visibleTeamStatistics = teamStatistics.filter(
+    (team) => !hiddenTeams.has(team.teamId),
+  );
+  const visibleAgentStatistics = agentStatistics.filter(
+    (agent) => !hiddenAgents.has(agent.agentId),
+  );
+  const visibleModelStatistics = modelStatistics.filter(
+    (model) => !hiddenModels.has(model.model),
+  );
+
+  // Chart.js data configuration - use ALL statistics, let Chart.js handle visibility
   const teamChartData =
     teamStatistics.length > 0
-      ? convertStatsToChartData(teamStatistics, "teamName", colors)
+      ? convertStatsToChartData<TeamStatisticsData>(
+          teamStatistics,
+          "teamName",
+          colors,
+          hiddenTeams,
+          (stat) => stat.teamId,
+        )
       : {
           labels: ["No Data"],
           datasets: [
@@ -314,10 +379,15 @@ export default function StatisticsPage() {
           ],
         };
 
-  // Agent chart data
   const agentChartData =
     agentStatistics.length > 0
-      ? convertStatsToChartData(agentStatistics, "agentName", colors)
+      ? convertStatsToChartData<AgentStatisticsData>(
+          agentStatistics,
+          "agentName",
+          colors,
+          hiddenAgents,
+          (stat) => stat.agentId,
+        )
       : {
           labels: ["No Data"],
           datasets: [
@@ -333,10 +403,15 @@ export default function StatisticsPage() {
           ],
         };
 
-  // Model chart data
   const modelChartData =
     modelStatistics.length > 0
-      ? convertStatsToChartData(modelStatistics, "model", colors)
+      ? convertStatsToChartData<ModelStatisticsData>(
+          modelStatistics,
+          "model",
+          colors,
+          hiddenModels,
+          (stat) => stat.model,
+        )
       : {
           labels: ["No Data"],
           datasets: [
@@ -352,6 +427,12 @@ export default function StatisticsPage() {
           ],
         };
 
+  // Chart keys to force remount when data changes
+  const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;
+  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenAgents.size}`;
+  const modelChartKey = `model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`;
+
+  // Chart options with default legend behavior (strikethrough on click)
   const chartOptions = useMemo(
     () => ({
       responsive: true,
@@ -450,6 +531,40 @@ export default function StatisticsPage() {
       },
     }),
     [],
+  );
+
+  // Custom plugins to sync legend visibility with table
+  const teamChartPlugin = useMemo(
+    () =>
+      createVisibilitySyncPlugin(
+        "teamVisibilitySync",
+        teamStatistics,
+        (team) => team.teamId,
+        setHiddenTeams,
+      ),
+    [teamStatistics],
+  );
+
+  const agentChartPlugin = useMemo(
+    () =>
+      createVisibilitySyncPlugin(
+        "agentVisibilitySync",
+        agentStatistics,
+        (agent) => agent.agentId,
+        setHiddenAgents,
+      ),
+    [agentStatistics],
+  );
+
+  const modelChartPlugin = useMemo(
+    () =>
+      createVisibilitySyncPlugin(
+        "modelVisibilitySync",
+        modelStatistics,
+        (model) => model.model,
+        setHiddenModels,
+      ),
+    [modelStatistics],
   );
 
   return (
@@ -597,7 +712,12 @@ export default function StatisticsPage() {
             {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
-                <Line data={teamChartData} options={chartOptions} />
+                <Line
+                  key={teamChartKey}
+                  data={teamChartData}
+                  options={chartOptions}
+                  plugins={[teamChartPlugin]}
+                />
               </div>
             </div>
 
@@ -615,7 +735,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teamStatistics.length === 0 ? (
+                  {visibleTeamStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -625,7 +745,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    teamStatistics.map((team) => (
+                    visibleTeamStatistics.map((team) => (
                       <TableRow key={team.teamId}>
                         <TableCell className="font-medium">
                           {team.teamName}
@@ -660,7 +780,12 @@ export default function StatisticsPage() {
             {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
-                <Line data={agentChartData} options={chartOptions} />
+                <Line
+                  key={agentChartKey}
+                  data={agentChartData}
+                  options={chartOptions}
+                  plugins={[agentChartPlugin]}
+                />
               </div>
             </div>
 
@@ -677,7 +802,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agentStatistics.length === 0 ? (
+                  {visibleAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -687,7 +812,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    agentStatistics.map((agent) => (
+                    visibleAgentStatistics.map((agent) => (
                       <TableRow key={agent.agentId}>
                         <TableCell className="font-medium">
                           {agent.agentName}
@@ -721,7 +846,12 @@ export default function StatisticsPage() {
             {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
-                <Line data={modelChartData} options={chartOptions} />
+                <Line
+                  key={modelChartKey}
+                  data={modelChartData}
+                  options={chartOptions}
+                  plugins={[modelChartPlugin]}
+                />
               </div>
             </div>
 
@@ -738,7 +868,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {modelStatistics.length === 0 ? (
+                  {visibleModelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -748,7 +878,7 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    modelStatistics.map((model) => (
+                    visibleModelStatistics.map((model) => (
                       <TableRow key={model.model}>
                         <TableCell className="font-medium">
                           {model.model}

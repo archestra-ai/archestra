@@ -1,7 +1,5 @@
 // Import tracing first to ensure auto-instrumentation works properly
 import "./tracing";
-// Import sentry for error tracking
-import Sentry from "./sentry";
 
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
@@ -31,6 +29,8 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import * as routes from "./routes";
+// Import sentry for error tracking
+import Sentry from "./sentry";
 
 const {
   api: {
@@ -228,7 +228,9 @@ const startMcpServerRuntime = async (
       });
     } catch (error) {
       fastify.log.error(
-        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Failed to import MCP Server Runtime: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       // Continue server startup even if MCP runtime fails
     }
@@ -242,9 +244,11 @@ const startMcpServerRuntime = async (
 const start = async () => {
   const fastify = createFastifyInstance();
 
-  // Setup Sentry error handler for Fastify
-  // This should be done after creating the instance but before registering routes
-  if (config.observability.sentry.dsn) {
+  /**
+   * Setup Sentry error handler for Fastify
+   * This should be done after creating the instance but before registering routes
+   */
+  if (observability.sentry.dsn) {
     Sentry.setupFastifyErrorHandler(fastify);
   }
 

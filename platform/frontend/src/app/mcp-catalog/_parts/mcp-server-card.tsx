@@ -541,7 +541,7 @@ export function McpServerCard({
           </Tooltip>
         </TooltipProvider>
       )}
-      {isCurrentUserAuthenticated && (
+      {isCurrentUserAuthenticated && !isInstalling && (
         <Button
           onClick={() => {
             // For local servers, use the current user's specific installation
@@ -561,13 +561,15 @@ export function McpServerCard({
           size="sm"
           variant={"outline"}
           className="w-full"
-          disabled={installationStatus === "discovering-tools"}
         >
+          Uninstall
+        </Button>
+      )}
+      {(installationStatus === "discovering-tools" || isInstalling) && (
+        <Button size="sm" variant={"outline"} className="w-full" disabled>
           {installationStatus === "discovering-tools"
             ? "Discovering tools..."
-            : isInstalling
-              ? "Installing... (click to cancel)"
-              : "Uninstall"}
+            : "Installing..."}
         </Button>
       )}
       {config.features.enableTeamAuth &&

@@ -1,4 +1,5 @@
 import { createAccessControl } from "better-auth/plugins/access";
+import { defaultStatements } from "better-auth/plugins/organization/access";
 import { z } from "zod";
 
 export const ADMIN_ROLE_NAME = "admin";
@@ -15,6 +16,7 @@ export const ActionSchema = z.enum([
   "update",
   "delete",
   "admin",
+  "cancel",
 ]);
 
 export const ResourceSchema = z.enum([
@@ -37,6 +39,14 @@ export const ResourceSchema = z.enum([
   "tokenPrice",
   "chatSettings",
   "prompt",
+  /**
+   * Better-auth access control resource - needed for organization role management
+   * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
+   *
+   * The "ac" resource is part of better-auth's defaultStatements from organization plugin
+   * and is required for dynamic access control to work correctly with custom roles
+   */
+  "ac",
 ]);
 
 export const PermissionsSchema = z.partialRecord(
@@ -45,15 +55,18 @@ export const PermissionsSchema = z.partialRecord(
 );
 
 export const allAvailableActions: Record<Resource, Action[]> = {
+  // Start with better-auth defaults
+  ...defaultStatements,
+  // Override with Archestra-specific actions
   profile: ["create", "read", "update", "delete", "admin"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
   dualLlmConfig: ["create", "read", "update", "delete"],
   dualLlmResult: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
-  organization: ["read", "update"],
+  organization: ["read", "update", "delete"],
   member: ["create", "update", "delete"],
-  invitation: ["create"],
+  invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
@@ -64,6 +77,14 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["read", "update"],
   prompt: ["create", "read", "update", "delete"],
+  /**
+   * Better-auth access control resource - needed for organization role management
+   * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
+   *
+   * The "ac" resource is part of better-auth's defaultStatements from organization plugin
+   * and is required for dynamic access control to work correctly with custom roles
+   */
+  ac: ["create", "read", "update", "delete"],
 };
 
 export const ac = createAccessControl(allAvailableActions);
@@ -115,7 +136,8 @@ export type Permission =
   | `${Resource}:${"create" | "read" | "update" | "delete"}`
   | "profile:admin"
   | "mcpServer:admin"
-  | "mcpServerInstallationRequest:admin";
+  | "mcpServerInstallationRequest:admin"
+  | "invitation:cancel";
 
 export type Permissions = z.infer<typeof PermissionsSchema>;
 export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;

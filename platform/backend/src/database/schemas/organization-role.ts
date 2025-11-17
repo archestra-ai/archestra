@@ -1,12 +1,4 @@
-import type { Permissions } from "@shared";
-import {
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 
 export const organizationRole = pgTable(
@@ -17,7 +9,7 @@ export const organizationRole = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    permission: jsonb("permission").$type<Permissions>().notNull(),
+    permission: text("permission").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").$onUpdate(
       () => /* @__PURE__ */ new Date(),

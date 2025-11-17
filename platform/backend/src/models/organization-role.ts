@@ -208,7 +208,14 @@ class OrganizationRoleModel {
       )
       .limit(1);
 
-    return result;
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      permission: JSON.parse(result.permission),
+    };
   }
 
   static async getPermissions(
@@ -250,39 +257,56 @@ class OrganizationRoleModel {
           eq(schema.organizationRolesTable.organizationId, organizationId),
         );
 
-      return [...predefinedRoles, ...customRoles];
+      return [
+        ...predefinedRoles,
+        ...customRoles.map((role) => ({
+          ...role,
+          permission: JSON.parse(role.permission),
+        })),
+      ];
     } catch (_error) {
       // Return predefined roles as fallback
       return predefinedRoles;
     }
   }
 
-  static async create(data: InsertOrganizationRole) {
+  static async create(data: InsertOrganizationRole): Promise<OrganizationRole> {
     const [result] = await db
       .insert(schema.organizationRolesTable)
-      .values(data)
+      .values({
+        ...data,
+        permission: JSON.stringify(data.permission),
+      })
       .returning();
 
     return {
       ...result,
       predefined: false,
+      permission: JSON.parse(result.permission),
     };
   }
 
-  static async update(roleId: string, data: UpdateOrganizationRole) {
+  static async update(
+    roleId: string,
+    data: UpdateOrganizationRole,
+  ): Promise<OrganizationRole> {
     const [result] = await db
       .update(schema.organizationRolesTable)
-      .set(data)
+      .set({
+        ...data,
+        permission: JSON.stringify(data.permission),
+      })
       .where(eq(schema.organizationRolesTable.id, roleId))
       .returning();
 
     return {
       ...result,
       predefined: false,
+      permission: JSON.parse(result.permission),
     };
   }
 
-  static async delete(roleId: string) {
+  static async delete(roleId: string): Promise<boolean> {
     const result = await db
       .delete(schema.organizationRolesTable)
       .where(eq(schema.organizationRolesTable.id, roleId))

@@ -134,17 +134,12 @@ export function RolesList() {
     }
   }, [roleToDelete, deleteMutation]);
 
-  const openEditDialog = useCallback(
-    (role: Role) => {
-      if (!selectedRole) return;
-
-      setSelectedRole(role);
-      setRoleName(role.name);
-      setPermission(role.permission);
-      setEditDialogOpen(true);
-    },
-    [selectedRole],
-  );
+  const openEditDialog = useCallback((role: Role) => {
+    setSelectedRole(role);
+    setRoleName(role.name);
+    setPermission(role.permission);
+    setEditDialogOpen(true);
+  }, []);
 
   if (isLoading) {
     return (
@@ -394,7 +389,7 @@ export function RolesList() {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Role</DialogTitle>
             <DialogDescription>

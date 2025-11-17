@@ -13,11 +13,7 @@ import {
 const CreateUpdateRoleNameSchema = z
   .string()
   .min(1, "Role name is required")
-  .max(50, "Role name must be less than 50 characters")
-  .regex(
-    /^[a-zA-Z0-9_-]+$/,
-    "Role name can only contain letters, numbers, hyphens, and underscores",
-  );
+  .max(50, "Role name must be less than 50 characters");
 
 const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
 const PredefinedRoleNameOrCustomRoleIdSchema = z
@@ -131,7 +127,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
-          roleId: CustomRoleIdSchema,
+          roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
         body: z.object({
           name: CreateUpdateRoleNameSchema.optional(),
@@ -215,6 +211,12 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { roleId }, organizationId }, reply) => {
+      // Check if role exists first
+      const role = await OrganizationRoleModel.getById(roleId, organizationId);
+      if (!role) {
+        throw new ApiError(404, "Role not found");
+      }
+
       // Check if role can be deleted
       const deleteCheck = await OrganizationRoleModel.canDelete(
         roleId,

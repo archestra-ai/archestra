@@ -37,6 +37,7 @@ function getResourceDescription(resource: Resource): string {
     tokenPrice: "Token pricing configuration",
     chatSettings: "Chat feature configuration and settings",
     prompt: "Reusable prompt templates and system prompts",
+    ac: "Access control and role management",
   };
   return descriptions[resource] || "";
 }
@@ -105,6 +106,7 @@ function getActionDescription(action: Action): string {
     update: "Modify existing",
     delete: "Remove existing",
     admin: "Administrative control over",
+    cancel: "Cancel",
   };
 
   return actionDescriptions[action] || "";

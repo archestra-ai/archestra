@@ -57,20 +57,6 @@ export default class K8sPod {
   }
 
   /**
-   * Get the current state of the pod
-   */
-  getState(): K8sPodState {
-    return this.state;
-  }
-
-  /**
-   * Get the error message if the pod failed
-   */
-  getErrorMessage(): string | null {
-    return this.errorMessage;
-  }
-
-  /**
    * Constructs a valid Kubernetes pod name for an MCP server.
    *
    * Creates a pod name in the format "mcp-<slugified-name>".

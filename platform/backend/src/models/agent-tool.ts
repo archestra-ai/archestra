@@ -358,6 +358,20 @@ class AgentToolModel {
       );
     }
 
+    // Filter by credential owner (check both credential source and execution source)
+    if (filters?.credentialOwner) {
+      whereConditions.push(
+        sql`(
+          credential_source_mcp_server_id IN (
+            SELECT id FROM mcp_server WHERE owner_id = ${filters.credentialOwner}
+          )
+          OR execution_source_mcp_server_id IN (
+            SELECT id FROM mcp_server WHERE owner_id = ${filters.credentialOwner}
+          )
+        )`,
+      );
+    }
+
     // Exclude Archestra built-in tools for test isolation
     if (filters?.excludeArchestraTools) {
       whereConditions.push(

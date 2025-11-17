@@ -3330,6 +3330,10 @@ export type GetAllAgentToolsData = {
          */
         credentialSourceMcpServerId?: string;
         /**
+         * Filter by credential source owner user ID
+         */
+        credentialOwner?: string;
+        /**
          * For test isolation
          */
         excludeArchestraTools?: boolean;

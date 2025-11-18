@@ -7,6 +7,13 @@ description: Understanding and configuring profiles in Archestra Platform
 lastUpdated: 2025-10-17
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+-->
+
+![Profiles Management](/docs/automated_screenshots/platform_profiles_management.png)
+
 Profiles are the core concept in Archestra Platform. Each profile represents a distinct AI application or workflow that you want to secure and monitor. Think of a profile as a logical grouping for:
 
 - **Interaction history** - All LLM requests and responses

@@ -7,6 +7,15 @@ description: Secure proxy for LLM provider interactions
 lastUpdated: 2025-10-31
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+
+Exception:
+- Screenshot
+-->
+
 LLM Proxy is Archestra's security layer that sits between AI agents and LLM providers (OpenAI, Anthropic, Google, etc.). It intercepts, analyzes, and modifies LLM requests and responses to enforce security policies, prevent data leakage, and ensure compliance with organizational guidelines.
 
 ## To use LLM Proxy:

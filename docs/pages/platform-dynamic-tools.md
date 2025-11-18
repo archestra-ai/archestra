@@ -5,6 +5,17 @@ subcategory: Security Concepts
 order: 3
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+
+Exception:
+- Screenshot
+-->
+
+![Platform Tools Management](/docs/automated_screenshots/platform_tools_management.png)
+
 Dynamic Tools feature af the Archestra Platform addresses the "lethal trifecta" by adapting agent capabilities based on trust levels, providing more flexibility than read-only or isolated systems.
 
 This feature automatically restricts agent capabilities when untrusted content enters the context:
@@ -51,7 +62,7 @@ This dynamic discovery allows Archestra to monitor and control tool usage withou
 
 Archestra uses **Trusted Data Policies** to identify which tool outputs should be considered safe. **By default, all data is untrusted** - only explicitly marked data becomes trusted.
 
-![Dynamic Tools](/docs/platfrom/dynamic-tools.png)
+![Dynamic Tools Edit Popup](/docs/automated_screenshots/platform_dynamic_tools_edit_popup.png)
 
 When a tool returns data:
 

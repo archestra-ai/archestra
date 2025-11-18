@@ -3326,9 +3326,9 @@ export type GetAllAgentToolsData = {
          */
         origin?: string;
         /**
-         * MCP server ID
+         * Filter by MCP server owner user ID
          */
-        credentialSourceMcpServerId?: string;
+        mcpServerOwnerId?: string;
         /**
          * For test isolation
          */

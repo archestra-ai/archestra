@@ -6,6 +6,12 @@ order: 4
 lastUpdated: 2025-11-17
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
 
 Permissions in Archestra are defined using a `resource:action` format, where:

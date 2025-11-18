@@ -6,6 +6,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -381,14 +382,30 @@ class AgentToolModel {
       }
     }
 
-    // Filter by credential source
-    if (filters?.credentialSourceMcpServerId) {
-      whereConditions.push(
-        eq(
-          schema.agentToolsTable.credentialSourceMcpServerId,
-          filters.credentialSourceMcpServerId,
-        ),
-      );
+    // Filter by credential owner (check both credential source and execution source)
+    if (filters?.mcpServerOwnerId) {
+      // First, get all MCP server IDs owned by this user
+      const mcpServerIds = await db
+        .select({ id: schema.mcpServersTable.id })
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId))
+        .then((rows) => rows.map((r) => r.id));
+
+      if (mcpServerIds.length > 0) {
+        const credentialCondition = or(
+          inArray(
+            schema.agentToolsTable.credentialSourceMcpServerId,
+            mcpServerIds,
+          ),
+          inArray(
+            schema.agentToolsTable.executionSourceMcpServerId,
+            mcpServerIds,
+          ),
+        );
+        if (credentialCondition) {
+          whereConditions.push(credentialCondition);
+        }
+      }
     }
 
     // Exclude Archestra built-in tools for test isolation

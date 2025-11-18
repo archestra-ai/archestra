@@ -16,6 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 
+## Docs
+
+Docs are stored at ./docs
+Check ./docs/docs_writer_prompt.md before changing docs files.
+
 ## Key URLs
 
 - **Frontend**: <http://localhost:3000/>
@@ -374,5 +379,4 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
   await deleteAgent(request, agent.id);
 });
 ```
-
 - never amend commits

@@ -4,6 +4,12 @@ category: Examples
 order: 6
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 ## Overview
 
 [**AI SDK**](https://ai-sdk.dev) \- an open-source toolkit from Vercel that simplifies building AI-driven applications: unified provider support (OpenAI, Claude, Hugging-Face, etc.), streaming, tools execution, error handling, and more. While it offers great developer ergonomics and abstractions, out of the box it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. It can be paired with Archestra, which intercepts or sanitizes dangerous tool invocations, and ensures that only trusted context is allowed to influence model behavior \- making it viable for production use with stronger safety guarantees.

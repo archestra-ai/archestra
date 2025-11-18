@@ -4,6 +4,12 @@ category: Examples
 order: 4
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 ## Overview
 
 OpenWebUI - one of the most popular clients for LLMs, however it doesn't have built-in mechanisms to prevent data leaks and malicious commands via tool calls. It can be integrated with Archestra, which intercepts malicious tool calls, and prevent untrusted context from influencing the LLM’s behaviour, providing an essential security layer for production deployments.

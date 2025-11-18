@@ -4,7 +4,15 @@ category: Archestra Platform
 order: 5
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 # Platform Observability
+
+![Platform Logs Viewer](/docs/automated_screenshots/platform_logs_viewer.png)
 
 The Archestra platform exposes Prometheus metrics and OpenTelemetry traces for monitoring system health, tracking HTTP requests, and analyzing LLM API performance.
 

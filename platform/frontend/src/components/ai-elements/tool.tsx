@@ -35,6 +35,7 @@ export type ToolHeaderProps = {
   state: ToolUIPart["state"] | "output-available-dual-llm";
   className?: string;
   icon?: React.ReactNode;
+  errorText?: ToolUIPart["errorText"];
 };
 
 const getStatusBadge = (
@@ -55,7 +56,7 @@ const getStatusBadge = (
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />
     ),
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
+    "output-error": <XCircleIcon className="size-4 text-destructive" />,
   } as const;
 
   return (
@@ -71,6 +72,7 @@ export const ToolHeader = ({
   title,
   type,
   state,
+  errorText,
   icon,
   ...props
 }: ToolHeaderProps) => (
@@ -81,12 +83,19 @@ export const ToolHeader = ({
     )}
     {...props}
   >
-    <div className="flex items-center gap-2">
-      {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
-      <span className="font-medium text-sm">
-        {title ?? type.split("-").slice(1).join("-")}
-      </span>
-      {getStatusBadge(state)}
+    <div>
+      <div className="flex items-center gap-2">
+        {icon ?? <WrenchIcon className={`size-4 text-muted-foreground`} />}
+        <span className="font-medium text-sm">
+          {title ?? type.split("-").slice(1).join("-")}
+        </span>
+        {getStatusBadge(state)}
+      </div>
+      {errorText && (
+        <div className="text-destructive text-xs mt-2 text-left">
+          {errorText}
+        </div>
+      )}
     </div>
     <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
   </CollapsibleTrigger>

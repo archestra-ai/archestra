@@ -33,6 +33,7 @@ export function useAllAgentTools({
     agentId?: string;
     origin?: string;
     credentialSourceMcpServerId?: string;
+    mcpServerOwnerId?: string;
   };
 }) {
   return useQuery({
@@ -47,6 +48,7 @@ export function useAllAgentTools({
         agentId: filters?.agentId,
         origin: filters?.origin,
         credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+        mcpServerOwnerId: filters?.mcpServerOwnerId,
       },
     ],
     queryFn: async () => {
@@ -59,7 +61,7 @@ export function useAllAgentTools({
           search: filters?.search,
           agentId: filters?.agentId,
           origin: filters?.origin,
-          credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
+          mcpServerOwnerId: filters?.mcpServerOwnerId,
           excludeArchestraTools: true,
         },
       });

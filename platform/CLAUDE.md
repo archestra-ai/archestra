@@ -14,6 +14,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **Use Tilt for development** - `tilt up` to start the full environment
 5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
 
+## Docs
+
+Docs are stored at ./docs
+Check ./docs/docs_writer_prompt.md before changing docs files.
+
 ## Key URLs
 
 - **Frontend**: <http://localhost:3000/>

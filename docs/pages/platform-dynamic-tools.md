@@ -5,6 +5,15 @@ subcategory: Security Concepts
 order: 3
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+
+Exception:
+- Screenshot
+-->
+
 Dynamic Tools feature af the Archestra Platform addresses the "lethal trifecta" by adapting agent capabilities based on trust levels, providing more flexibility than read-only or isolated systems.
 
 This feature automatically restricts agent capabilities when untrusted content enters the context:

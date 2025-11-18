@@ -6,7 +6,7 @@ Steps:
 
 Screenshots:
 Each docs page should have at least one related screenshot at the top. It's ok to add more screenshots along the way if needed. The more screenshots the better.
-Screenshots should be stored in /docs/screenshots/{page_path}/{what's on the screenshot}.png. Make screenshots "realistic" by pre-filling forms. When creating a screenshot, make sure that scroll position makes sense and no important elements are hidden.
+Screenshots should be stored in /docs/assets/automated_screenshots/{page name}_{what's on the screenshot}.png. Make screenshots "realistic" by pre-filling forms. When creating a screenshot, make sure that scroll position makes sense and no important elements are hidden.
 
 Principals to follow:
 1) There is no need to document objious things and what's visible on the UI.

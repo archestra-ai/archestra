@@ -4,6 +4,12 @@ category: Examples
 order: 3
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 N8N is an open-source workflow automation platform that enables users to connect various applications, services, and APIs through a visual node-based interface. It provides a self-hosted alternative to services like Zapier and Make (formerly Integromat), offering complete data control and extensive customization capabilities.
 
 ## Security Challenges with Autonomous N8N Agents

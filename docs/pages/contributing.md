@@ -4,6 +4,12 @@ category: Development
 order: 1
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 ![Contributing](/docs/one-person-is-handling-a-box-for-the-other-over.png)
 
 If you're reading this, you're likely an open source fan, which is awesome. Thank you for your interest in contributing to our project. ❤️

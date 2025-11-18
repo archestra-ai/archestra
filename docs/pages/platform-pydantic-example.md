@@ -4,6 +4,12 @@ category: Examples
 order: 5
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 ## Overview
 
 [**Pydantic AI**](https://ai.pydantic.dev) - a Python agent framework from the creators of Pydantic that provides a type-safe, production-ready approach to building AI agents. It offers unified LLM provider support (OpenAI, Anthropic, Gemini, etc.), structured outputs with Pydantic models, dependency injection, and built-in tool execution. While Pydantic AI excels at developer ergonomics and type safety, it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. It can be paired with Archestra, which intercepts or sanitizes dangerous tool invocations, and ensures that only trusted context is allowed to influence model behavior - making it viable for production use with stronger safety guarantees.

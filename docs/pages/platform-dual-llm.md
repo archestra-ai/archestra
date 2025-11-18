@@ -5,6 +5,15 @@ subcategory: Security Concepts
 order: 4
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+
+Exception:
+- Screenshot
+-->
+
 # Dual LLM Quarantine Pattern
 
 The Dual LLM pattern protects AI agents from prompt injection attacks when processing untrusted data from tools like email readers, web scrapers, or file systems.

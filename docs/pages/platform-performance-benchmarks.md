@@ -6,6 +6,12 @@ description: Performance metrics and benchmarks for Archestra Platform's securit
 lastUpdated: 2025-10-15
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 ## Overview
 
 This document provides performance metrics and overhead measurements for Archestra Platform. The platform adds approximately 30-50ms latency per request (41ms at p99) while providing enterprise-grade security and policy enforcement for LLM applications.

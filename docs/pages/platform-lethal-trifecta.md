@@ -5,6 +5,12 @@ subcategory: Security Concepts
 order: 2
 ---
 
+<!-- 
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 The "Lethal Trifecta" represents a critical security vulnerability pattern in AI agents that emerges when three specific capabilities are combined. This concept, popularized by security researcher Simon Willison, identifies a dangerous configuration that can lead to data exfiltration and system compromise.
 
 ## The Three Components

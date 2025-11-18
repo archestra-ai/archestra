@@ -82,7 +82,7 @@ export function StreamTimeoutWarning({
               rel="noopener noreferrer"
               className="font-medium underline hover:no-underline"
             >
-              Learn more in our documentation →
+              Learn more in our documentation
             </a>
           </p>
         </div>

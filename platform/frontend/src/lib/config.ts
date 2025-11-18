@@ -62,6 +62,8 @@ export default {
   },
   sentry: {
     dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
-    environment: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT") || environment,
+    environment:
+      env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
+      environment,
   },
 };

@@ -25,7 +25,7 @@
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.44",
+    "@ai-sdk/anthropic": "^2.0.45",
     "@ai-sdk/mcp": "^0.0.8",
     "@ai-sdk/openai": "^2.0.68",
     "@anthropic-ai/sdk": "^0.69.0",

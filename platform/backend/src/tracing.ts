@@ -6,7 +6,10 @@ import {
   resourceFromAttributes,
 } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+  BatchSpanProcessor,
+  type SpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -42,7 +45,7 @@ const resource = defaultResource().merge(
 
 // Create span processors array
 // Always include the OTLP exporter for regular telemetry
-const spanProcessors = [new BatchSpanProcessor(traceExporter)];
+const spanProcessors: SpanProcessor[] = [new BatchSpanProcessor(traceExporter)];
 
 // Add Sentry span processor if Sentry is enabled
 if (sentryEnabled) {

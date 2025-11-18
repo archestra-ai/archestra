@@ -70,13 +70,12 @@ class McpServerModel {
 
     // Apply access control filtering for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
-      // Get MCP servers accessible through team membership
-      const teamAccessibleMcpServerIds =
-        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
-
-      // Get MCP servers with personal access
-      const personalMcpServerIds =
-        await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+      // Get MCP servers accessible through team membership and personal access in parallel
+      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
+        await Promise.all([
+          McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false),
+          McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        ]);
 
       // Combine both lists
       const accessibleMcpServerIds = [
@@ -128,13 +127,10 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
-      const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
-        userId,
-        id,
-        false,
-      );
-      const hasPersonalAccess =
-        await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
+      const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
+        McpServerTeamModel.userHasMcpServerAccess(userId, id, false),
+        McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
+      ]);
 
       if (!hasTeamAccess && !hasPersonalAccess) {
         return null;
@@ -157,8 +153,10 @@ class McpServerModel {
       return null;
     }
 
-    const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(id);
-    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
+    const [teamDetails, userDetails] = await Promise.all([
+      McpServerTeamModel.getTeamDetailsForMcpServer(id),
+      McpServerUserModel.getUserDetailsForMcpServer(id),
+    ]);
 
     return {
       ...result.server,

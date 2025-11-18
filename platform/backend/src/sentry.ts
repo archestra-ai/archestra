@@ -1,3 +1,4 @@
+import type { TracesSamplerSamplingContext } from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import config from "@/config";
@@ -37,13 +38,6 @@ if (enabled) {
     ],
 
     /**
-     * Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
-     * We recommend adjusting this value in production
-     * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#tracesSampleRate
-     */
-    tracesSampleRate: 1.0,
-
-    /**
      * Set profilesSampleRate to 1.0 to profile 100% of sampled transactions (this is relative to tracesSampleRate)
      * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#profilesSampleRate
      */
@@ -58,6 +52,17 @@ if (enabled) {
      * https://docs.sentry.io/platforms/javascript/guides/express/opentelemetry/custom-setup/
      */
     skipOpenTelemetrySetup: true,
+
+    // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
+    tracesSampler: ({ normalizedRequest }: TracesSamplerSamplingContext) => {
+      if (
+        normalizedRequest?.url?.startsWith("/health") ||
+        normalizedRequest?.url?.startsWith("/metrics")
+      ) {
+        return 0; // Ignore certain transactions
+      }
+      return 1.0; // Sample 100% of other transactions
+    },
   });
 
   logger.info("Sentry initialized successfully");

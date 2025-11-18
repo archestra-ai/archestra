@@ -83,6 +83,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.38.0
         version: 1.38.0
+      '@sentry/core':
+        specifier: ^10.25.0
+        version: 10.25.0
       '@sentry/node':
         specifier: ^10.25.0
         version: 10.25.0

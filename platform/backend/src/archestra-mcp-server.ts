@@ -11,7 +11,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
-import type { Agent, InternalMcpCatalog } from "@/types";
+import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
   type LimitEntityType,
@@ -81,7 +81,10 @@ const TOOL_GET_PROFILE_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEP
  * Context for the Archestra MCP server
  */
 export interface ArchestraContext {
-  profile: Agent;
+  profile: {
+    id: string;
+    name: string;
+  };
 }
 
 export const isArchestraMcpServerTool = (toolName: string): boolean => {
@@ -368,7 +371,7 @@ export async function executeArchestraTool(
       const entityId = args?.entity_id as string;
       const limitType = args?.limit_type as LimitType;
       const limitValue = args?.limit_value as number;
-      const model = args?.model as string | undefined;
+      const model = args?.model as string[] | undefined;
       const mcpServerName = args?.mcp_server_name as string | undefined;
       const toolName = args?.tool_name as string | undefined;
 
@@ -386,12 +389,15 @@ export async function executeArchestraTool(
       }
 
       // Validate limit type specific requirements
-      if (limitType === "token_cost" && !model) {
+      if (
+        limitType === "token_cost" &&
+        (!model || !Array.isArray(model) || model.length === 0)
+      ) {
         return {
           content: [
             {
               type: "text",
-              text: "Error: model is required for token_cost limits.",
+              text: "Error: model array with at least one model is required for token_cost limits.",
             },
           ],
           isError: true,
@@ -497,8 +503,6 @@ export async function executeArchestraTool(
           result += `\n  Entity ID: ${limit.entityId}`;
           result += `\n  Limit Type: ${limit.limitType}`;
           result += `\n  Limit Value: ${limit.limitValue}`;
-          result += `\n  Current Usage (In): ${limit.currentUsageTokensIn}`;
-          result += `\n  Current Usage (Out): ${limit.currentUsageTokensOut}`;
           if (limit.model) result += `\n  Model: ${limit.model}`;
           if (limit.mcpServerName)
             result += `\n  MCP Server: ${limit.mcpServerName}`;
@@ -1534,8 +1538,12 @@ export function getArchestraMcpTools(): Tool[] {
               "The limit value (tokens or count depending on limit type)",
           },
           model: {
-            type: "string",
-            description: "Model name (required for token_cost limits)",
+            type: "array",
+            items: {
+              type: "string",
+            },
+            description:
+              "Array of model names (required for token_cost limits)",
           },
           mcp_server_name: {
             type: "string",

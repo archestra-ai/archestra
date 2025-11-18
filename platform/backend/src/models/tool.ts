@@ -328,7 +328,7 @@ class ToolModel {
     const archestraTools = getArchestraMcpTools();
     const toolNames = archestraTools.map((t) => t.name);
 
-    // First, fetch all existing Archestra tools in a single query
+    // Get all existing Archestra tools in a single query
     const existingTools = await db
       .select()
       .from(schema.toolsTable)
@@ -336,31 +336,41 @@ class ToolModel {
         and(
           isNull(schema.toolsTable.agentId),
           isNull(schema.toolsTable.catalogId),
-          inArray(schema.toolsTable.name, toolNames),
+          inArray(
+            schema.toolsTable.name,
+            archestraTools.map((t) => t.name),
+          ),
         ),
       );
 
-    // Determine which tools need to be created
-    const existingToolNames = new Set(existingTools.map((t) => t.name));
-    const toolsToCreate = archestraTools.filter(
-      (t) => !existingToolNames.has(t.name),
-    );
+    const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
 
-    // Bulk insert missing tools if any
-    let newTools: Tool[] = [];
-    if (toolsToCreate.length > 0) {
-      newTools = await db
+    // Prepare tools to insert (only those that don't exist)
+    const toolsToInsert: InsertTool[] = [];
+    const toolIds: string[] = [];
+
+    for (const archestraTool of archestraTools) {
+      const existingTool = existingToolsByName.get(archestraTool.name);
+      if (existingTool) {
+        toolIds.push(existingTool.id);
+      } else {
+        toolsToInsert.push({
+          name: archestraTool.name,
+          description: archestraTool.description || null,
+          parameters: archestraTool.inputSchema,
+          catalogId: null,
+          agentId: null,
+        });
+      }
+    }
+
+    // Bulk insert new tools if any
+    if (toolsToInsert.length > 0) {
+      const insertedTools = await db
         .insert(schema.toolsTable)
-        .values(
-          toolsToCreate.map((tool) => ({
-            name: tool.name,
-            description: tool.description || null,
-            parameters: tool.inputSchema,
-            catalogId: null,
-            agentId: null,
-          })),
-        )
+        .values(toolsToInsert)
         .returning();
+      toolIds.push(...insertedTools.map((t) => t.id));
     }
 
     // Combine existing and new tools

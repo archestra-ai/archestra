@@ -764,7 +764,7 @@ export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = fals
 };
 
 /**
- * Get all limits with optional filtering
+ * Get all limits with optional filtering and per-model usage breakdown
  */
 export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({

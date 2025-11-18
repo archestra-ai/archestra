@@ -55,7 +55,20 @@ if (sentryEnabled) {
 // Initialize the OpenTelemetry SDK with auto-instrumentations
 const sdk = new NodeSDK({
   resource,
-  // Don't set traceExporter directly when using custom spanProcessors
+  /**
+   * IMPORTANT: We DON'T set `traceExporter` here because we're using custom `spanProcessors`.
+   *
+   * When you provide `traceExporter` to NodeSDK, it automatically wraps it in a
+   * BatchSpanProcessor internally. However, when you also provide `spanProcessors`,
+   * NodeSDK will ignore the `traceExporter` and only use the processors in `spanProcessors`.
+   *
+   * Since we need to send traces to BOTH Sentry and our OTLP endpoint, we manually
+   * create our span processors array below:
+   * 1. BatchSpanProcessor with OTLPTraceExporter - sends traces to our telemetry backend
+   * 2. SentrySpanProcessor (when enabled) - sends traces to Sentry
+   *
+   * This ensures traces are sent to both destinations simultaneously.
+   */
   instrumentations: [
     /**
      * If Sentry is configured, we don't need to instrument Fastify

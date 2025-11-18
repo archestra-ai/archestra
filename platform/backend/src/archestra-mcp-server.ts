@@ -260,14 +260,7 @@ export async function executeArchestraTool(
     }
   }
 
-  /**
-   * TODO: Currently there is no user available in the mcp-gateway context. In order to be able to create
-   * an MCP server installation request, we'd either need to have an explicit user, create a "fake archestra mcp server" user
-   * (probably a bad idea), or modify McpServerInstallationRequestModel such that createdBy is renamed to createdByUser
-   * (and can be null) + we add createdByProfile
-   */
-  /*
-  if (toolName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
+  if (toolName === _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
     logger.info(
       { profileId: profile.id, requestArgs: args },
       "create_mcp_server_installation_request tool called",
@@ -277,7 +270,7 @@ export async function executeArchestraTool(
       const externalCatalogId = args?.external_catalog_id as string | undefined;
       const requestReason = args?.request_reason as string | undefined;
       const customServerConfig = args?.custom_server_config as
-        | InsertMcpServerInstallationRequest["customServerConfig"]
+        | Record<string, unknown>
         | undefined;
 
       // Validate that either externalCatalogId or customServerConfig is provided
@@ -293,40 +286,20 @@ export async function executeArchestraTool(
         };
       }
 
-      // Check if there's already a pending request for this external catalog ID
-      if (externalCatalogId) {
-        const existingRequest =
-          await McpServerInstallationRequestModel.findPendingByExternalCatalogId(
-            externalCatalogId,
-          );
-        if (existingRequest) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `A pending installation request already exists for this MCP server (Request ID: ${existingRequest.id}). Please wait for it to be reviewed.`,
-              },
-            ],
-            isError: false,
-          };
-        }
-      }
-
-      // Create the installation request
-      const installationRequest =
-        await McpServerInstallationRequestModel.create({
-          externalCatalogId: externalCatalogId || null,
-          requestedBy: userId, // This would need to be changed as per TODO above
-          requestReason: requestReason || null,
-          customServerConfig: customServerConfig || null,
-          status: "pending",
-        });
+      // Instead of creating the request directly (which requires a user context),
+      // return a special indicator that tells the UI to open the installation request dialog
+      const actionPayload = {
+        __archestra_action: "open_mcp_installation_dialog",
+        externalCatalogId: externalCatalogId || null,
+        requestReason: requestReason || null,
+        customServerConfig: customServerConfig || null,
+      };
 
       return {
         content: [
           {
             type: "text",
-            text: `Successfully created MCP server installation request.\n\nRequest ID: ${installationRequest.id}\nStatus: ${installationRequest.status}\n\nYour request will be reviewed by an administrator.`,
+            text: JSON.stringify(actionPayload, null, 2),
           },
         ],
         isError: false,
@@ -334,20 +307,19 @@ export async function executeArchestraTool(
     } catch (error) {
       logger.error(
         { err: error },
-        "Error creating MCP server installation request",
+        "Error handling MCP server installation request",
       );
       return {
         content: [
           {
             type: "text",
-            text: `Error creating installation request: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error handling installation request: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
         isError: true,
       };
     }
   }
-  */
 
   if (toolName === TOOL_CREATE_LIMIT_FULL_NAME) {
     logger.info(
@@ -2061,55 +2033,54 @@ export function getArchestraMcpTools(): Tool[] {
       annotations: {},
       _meta: {},
     },
-    // TODO: MCP server installation request tool is temporarily disabled until user context is available
-    // {
-    //   name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-    //   title: "Create MCP Server Installation Request",
-    //   description:
-    //     "Create a request to install an MCP server. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
-    //   inputSchema: {
-    //     type: "object",
-    //     properties: {
-    //       external_catalog_id: {
-    //         type: "string",
-    //         description:
-    //           "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
-    //       },
-    //       request_reason: {
-    //         type: "string",
-    //         description:
-    //           "Reason for requesting the installation (optional but recommended)",
-    //       },
-    //       custom_server_config: {
-    //         type: "object",
-    //         description:
-    //           "Custom server configuration (optional if external_catalog_id is provided)",
-    //         properties: {
-    //           type: {
-    //             type: "string",
-    //             enum: ["remote", "local"],
-    //             description: "The type of the custom server",
-    //           },
-    //           label: {
-    //             type: "string",
-    //             description: "A label for the custom server",
-    //           },
-    //           name: {
-    //             type: "string",
-    //             description: "The name of the custom server",
-    //           },
-    //           version: {
-    //             type: "string",
-    //             description: "The version of the custom server (optional)",
-    //           },
-    //         },
-    //         required: ["type", "label", "name"],
-    //       },
-    //     },
-    //     required: [],
-    //   },
-    //   annotations: {},
-    //   _meta: {},
-    // },
+    {
+      name: _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+      title: "Create MCP Server Installation Request",
+      description:
+        "Create a request to install an MCP server. This will open a dialog for the user to submit an installation request. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          external_catalog_id: {
+            type: "string",
+            description:
+              "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
+          },
+          request_reason: {
+            type: "string",
+            description:
+              "Reason for requesting the installation (optional but recommended)",
+          },
+          custom_server_config: {
+            type: "object",
+            description:
+              "Custom server configuration (optional if external_catalog_id is provided)",
+            properties: {
+              type: {
+                type: "string",
+                enum: ["remote", "local"],
+                description: "The type of the custom server",
+              },
+              label: {
+                type: "string",
+                description: "A label for the custom server",
+              },
+              name: {
+                type: "string",
+                description: "The name of the custom server",
+              },
+              version: {
+                type: "string",
+                description: "The version of the custom server (optional)",
+              },
+            },
+            required: ["type", "label", "name"],
+          },
+        },
+        required: [],
+      },
+      annotations: {},
+      _meta: {},
+    },
   ];
 }

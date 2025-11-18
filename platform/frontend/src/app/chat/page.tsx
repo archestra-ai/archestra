@@ -18,6 +18,8 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { RequestInstallationDialog } from "@/app/mcp-catalog/_parts/request-installation-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +62,18 @@ export default function ChatPage() {
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
+
+  // State for MCP installation request dialogs
+  const [mcpInstallationRequestServer, setMcpInstallationRequestServer] =
+    useState<{
+      name: string;
+      display_name?: string;
+      description?: string;
+      icon?: string;
+      requestReason?: string;
+    } | null>(null);
+  const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
+    useState(false);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
@@ -226,6 +240,57 @@ export default function ChatPage() {
       setMessages([]);
     }
   }, [conversationId, conversation, setMessages, sendMessage, status]);
+
+  // Detect special action indicator in messages to trigger MCP installation dialog
+  useEffect(() => {
+    // Look through messages for tool results containing the special action indicator
+    for (const message of messages) {
+      if (message.role === "assistant") {
+        for (const part of message.parts) {
+          // Check if this is a tool result part with output
+          // Handle both dynamic-tool and tool- prefixed types
+          const isToolWithOutput =
+            (part.type === "dynamic-tool" ||
+              (typeof part.type === "string" &&
+                part.type.startsWith("tool-"))) &&
+            "output" in part &&
+            part.output;
+
+          if (isToolWithOutput) {
+            const output =
+              typeof part.output === "string"
+                ? part.output
+                : JSON.stringify(part.output);
+
+            try {
+              const parsed = JSON.parse(output);
+              if (
+                parsed.__archestra_action === "open_mcp_installation_dialog"
+              ) {
+                // Handle opening the appropriate dialog
+                if (parsed.externalCatalogId) {
+                  // Open RequestInstallationDialog with minimal server info
+                  setMcpInstallationRequestServer({
+                    name: parsed.externalCatalogId,
+                    display_name: parsed.externalCatalogId,
+                    description: "MCP Server from Archestra Catalog",
+                    requestReason: parsed.requestReason || undefined,
+                  });
+                } else if (parsed.customServerConfig) {
+                  // Open CustomServerRequestDialog
+                  // Note: This would require additional state/logic to pre-fill the form
+                  setIsCustomServerDialogOpen(true);
+                }
+                return; // Only process the first action found
+              }
+            } catch {
+              // Not JSON or not our special action, continue
+            }
+          }
+        }
+      }
+    }
+  }, [messages]);
 
   const handleSubmit = (
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
@@ -406,6 +471,42 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* MCP Installation Request Dialogs */}
+      <RequestInstallationDialog
+        server={
+          mcpInstallationRequestServer
+            ? {
+                name: mcpInstallationRequestServer.name,
+                display_name:
+                  mcpInstallationRequestServer.display_name ||
+                  mcpInstallationRequestServer.name,
+                description:
+                  mcpInstallationRequestServer.description ||
+                  "MCP Server from Archestra Catalog",
+                icon: mcpInstallationRequestServer.icon,
+                // Add minimal required fields for the manifest type
+                author: { name: "Unknown" },
+                server: { type: "remote" as const, url: "", docs_url: null },
+                category: "General" as const,
+                quality_score: null,
+                readme: null,
+                github_info: {
+                  owner: "",
+                  repo: "",
+                  url: "",
+                  name: "",
+                  path: null,
+                },
+              }
+            : null
+        }
+        onClose={() => setMcpInstallationRequestServer(null)}
+      />
+      <CustomServerRequestDialog
+        isOpen={isCustomServerDialogOpen}
+        onClose={() => setIsCustomServerDialogOpen(false)}
+      />
     </div>
   );
 }

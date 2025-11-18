@@ -39,8 +39,9 @@ const resourceCategories: Record<string, Resource[]> = {
   Organization: [
     "organization",
     "member",
-    "invitation",
+    "ac",
     "team",
+    "invitation",
     "limit",
     "tokenPrice",
   ],
@@ -62,6 +63,7 @@ const resourceLabels: Record<Resource, string> = {
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   mcpToolCall: "MCP Tool Calls",
   team: "Teams",
+  ac: "Access Control",
   conversation: "Conversations",
   limit: "Limits",
   tokenPrice: "Token Prices",
@@ -76,6 +78,7 @@ const actionLabels: Record<Action, string> = {
   update: "Update",
   delete: "Delete",
   admin: "Admin",
+  cancel: "Cancel",
 };
 
 export function RolePermissionBuilder({

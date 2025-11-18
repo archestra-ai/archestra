@@ -4,7 +4,7 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -17,8 +17,8 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
+import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -189,6 +189,14 @@ export default function ChatPage() {
         });
       }
     },
+    onError: (error) => {
+      console.error("[Chat] Error occurred:", {
+        error,
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+    },
   });
 
   // Sync messages when conversation loads or changes
@@ -279,15 +287,7 @@ export default function ChatPage() {
           <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
         ) : (
           <div className="flex flex-col h-full">
-            {error && (
-              <div className="border-b p-4 bg-destructive/5">
-                <Alert variant="destructive" className="max-w-3xl mx-auto">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{error.message}</AlertDescription>
-                </Alert>
-              </div>
-            )}
+            {error && <ChatError error={error} />}
 
             {/* Sticky top bar with agent name and toggle */}
             <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">

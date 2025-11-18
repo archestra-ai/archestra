@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,7 +40,6 @@ export function CreateCatalogDialog({
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>("archestra-catalog");
   const createMutation = useCreateInternalMcpCatalogItem();
-  const submitButtonRef = useRef<HTMLButtonElement>(null);
   const { data: catalogItems } = useInternalMcpCatalog();
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
@@ -54,6 +53,17 @@ export function CreateCatalogDialog({
     await createMutation.mutateAsync(apiData);
     handleClose();
   };
+
+  const footer = (
+    <DialogFooter className="flex-shrink-0">
+      <Button variant="outline" onClick={handleClose} type="button">
+        Cancel
+      </Button>
+      <Button type="submit" disabled={createMutation.isPending}>
+        {createMutation.isPending ? "Adding..." : "Add Server"}
+      </Button>
+    </DialogFooter>
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -134,8 +144,8 @@ export function CreateCatalogDialog({
             <McpCatalogForm
               mode="create"
               onSubmit={onSubmit}
-              submitButtonRef={submitButtonRef}
               serverType="remote"
+              footer={footer}
             />
           )}
 
@@ -143,25 +153,11 @@ export function CreateCatalogDialog({
             <McpCatalogForm
               mode="create"
               onSubmit={onSubmit}
-              submitButtonRef={submitButtonRef}
               serverType="local"
+              footer={footer}
             />
           )}
         </div>
-
-        {activeTab !== "archestra-catalog" && (
-          <DialogFooter className="flex-shrink-0">
-            <Button variant="outline" onClick={handleClose} type="button">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => submitButtonRef.current?.click()}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? "Adding..." : "Add Server"}
-            </Button>
-          </DialogFooter>
-        )}
       </DialogContent>
     </Dialog>
   );

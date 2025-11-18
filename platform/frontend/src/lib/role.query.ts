@@ -12,6 +12,7 @@ export const roleKeys = {
   lists: () => [...roleKeys.all, "list"] as const,
   details: () => [...roleKeys.all, "detail"] as const,
   detail: (id: string) => [...roleKeys.details(), id] as const,
+  custom: () => [...roleKeys.all, "custom"] as const,
 };
 
 /**
@@ -95,5 +96,24 @@ export function useDeleteRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },
+  });
+}
+
+/**
+ * Get custom roles for better-auth UI components
+ * Filters out predefined roles and returns only custom ones
+ */
+export function useCustomRoles() {
+  return useQuery({
+    queryKey: roleKeys.custom(),
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getRoles();
+      if (!data) return [];
+
+      // Filter to only custom roles (non-predefined)
+      return data.filter((role) => !role.predefined);
+    },
+    retry: false,
+    throwOnError: false,
   });
 }

@@ -37,8 +37,8 @@ interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
-  submitButtonRef?: React.RefObject<HTMLButtonElement | null>;
   serverType?: "remote" | "local";
+  footer?: React.ReactNode;
 }
 
 const { baseMcpServerDockerImage } = config.orchestrator;
@@ -47,8 +47,8 @@ export function McpCatalogForm({
   mode,
   initialValues,
   onSubmit,
-  submitButtonRef,
   serverType = "remote",
+  footer,
 }: McpCatalogFormProps) {
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
@@ -528,13 +528,7 @@ export function McpCatalogForm({
           </div>
         )}
 
-        {/* Hidden submit button that can be triggered externally */}
-        <button
-          ref={submitButtonRef}
-          type="submit"
-          className="hidden"
-          tabIndex={-1}
-        />
+        {footer}
       </form>
     </Form>
   );

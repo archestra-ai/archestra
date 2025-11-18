@@ -10,13 +10,21 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import * as Sentry from "@sentry/node";
+import {
+  SentryPropagator,
+  SentrySampler,
+  SentrySpanProcessor,
+} from "@sentry/opentelemetry";
 import config from "@/config";
 import logger from "@/logging";
+import sentryClient from "@/sentry";
 
 const {
   api: { name, version },
   observability: {
     otel: { traceExporter: traceExporterConfig },
+    sentry: { enabled: sentryEnabled },
   },
 } = config;
 
@@ -36,12 +44,21 @@ const sdk = new NodeSDK({
   resource,
   traceExporter,
   instrumentations: [
-    new FastifyOtelInstrumentation({
-      registerOnInitialization: true,
-      ignorePaths: (opts) => {
-        return opts.url.startsWith(config.observability.metrics.endpoint);
-      },
-    }),
+    /**
+     * If Sentry is configured, we don't need to instrument Fastify
+     * as Sentry already instruments Fastify automatically
+     * https://docs.sentry.io/platforms/javascript/guides/fastify/migration/v7-to-v8/v8-opentelemetry/
+     */
+    ...(sentryEnabled
+      ? []
+      : [
+          new FastifyOtelInstrumentation({
+            registerOnInitialization: true,
+            ignorePaths: (opts) => {
+              return opts.url.startsWith(config.observability.metrics.endpoint);
+            },
+          }),
+        ]),
     getNodeAutoInstrumentations({
       // Disable instrumentation for specific packages if needed
       "@opentelemetry/instrumentation-fs": {
@@ -49,10 +66,28 @@ const sdk = new NodeSDK({
       },
     }),
   ],
+  /**
+   * If Sentry is configured, add Sentry components for proper integration
+   */
+  contextManager: sentryEnabled ? new Sentry.SentryContextManager() : undefined,
+  sampler:
+    sentryEnabled && sentryClient ? new SentrySampler(sentryClient) : undefined,
+  textMapPropagator: sentryEnabled ? new SentryPropagator() : undefined,
+  spanProcessors: sentryEnabled ? [new SentrySpanProcessor()] : undefined,
 });
 
 // Start the SDK
 sdk.start();
+
+// Validate Sentry + OpenTelemetry integration if Sentry is configured
+if (sentryClient) {
+  try {
+    Sentry.validateOpenTelemetrySetup();
+    logger.info("Sentry + OpenTelemetry integration validated successfully");
+  } catch (error) {
+    logger.warn({ error }, "Sentry + OpenTelemetry validation warning");
+  }
+}
 
 // Gracefully shutdown the SDK on process exit
 process.on("SIGTERM", () => {

@@ -266,13 +266,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Start async tool fetching in the background (non-blocking)
             (async () => {
               try {
+                // Wait for the pod to be fully ready before fetching tools
+                const podManager = McpServerRuntimeManager.getPod(mcpServer.id);
+                if (!podManager) {
+                  throw new Error("Pod manager not found");
+                }
+
+                fastify.log.info(
+                  `Waiting for pod to be ready: ${mcpServer.name}`,
+                );
+
+                // Wait for pod to be ready (with timeout)
+                // This will throw an error if the pod fails or times out
+                await podManager.waitForPodReady(60, 2000); // 60 attempts * 2s = 2 minutes max
+
+                fastify.log.info(
+                  `Pod is ready, updating status to discovering-tools: ${mcpServer.name}`,
+                );
+
                 await McpServerModel.update(mcpServer.id, {
                   localInstallationStatus: "discovering-tools",
                   localInstallationError: null,
                 });
 
-                // Wait for the pod to be fully ready (MCP server process needs time to initialize)
-                await new Promise((resolve) => setTimeout(resolve, 10000));
                 fastify.log.info(
                   `Attempting to fetch tools from local server: ${mcpServer.name}`,
                 );
@@ -325,10 +341,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   localInstallationStatus: "error",
                   localInstallationError: errorMessage,
                 });
-                // then after 5secs, delete the MCP server record
-                setTimeout(async () => {
-                  await McpServerModel.delete(mcpServer.id);
-                }, 5000);
               }
             })();
 
@@ -339,13 +351,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               localInstallationError: null,
             });
           } catch (podError) {
-            // If pod fails to start, delete the MCP server record
-            await McpServerModel.delete(mcpServer.id);
-
-            throw new ApiError(
-              500,
-              `Failed to start K8s pod for MCP server: ${podError instanceof Error ? podError.message : "Unknown error"}`,
+            // If pod fails to start, set status to error
+            const errorMessage =
+              podError instanceof Error ? podError.message : "Unknown error";
+            fastify.log.error(
+              `Failed to start K8s pod for MCP server ${mcpServer.name}: ${errorMessage}`,
             );
+
+            await McpServerModel.update(mcpServer.id, {
+              localInstallationStatus: "error",
+              localInstallationError: `Failed to start pod: ${errorMessage}`,
+            });
+
+            // Return the server with error status instead of throwing 500
+            return reply.send({
+              ...mcpServer,
+              localInstallationStatus: "error",
+              localInstallationError: `Failed to start pod: ${errorMessage}`,
+            });
           }
         }
 

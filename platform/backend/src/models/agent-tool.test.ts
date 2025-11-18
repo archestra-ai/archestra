@@ -252,7 +252,6 @@ describe("AgentToolModel.findAllPaginated", () => {
         { excludeArchestraTools: true },
       );
 
-      // true comes before false
       expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
         true,
       );
@@ -424,36 +423,72 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(result.data[0].tool.catalogId).toBe(catalog1.id);
     });
 
-    test("filters by credentialSourceMcpServerId", async ({
+    test("filters by mcpServerOwnerId", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
       makeMcpServer,
+      makeUser,
     }) => {
       const agent = await makeAgent();
-      const server1 = await makeMcpServer({ name: "Server 1" });
-      const server2 = await makeMcpServer({ name: "Server 2" });
+      const owner = await makeUser();
+      const otherOwner = await makeUser();
+
+      const ownerServer1 = await makeMcpServer({
+        name: "Server 1",
+        ownerId: owner.id,
+      });
+      const ownerServer2 = await makeMcpServer({
+        name: "Server 2",
+        ownerId: owner.id,
+      });
+      const otherOwnerServer = await makeMcpServer({
+        name: "Server 3",
+        ownerId: otherOwner.id,
+      });
 
       const tool1 = await makeTool({ name: "tool-1" });
       const tool2 = await makeTool({ name: "tool-2" });
       const tool3 = await makeTool({ name: "tool-3" });
+      const tool4 = await makeTool({ name: "tool-4" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        credentialSourceMcpServerId: server1.id,
+        credentialSourceMcpServerId: ownerServer1.id,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        credentialSourceMcpServerId: server2.id,
+        executionSourceMcpServerId: ownerServer2.id,
       });
-      await makeAgentTool(agent.id, tool3.id);
+      await makeAgentTool(agent.id, tool3.id, {
+        credentialSourceMcpServerId: otherOwnerServer.id,
+      });
+      await makeAgentTool(agent.id, tool4.id);
 
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        { credentialSourceMcpServerId: server1.id },
+        { mcpServerOwnerId: owner.id },
       );
 
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0].credentialSourceMcpServerId).toBe(server1.id);
+      expect(result.data).toHaveLength(2);
+      expect(
+        result.data.some(
+          (agentTool) =>
+            agentTool.credentialSourceMcpServerId === ownerServer1.id,
+        ),
+      ).toBe(true);
+      expect(
+        result.data.some(
+          (agentTool) =>
+            agentTool.executionSourceMcpServerId === ownerServer2.id,
+        ),
+      ).toBe(true);
+      expect(
+        result.data.every(
+          (agentTool) =>
+            agentTool.credentialSourceMcpServerId === ownerServer1.id ||
+            agentTool.executionSourceMcpServerId === ownerServer2.id,
+        ),
+      ).toBe(true);
     });
   });
 
@@ -675,6 +710,73 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(result.data).toHaveLength(2);
       expect(result.pagination.total).toBe(3); // 3 tools match "file"
       expect(result.pagination.totalPages).toBe(2);
+    });
+  });
+
+  describe("createManyIfNotExists", () => {
+    test("creates multiple agent-tool relationships in bulk", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const tools = await Promise.all([
+        makeTool({ name: "tool-1" }),
+        makeTool({ name: "tool-2" }),
+        makeTool({ name: "tool-3" }),
+      ]);
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      await AgentToolModel.createManyIfNotExists(
+        agent.id,
+        tools.map((t) => t.id),
+      );
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length + 3);
+      expect(finalToolIds).toContain(tools[0].id);
+      expect(finalToolIds).toContain(tools[1].id);
+      expect(finalToolIds).toContain(tools[2].id);
+    });
+
+    test("skips existing relationships and only creates new ones", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool1 = await makeTool({ name: "tool-1" });
+      const tool2 = await makeTool({ name: "tool-2" });
+      const tool3 = await makeTool({ name: "tool-3" });
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      // Create one relationship manually
+      await makeAgentTool(agent.id, tool1.id);
+
+      // Try to create all three relationships in bulk
+      await AgentToolModel.createManyIfNotExists(agent.id, [
+        tool1.id,
+        tool2.id,
+        tool3.id,
+      ]);
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length + 3);
+      expect(finalToolIds).toContain(tool1.id);
+      expect(finalToolIds).toContain(tool2.id);
+      expect(finalToolIds).toContain(tool3.id);
+    });
+
+    test("handles empty tool IDs array", async ({ makeAgent }) => {
+      const agent = await makeAgent();
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      await AgentToolModel.createManyIfNotExists(agent.id, []);
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length);
     });
   });
 });

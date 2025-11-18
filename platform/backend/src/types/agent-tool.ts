@@ -60,8 +60,10 @@ export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
   agentId: UuidIdSchema.optional(),
   origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
-  credentialSourceMcpServerId:
-    UuidIdSchema.optional().describe("MCP server ID"),
+  mcpServerOwnerId: z
+    .string()
+    .optional()
+    .describe("Filter by MCP server owner user ID"),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()

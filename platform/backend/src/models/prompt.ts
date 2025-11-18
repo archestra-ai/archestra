@@ -154,6 +154,7 @@ class PromptModel {
   /**
    * Update a prompt - creates a new version
    * Deactivates the old version and creates a new active version
+   * Migrates agent-prompt relationships to the new version
    */
   static async update(
     id: string,
@@ -164,6 +165,12 @@ class PromptModel {
     if (!currentPrompt) {
       return null;
     }
+
+    // Get existing agent-prompt relationships before deactivating
+    const existingRelationships = await db
+      .select()
+      .from(schema.agentPromptsTable)
+      .where(eq(schema.agentPromptsTable.promptId, id));
 
     // Deactivate current version
     await db
@@ -185,6 +192,15 @@ class PromptModel {
         createdBy,
       })
       .returning();
+
+    // Migrate agent-prompt relationships to the new version
+    if (existingRelationships.length > 0) {
+      // Update existing relationships to point to the new prompt version
+      await db
+        .update(schema.agentPromptsTable)
+        .set({ promptId: newVersion.id })
+        .where(eq(schema.agentPromptsTable.promptId, id));
+    }
 
     return {
       ...newVersion,

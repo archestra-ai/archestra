@@ -1,5 +1,5 @@
 {
-  "id": "fb94f133-53fd-49c1-a38c-2079a63617e5",
+  "id": "81e65a30-084e-4569-b101-a84d813d9674",
   "prevId": "60252abc-365c-4495-897e-3a85e729e4c0",
   "version": "7",
   "dialect": "postgresql",
@@ -1486,7 +1486,7 @@
         },
         "model": {
           "name": "model",
-          "type": "jsonb",
+          "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
         },
@@ -2287,7 +2287,7 @@
         },
         "permission": {
           "name": "permission",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },

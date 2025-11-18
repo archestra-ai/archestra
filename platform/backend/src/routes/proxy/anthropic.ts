@@ -6,7 +6,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { get } from "lodash-es";
 import { z } from "zod";
 import config from "@/config";
-import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
+import {
+  getObservableFetch,
+  reportBlockedTools,
+  reportLLMTokens,
+} from "@/llm-metrics";
 import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 import {
   type Agent,
@@ -519,6 +523,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reply.raw.write(
             `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
           );
+          reportBlockedTools(
+            "anthropic",
+            resolvedAgent,
+            accumulatedToolCalls.length,
+          );
         } else {
           // Tool calls are allowed - stream them now
           if (accumulatedToolCalls.length > 0) {
@@ -711,6 +720,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 citations: null,
               },
             ];
+
+            reportBlockedTools("anthropic", resolvedAgent, toolCalls.length);
 
             // Extract token usage and store the interaction with refusal
             const tokenUsage = response.usage

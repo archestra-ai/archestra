@@ -3326,9 +3326,9 @@ export type GetAllAgentToolsData = {
          */
         origin?: string;
         /**
-         * MCP server ID
+         * Filter by MCP server owner user ID
          */
-        credentialSourceMcpServerId?: string;
+        mcpServerOwnerId?: string;
         /**
          * For test isolation
          */
@@ -11908,7 +11908,7 @@ export type GetRolesResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -11922,7 +11922,7 @@ export type CreateRoleData = {
     body: {
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
     };
     path?: never;
@@ -11998,7 +11998,7 @@ export type CreateRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -12170,7 +12170,7 @@ export type GetRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -12184,14 +12184,14 @@ export type UpdateRoleData = {
     body?: {
         name?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
     };
     path: {
         /**
-         * Custom role ID
+         * Predefined role name or custom role ID
          */
-        roleId: string;
+        roleId: 'admin' | 'member' | string;
     };
     query?: never;
     url: '/api/roles/{roleId}';
@@ -12265,7 +12265,7 @@ export type UpdateRoleResponses = {
         organizationId?: string;
         name: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -13084,7 +13084,7 @@ export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/teams';
 };
@@ -13174,7 +13174,7 @@ export type GetAgentStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/agents';
 };
@@ -13263,7 +13263,7 @@ export type GetModelStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/models';
 };
@@ -13351,7 +13351,7 @@ export type GetOverviewStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/overview';
 };

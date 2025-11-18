@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.6.3](https://github.com/archestra-ai/archestra/compare/platform-v0.6.2...platform-v0.6.3) (2025-11-18)
+
+
+### Bug Fixes
+
+* chat system prompt update deselection bug ([#1163](https://github.com/archestra-ai/archestra/issues/1163)) ([f2cd147](https://github.com/archestra-ai/archestra/commit/f2cd14764a856bfa8b5f30188d907e7f4dd9d9ac))
+
+
+### Dependencies
+
+* bump 27 platform dependencies ([#1162](https://github.com/archestra-ai/archestra/issues/1162)) ([c1399c4](https://github.com/archestra-ai/archestra/commit/c1399c4fbd3dae644ecd8d06ee63a0b1e7c38474))
+* bump the platform-dependencies group across 1 directory with 3 updates ([#1166](https://github.com/archestra-ai/archestra/issues/1166)) ([f107469](https://github.com/archestra-ai/archestra/commit/f107469d48a7262dbe1a85d5c6034d6915f3703f))
+
+## [0.6.2](https://github.com/archestra-ai/archestra/compare/platform-v0.6.1...platform-v0.6.2) (2025-11-17)
+
+
+### Bug Fixes
+
+* hide graph data from table in Costs &gt; Statistics ([#1156](https://github.com/archestra-ai/archestra/issues/1156)) ([81dc952](https://github.com/archestra-ai/archestra/commit/81dc9521c807fcf221deb8ed261d3cea27fcfc6c))
+* increase timeout to fix network error during chat ([#1154](https://github.com/archestra-ai/archestra/issues/1154)) ([b177c7f](https://github.com/archestra-ai/archestra/commit/b177c7f5fa73b0c71fe071445031393f25265317))
+* MCP server tools calls don't work with error: Not connected ([#1153](https://github.com/archestra-ai/archestra/issues/1153)) ([3e2c25b](https://github.com/archestra-ai/archestra/commit/3e2c25b97bfe089c7cd09978f993050ff656f72f))
+* sidebar menu item tooltip on top ([#1151](https://github.com/archestra-ai/archestra/issues/1151)) ([90b617f](https://github.com/archestra-ai/archestra/commit/90b617f21aed2f6659ebb4f93d8064046a2b5362))
+* timeframes ([#1158](https://github.com/archestra-ai/archestra/issues/1158)) ([cf63de4](https://github.com/archestra-ai/archestra/commit/cf63de4c8f7b13a3eec777452c475e24b1753763))
+* tool policy toggle in dialog ([#1148](https://github.com/archestra-ai/archestra/issues/1148)) ([fb021a0](https://github.com/archestra-ai/archestra/commit/fb021a0d4a3f85bfb7421c624665045d036f887a))
+
+## [0.6.1](https://github.com/archestra-ai/archestra/compare/platform-v0.6.0...platform-v0.6.1) (2025-11-17)
+
+
+### Bug Fixes
+
+* show mcp installation failures ([#1144](https://github.com/archestra-ai/archestra/issues/1144)) ([62fcfb7](https://github.com/archestra-ai/archestra/commit/62fcfb78542e6b4d69af589f23229cbd6fb0cf3f))
+
+## [0.6.0](https://github.com/archestra-ai/archestra/compare/platform-v0.5.0...platform-v0.6.0) (2025-11-17)
+
+
+### Features
+
+* add `use_in_chat` checkbox to agent profile create/edit forms ([#1129](https://github.com/archestra-ai/archestra/issues/1129)) ([0fa6817](https://github.com/archestra-ai/archestra/commit/0fa68177cdf63804d9e81e526a848c55280047b1))
+* add refresh functionality to McpLogsDialog ([#1043](https://github.com/archestra-ai/archestra/issues/1043)) ([ef3c140](https://github.com/archestra-ai/archestra/commit/ef3c1405825e51e83afe020632a47eb8eeb5ea14))
+
+
+### Bug Fixes
+
+* fix form validation that blocks adding remote server ([#1140](https://github.com/archestra-ai/archestra/issues/1140)) ([a90c965](https://github.com/archestra-ai/archestra/commit/a90c96585c4dc437857923083eda8a66b151ff4a))
+* RBAC issues ([#1138](https://github.com/archestra-ai/archestra/issues/1138)) ([b2d990a](https://github.com/archestra-ai/archestra/commit/b2d990a8bc1949924594ad2d4eef24a29403c881)), closes [#1103](https://github.com/archestra-ai/archestra/issues/1103)
+* remove unnecessary limit check from frontend ([#1133](https://github.com/archestra-ai/archestra/issues/1133)) ([ac25c34](https://github.com/archestra-ai/archestra/commit/ac25c34744bf6b0be8ccf3c9f544de7bd415f12d))
+* token pricing rule update ordering behavior ([#1127](https://github.com/archestra-ai/archestra/issues/1127)) ([db25141](https://github.com/archestra-ai/archestra/commit/db251411147ffd200d568318bc0067f18283fcf6))
+
 ## [0.5.0](https://github.com/archestra-ai/archestra/compare/platform-v0.4.1...platform-v0.5.0) (2025-11-14)
 
 

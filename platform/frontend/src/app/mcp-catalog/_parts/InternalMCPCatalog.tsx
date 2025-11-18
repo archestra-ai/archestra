@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -13,7 +14,6 @@ import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
   useInstallMcpServer,
-  useMcpServerInstallationStatus,
   useMcpServers,
 } from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -38,8 +38,12 @@ export function InternalMCPCatalog({
   installedServers?: InstalledServer[];
 }) {
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
+  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
+    hasInstallingServers: installingServerIds.size > 0,
   });
   const installMutation = useInstallMcpServer();
 
@@ -61,9 +65,6 @@ export function InternalMCPCatalog({
 
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
-  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCatalogItem, setSelectedCatalogItem] =
@@ -80,22 +81,67 @@ export function InternalMCPCatalog({
     mcpServer: ["admin"],
   });
 
-  // Poll installation status for the first installing server
-  const mcpServerInstallationStatus = useMcpServerInstallationStatus(
-    Array.from(installingServerIds)[0] ?? null,
-  );
+  const queryClient = useQueryClient();
 
-  // Remove server from installing set when installation completes
+  // Remove servers from installing set when installation completes (success or error)
   useEffect(() => {
-    const firstInstallingId = Array.from(installingServerIds)[0];
-    if (firstInstallingId && mcpServerInstallationStatus.data === "success") {
-      setInstallingServerIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(firstInstallingId);
-        return newSet;
-      });
+    if (installedServers && installingServerIds.size > 0) {
+      const completedServerIds = Array.from(installingServerIds).filter(
+        (serverId) => {
+          const server = installedServers.find((s) => s.id === serverId);
+          return (
+            server &&
+            (server.localInstallationStatus === "success" ||
+              server.localInstallationStatus === "error")
+          );
+        },
+      );
+
+      if (completedServerIds.length > 0) {
+        setInstallingServerIds((prev) => {
+          const newSet = new Set(prev);
+          for (const id of completedServerIds) {
+            newSet.delete(id);
+          }
+          return newSet;
+        });
+
+        // Show toasts for completed installations and invalidate tools queries
+        completedServerIds.forEach((serverId) => {
+          const server = installedServers.find((s) => s.id === serverId);
+          if (server) {
+            if (server.localInstallationStatus === "success") {
+              toast.success(`Successfully installed ${server.name}`);
+              // Invalidate tools queries to update "Tools assigned" count
+              queryClient.invalidateQueries({
+                queryKey: ["mcp-servers", server.id, "tools"],
+              });
+              queryClient.invalidateQueries({ queryKey: ["tools"] });
+              queryClient.invalidateQueries({
+                queryKey: ["tools", "unassigned"],
+              });
+            } else if (server.localInstallationStatus === "error") {
+              toast.error(`Failed to install ${server.name}`);
+            }
+          }
+        });
+      }
     }
-  }, [mcpServerInstallationStatus.data, installingServerIds]);
+  }, [installedServers, installingServerIds, queryClient]);
+
+  // Resume polling for pending installations after page refresh
+  useEffect(() => {
+    if (installedServers) {
+      const pendingServers = installedServers.filter(
+        (s) =>
+          s.localInstallationStatus === "pending" ||
+          s.localInstallationStatus === "discovering-tools",
+      );
+      if (pendingServers.length > 0) {
+        setInstallingServerIds(new Set(pendingServers.map((s) => s.id)));
+      }
+    }
+  }, [installedServers]);
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
@@ -161,15 +207,16 @@ export function InternalMCPCatalog({
     // No configuration needed, install directly
     try {
       setInstallingItemId(catalogItem.id);
-      const installedServer = await installMutation.mutateAsync({
+      const result = await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
         teams: [],
         dontShowToast: true,
       });
       // Track the installed server for polling
-      if (installedServer?.id) {
-        setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+      const installedServerId = result?.installedServer?.id;
+      if (installedServerId) {
+        setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
       }
     } finally {
       setInstallingItemId(null);
@@ -198,7 +245,7 @@ export function InternalMCPCatalog({
     if (!localServerCatalogItem) return;
 
     setInstallingItemId(localServerCatalogItem.id);
-    const installedServer = await installMutation.mutateAsync({
+    const result = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       teams: teams || [],
@@ -208,8 +255,9 @@ export function InternalMCPCatalog({
     });
 
     // Track the installed server for polling
-    if (installedServer?.id) {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServer.id));
+    const installedServerId = result?.installedServer?.id;
+    if (installedServerId) {
+      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
     }
 
     closeDialog("local-install");
@@ -428,6 +476,15 @@ export function InternalMCPCatalog({
     setCatalogItemForReinstall(null);
   };
 
+  const handleCancelInstallation = (serverId: string) => {
+    // Remove server from installing set to stop polling
+    setInstallingServerIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(serverId);
+      return newSet;
+    });
+  };
+
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
       const aIsRemote = a.serverType === "remote";
@@ -530,9 +587,8 @@ export function InternalMCPCatalog({
                   installedServer={serverInfo.installedServer}
                   installingItemId={installingItemId}
                   installationStatus={
-                    serverInfo.isInstallInProgress
-                      ? mcpServerInstallationStatus.data
-                      : undefined
+                    serverInfo.installedServer?.localInstallationStatus ||
+                    undefined
                   }
                   onInstallRemoteServer={() =>
                     handleInstallRemoteServer(item, false)
@@ -547,6 +603,7 @@ export function InternalMCPCatalog({
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDelete={() => setDeletingItem(item)}
+                  onCancelInstallation={handleCancelInstallation}
                   currentUserInstalledLocalServer={
                     serverInfo.currentUserInstalledLocalServer
                   }

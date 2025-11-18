@@ -79,6 +79,8 @@ export function useUpdatePrompt() {
       queryClient.invalidateQueries({
         queryKey: ["prompts", variables.id, "versions"],
       });
+      // Invalidate agent prompts cache since prompt migration updates agent relationships
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }
@@ -92,6 +94,9 @@ export function useDeletePrompt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      // Invalidate agent prompts cache since deleting a prompt removes
+      // it from all agents (cascade delete on agent-prompt relationships)
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

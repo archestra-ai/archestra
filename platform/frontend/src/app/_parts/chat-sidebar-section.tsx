@@ -170,7 +170,7 @@ export function ChatSidebarSection() {
                                 </span>
                               </SidebarMenuButton>
                             </TooltipTrigger>
-                            <TooltipContent side="right">
+                            <TooltipContent side="top">
                               <p>{conv.agent.name}</p>
                             </TooltipContent>
                           </Tooltip>

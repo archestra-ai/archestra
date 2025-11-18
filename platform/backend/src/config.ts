@@ -19,6 +19,11 @@ import packageJson from "../../package.json";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
+const sentryDsn = process.env.ARCHESTRA_SENTRY_BACKEND_DSN || "";
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const isProduction = ["production", "prod"].includes(environment);
+const isDevelopment = !isProduction;
+
 /**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
@@ -71,11 +76,6 @@ export const getDatabaseUrl = (): string => {
   }
   return databaseUrl;
 };
-
-const isProduction = ["production", "prod"].includes(
-  process.env.NODE_ENV?.toLowerCase() ?? "",
-);
-const isDevelopment = !isProduction;
 
 /**
  * Parse port from ARCHESTRA_API_BASE_URL if provided
@@ -237,9 +237,16 @@ export default {
       port: 9050,
       secret: process.env.ARCHESTRA_METRICS_SECRET,
     },
+    sentry: {
+      enabled: sentryDsn !== "",
+      dsn: sentryDsn,
+      environment:
+        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
+    },
   },
   debug: isDevelopment,
   production: isProduction,
+  environment,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

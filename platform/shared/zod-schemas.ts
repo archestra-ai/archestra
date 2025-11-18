@@ -55,29 +55,15 @@ export const LocalConfigSchema = z
   );
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
-export const LocalConfigFormSchema = z
-  .object({
-    command: z.string().optional(),
-    arguments: z.string(), // UI uses string, gets parsed to array
-    environment: z.array(EnvironmentVariableSchema), // Structured environment variables
-    dockerImage: z.string().optional(), // Custom Docker image URL
-    transportType: z.enum(["stdio", "streamable-http"]).optional(),
-    httpPort: z.string().optional(), // UI uses string, gets parsed to number
-    httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
-  })
-  .refine(
-    (data) => {
-      // At least one of command or dockerImage must be provided
-      return (
-        (data.command && data.command.trim().length > 0) || data.dockerImage
-      );
-    },
-    {
-      message:
-        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
-      path: [],
-    },
-  );
+export const LocalConfigFormSchema = z.object({
+  command: z.string().optional(),
+  arguments: z.string(), // UI uses string, gets parsed to array
+  environment: z.array(EnvironmentVariableSchema), // Structured environment variables
+  dockerImage: z.string().optional(), // Custom Docker image URL
+  transportType: z.enum(["stdio", "streamable-http"]).optional(),
+  httpPort: z.string().optional(), // UI uses string, gets parsed to number
+  httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
+});
 
 /**
  * Organization Appearance Schemas
@@ -99,7 +85,7 @@ export type OrganizationCustomFont = z.infer<
 >;
 
 export const StatisticsTimeFrameSchema = z.union([
-  z.enum(["1h", "24h", "7d", "30d", "90d", "12m", "all"]),
+  z.enum(["5m", "15m", "30m", "1h", "24h", "7d", "30d", "90d", "12m", "all"]),
   z
     .templateLiteral(["custom:", z.string(), "_", z.string()])
     .describe("Custom timeframe must be in format 'custom:startTime_endTime'"),

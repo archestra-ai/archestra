@@ -358,6 +358,7 @@ function LimitRow({
     currentUsageTokensOut: number,
     limitValue: number,
     limitType: string,
+    model?: string,
   ) => {
     percentage: number;
     status: UsageStatus;
@@ -390,6 +391,7 @@ function LimitRow({
     limit.currentUsageTokensOut || 0,
     limit.limitValue,
     limit.limitType,
+    limit.model || undefined,
   );
 
   return (
@@ -559,26 +561,50 @@ export default function LimitsPage() {
 
   // Helper function to calculate real cost for token limits
   const calculateTokenCost = useCallback(
-    (inputTokens: number, outputTokens: number): number => {
+    (inputTokens: number, outputTokens: number, model?: string): number => {
       if (tokenPrices.length === 0) {
         console.warn("No token prices available for cost calculation");
         return 0;
       }
 
-      const averageInputPrice =
-        tokenPrices.reduce(
-          (sum, tp) => sum + parseFloat(tp.pricePerMillionInput),
-          0,
-        ) / tokenPrices.length;
+      // Find the specific model's price, or use average as fallback
+      let inputPrice: number;
+      let outputPrice: number;
 
-      const averageOutputPrice =
-        tokenPrices.reduce(
-          (sum, tp) => sum + parseFloat(tp.pricePerMillionOutput),
-          0,
-        ) / tokenPrices.length;
+      if (model) {
+        const modelPrice = tokenPrices.find((tp) => tp.model === model);
+        if (modelPrice) {
+          inputPrice = parseFloat(modelPrice.pricePerMillionInput);
+          outputPrice = parseFloat(modelPrice.pricePerMillionOutput);
+        } else {
+          // Fallback to average if specific model not found
+          inputPrice =
+            tokenPrices.reduce(
+              (sum, tp) => sum + parseFloat(tp.pricePerMillionInput),
+              0,
+            ) / tokenPrices.length;
+          outputPrice =
+            tokenPrices.reduce(
+              (sum, tp) => sum + parseFloat(tp.pricePerMillionOutput),
+              0,
+            ) / tokenPrices.length;
+        }
+      } else {
+        // No model specified, use average
+        inputPrice =
+          tokenPrices.reduce(
+            (sum, tp) => sum + parseFloat(tp.pricePerMillionInput),
+            0,
+          ) / tokenPrices.length;
+        outputPrice =
+          tokenPrices.reduce(
+            (sum, tp) => sum + parseFloat(tp.pricePerMillionOutput),
+            0,
+          ) / tokenPrices.length;
+      }
 
-      const inputCost = (inputTokens * averageInputPrice) / 1000000;
-      const outputCost = (outputTokens * averageOutputPrice) / 1000000;
+      const inputCost = (inputTokens * inputPrice) / 1000000;
+      const outputCost = (outputTokens * outputPrice) / 1000000;
       const totalCost = inputCost + outputCost;
 
       return totalCost;
@@ -593,6 +619,7 @@ export default function LimitsPage() {
       currentUsageTokensOut: number,
       limitValue: number,
       limitType: string,
+      model?: string,
     ) => {
       let actualUsage: number;
       const actualLimit = limitValue;
@@ -601,6 +628,7 @@ export default function LimitsPage() {
         actualUsage = calculateTokenCost(
           currentUsageTokensIn,
           currentUsageTokensOut,
+          model,
         );
       } else {
         // For MCP server calls, use the input tokens field as call count

@@ -2,6 +2,7 @@ import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+const backendBaseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
 /**
  * Get the display proxy URL for showing to users.
@@ -9,31 +10,28 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
  */
 export const getDisplayProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
-  if (!baseUrl) {
+  if (!backendBaseUrl) {
     return `http://localhost:9000${proxyUrlSuffix}`;
-  } else if (baseUrl.endsWith(proxyUrlSuffix)) {
-    return baseUrl;
-  } else if (baseUrl.endsWith("/")) {
-    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
+  } else if (backendBaseUrl.endsWith(proxyUrlSuffix)) {
+    return backendBaseUrl;
+  } else if (backendBaseUrl.endsWith("/")) {
+    return `${backendBaseUrl.slice(0, -1)}${proxyUrlSuffix}`;
   }
-  return `${baseUrl}${proxyUrlSuffix}`;
+  return `${backendBaseUrl}${proxyUrlSuffix}`;
 };
 
 /**
  * Get the WebSocket URL
  */
 const getWebSocketUrl = (): string => {
-  const baseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
-
   // In development, use localhost
-  if (!baseUrl || typeof window === "undefined") {
+  if (!backendBaseUrl || typeof window === "undefined") {
     return "ws://localhost:9000/ws";
   }
 
   // Convert http(s) to ws(s)
-  const wsUrl = baseUrl.replace(/^http/, "ws");
+  const wsUrl = backendBaseUrl.replace(/^http/, "ws");
   return `${wsUrl}/ws`;
 };
 

@@ -33,12 +33,18 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: cp .env.example .env
 
+      - name: Turbo Cache
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/cache@v4
+        with:
+          path: ./platform/.turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   platform-e2e-tests:
     name: Platform e2e Tests

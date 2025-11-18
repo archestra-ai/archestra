@@ -55,12 +55,9 @@ function ChatConfigDialogContent({
   // Initialize selected prompts when dialog opens
   useEffect(() => {
     if (open && agentPrompts) {
-      // Find the active system prompt (prioritize isActive: true)
-      const systemPrompt = agentPrompts
-        .filter((ap) => ap.prompt.type === "system")
-        .sort(
-          (a, b) => (b.prompt.isActive ? 1 : 0) - (a.prompt.isActive ? 1 : 0),
-        )[0];
+      const systemPrompt = agentPrompts.find(
+        (ap) => ap.prompt.type === "system",
+      );
       const regularPromptsList = agentPrompts.filter(
         (ap) => ap.prompt.type === "regular",
       );

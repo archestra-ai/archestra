@@ -28,6 +28,7 @@ const resourceCategories: Record<string, Resource[]> = {
     "policy",
     "interaction",
     "conversation",
+    "prompt",
   ],
   "MCP & Integrations": [
     "mcpServer",
@@ -44,6 +45,7 @@ const resourceCategories: Record<string, Resource[]> = {
     "invitation",
     "limit",
     "tokenPrice",
+    "chatSettings",
   ],
 };
 

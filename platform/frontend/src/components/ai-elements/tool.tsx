@@ -81,7 +81,7 @@ export const ToolHeader = ({
   <CollapsibleTrigger
     className={cn(
       "flex w-full items-center justify-between gap-4 p-3 cursor-pointer group",
-      isCollapsible ? "cursor-pointer" : "cursor-default!",
+      isCollapsible ? "cursor-pointer" : "!cursor-default",
       className,
     )}
     {...props}

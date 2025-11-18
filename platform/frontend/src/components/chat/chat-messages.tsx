@@ -140,7 +140,6 @@ export function ChatMessages({
 
                     return (
                       <MessageTool
-                        message={message}
                         part={part}
                         key={`${message.id}-${i}`}
                         toolResultPart={toolResultPart}
@@ -170,7 +169,6 @@ export function ChatMessages({
 
                       return (
                         <MessageTool
-                          message={message}
                           part={part}
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
@@ -245,17 +243,17 @@ function useStreamingStallDetection(
 }
 
 function MessageTool({
-  message,
   part,
   toolResultPart,
   toolName,
 }: {
-  message: UIMessage;
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
 }) {
-  const outputError = tryToExtractErrorFromOutput(part.output);
+  const outputError = toolResultPart
+    ? tryToExtractErrorFromOutput(toolResultPart.output)
+    : tryToExtractErrorFromOutput(part.output);
   const errorText = toolResultPart
     ? (toolResultPart.errorText ?? outputError)
     : (part.errorText ?? outputError);
@@ -268,10 +266,7 @@ function MessageTool({
   );
 
   return (
-    <Tool
-      key={`${message.id}-${part.toolCallId}-${toolName}`}
-      className={hasContent ? "cursor-pointer" : ""}
-    >
+    <Tool className={hasContent ? "cursor-pointer" : ""}>
       <ToolHeader
         type={`tool-${toolName}`}
         state={getHeaderState({
@@ -281,7 +276,6 @@ function MessageTool({
         })}
         errorText={errorText}
         isCollapsible={hasContent}
-        className={hasContent ? "cursor-pointer" : ""}
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} /> : null}
@@ -308,7 +302,7 @@ const tryToExtractErrorFromOutput = (output: unknown) => {
   try {
     if (typeof output !== "string") return undefined;
     const json = JSON.parse(output);
-    return json.error;
+    return typeof json.error === "string" ? json.error : undefined;
   } catch (_error) {
     return undefined;
   }

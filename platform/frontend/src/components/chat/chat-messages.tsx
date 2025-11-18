@@ -203,6 +203,7 @@ export function ChatMessages({
                                 ? "output-available"
                                 : part.state || "input-available"
                             }
+                            errorText={part.errorText}
                           />
                           <ToolContent>
                             {part.input &&
@@ -218,13 +219,14 @@ export function ChatMessages({
                                 errorText={toolResultPart.errorText}
                               />
                             )}
-                            {!toolResultPart && Boolean(part.output) && (
-                              <ToolOutput
-                                label={part.errorText ? "Error" : "Result"}
-                                output={part.output}
-                                errorText={part.errorText}
-                              />
-                            )}
+                            {!toolResultPart &&
+                              Boolean(part.output || part.errorText) && (
+                                <ToolOutput
+                                  label={part.errorText ? "Error" : "Result"}
+                                  output={part.output}
+                                  errorText={part.errorText}
+                                />
+                              )}
                           </ToolContent>
                         </Tool>
                       );

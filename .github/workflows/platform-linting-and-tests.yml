@@ -36,6 +36,9 @@ jobs:
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   platform-e2e-tests:
     name: Platform e2e Tests

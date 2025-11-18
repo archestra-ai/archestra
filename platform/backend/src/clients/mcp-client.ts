@@ -157,9 +157,7 @@ class McpClient {
         version: "1.0.0",
       },
       {
-        capabilities: {
-          tools: {},
-        },
+        capabilities: {},
       },
     );
 
@@ -505,9 +503,7 @@ class McpClient {
             version: "1.0.0",
           },
           {
-            capabilities: {
-              tools: {},
-            },
+            capabilities: {},
           },
         );
 

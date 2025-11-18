@@ -439,11 +439,8 @@ function LimitRow({
   tokenPrices: TokenPriceData[];
   getEntityName: (limit: LimitData) => string;
   getUsageStatus: (
-    currentUsageTokensIn: number,
-    currentUsageTokensOut: number,
     limitValue: number,
     limitType: string,
-    models?: string[] | null,
     modelUsage?: Array<{
       model: string;
       tokensIn: number;
@@ -478,11 +475,8 @@ function LimitRow({
   }
 
   const { percentage, status, actualUsage, actualLimit } = getUsageStatus(
-    limit.currentUsageTokensIn || 0,
-    limit.currentUsageTokensOut || 0,
     limit.limitValue,
     limit.limitType,
-    limit.model as string[] | null,
     limit.modelUsage,
   );
 
@@ -535,7 +529,7 @@ function LimitRow({
             <span>
               {limit.limitType === "token_cost"
                 ? `$${actualUsage.toFixed(2)} / $${actualLimit.toFixed(2)}`
-                : `${(limit.currentUsageTokensIn || 0).toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
+                : `${actualUsage.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
             </span>
             <span>{percentage.toFixed(1)}%</span>
           </div>
@@ -665,69 +659,11 @@ export default function LimitsPage() {
     [teams],
   );
 
-  // Helper function to calculate real cost for token limits
-  const calculateTokenCost = useCallback(
-    (
-      inputTokens: number,
-      outputTokens: number,
-      models?: string[] | null,
-    ): number => {
-      if (tokenPrices.length === 0) {
-        console.warn("No token prices available for cost calculation");
-        return 0;
-      }
-
-      // If no models specified or empty array, return 0
-      if (!models || !Array.isArray(models) || models.length === 0) {
-        console.warn("No models specified for cost calculation");
-        return 0;
-      }
-
-      // For multi-model limits, calculate average cost across all specified models
-      // This matches the backend logic
-      let totalInputPrice = 0;
-      let totalOutputPrice = 0;
-      let validModelsCount = 0;
-
-      for (const modelName of models) {
-        const modelPrice = tokenPrices.find((tp) => tp.model === modelName);
-
-        if (!modelPrice) {
-          console.warn(`No pricing found for model ${modelName}`);
-          continue;
-        }
-
-        totalInputPrice += parseFloat(modelPrice.pricePerMillionInput);
-        totalOutputPrice += parseFloat(modelPrice.pricePerMillionOutput);
-        validModelsCount++;
-      }
-
-      if (validModelsCount === 0) {
-        console.warn("No valid pricing found for any specified models");
-        return 0;
-      }
-
-      // Calculate average price across all models
-      const avgInputPrice = totalInputPrice / validModelsCount;
-      const avgOutputPrice = totalOutputPrice / validModelsCount;
-
-      const inputCost = (inputTokens * avgInputPrice) / 1000000;
-      const outputCost = (outputTokens * avgOutputPrice) / 1000000;
-      const totalCost = inputCost + outputCost;
-
-      return totalCost;
-    },
-    [tokenPrices],
-  );
-
   // Helper function to get usage percentage and status
   const getUsageStatus = useCallback(
     (
-      currentUsageTokensIn: number,
-      currentUsageTokensOut: number,
       limitValue: number,
       limitType: string,
-      models?: string[] | null,
       modelUsage?: Array<{
         model: string;
         tokensIn: number;
@@ -739,20 +675,16 @@ export default function LimitsPage() {
       const actualLimit = limitValue;
 
       if (limitType === "token_cost") {
-        // Use precise per-model cost sum from backend if available
+        // Use precise per-model cost sum from backend
         if (modelUsage && modelUsage.length > 0) {
           actualUsage = modelUsage.reduce((sum, usage) => sum + usage.cost, 0);
         } else {
-          // Fallback to average pricing calculation
-          actualUsage = calculateTokenCost(
-            currentUsageTokensIn,
-            currentUsageTokensOut,
-            models,
-          );
+          // No usage tracked yet
+          actualUsage = 0;
         }
       } else {
-        // For MCP server calls, use the input tokens field as call count
-        actualUsage = currentUsageTokensIn;
+        // MCP server calls and tool calls limits are not currently tracked
+        actualUsage = 0;
       }
 
       const percentage = (actualUsage / actualLimit) * 100;
@@ -763,7 +695,7 @@ export default function LimitsPage() {
 
       return { percentage, status, actualUsage, actualLimit };
     },
-    [calculateTokenCost],
+    [],
   );
 
   const handleDeleteLimit = useCallback(

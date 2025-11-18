@@ -28,7 +28,7 @@ const getWebSocketUrl = (): string => {
   const baseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
   // In development, use localhost
-  if (!baseUrl || typeof window === 'undefined') {
+  if (!baseUrl || typeof window === "undefined") {
     return "ws://localhost:9000/ws";
   }
 

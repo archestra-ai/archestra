@@ -4,31 +4,6 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type McpInstallationRequestInput = {
-    sessionId: string;
-    conversationId: string;
-    externalCatalogId?: string;
-    requestReason?: string;
-    customServerConfig?: {
-        [key: string]: unknown;
-    };
-};
-
-export type McpInstallationResponseInput = {
-    sessionId: string;
-    conversationId: string;
-    success: boolean;
-    message?: string;
-};
-
-export type WebSocketMessageInput = {
-    type: string;
-    payload: McpInstallationRequestInput;
-} | {
-    type: string;
-    payload: McpInstallationResponseInput;
-};
-
 export type SupportedProvidersInput = 'openai' | 'gemini' | 'anthropic';
 
 export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
@@ -1050,29 +1025,11 @@ export type AnthropicMessagesResponseInput = {
     };
 };
 
-export type McpInstallationRequest = {
-    sessionId: string;
-    conversationId: string;
-    externalCatalogId?: string;
-    requestReason?: string;
-    customServerConfig?: {
+export type WebSocketMessageInput = {
+    type: 'mcp-installation-request';
+    payload: {
         [key: string]: unknown;
     };
-};
-
-export type McpInstallationResponse = {
-    sessionId: string;
-    conversationId: string;
-    success: boolean;
-    message?: string;
-};
-
-export type WebSocketMessage = {
-    type: string;
-    payload: McpInstallationRequest;
-} | {
-    type: string;
-    payload: McpInstallationResponse;
 };
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
@@ -2093,6 +2050,13 @@ export type AnthropicMessagesResponse = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+    };
+};
+
+export type WebSocketMessage = {
+    type: 'mcp-installation-request';
+    payload: {
+        [key: string]: never;
     };
 };
 

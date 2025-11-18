@@ -34,6 +34,7 @@ import {
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
+  WebSocketMessageSchema,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
@@ -74,6 +75,9 @@ z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
 });
 z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
   id: "AnthropicMessagesResponse",
+});
+z.globalRegistry.add(WebSocketMessageSchema, {
+  id: "WebSocketMessage",
 });
 
 /**

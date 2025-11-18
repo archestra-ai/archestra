@@ -76,15 +76,6 @@ class WebSocketService {
     _ws: WebSocket,
   ): Promise<void> {
     switch (message.type) {
-      case "mcp-installation-response":
-        logger.info(
-          { message: message.payload },
-          "Received MCP installation response",
-        );
-        // The response from the frontend is just for logging/tracking
-        // The actual installation happens via the regular HTTP API
-        break;
-
       default:
         logger.warn({ message }, "Unknown WebSocket message type");
     }

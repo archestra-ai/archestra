@@ -271,60 +271,18 @@ export async function executeArchestraTool(
     );
 
     try {
-      const externalCatalogId = args?.external_catalog_id as string | undefined;
-      const requestReason = args?.request_reason as string | undefined;
-      const customServerConfig = args?.custom_server_config as
-        | Record<string, unknown>
-        | undefined;
-
-      // Validate that either externalCatalogId or customServerConfig is provided
-      if (!externalCatalogId && !customServerConfig) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Either external_catalog_id or custom_server_config must be provided.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
       // Send websocket message to open the installation dialog in the frontend
-      // Use a generated session ID since we don't have the actual session here
-      const sessionId = `profile-${profile.id}-${Date.now()}`;
-      const conversationId = "unknown"; // We don't have access to conversationId here
-
       websocketService.broadcast({
         type: "mcp-installation-request",
-        payload: {
-          sessionId,
-          conversationId,
-          externalCatalogId,
-          requestReason,
-          customServerConfig,
-        },
+        payload: {},
       });
-
-      logger.info(
-        {
-          sessionId,
-          externalCatalogId,
-          customServerConfig: !!customServerConfig,
-        },
-        "Sent MCP installation request via WebSocket",
-      );
-
-      // Return a user-friendly message explaining what will happen
-      const message = externalCatalogId
-        ? `An installation request dialog for "${externalCatalogId}" should now be visible in your chat interface. Please review and submit the request to proceed with the installation.`
-        : "An installation request dialog for a custom MCP server should now be visible in your chat interface. Please review and submit the request to proceed with the installation.";
 
       return {
         content: [
           {
             type: "text",
-            text: message,
+            // Return a user-friendly message explaining what will happen
+            text: "An installation request dialog for an MCP server should now be visible in the chat. Please review and submit the request to proceed with the installation.",
           },
         ],
         isError: false,

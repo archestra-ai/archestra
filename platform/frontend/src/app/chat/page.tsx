@@ -9,7 +9,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import { RequestInstallationDialog } from "@/app/mcp-catalog/_parts/request-installation-dialog";
 import {
   PromptInput,
   PromptInputBody,
@@ -21,7 +20,6 @@ import {
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,37 +58,19 @@ export default function ChatPage() {
     }
     return false;
   });
-  const [hasInitialized, setHasInitialized] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
   // State for MCP installation request dialogs
-  const [mcpInstallationRequestServer, setMcpInstallationRequestServer] =
-    useState<{
-      name: string;
-      display_name?: string;
-      description?: string;
-      icon?: string;
-      requestReason?: string;
-    } | null>(null);
   const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
     useState(false);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
 
-  // Initialize WebSocket connection
+  // Subscribe to MCP installation requests
   useEffect(() => {
-    if (hasInitialized) return;
-    setHasInitialized(true);
-
-    // Connect to WebSocket
-    websocketService.connect().catch((error) => {
-      console.error("[Chat] Failed to connect to WebSocket:", error);
-    });
-
-    // Subscribe to MCP installation requests
     const unsubscribe = websocketService.subscribe(
       "mcp-installation-request",
       (message) => {
@@ -99,17 +79,7 @@ export default function ChatPage() {
           message.payload,
         );
 
-        // Open the appropriate dialog based on the payload
-        if (message.payload.externalCatalogId) {
-          setMcpInstallationRequestServer({
-            name: message.payload.externalCatalogId,
-            display_name: message.payload.externalCatalogId,
-            description: "MCP Server from Archestra Catalog",
-            requestReason: message.payload.requestReason,
-          });
-        } else if (message.payload.customServerConfig) {
-          setIsCustomServerDialogOpen(true);
-        }
+        setIsCustomServerDialogOpen(true);
       },
     );
 
@@ -117,7 +87,7 @@ export default function ChatPage() {
     return () => {
       unsubscribe();
     };
-  }, [hasInitialized]);
+  }, []);
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -453,36 +423,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      <RequestInstallationDialog
-        server={
-          mcpInstallationRequestServer
-            ? {
-                name: mcpInstallationRequestServer.name,
-                display_name:
-                  mcpInstallationRequestServer.display_name ||
-                  mcpInstallationRequestServer.name,
-                description:
-                  mcpInstallationRequestServer.description ||
-                  "MCP Server from Archestra Catalog",
-                icon: mcpInstallationRequestServer.icon,
-                // Add minimal required fields for the manifest type
-                author: { name: "Unknown" },
-                server: { type: "remote" as const, url: "", docs_url: null },
-                category: "General" as const,
-                quality_score: null,
-                readme: null,
-                github_info: {
-                  owner: "",
-                  repo: "",
-                  url: "",
-                  name: "",
-                  path: null,
-                },
-              }
-            : null
-        }
-        onClose={() => setMcpInstallationRequestServer(null)}
-      />
       <CustomServerRequestDialog
         isOpen={isCustomServerDialogOpen}
         onClose={() => setIsCustomServerDialogOpen(false)}

@@ -3,7 +3,7 @@
 import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -81,85 +81,90 @@ export function ArchestraCatalogTab({
   // Mutation for adding servers to catalog
   const createMutation = useCreateInternalMcpCatalogItem();
 
-  const handleAddToCatalog = async (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-  ) => {
-    // For local servers, open the environment configuration dialog
-    if (server.server.type === "local") {
-      setConfigureEnvServer(server);
-      return;
-    }
+  const addServerToCatalog = useCallback(
+    async (
+      server: archestraCatalogTypes.ArchestraMcpServerManifest,
+      environment?: Array<{
+        key: string;
+        type: "plain_text" | "secret";
+        value?: string;
+        promptOnInstallation: boolean;
+      }>,
+    ) => {
+      // Rewrite redirect URIs to prefer platform callback (port 3000)
+      const rewrittenOauth =
+        server.oauth_config && !server.oauth_config.requires_proxy
+          ? {
+              ...server.oauth_config,
+              redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
+                u === "http://localhost:8080/oauth/callback"
+                  ? `${window.location.origin}/oauth-callback`
+                  : u,
+              ),
+            }
+          : undefined;
 
-    // For remote servers, proceed with direct addition
-    await addServerToCatalog(server, undefined);
-  };
+      // For local servers, extract local_config from manifest
+      const localConfig =
+        server.server.type === "local"
+          ? {
+              command: server.server.command,
+              arguments: server.server.args,
+              environment:
+                environment ||
+                (server.server.env
+                  ? Object.entries(server.server.env).map(([key, value]) => ({
+                      key,
+                      type: "plain_text" as const,
+                      value,
+                      promptOnInstallation: false,
+                    }))
+                  : undefined),
+            }
+          : undefined;
 
-  const addServerToCatalog = async (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-    environment?: Array<{
-      key: string;
-      type: "plain_text" | "secret";
-      value?: string;
-      promptOnInstallation: boolean;
-    }>,
-  ) => {
-    // Rewrite redirect URIs to prefer platform callback (port 3000)
-    const rewrittenOauth =
-      server.oauth_config && !server.oauth_config.requires_proxy
-        ? {
-            ...server.oauth_config,
-            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
-              u === "http://localhost:8080/oauth/callback"
-                ? `${window.location.origin}/oauth-callback`
-                : u,
-            ),
-          }
-        : undefined;
+      await createMutation.mutateAsync({
+        name: server.name,
+        version: undefined, // No version in archestra catalog
+        serverType: server.server.type,
+        serverUrl:
+          server.server.type === "remote" ? server.server.url : undefined,
+        docsUrl:
+          server.server.type === "remote"
+            ? (server.server.docs_url ?? undefined)
+            : undefined,
+        localConfig,
+        userConfig: server.user_config,
+        oauthConfig: rewrittenOauth,
+      });
 
-    // For local servers, extract local_config from manifest
-    const localConfig =
-      server.server.type === "local"
-        ? {
-            command: server.server.command,
-            arguments: server.server.args,
-            environment:
-              environment ||
-              (server.server.env
-                ? Object.entries(server.server.env).map(([key, value]) => ({
-                    key,
-                    type: "plain_text" as const,
-                    value,
-                    promptOnInstallation: false,
-                  }))
-                : undefined),
-          }
-        : undefined;
+      // Close the dialog after adding
+      onClose();
+    },
+    [createMutation, onClose],
+  );
 
-    await createMutation.mutateAsync({
-      name: server.name,
-      version: undefined, // No version in archestra catalog
-      serverType: server.server.type,
-      serverUrl:
-        server.server.type === "remote" ? server.server.url : undefined,
-      docsUrl:
-        server.server.type === "remote"
-          ? (server.server.docs_url ?? undefined)
-          : undefined,
-      localConfig,
-      userConfig: server.user_config,
-      oauthConfig: rewrittenOauth,
-    });
+  const handleAddToCatalog = useCallback(
+    async (server: archestraCatalogTypes.ArchestraMcpServerManifest) => {
+      // For local servers, open the environment configuration dialog
+      if (server.server.type === "local") {
+        setConfigureEnvServer(server);
+        return;
+      }
 
-    // Close the dialog after adding
-    onClose();
-  };
+      // For remote servers, proceed with direct addition
+      await addServerToCatalog(server, undefined);
+    },
+    [addServerToCatalog],
+  );
 
-  const handleRequestInstallation = async (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-  ) => {
-    // Just open the request dialog with the server data
-    setRequestServer(server);
-  };
+  const handleRequestInstallation = useCallback(
+    async (server: archestraCatalogTypes.ArchestraMcpServerManifest) => {
+      // Just open the request dialog with the server data
+      setRequestServer(server);
+    },
+    [],
+  );
 
   // Flatten all pages into a single array of servers
   const servers = useMemo(() => {

@@ -30,6 +30,10 @@ interface SessionData {
   transport: StreamableHTTPServerTransport;
   lastAccess: number;
   agentId: string;
+  agent?: {
+    id: string;
+    name: string;
+  }; // Cache agent data
 }
 
 /**
@@ -69,7 +73,8 @@ function cleanupExpiredSessions(): void {
 async function createAgentServer(
   agentId: string,
   logger: { info: (obj: unknown, msg: string) => void },
-): Promise<Server> {
+  cachedAgent?: { name: string; id: string },
+): Promise<{ server: Server; agent: { name: string; id: string } }> {
   const server = new Server(
     {
       name: `archestra-agent-${agentId}`,
@@ -82,10 +87,14 @@ async function createAgentServer(
     },
   );
 
-  // Get agent information
-  const agent = await AgentModel.findById(agentId);
+  // Use cached agent data if available, otherwise fetch it
+  let agent = cachedAgent;
   if (!agent) {
-    throw new Error(`Agent not found: ${agentId}`);
+    const fetchedAgent = await AgentModel.findById(agentId);
+    if (!fetchedAgent) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+    agent = fetchedAgent;
   }
 
   // Create a map of Archestra tool names to their titles
@@ -148,7 +157,7 @@ async function createAgentServer(
 
           // Handle Archestra tools directly
           const archestraResponse = await executeArchestraTool(name, args, {
-            profile: agent,
+            profile: { id: agent.id, name: agent.name },
           });
 
           logger.info(
@@ -236,7 +245,7 @@ async function createAgentServer(
   );
 
   logger.info({ agentId }, "MCP server instance created");
-  return server;
+  return { server, agent };
 }
 
 /**
@@ -477,7 +486,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Initialize request - creating NEW session",
           );
-          server = await createAgentServer(agentId, fastify.log);
+          const { server: newServer, agent } = await createAgentServer(
+            agentId,
+            fastify.log,
+          );
+          server = newServer;
           transport = createTransport(agentId, effectiveSessionId, fastify.log);
 
           // Connect server to transport (this also starts the transport)
@@ -492,6 +505,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             transport,
             lastAccess: Date.now(),
             agentId,
+            agent, // Cache the agent data
           });
           fastify.log.info(
             {

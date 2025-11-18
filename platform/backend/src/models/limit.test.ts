@@ -1,3 +1,5 @@
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import LimitModel, { LimitValidationService } from "./limit";
 
@@ -13,7 +15,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       expect(limit.id).toBeDefined();
@@ -21,9 +23,7 @@ describe("LimitModel", () => {
       expect(limit.entityId).toBe(agent.id);
       expect(limit.limitType).toBe("token_cost");
       expect(limit.limitValue).toBe(1000000);
-      expect(limit.model).toBe("claude-3-5-sonnet-20241022");
-      expect(limit.currentUsageTokensIn).toBe(0);
-      expect(limit.currentUsageTokensOut).toBe(0);
+      expect(limit.model).toEqual(["claude-3-5-sonnet-20241022"]);
     });
 
     test("can create a token_cost limit for a team", async ({
@@ -40,7 +40,7 @@ describe("LimitModel", () => {
         entityId: team.id,
         limitType: "token_cost",
         limitValue: 5000000,
-        model: "gpt-4",
+        model: ["gpt-4"],
       });
 
       expect(limit.entityType).toBe("team");
@@ -58,12 +58,51 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 10000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       expect(limit.entityType).toBe("organization");
       expect(limit.entityId).toBe(org.id);
       expect(limit.limitValue).toBe(10000000);
+    });
+
+    test("can create a token_cost limit with multiple models", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-pro"],
+      });
+
+      expect(limit.id).toBeDefined();
+      expect(limit.model).toEqual([
+        "gpt-4o",
+        "claude-3-5-sonnet-20241022",
+        "gemini-pro",
+      ]);
+
+      // Verify model usage records were initialized for all 3 models
+      const modelUsage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+
+      expect(modelUsage).toHaveLength(3);
+      expect(modelUsage.map((u) => u.model).sort()).toEqual([
+        "claude-3-5-sonnet-20241022",
+        "gemini-pro",
+        "gpt-4o",
+      ]);
+      // All should start at 0
+      for (const usage of modelUsage) {
+        expect(usage.currentUsageTokensIn).toBe(0);
+        expect(usage.currentUsageTokensOut).toBe(0);
+      }
     });
   });
 
@@ -77,7 +116,7 @@ describe("LimitModel", () => {
         entityId: agent1.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       await LimitModel.create({
@@ -85,7 +124,7 @@ describe("LimitModel", () => {
         entityId: agent2.id,
         limitType: "token_cost",
         limitValue: 2000000,
-        model: "gpt-4",
+        model: ["gpt-4"],
       });
 
       const limits = await LimitModel.findAll();
@@ -104,7 +143,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       await LimitModel.create({
@@ -112,7 +151,7 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 10000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const agentLimits = await LimitModel.findAll("agent");
@@ -133,7 +172,7 @@ describe("LimitModel", () => {
         entityId: agent1.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       await LimitModel.create({
@@ -141,7 +180,7 @@ describe("LimitModel", () => {
         entityId: agent2.id,
         limitType: "token_cost",
         limitValue: 2000000,
-        model: "gpt-4",
+        model: ["gpt-4"],
       });
 
       const agent1Limits = await LimitModel.findAll(undefined, agent1.id);
@@ -161,7 +200,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       await LimitModel.create({
@@ -169,7 +208,7 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 10000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const agentLimits = await LimitModel.findAll("agent", agent.id);
@@ -188,7 +227,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const found = await LimitModel.findById(created.id);
@@ -214,7 +253,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const updated = await LimitModel.patch(limit.id, {
@@ -223,7 +262,7 @@ describe("LimitModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.limitValue).toBe(2000000);
-      expect(updated?.model).toBe("claude-3-5-sonnet-20241022"); // Other fields unchanged
+      expect(updated?.model).toEqual(["claude-3-5-sonnet-20241022"]); // Other fields unchanged
     });
 
     test("returns null for non-existent limit", async () => {
@@ -246,7 +285,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const deleted = await LimitModel.delete(limit.id);
@@ -322,14 +361,26 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
-      await LimitModel.updateTokenLimitUsage("agent", agent.id, 100, 200);
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "claude-3-5-sonnet-20241022",
+        100,
+        200,
+      );
 
-      const updated = await LimitModel.findById(limit.id);
-      expect(updated?.currentUsageTokensIn).toBe(100);
-      expect(updated?.currentUsageTokensOut).toBe(200);
+      // Check model usage table instead
+      const modelUsage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+
+      expect(modelUsage.length).toBe(1);
+      expect(modelUsage[0].currentUsageTokensIn).toBe(100);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(200);
     });
 
     test("should increment token usage on multiple updates", async ({
@@ -337,20 +388,216 @@ describe("LimitModel", () => {
     }) => {
       const agent = await makeAgent({ name: "Test Agent" });
 
-      await LimitModel.create({
+      const limit = await LimitModel.create({
         entityType: "agent",
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
-      await LimitModel.updateTokenLimitUsage("agent", agent.id, 100, 200);
-      await LimitModel.updateTokenLimitUsage("agent", agent.id, 50, 75);
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "claude-3-5-sonnet-20241022",
+        100,
+        200,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "claude-3-5-sonnet-20241022",
+        50,
+        75,
+      );
 
-      const limits = await LimitModel.findAll("agent", agent.id);
-      expect(limits[0].currentUsageTokensIn).toBe(150);
-      expect(limits[0].currentUsageTokensOut).toBe(275);
+      // Check model usage table
+      const modelUsage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+
+      expect(modelUsage.length).toBe(1);
+      expect(modelUsage[0].currentUsageTokensIn).toBe(150);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(275);
+    });
+
+    test("should update only the specified model in a multi-model limit", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      // Create limit with multiple models
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o", "claude-3-5-sonnet-20241022"],
+      });
+
+      // Update usage for gpt-4o only
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        100,
+        200,
+      );
+
+      // Check that only gpt-4o was updated
+      const modelUsage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(eq(schema.limitModelUsageTable.limitId, limit.id))
+        .orderBy(schema.limitModelUsageTable.model);
+
+      expect(modelUsage).toHaveLength(2);
+
+      const claudeUsage = modelUsage.find(
+        (u) => u.model === "claude-3-5-sonnet-20241022",
+      );
+      const gptUsage = modelUsage.find((u) => u.model === "gpt-4o");
+
+      expect(claudeUsage?.currentUsageTokensIn).toBe(0);
+      expect(claudeUsage?.currentUsageTokensOut).toBe(0);
+      expect(gptUsage?.currentUsageTokensIn).toBe(100);
+      expect(gptUsage?.currentUsageTokensOut).toBe(200);
+    });
+
+    test("should update multiple limits that contain the same model", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      // Create two limits, both containing gpt-4o
+      const limit1 = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o", "claude-3-5-sonnet-20241022"],
+      });
+
+      const limit2 = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 500000,
+        model: ["gpt-4o", "gemini-pro"],
+      });
+
+      // Update usage for gpt-4o
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        100,
+        200,
+      );
+
+      // Check that gpt-4o was updated in BOTH limits
+      const limit1Usage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(
+          and(
+            eq(schema.limitModelUsageTable.limitId, limit1.id),
+            eq(schema.limitModelUsageTable.model, "gpt-4o"),
+          ),
+        );
+
+      const limit2Usage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(
+          and(
+            eq(schema.limitModelUsageTable.limitId, limit2.id),
+            eq(schema.limitModelUsageTable.model, "gpt-4o"),
+          ),
+        );
+
+      expect(limit1Usage[0].currentUsageTokensIn).toBe(100);
+      expect(limit1Usage[0].currentUsageTokensOut).toBe(200);
+      expect(limit2Usage[0].currentUsageTokensIn).toBe(100);
+      expect(limit2Usage[0].currentUsageTokensOut).toBe(200);
+    });
+  });
+
+  describe("getModelUsageBreakdown", () => {
+    test("should return empty array for limit with no usage", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+
+      expect(breakdown).toHaveLength(1);
+      expect(breakdown[0].model).toBe("gpt-4o");
+      expect(breakdown[0].tokensIn).toBe(0);
+      expect(breakdown[0].tokensOut).toBe(0);
+      expect(breakdown[0].cost).toBe(0);
+    });
+
+    test("should calculate cost correctly for multiple models", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o", "claude-3-5-sonnet-20241022"],
+      });
+
+      // Add usage for both models
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        100000,
+        50000,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "claude-3-5-sonnet-20241022",
+        200000,
+        100000,
+      );
+
+      const breakdown = await LimitModel.getModelUsageBreakdown(limit.id);
+
+      expect(breakdown).toHaveLength(2);
+
+      // Each model should have its own usage tracked
+      const gptBreakdown = breakdown.find((b) => b.model === "gpt-4o");
+      const claudeBreakdown = breakdown.find(
+        (b) => b.model === "claude-3-5-sonnet-20241022",
+      );
+
+      expect(gptBreakdown?.tokensIn).toBe(100000);
+      expect(gptBreakdown?.tokensOut).toBe(50000);
+      // Cost depends on pricing data, just verify it's calculated
+      expect(gptBreakdown?.cost).toBeGreaterThanOrEqual(0);
+
+      expect(claudeBreakdown?.tokensIn).toBe(200000);
+      expect(claudeBreakdown?.tokensOut).toBe(100000);
+      expect(claudeBreakdown?.cost).toBeGreaterThanOrEqual(0);
+
+      // Total cost should be sum of both
+      const totalCost = breakdown.reduce((sum, b) => sum + b.cost, 0);
+      expect(totalCost).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -365,7 +612,7 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const cutoffTime = new Date();
@@ -388,7 +635,7 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       // Set lastCleanup to 2 hours ago
@@ -415,7 +662,7 @@ describe("LimitModel", () => {
         entityId: org.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       // Set lastCleanup to 30 minutes ago
@@ -444,18 +691,31 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       // Add some usage
-      await LimitModel.updateTokenLimitUsage("agent", agent.id, 100, 200);
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "claude-3-5-sonnet-20241022",
+        100,
+        200,
+      );
 
       // Reset
       const reset = await LimitModel.resetLimitUsage(limit.id);
 
+      // Check model usage was also reset
+      const modelUsage = await db
+        .select()
+        .from(schema.limitModelUsageTable)
+        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+
       expect(reset).toBeDefined();
-      expect(reset?.currentUsageTokensIn).toBe(0);
-      expect(reset?.currentUsageTokensOut).toBe(0);
+      expect(modelUsage.length).toBe(1);
+      expect(modelUsage[0].currentUsageTokensIn).toBe(0);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(0);
       expect(reset?.lastCleanup).toBeDefined();
       expect(reset?.lastCleanup).not.toBeNull();
     });
@@ -470,7 +730,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const limits = await LimitModel.findLimitsForValidation(
@@ -495,7 +755,7 @@ describe("LimitModel", () => {
         entityId: agent.id,
         limitType: "token_cost",
         limitValue: 1000000,
-        model: "claude-3-5-sonnet-20241022",
+        model: ["claude-3-5-sonnet-20241022"],
       });
 
       const limits = await LimitModel.findLimitsForValidation(

@@ -9,6 +9,7 @@ import {
   DeleteObjectResponseSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
+  LimitWithUsageSchema,
   SelectLimitSchema,
   UpdateLimitSchema,
   UuidIdSchema,
@@ -20,14 +21,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetLimits,
-        description: "Get all limits with optional filtering",
+        description:
+          "Get all limits with optional filtering and per-model usage breakdown",
         tags: ["Limits"],
         querystring: z.object({
           entityType: LimitEntityTypeSchema.optional(),
           entityId: z.string().optional(),
           limitType: LimitTypeSchema.optional(),
         }),
-        response: constructResponseSchema(z.array(SelectLimitSchema)),
+        response: constructResponseSchema(z.array(LimitWithUsageSchema)),
       },
     },
     async (
@@ -43,7 +45,21 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await TokenPriceModel.ensureAllModelsHavePricing();
 
       const limits = await LimitModel.findAll(entityType, entityId, limitType);
-      return reply.send(limits);
+
+      // Add per-model usage breakdown for token_cost limits
+      const limitsWithUsage = await Promise.all(
+        limits.map(async (limit) => {
+          if (limit.limitType === "token_cost") {
+            const modelUsage = await LimitModel.getModelUsageBreakdown(
+              limit.id,
+            );
+            return { ...limit, modelUsage };
+          }
+          return limit;
+        }),
+      );
+
+      return reply.send(limitsWithUsage);
     },
   );
 

@@ -444,6 +444,12 @@ function LimitRow({
     limitValue: number,
     limitType: string,
     models?: string[] | null,
+    modelUsage?: Array<{
+      model: string;
+      tokensIn: number;
+      tokensOut: number;
+      cost: number;
+    }>,
   ) => {
     percentage: number;
     status: UsageStatus;

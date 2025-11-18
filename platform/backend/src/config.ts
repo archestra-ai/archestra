@@ -240,7 +240,8 @@ export default {
     sentry: {
       enabled: sentryDsn !== "",
       dsn: sentryDsn,
-      serverName: process.env.ARCHESTRA_SENTRY_SERVER_NAME,
+      environment:
+        process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
     },
   },
   debug: isDevelopment,

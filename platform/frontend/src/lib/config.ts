@@ -1,6 +1,8 @@
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+
 /**
  * Get the display proxy URL for showing to users.
  * This is the URL that external agents should use to connect to Archestra.
@@ -59,13 +61,9 @@ export default {
     enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
   },
   sentry: {
-    /**
-     * Sentry DSN for error tracking (empty to disable).
-     */
     dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
-    /**
-     * Sentry server name for error tracking (empty to disable).
-     */
-    serverName: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME"),
+    environment:
+      env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
+      environment,
   },
 };

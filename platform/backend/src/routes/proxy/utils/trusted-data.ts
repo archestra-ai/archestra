@@ -49,71 +49,106 @@ export async function evaluateIfContextIsTrusted(
     };
   }
 
-  // Process each message looking for tool calls
+  // First, collect all tool calls from all messages
+  const allToolCalls: Array<{
+    toolCallId: string;
+    toolName: string;
+    // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
+    toolResult: any;
+  }> = [];
+
   for (const message of messages) {
     if (message.toolCalls && message.toolCalls.length > 0) {
       for (const toolCall of message.toolCalls) {
-        const {
-          id: toolCallId,
-          name: toolName,
-          content: toolResult,
-        } = toolCall;
-
-        // Evaluate trusted data policy
-        const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
-          await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
-
-        if (!isTrusted) {
-          hasUntrustedData = true;
-        }
-
-        if (isBlocked) {
-          // Tool result is blocked - replace with blocked message
-          toolResultUpdates[toolCallId] =
-            `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
-        } else if (shouldSanitizeWithDualLlm) {
-          // Check if this tool call has already been analyzed
-          const existingResult =
-            await DualLlmResultModel.findByToolCallId(toolCallId);
-
-          if (existingResult) {
-            // Use cached result from database
-            toolResultUpdates[toolCallId] = existingResult.result;
-          } else {
-            // Notify that dual LLM processing is starting (only once)
-            if (!usedDualLlm && onDualLlmStart) {
-              onDualLlmStart();
-            }
-
-            // Run Dual LLM quarantine pattern
-            usedDualLlm = true;
-
-            // Extract user request from messages (last user message)
-            const userRequest = extractUserRequest(messages);
-
-            const dualLlmSubagent = await DualLlmSubagent.create(
-              {
-                toolCallId,
-                userRequest,
-                toolResult,
-              },
-              agentId,
-              apiKey,
-              provider,
-            );
-
-            // Get safe summary and store as update
-            const safeSummary =
-              await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
-            toolResultUpdates[toolCallId] = safeSummary;
-          }
-
-          // After sanitization, treat as trusted
-          hasUntrustedData = false;
-        }
-        // If not blocked or sanitized, no update needed (original content remains)
+        allToolCalls.push({
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          toolResult: toolCall.content,
+        });
       }
     }
+  }
+
+  if (allToolCalls.length === 0) {
+    return {
+      toolResultUpdates,
+      contextIsTrusted: true,
+      usedDualLlm: false,
+    };
+  }
+
+  // Bulk evaluate all tool calls for trusted data policies
+  const evaluationResults = await TrustedDataPolicyModel.evaluateBulk(
+    agentId,
+    allToolCalls.map(({ toolName, toolResult }) => ({
+      toolName,
+      toolOutput: toolResult,
+    })),
+  );
+
+  // Process evaluation results
+  for (let i = 0; i < allToolCalls.length; i++) {
+    const { toolCallId, toolResult } = allToolCalls[i];
+    const evaluation = evaluationResults.get(i.toString());
+
+    if (!evaluation) {
+      // Tool not found - treat as untrusted
+      hasUntrustedData = true;
+      continue;
+    }
+
+    const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
+      evaluation;
+
+    if (!isTrusted) {
+      hasUntrustedData = true;
+    }
+
+    if (isBlocked) {
+      // Tool result is blocked - replace with blocked message
+      toolResultUpdates[toolCallId] =
+        `[Content blocked by policy${reason ? `: ${reason}` : ""}]`;
+    } else if (shouldSanitizeWithDualLlm) {
+      // Check if this tool call has already been analyzed
+      const existingResult =
+        await DualLlmResultModel.findByToolCallId(toolCallId);
+
+      if (existingResult) {
+        // Use cached result from database
+        toolResultUpdates[toolCallId] = existingResult.result;
+      } else {
+        // Notify that dual LLM processing is starting (only once)
+        if (!usedDualLlm && onDualLlmStart) {
+          onDualLlmStart();
+        }
+
+        // Run Dual LLM quarantine pattern
+        usedDualLlm = true;
+
+        // Extract user request from messages (last user message)
+        const userRequest = extractUserRequest(messages);
+
+        const dualLlmSubagent = await DualLlmSubagent.create(
+          {
+            toolCallId,
+            userRequest,
+            toolResult,
+          },
+          agentId,
+          apiKey,
+          provider,
+        );
+
+        // Get safe summary and store as update
+        const safeSummary =
+          await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+        toolResultUpdates[toolCallId] = safeSummary;
+      }
+
+      // After sanitization, treat as trusted
+      hasUntrustedData = false;
+    }
+    // If not blocked or sanitized, no update needed (original content remains)
   }
 
   return {

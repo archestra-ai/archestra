@@ -8168,14 +8168,18 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
     }>;
 };
 
@@ -8189,7 +8193,7 @@ export type CreateLimitData = {
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -8266,11 +8270,9 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8436,11 +8438,9 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8457,7 +8457,7 @@ export type UpdateLimitData = {
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path: {
@@ -8536,11 +8536,9 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { requiredPagePermissionsMap } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactElement } from "react";
@@ -36,6 +37,28 @@ export function WithAuthCheck({
     useHasPermissions(requiredPermissions || {});
 
   const loading = isAuthCheckPending || isPermissionCheckPending;
+
+  // Set Sentry user context when user is authenticated
+  useEffect(() => {
+    if (session?.user) {
+      try {
+        Sentry.setUser({
+          id: session.user.id,
+          email: session.user.email,
+          username: session.user.name || session.user.email,
+        });
+      } catch (_error) {
+        // Silently fail if Sentry is not configured
+      }
+    } else {
+      // Clear user context when not authenticated
+      try {
+        Sentry.setUser(null);
+      } catch (_error) {
+        // Silently fail if Sentry is not configured
+      }
+    }
+  }, [session?.user]);
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {

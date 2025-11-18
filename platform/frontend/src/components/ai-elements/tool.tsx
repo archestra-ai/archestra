@@ -36,6 +36,7 @@ export type ToolHeaderProps = {
   className?: string;
   icon?: React.ReactNode;
   errorText?: ToolUIPart["errorText"];
+  isCollapsible?: boolean;
 };
 
 const getStatusBadge = (
@@ -74,11 +75,13 @@ export const ToolHeader = ({
   state,
   errorText,
   icon,
+  isCollapsible = true,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
     className={cn(
       "flex w-full items-center justify-between gap-4 p-3 cursor-pointer group",
+      isCollapsible ? "cursor-pointer" : "!cursor-default",
       className,
     )}
     {...props}
@@ -97,7 +100,9 @@ export const ToolHeader = ({
         </div>
       )}
     </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    {isCollapsible && (
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    )}
   </CollapsibleTrigger>
 );
 
@@ -202,7 +207,6 @@ export const ToolOutput = ({
   } else if (typeof output === "string") {
     Output = <CodeBlock code={output} language="json" />;
   }
-
   return (
     <div className={cn("space-y-2 p-4", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -216,7 +220,6 @@ export const ToolOutput = ({
             : "bg-muted/50 text-foreground",
         )}
       >
-        {errorText && <div>{errorText}</div>}
         {Output}
       </div>
     </div>

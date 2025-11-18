@@ -56,7 +56,7 @@ const getStatusBadge = (
     "output-available-dual-llm": (
       <CheckCircleIcon className="size-4 text-green-600" />
     ),
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
+    "output-error": <XCircleIcon className="size-4 text-destructive" />,
   } as const;
 
   return (
@@ -92,7 +92,9 @@ export const ToolHeader = ({
         {getStatusBadge(state)}
       </div>
       {errorText && (
-        <div className="text-red-600 text-xs mt-2 text-left">{errorText}</div>
+        <div className="text-destructive text-xs mt-2 text-left">
+          {errorText}
+        </div>
       )}
     </div>
     <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

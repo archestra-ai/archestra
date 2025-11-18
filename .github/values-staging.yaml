@@ -1,16 +1,7 @@
 archestra:
-  # Cloud Provider Configuration - GKE
-  # Enable BackendConfig for streaming timeout support (chat and MCP operations)
-  cloudProvider:
-    gke:
-      backendConfig:
-        enabled: true
-        # 600 seconds (10 minutes) to support long-running MCP tool operations
-        timeoutSec: 600
-
   service:
     annotations:
-      # GKE BackendConfig reference - links Service to BackendConfig for timeout configuration
+      # GKE BackendConfig for custom health checks
       cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
 
   ingress:

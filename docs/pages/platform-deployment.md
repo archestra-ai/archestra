@@ -215,22 +215,35 @@ Note: `ARCHESTRA_AUTH_SECRET` is optional. It will be auto-generated if not spec
 
 ##### Google Cloud Platform (GKE)
 
-For GKE deployments using the GCE Ingress Controller, enable the BackendConfig resource to configure load balancer timeouts:
+For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts using a BackendConfig resource. **BackendConfig is cloud-provider-specific and should be managed through your infrastructure-as-code** (Terraform, Pulumi, etc.) rather than the Helm chart.
 
-**Enable BackendConfig**:
+**Create BackendConfig Resource**:
 
-```bash
-helm upgrade archestra-platform \
-  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
-  --install \
-  --namespace archestra \
-  --create-namespace \
-  --set archestra.cloudProvider.gke.backendConfig.enabled=true \
-  --set archestra.cloudProvider.gke.backendConfig.timeoutSec=600 \
-  --wait
+The BackendConfig should be created in the same namespace as your Archestra Platform deployment:
+
+```yaml
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: archestra-platform-backend-config
+  namespace: archestra  # Same namespace as Helm release
+spec:
+  timeoutSec: 600  # 10 minutes for streaming responses and long-running MCP operations
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /health
+    port: 9000
 ```
 
-Then update your service to reference the BackendConfig (replace `archestra-platform` with your release name):
+**Reference BackendConfig in Service**:
+
+After creating the BackendConfig resource, configure the Helm chart to reference it via service annotations:
 
 ```yaml
 archestra:
@@ -239,11 +252,16 @@ archestra:
       cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
 ```
 
-**Settings**:
-- `archestra.cloudProvider.gke.backendConfig.enabled` - Enable BackendConfig creation (default: false, **must be true for streaming to work**)
-- `archestra.cloudProvider.gke.backendConfig.timeoutSec` - Request timeout in seconds (default: 600, minimum 30)
-- `archestra.cloudProvider.gke.backendConfig.connectionDraining.drainingTimeoutSec` - Connection draining timeout (default: 60)
-- `archestra.cloudProvider.gke.backendConfig.healthCheck.*` - Health check configuration (see values.yaml)
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-backend-config"}}' \
+  --wait
+```
 
 ##### Amazon Web Services (AWS EKS)
 

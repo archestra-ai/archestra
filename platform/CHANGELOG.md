@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.3](https://github.com/archestra-ai/archestra/compare/platform-v0.6.2...platform-v0.6.3) (2025-11-18)
+
+
+### Bug Fixes
+
+* chat system prompt update deselection bug ([#1163](https://github.com/archestra-ai/archestra/issues/1163)) ([f2cd147](https://github.com/archestra-ai/archestra/commit/f2cd14764a856bfa8b5f30188d907e7f4dd9d9ac))
+
+
+### Dependencies
+
+* bump 27 platform dependencies ([#1162](https://github.com/archestra-ai/archestra/issues/1162)) ([c1399c4](https://github.com/archestra-ai/archestra/commit/c1399c4fbd3dae644ecd8d06ee63a0b1e7c38474))
+* bump the platform-dependencies group across 1 directory with 3 updates ([#1166](https://github.com/archestra-ai/archestra/issues/1166)) ([f107469](https://github.com/archestra-ai/archestra/commit/f107469d48a7262dbe1a85d5c6034d6915f3703f))
+
 ## [0.6.2](https://github.com/archestra-ai/archestra/compare/platform-v0.6.1...platform-v0.6.2) (2025-11-17)
 
 

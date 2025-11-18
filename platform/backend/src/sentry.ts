@@ -4,10 +4,9 @@ import config from "@/config";
 import logger from "@/logging";
 
 const {
-  api: { name, version },
-  environment,
+  api: { version },
   observability: {
-    sentry: { enabled, dsn },
+    sentry: { enabled, dsn, environment: sentryEnvironment },
   },
 } = config;
 
@@ -18,9 +17,8 @@ if (enabled) {
   // https://docs.sentry.io/platforms/javascript/guides/fastify/install/commonjs/
   sentryClient = Sentry.init({
     dsn,
-    environment,
+    environment: sentryEnvironment,
     release: version,
-    serverName: name,
 
     /**
      * Setting this option to true will send default PII data to Sentry

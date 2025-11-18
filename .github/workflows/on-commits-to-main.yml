@@ -95,10 +95,14 @@ jobs:
             --create-namespace \
             --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
+            --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
             --set archestra.env.ARCHESTRA_AUTH_SECRET="${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}" \
             --set archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}" \
             --set archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}" \
+            --set archestra.env.ARCHESTRA_SENTRY_ENVIRONMENT="archestra.dev" \
+            --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
+            --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
             --values .github/values-staging.yaml \
             --wait

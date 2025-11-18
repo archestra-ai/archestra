@@ -327,6 +327,8 @@ class ToolModel {
   static async assignArchestraToolsToAgent(agentId: string): Promise<void> {
     const archestraTools = getArchestraMcpTools();
 
+    // Create all Archestra tools if they don't exist
+    const toolIds: string[] = [];
     for (const archestraTool of archestraTools) {
       // Create or get the tool (stored globally with catalogId and agentId both null)
       const tool = await ToolModel.createToolIfNotExists({
@@ -336,10 +338,11 @@ class ToolModel {
         catalogId: null,
         agentId: null,
       });
-
-      // Assign tool to agent via junction table
-      await AgentToolModel.createIfNotExists(agentId, tool.id);
+      toolIds.push(tool.id);
     }
+
+    // Assign all tools to agent in bulk to avoid N+1
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 
   /**
@@ -456,32 +459,52 @@ class ToolModel {
       .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    // For each tool, get assigned agents
-    const toolsWithAgents = await Promise.all(
-      tools.map(async (tool) => {
-        const assignments = await db
-          .select({
-            agentId: schema.agentToolsTable.agentId,
-            agentName: schema.agentsTable.name,
-          })
-          .from(schema.agentToolsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-          )
-          .where(eq(schema.agentToolsTable.toolId, tool.id));
+    const toolIds = tools.map((tool) => tool.id);
 
-        return {
-          ...tool,
-          parameters: tool.parameters ?? {},
-          assignedAgentCount: assignments.length,
-          assignedAgents: assignments.map((a) => ({
-            id: a.agentId,
-            name: a.agentName,
-          })),
-        };
-      }),
-    );
+    // Get all agent assignments for these tools in one query to avoid N+1
+    const assignments = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(inArray(schema.agentToolsTable.toolId, toolIds));
+
+    // Group assignments by tool ID
+    const assignmentsByTool = new Map<
+      string,
+      Array<{ id: string; name: string }>
+    >();
+
+    for (const toolId of toolIds) {
+      assignmentsByTool.set(toolId, []);
+    }
+
+    for (const assignment of assignments) {
+      const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
+      toolAssignments.push({
+        id: assignment.agentId,
+        name: assignment.agentName,
+      });
+      assignmentsByTool.set(assignment.toolId, toolAssignments);
+    }
+
+    // Build tools with their assigned agents
+    const toolsWithAgents = tools.map((tool) => {
+      const assignedAgents = assignmentsByTool.get(tool.id) || [];
+
+      return {
+        ...tool,
+        parameters: tool.parameters ?? {},
+        assignedAgentCount: assignedAgents.length,
+        assignedAgents,
+      };
+    });
 
     return toolsWithAgents;
   }
@@ -513,32 +536,52 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId))
       .orderBy(desc(schema.toolsTable.createdAt));
 
-    // For each tool, get assigned agents
-    const toolsWithAgents = await Promise.all(
-      tools.map(async (tool) => {
-        const assignments = await db
-          .select({
-            agentId: schema.agentToolsTable.agentId,
-            agentName: schema.agentsTable.name,
-          })
-          .from(schema.agentToolsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-          )
-          .where(eq(schema.agentToolsTable.toolId, tool.id));
+    const toolIds = tools.map((tool) => tool.id);
 
-        return {
-          ...tool,
-          parameters: tool.parameters ?? {},
-          assignedAgentCount: assignments.length,
-          assignedAgents: assignments.map((a) => ({
-            id: a.agentId,
-            name: a.agentName,
-          })),
-        };
-      }),
-    );
+    // Get all agent assignments for these tools in one query to avoid N+1
+    const assignments = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(inArray(schema.agentToolsTable.toolId, toolIds));
+
+    // Group assignments by tool ID
+    const assignmentsByTool = new Map<
+      string,
+      Array<{ id: string; name: string }>
+    >();
+
+    for (const toolId of toolIds) {
+      assignmentsByTool.set(toolId, []);
+    }
+
+    for (const assignment of assignments) {
+      const toolAssignments = assignmentsByTool.get(assignment.toolId) || [];
+      toolAssignments.push({
+        id: assignment.agentId,
+        name: assignment.agentName,
+      });
+      assignmentsByTool.set(assignment.toolId, toolAssignments);
+    }
+
+    // Build tools with their assigned agents
+    const toolsWithAgents = tools.map((tool) => {
+      const assignedAgents = assignmentsByTool.get(tool.id) || [];
+
+      return {
+        ...tool,
+        parameters: tool.parameters ?? {},
+        assignedAgentCount: assignedAgents.length,
+        assignedAgents,
+      };
+    });
 
     return toolsWithAgents;
   }

@@ -111,9 +111,7 @@ export async function getChatMcpClient(
         version: "1.0.0",
       },
       {
-        capabilities: {
-          tools: {},
-        },
+        capabilities: {},
       },
     );
 

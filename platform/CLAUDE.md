@@ -13,6 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **TypeScript strict mode** - Ensure code passes `pnpm type-check` before completion
 4. **Use Tilt for development** - `tilt up` to start the full environment
 5. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
+6. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
+7. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 
 ## Key URLs
 
@@ -160,6 +162,7 @@ ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 ## Tool Execution Architecture
 
 **LLM Proxy** returns tool calls to clients for execution (standard OpenAI/Anthropic behavior). Clients implement the agentic loop:
+
 1. Call LLM proxy → receive tool_use/tool_calls
 2. Execute tools via MCP Gateway (`POST /v1/mcp` with `Bearer ${agentId}`)
 3. Send tool results back to LLM proxy
@@ -323,7 +326,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Archestra MCP Server**:
 
 - Built-in tools automatically injected into all profiles
-- Tools prefixed with `archestra__` to avoid conflicts  
+- Tools prefixed with `archestra__` to avoid conflicts
 - Available tools:
   - Profile management: `whoami`, `create_profile`, `get_profile`
   - Limits: `create_limit`, `get_limits`, `update_limit`, `delete_limit`, `get_profile_token_usage`
@@ -340,12 +343,13 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
 - **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
-- **E2E Test Fixtures**: 
+- **E2E Test Fixtures**:
   - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`
   - UI fixtures: `goToPage`, `makeRandomString`
 - **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`
 
 **Backend Test Fixtures Usage**:
+
 ```typescript
 import { test, expect } from "@/test";
 
@@ -358,6 +362,7 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
 ```
 
 **E2E Test Fixtures Usage**:
+
 ```typescript
 import { test } from "./fixtures";
 
@@ -368,4 +373,5 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
   await deleteAgent(request, agent.id);
 });
 ```
+
 - never amend commits

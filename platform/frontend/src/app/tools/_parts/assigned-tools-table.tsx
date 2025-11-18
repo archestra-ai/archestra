@@ -138,7 +138,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       search: searchQuery || undefined,
       agentId: agentFilter !== "all" ? agentFilter : undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
-      credentialOwner:
+      mcpServerOwnerId:
         credentialFilter !== "all" ? credentialFilter : undefined,
     },
   });
@@ -635,16 +635,16 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     if (!mcpServers) return [];
 
     // Create a map of ownerEmail -> mcpServer to deduplicate
-    const credentialMap = new Map<string, (typeof mcpServers)[0]>();
+    const ownerToMcpServerMap = new Map<string, (typeof mcpServers)[0]>();
 
     for (const server of mcpServers) {
-      const key = server.ownerEmail || server.name;
-      if (!credentialMap.has(key)) {
-        credentialMap.set(key, server);
+      const key = server.ownerEmail || `__no_owner_${server.id}__`;
+      if (!ownerToMcpServerMap.has(key)) {
+        ownerToMcpServerMap.set(key, server);
       }
     }
 
-    return Array.from(credentialMap.values());
+    return Array.from(ownerToMcpServerMap.values());
   }, [mcpServers]);
 
   return (
@@ -699,10 +699,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <SelectContent>
             <SelectItem value="all">All Credentials</SelectItem>
             {uniqueCredentials.map((credential) => (
-              <SelectItem
-                key={credential.id}
-                value={credential.ownerId || credential.id}
-              >
+              <SelectItem key={credential.id} value={credential.ownerId || ""}>
                 {credential.ownerEmail || credential.name}
               </SelectItem>
             ))}

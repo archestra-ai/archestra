@@ -349,23 +349,13 @@ class AgentToolModel {
       }
     }
 
-    // Filter by credential source
-    if (filters?.credentialSourceMcpServerId) {
-      whereConditions.push(
-        eq(
-          schema.agentToolsTable.credentialSourceMcpServerId,
-          filters.credentialSourceMcpServerId,
-        ),
-      );
-    }
-
     // Filter by credential owner (check both credential source and execution source)
-    if (filters?.credentialOwner) {
+    if (filters?.mcpServerOwnerId) {
       // First, get all MCP server IDs owned by this user
       const mcpServerIds = await db
         .select({ id: schema.mcpServersTable.id })
         .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.ownerId, filters.credentialOwner))
+        .where(eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId))
         .then((rows) => rows.map((r) => r.id));
 
       if (mcpServerIds.length > 0) {

@@ -326,46 +326,20 @@ class ToolModel {
    */
   static async assignArchestraToolsToAgent(agentId: string): Promise<void> {
     const archestraTools = getArchestraMcpTools();
-    const toolNames = archestraTools.map((t) => t.name);
 
-    // First, fetch all existing Archestra tools in a single query
-    const existingTools = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(
-        and(
-          isNull(schema.toolsTable.agentId),
-          isNull(schema.toolsTable.catalogId),
-          inArray(schema.toolsTable.name, toolNames),
-        ),
-      );
-
-    // Determine which tools need to be created
-    const existingToolNames = new Set(existingTools.map((t) => t.name));
-    const toolsToCreate = archestraTools.filter(
-      (t) => !existingToolNames.has(t.name),
-    );
-
-    // Bulk insert missing tools if any
-    let newTools: Tool[] = [];
-    if (toolsToCreate.length > 0) {
-      newTools = await db
-        .insert(schema.toolsTable)
-        .values(
-          toolsToCreate.map((tool) => ({
-            name: tool.name,
-            description: tool.description || null,
-            parameters: tool.inputSchema,
-            catalogId: null,
-            agentId: null,
-          })),
-        )
-        .returning();
+    // Create all Archestra tools if they don't exist
+    const toolIds: string[] = [];
+    for (const archestraTool of archestraTools) {
+      // Create or get the tool (stored globally with catalogId and agentId both null)
+      const tool = await ToolModel.createToolIfNotExists({
+        name: archestraTool.name,
+        description: archestraTool.description || null,
+        parameters: archestraTool.inputSchema,
+        catalogId: null,
+        agentId: null,
+      });
+      toolIds.push(tool.id);
     }
-
-    // Combine existing and new tools
-    const allTools = [...existingTools, ...newTools];
-    const toolIds = allTools.map((t) => t.id);
 
     // Assign all tools to agent in bulk to avoid N+1
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);

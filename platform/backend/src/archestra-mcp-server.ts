@@ -1,6 +1,6 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import logger from "@/logging";
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from '@shared';
+import logger from '@/logging';
 import {
   AgentModel,
   InternalMcpCatalogModel,
@@ -9,9 +9,9 @@ import {
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
-} from "@/models";
-import { assignToolToAgent } from "@/routes/agent-tool";
-import type { Agent, InternalMcpCatalog } from "@/types";
+} from '@/models';
+import { assignToolToAgent } from '@/routes/agent-tool';
+import type { Agent, InternalMcpCatalog } from '@/types';
 import {
   AutonomyPolicyOperator,
   type LimitEntityType,
@@ -19,37 +19,37 @@ import {
   LimitTypeSchema,
   type ToolInvocation,
   type TrustedData,
-} from "@/types";
+} from '@/types';
 
 /**
  * Constants for Archestra MCP server
  */
-export const MCP_SERVER_NAME = "archestra";
-const TOOL_WHOAMI_NAME = "whoami";
-const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
+export const MCP_SERVER_NAME = 'archestra';
+const TOOL_WHOAMI_NAME = 'whoami';
+const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = 'search_private_mcp_registry';
 const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
-  "create_mcp_server_installation_request";
-const TOOL_CREATE_LIMIT_NAME = "create_limit";
-const TOOL_GET_LIMITS_NAME = "get_limits";
-const TOOL_UPDATE_LIMIT_NAME = "update_limit";
-const TOOL_DELETE_LIMIT_NAME = "delete_limit";
-const TOOL_GET_PROFILE_TOKEN_USAGE_NAME = "get_profile_token_usage";
-const TOOL_CREATE_PROFILE_NAME = "create_profile";
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME = "get_autonomy_policy_operators";
-const TOOL_GET_TOOL_INVOCATION_POLICIES_NAME = "get_tool_invocation_policies";
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME = "create_tool_invocation_policy";
-const TOOL_GET_TOOL_INVOCATION_POLICY_NAME = "get_tool_invocation_policy";
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME = "update_tool_invocation_policy";
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME = "delete_tool_invocation_policy";
-const TOOL_GET_TRUSTED_DATA_POLICIES_NAME = "get_trusted_data_policies";
-const TOOL_CREATE_TRUSTED_DATA_POLICY_NAME = "create_trusted_data_policy";
-const TOOL_GET_TRUSTED_DATA_POLICY_NAME = "get_trusted_data_policy";
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME = "update_trusted_data_policy";
-const TOOL_DELETE_TRUSTED_DATA_POLICY_NAME = "delete_trusted_data_policy";
-const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME = "bulk_assign_tools_to_profiles";
-const TOOL_GET_MCP_SERVERS_NAME = "get_mcp_servers";
-const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
-const TOOL_GET_PROFILE_NAME = "get_profile";
+  'create_mcp_server_installation_request';
+const TOOL_CREATE_LIMIT_NAME = 'create_limit';
+const TOOL_GET_LIMITS_NAME = 'get_limits';
+const TOOL_UPDATE_LIMIT_NAME = 'update_limit';
+const TOOL_DELETE_LIMIT_NAME = 'delete_limit';
+const TOOL_GET_PROFILE_TOKEN_USAGE_NAME = 'get_profile_token_usage';
+const TOOL_CREATE_PROFILE_NAME = 'create_profile';
+const TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME = 'get_autonomy_policy_operators';
+const TOOL_GET_TOOL_INVOCATION_POLICIES_NAME = 'get_tool_invocation_policies';
+const TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME = 'create_tool_invocation_policy';
+const TOOL_GET_TOOL_INVOCATION_POLICY_NAME = 'get_tool_invocation_policy';
+const TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME = 'update_tool_invocation_policy';
+const TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME = 'delete_tool_invocation_policy';
+const TOOL_GET_TRUSTED_DATA_POLICIES_NAME = 'get_trusted_data_policies';
+const TOOL_CREATE_TRUSTED_DATA_POLICY_NAME = 'create_trusted_data_policy';
+const TOOL_GET_TRUSTED_DATA_POLICY_NAME = 'get_trusted_data_policy';
+const TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME = 'update_trusted_data_policy';
+const TOOL_DELETE_TRUSTED_DATA_POLICY_NAME = 'delete_trusted_data_policy';
+const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME = 'bulk_assign_tools_to_profiles';
+const TOOL_GET_MCP_SERVERS_NAME = 'get_mcp_servers';
+const TOOL_GET_MCP_SERVER_TOOLS_NAME = 'get_mcp_server_tools';
+const TOOL_GET_PROFILE_NAME = 'get_profile';
 
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
@@ -86,7 +86,7 @@ export interface ArchestraContext {
 
 export const isArchestraMcpServerTool = (toolName: string): boolean => {
   return toolName.startsWith(
-    `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
+    `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`
   );
 };
 
@@ -96,20 +96,20 @@ export const isArchestraMcpServerTool = (toolName: string): boolean => {
 export async function executeArchestraTool(
   toolName: string,
   args: Record<string, unknown> | undefined,
-  context: ArchestraContext,
+  context: ArchestraContext
 ): Promise<CallToolResult> {
   const { profile } = context;
 
   if (toolName === TOOL_WHOAMI_FULL_NAME) {
     logger.info(
       { profileId: profile.id, profileName: profile.name },
-      "whoami tool called",
+      'whoami tool called'
     );
 
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `Profile Name: ${profile.name}\nProfile ID: ${profile.id}`,
         },
       ],
@@ -120,7 +120,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, searchArgs: args },
-      "search_private_mcp_registry tool called",
+      'search_private_mcp_registry tool called'
     );
 
     try {
@@ -128,7 +128,7 @@ export async function executeArchestraTool(
 
       let catalogItems: InternalMcpCatalog[];
 
-      if (query && query.trim() !== "") {
+      if (query && query.trim() !== '') {
         // Search by name or description
         catalogItems = await InternalMcpCatalogModel.searchByQuery(query);
       } else {
@@ -140,10 +140,10 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: query
                 ? `No MCP servers found matching query: "${query}"`
-                : "No MCP servers found in the private registry.",
+                : 'No MCP servers found in the private registry.',
             },
           ],
           isError: false,
@@ -162,25 +162,25 @@ export async function executeArchestraTool(
           result += `\n  ID: ${item.id}`;
           return result;
         })
-        .join("\n\n");
+        .join('\n\n');
 
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Found ${catalogItems.length} MCP server(s):\n\n${formattedResults}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error searching private MCP registry");
+      logger.error({ err: error }, 'Error searching private MCP registry');
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error searching private MCP registry: ${
-              error instanceof Error ? error.message : "Unknown error"
+              error instanceof Error ? error.message : 'Unknown error'
             }`,
           },
         ],
@@ -192,7 +192,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_CREATE_PROFILE_FULL_NAME) {
     logger.info(
       { profileId: profile.id, createArgs: args },
-      "create_profile tool called",
+      'create_profile tool called'
     );
 
     try {
@@ -206,12 +206,12 @@ export async function executeArchestraTool(
         | undefined;
 
       // Validate required fields
-      if (!name || name.trim() === "") {
+      if (!name || name.trim() === '') {
         return {
           content: [
             {
-              type: "text",
-              text: "Error: Profile name is required and cannot be empty.",
+              type: 'text',
+              text: 'Error: Profile name is required and cannot be empty.',
             },
           ],
           isError: true,
@@ -228,30 +228,30 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Successfully created profile.\n\nProfile Name: ${
               newProfile.name
             }\nProfile ID: ${newProfile.id}\nTeams: ${
-              newProfile.teams.length > 0 ? newProfile.teams.join(", ") : "None"
+              newProfile.teams.length > 0 ? newProfile.teams.join(', ') : 'None'
             }\nLabels: ${
               newProfile.labels.length > 0
                 ? newProfile.labels
                     .map((l) => `${l.key}: ${l.value}`)
-                    .join(", ")
-                : "None"
+                    .join(', ')
+                : 'None'
             }`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error creating profile");
+      logger.error({ err: error }, 'Error creating profile');
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error creating profile: ${
-              error instanceof Error ? error.message : "Unknown error"
+              error instanceof Error ? error.message : 'Unknown error'
             }`,
           },
         ],
@@ -263,7 +263,7 @@ export async function executeArchestraTool(
   if (toolName === _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
     logger.info(
       { profileId: profile.id, requestArgs: args },
-      "create_mcp_server_installation_request tool called",
+      'create_mcp_server_installation_request tool called'
     );
 
     try {
@@ -278,8 +278,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: Either external_catalog_id or custom_server_config must be provided.",
+              type: 'text',
+              text: 'Error: Either external_catalog_id or custom_server_config must be provided.',
             },
           ],
           isError: true,
@@ -289,7 +289,7 @@ export async function executeArchestraTool(
       // Instead of creating the request directly (which requires a user context),
       // return a special indicator that tells the UI to open the installation request dialog
       const actionPayload = {
-        __archestra_action: "open_mcp_installation_dialog",
+        __archestra_action: 'open_mcp_installation_dialog',
         externalCatalogId: externalCatalogId || null,
         requestReason: requestReason || null,
         customServerConfig: customServerConfig || null,
@@ -298,7 +298,7 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(actionPayload, null, 2),
           },
         ],
@@ -307,13 +307,15 @@ export async function executeArchestraTool(
     } catch (error) {
       logger.error(
         { err: error },
-        "Error handling MCP server installation request",
+        'Error handling MCP server installation request'
       );
       return {
         content: [
           {
-            type: "text",
-            text: `Error handling installation request: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error handling installation request: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -324,15 +326,15 @@ export async function executeArchestraTool(
   if (toolName === TOOL_CREATE_LIMIT_FULL_NAME) {
     logger.info(
       { profileId: profile.id, createLimitArgs: args },
-      "create_limit tool called",
+      'create_limit tool called'
     );
 
     try {
       let entityType: LimitEntityType;
 
       // Mapping until we migrate agent -> profile in LimitEntityType database column
-      if (args?.entity_type === "profile") {
-        entityType = "agent";
+      if (args?.entity_type === 'profile') {
+        entityType = 'agent';
       } else {
         entityType = args?.entity_type as LimitEntityType;
       }
@@ -349,8 +351,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: entity_type, entity_id, limit_type, and limit_value are required fields.",
+              type: 'text',
+              text: 'Error: entity_type, entity_id, limit_type, and limit_value are required fields.',
             },
           ],
           isError: true,
@@ -358,36 +360,36 @@ export async function executeArchestraTool(
       }
 
       // Validate limit type specific requirements
-      if (limitType === "token_cost" && !model) {
+      if (limitType === 'token_cost' && !model) {
         return {
           content: [
             {
-              type: "text",
-              text: "Error: model is required for token_cost limits.",
+              type: 'text',
+              text: 'Error: model is required for token_cost limits.',
             },
           ],
           isError: true,
         };
       }
 
-      if (limitType === "mcp_server_calls" && !mcpServerName) {
+      if (limitType === 'mcp_server_calls' && !mcpServerName) {
         return {
           content: [
             {
-              type: "text",
-              text: "Error: mcp_server_name is required for mcp_server_calls limits.",
+              type: 'text',
+              text: 'Error: mcp_server_name is required for mcp_server_calls limits.',
             },
           ],
           isError: true,
         };
       }
 
-      if (limitType === "tool_calls" && (!mcpServerName || !toolName)) {
+      if (limitType === 'tool_calls' && (!mcpServerName || !toolName)) {
         return {
           content: [
             {
-              type: "text",
-              text: "Error: mcp_server_name and tool_name are required for tool_calls limits.",
+              type: 'text',
+              text: 'Error: mcp_server_name and tool_name are required for tool_calls limits.',
             },
           ],
           isError: true,
@@ -408,19 +410,29 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
-            text: `Successfully created limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${limit.model ? `\nModel: ${limit.model}` : ""}${limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""}${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
+            type: 'text',
+            text: `Successfully created limit.\n\nLimit ID: ${
+              limit.id
+            }\nEntity Type: ${limit.entityType}\nEntity ID: ${
+              limit.entityId
+            }\nLimit Type: ${limit.limitType}\nLimit Value: ${
+              limit.limitValue
+            }${limit.model ? `\nModel: ${limit.model}` : ''}${
+              limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ''
+            }${limit.toolName ? `\nTool: ${limit.toolName}` : ''}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error creating limit");
+      logger.error({ err: error }, 'Error creating limit');
       return {
         content: [
           {
-            type: "text",
-            text: `Error creating limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error creating limit: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -431,14 +443,14 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_LIMITS_FULL_NAME) {
     logger.info(
       { profileId: profile.id, getLimitsArgs: args },
-      "get_limits tool called",
+      'get_limits tool called'
     );
 
     try {
       let entityType: LimitEntityType;
       // Mapping until we migrate agent -> profile in LimitEntityType database column
-      if (args?.entity_type === "profile") {
-        entityType = "agent";
+      if (args?.entity_type === 'profile') {
+        entityType = 'agent';
       } else {
         entityType = args?.entity_type as LimitEntityType;
       }
@@ -451,11 +463,13 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text:
                 entityType || entityId
-                  ? `No limits found${entityType ? ` for entity type: ${entityType}` : ""}${entityId ? ` and entity ID: ${entityId}` : ""}.`
-                  : "No limits found.",
+                  ? `No limits found${
+                      entityType ? ` for entity type: ${entityType}` : ''
+                    }${entityId ? ` and entity ID: ${entityId}` : ''}.`
+                  : 'No limits found.',
             },
           ],
           isError: false,
@@ -479,24 +493,26 @@ export async function executeArchestraTool(
             result += `\n  Last Cleanup: ${limit.lastCleanup}`;
           return result;
         })
-        .join("\n\n");
+        .join('\n\n');
 
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Found ${limits.length} limit(s):\n\n${formattedLimits}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting limits");
+      logger.error({ err: error }, 'Error getting limits');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting limits: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting limits: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -507,7 +523,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_UPDATE_LIMIT_FULL_NAME) {
     logger.info(
       { profileId: profile.id, updateLimitArgs: args },
-      "update_limit tool called",
+      'update_limit tool called'
     );
 
     try {
@@ -518,8 +534,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id is required to update a limit.",
+              type: 'text',
+              text: 'Error: id is required to update a limit.',
             },
           ],
           isError: true,
@@ -535,8 +551,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: No fields provided to update.",
+              type: 'text',
+              text: 'Error: No fields provided to update.',
             },
           ],
           isError: true,
@@ -549,7 +565,7 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `Error: Limit with ID ${id} not found.`,
             },
           ],
@@ -560,19 +576,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Successfully updated limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error updating limit");
+      logger.error({ err: error }, 'Error updating limit');
       return {
         content: [
           {
-            type: "text",
-            text: `Error updating limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error updating limit: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -583,7 +601,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_DELETE_LIMIT_FULL_NAME) {
     logger.info(
       { profileId: profile.id, deleteLimitArgs: args },
-      "delete_limit tool called",
+      'delete_limit tool called'
     );
 
     try {
@@ -593,8 +611,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id is required to delete a limit.",
+              type: 'text',
+              text: 'Error: id is required to delete a limit.',
             },
           ],
           isError: true,
@@ -607,7 +625,7 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `Error: Limit with ID ${id} not found.`,
             },
           ],
@@ -618,19 +636,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Successfully deleted limit with ID: ${id}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error deleting limit");
+      logger.error({ err: error }, 'Error deleting limit');
       return {
         content: [
           {
-            type: "text",
-            text: `Error deleting limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error deleting limit: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -641,7 +661,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_PROFILE_TOKEN_USAGE_FULL_NAME) {
     logger.info(
       { profileId: profile.id, getTokenUsageArgs: args },
-      "get_profile_token_usage tool called",
+      'get_profile_token_usage tool called'
     );
 
     try {
@@ -651,19 +671,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Token usage for profile ${targetProfileId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting profile token usage");
+      logger.error({ err: error }, 'Error getting profile token usage');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting profile token usage: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting profile token usage: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -674,15 +696,15 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME) {
     logger.info(
       { profileId: profile.id },
-      "get_autonomy_policy_operators tool called",
+      'get_autonomy_policy_operators tool called'
     );
 
     try {
       const supportedOperators = Object.values(
-        AutonomyPolicyOperator.SupportedOperatorSchema.enum,
+        AutonomyPolicyOperator.SupportedOperatorSchema.enum
       ).map((value) => {
         // Convert camel case to title case
-        const titleCaseConversion = value.replace(/([A-Z])/g, " $1");
+        const titleCaseConversion = value.replace(/([A-Z])/g, ' $1');
         const label =
           titleCaseConversion.charAt(0).toUpperCase() +
           titleCaseConversion.slice(1);
@@ -693,19 +715,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(supportedOperators, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting autonomy policy operators");
+      logger.error({ err: error }, 'Error getting autonomy policy operators');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting autonomy policy operators: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting autonomy policy operators: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -716,7 +740,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME) {
     logger.info(
       { profileId: profile.id },
-      "get_tool_invocation_policies tool called",
+      'get_tool_invocation_policies tool called'
     );
 
     try {
@@ -724,19 +748,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policies, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting tool invocation policies");
+      logger.error({ err: error }, 'Error getting tool invocation policies');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting tool invocation policies: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting tool invocation policies: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -747,29 +773,31 @@ export async function executeArchestraTool(
   if (toolName === TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, createArgs: args },
-      "create_tool_invocation_policy tool called",
+      'create_tool_invocation_policy tool called'
     );
 
     try {
       const policy = await ToolInvocationPolicyModel.create(
-        args as ToolInvocation.InsertToolInvocationPolicy,
+        args as ToolInvocation.InsertToolInvocationPolicy
       );
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error creating tool invocation policy");
+      logger.error({ err: error }, 'Error creating tool invocation policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error creating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error creating tool invocation policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -780,7 +808,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, policyId: args?.id },
-      "get_tool_invocation_policy tool called",
+      'get_tool_invocation_policy tool called'
     );
 
     try {
@@ -789,8 +817,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -802,8 +830,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Tool invocation policy not found",
+              type: 'text',
+              text: 'Tool invocation policy not found',
             },
           ],
           isError: true,
@@ -813,19 +841,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting tool invocation policy");
+      logger.error({ err: error }, 'Error getting tool invocation policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting tool invocation policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -836,7 +866,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, updateArgs: args },
-      "update_tool_invocation_policy tool called",
+      'update_tool_invocation_policy tool called'
     );
 
     try {
@@ -847,8 +877,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -860,8 +890,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Tool invocation policy not found",
+              type: 'text',
+              text: 'Tool invocation policy not found',
             },
           ],
           isError: true,
@@ -871,19 +901,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error updating tool invocation policy");
+      logger.error({ err: error }, 'Error updating tool invocation policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error updating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error updating tool invocation policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -894,7 +926,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, policyId: args?.id },
-      "delete_tool_invocation_policy tool called",
+      'delete_tool_invocation_policy tool called'
     );
 
     try {
@@ -903,8 +935,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -916,8 +948,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Tool invocation policy not found",
+              type: 'text',
+              text: 'Tool invocation policy not found',
             },
           ],
           isError: true,
@@ -927,19 +959,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify({ success: true }, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error deleting tool invocation policy");
+      logger.error({ err: error }, 'Error deleting tool invocation policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error deleting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error deleting tool invocation policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -950,7 +984,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME) {
     logger.info(
       { profileId: profile.id },
-      "get_trusted_data_policies tool called",
+      'get_trusted_data_policies tool called'
     );
 
     try {
@@ -958,19 +992,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policies, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting trusted data policies");
+      logger.error({ err: error }, 'Error getting trusted data policies');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting trusted data policies: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting trusted data policies: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -981,29 +1017,31 @@ export async function executeArchestraTool(
   if (toolName === TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, createArgs: args },
-      "create_trusted_data_policy tool called",
+      'create_trusted_data_policy tool called'
     );
 
     try {
       const policy = await TrustedDataPolicyModel.create(
-        args as TrustedData.InsertTrustedDataPolicy,
+        args as TrustedData.InsertTrustedDataPolicy
       );
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error creating trusted data policy");
+      logger.error({ err: error }, 'Error creating trusted data policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error creating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error creating trusted data policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1014,7 +1052,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, policyId: args?.id },
-      "get_trusted_data_policy tool called",
+      'get_trusted_data_policy tool called'
     );
 
     try {
@@ -1023,8 +1061,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -1036,8 +1074,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Trusted data policy not found",
+              type: 'text',
+              text: 'Trusted data policy not found',
             },
           ],
           isError: true,
@@ -1047,19 +1085,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting trusted data policy");
+      logger.error({ err: error }, 'Error getting trusted data policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting trusted data policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1070,7 +1110,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, updateArgs: args },
-      "update_trusted_data_policy tool called",
+      'update_trusted_data_policy tool called'
     );
 
     try {
@@ -1081,8 +1121,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -1094,8 +1134,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Trusted data policy not found",
+              type: 'text',
+              text: 'Trusted data policy not found',
             },
           ],
           isError: true,
@@ -1105,19 +1145,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(policy, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error updating trusted data policy");
+      logger.error({ err: error }, 'Error updating trusted data policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error updating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error updating trusted data policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1128,7 +1170,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME) {
     logger.info(
       { profileId: profile.id, policyId: args?.id },
-      "delete_trusted_data_policy tool called",
+      'delete_trusted_data_policy tool called'
     );
 
     try {
@@ -1137,8 +1179,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -1150,8 +1192,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Trusted data policy not found",
+              type: 'text',
+              text: 'Trusted data policy not found',
             },
           ],
           isError: true,
@@ -1161,19 +1203,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify({ success: true }, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error deleting trusted data policy");
+      logger.error({ err: error }, 'Error deleting trusted data policy');
       return {
         content: [
           {
-            type: "text",
-            text: `Error deleting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error deleting trusted data policy: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1184,7 +1228,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_FULL_NAME) {
     logger.info(
       { profileId: profile.id, assignments: args?.assignments },
-      "bulk_assign_tools_to_profiles tool called",
+      'bulk_assign_tools_to_profiles tool called'
     );
 
     try {
@@ -1199,8 +1243,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: assignments parameter is required and must be an array",
+              type: 'text',
+              text: 'Error: assignments parameter is required and must be an array',
             },
           ],
           isError: true,
@@ -1213,9 +1257,9 @@ export async function executeArchestraTool(
             assignment.profileId,
             assignment.toolId,
             assignment.credentialSourceMcpServerId,
-            assignment.executionSourceMcpServerId,
-          ),
-        ),
+            assignment.executionSourceMcpServerId
+          )
+        )
       );
 
       const succeeded: { profileId: string; toolId: string }[] = [];
@@ -1224,24 +1268,24 @@ export async function executeArchestraTool(
 
       results.forEach((result, index) => {
         const { profileId, toolId } = assignments[index];
-        if (result.status === "fulfilled") {
-          if (result.value === null || result.value === "updated") {
+        if (result.status === 'fulfilled') {
+          if (result.value === null || result.value === 'updated') {
             // Success (created or updated)
             succeeded.push({ profileId, toolId });
-          } else if (result.value === "duplicate") {
+          } else if (result.value === 'duplicate') {
             // Already assigned with same credentials
             duplicates.push({ profileId, toolId });
           } else {
             // Validation error
-            const error = result.value.error.message || "Unknown error";
+            const error = result.value.error.message || 'Unknown error';
             failed.push({ profileId, toolId, error });
           }
-        } else if (result.status === "rejected") {
+        } else if (result.status === 'rejected') {
           // Runtime error
           const error =
             result.reason instanceof Error
               ? result.reason.message
-              : "Unknown error";
+              : 'Unknown error';
           failed.push({ profileId, toolId, error });
         }
       });
@@ -1249,19 +1293,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify({ succeeded, failed, duplicates }, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error bulk assigning tools to profiles");
+      logger.error({ err: error }, 'Error bulk assigning tools to profiles');
       return {
         content: [
           {
-            type: "text",
-            text: `Error bulk assigning tools to profiles: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error bulk assigning tools to profiles: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1272,13 +1318,13 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_MCP_SERVERS_FULL_NAME) {
     logger.info(
       { profileId: profile.id, filters: args },
-      "get_mcp_servers tool called",
+      'get_mcp_servers tool called'
     );
 
     try {
       // Note: We don't have access to request.user.id in this context,
       // so we'll use the profile's context or a placeholder for now
-      const authType = args?.authType as "personal" | "team" | undefined;
+      const authType = args?.authType as 'personal' | 'team' | undefined;
 
       // For now, we'll call findAll without the user ID and filter logic
       // This might need to be adjusted based on the actual requirements
@@ -1292,19 +1338,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(filteredServers, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting MCP servers");
+      logger.error({ err: error }, 'Error getting MCP servers');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting MCP servers: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting MCP servers: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1315,7 +1363,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME) {
     logger.info(
       { profileId: profile.id, mcpServerId: args?.mcpServerId },
-      "get_mcp_server_tools tool called",
+      'get_mcp_server_tools tool called'
     );
 
     try {
@@ -1325,8 +1373,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: mcpServerId parameter is required",
+              type: 'text',
+              text: 'Error: mcpServerId parameter is required',
             },
           ],
           isError: true,
@@ -1339,8 +1387,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "MCP server not found",
+              type: 'text',
+              text: 'MCP server not found',
             },
           ],
           isError: true,
@@ -1357,19 +1405,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(tools, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting MCP server tools");
+      logger.error({ err: error }, 'Error getting MCP server tools');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting MCP server tools: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting MCP server tools: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1380,7 +1430,7 @@ export async function executeArchestraTool(
   if (toolName === TOOL_GET_PROFILE_FULL_NAME) {
     logger.info(
       { profileId: profile.id, requestedProfileId: args?.id },
-      "get_profile tool called",
+      'get_profile tool called'
     );
 
     try {
@@ -1390,8 +1440,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Error: id parameter is required",
+              type: 'text',
+              text: 'Error: id parameter is required',
             },
           ],
           isError: true,
@@ -1403,8 +1453,8 @@ export async function executeArchestraTool(
         return {
           content: [
             {
-              type: "text",
-              text: "Profile not found",
+              type: 'text',
+              text: 'Profile not found',
             },
           ],
           isError: true,
@@ -1414,19 +1464,21 @@ export async function executeArchestraTool(
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(requestedProfile, null, 2),
           },
         ],
         isError: false,
       };
     } catch (error) {
-      logger.error({ err: error }, "Error getting profile");
+      logger.error({ err: error }, 'Error getting profile');
       return {
         content: [
           {
-            type: "text",
-            text: `Error getting profile: ${error instanceof Error ? error.message : "Unknown error"}`,
+            type: 'text',
+            text: `Error getting profile: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
           },
         ],
         isError: true,
@@ -1448,10 +1500,10 @@ export function getArchestraMcpTools(): Tool[] {
   return [
     {
       name: TOOL_WHOAMI_FULL_NAME,
-      title: "Who Am I",
-      description: "Returns the name and ID of the current profile",
+      title: 'Who Am I',
+      description: 'Returns the name and ID of the current profile',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {},
         required: [],
       },
@@ -1460,16 +1512,16 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME,
-      title: "Search Private MCP Registry",
+      title: 'Search Private MCP Registry',
       description:
-        "Search the private MCP registry for available MCP servers. Optionally provide a search query to filter results by name or description.",
+        'Search the private MCP registry for available MCP servers. Optionally provide a search query to filter results by name or description.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           query: {
-            type: "string",
+            type: 'string',
             description:
-              "Optional search query to filter MCP servers by name or description",
+              'Optional search query to filter MCP servers by name or description',
           },
         },
         required: [],
@@ -1479,67 +1531,67 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_CREATE_LIMIT_FULL_NAME,
-      title: "Create Limit",
+      title: 'Create Limit',
       description:
-        "Create a new cost or usage limit for an organization, team, or profile. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+        'Create a new cost or usage limit for an organization, team, or profile. Supports token_cost, mcp_server_calls, and tool_calls limit types.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           entity_type: {
-            type: "string",
-            enum: ["organization", "team", "profile"],
-            description: "The type of entity to apply the limit to",
+            type: 'string',
+            enum: ['organization', 'team', 'profile'],
+            description: 'The type of entity to apply the limit to',
           },
           entity_id: {
-            type: "string",
+            type: 'string',
             description:
-              "The ID of the entity (organization, team, or profile)",
+              'The ID of the entity (organization, team, or profile)',
           },
           limit_type: {
-            type: "string",
+            type: 'string',
             enum: LimitTypeSchema.options,
-            description: "The type of limit to apply",
+            description: 'The type of limit to apply',
           },
           limit_value: {
-            type: "number",
+            type: 'number',
             description:
-              "The limit value (tokens or count depending on limit type)",
+              'The limit value (tokens or count depending on limit type)',
           },
           model: {
-            type: "string",
-            description: "Model name (required for token_cost limits)",
+            type: 'string',
+            description: 'Model name (required for token_cost limits)',
           },
           mcp_server_name: {
-            type: "string",
+            type: 'string',
             description:
-              "MCP server name (required for mcp_server_calls and tool_calls limits)",
+              'MCP server name (required for mcp_server_calls and tool_calls limits)',
           },
           tool_name: {
-            type: "string",
-            description: "Tool name (required for tool_calls limits)",
+            type: 'string',
+            description: 'Tool name (required for tool_calls limits)',
           },
         },
-        required: ["entity_type", "entity_id", "limit_type", "limit_value"],
+        required: ['entity_type', 'entity_id', 'limit_type', 'limit_value'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_LIMITS_FULL_NAME,
-      title: "Get Limits",
+      title: 'Get Limits',
       description:
-        "Retrieve all limits, optionally filtered by entity type and/or entity ID.",
+        'Retrieve all limits, optionally filtered by entity type and/or entity ID.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           entity_type: {
-            type: "string",
-            enum: ["organization", "team", "profile"],
-            description: "Optional filter by entity type",
+            type: 'string',
+            enum: ['organization', 'team', 'profile'],
+            description: 'Optional filter by entity type',
           },
           entity_id: {
-            type: "string",
-            description: "Optional filter by entity ID",
+            type: 'string',
+            description: 'Optional filter by entity ID',
           },
         },
         required: [],
@@ -1549,54 +1601,54 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_UPDATE_LIMIT_FULL_NAME,
-      title: "Update Limit",
+      title: 'Update Limit',
       description: "Update an existing limit's value.",
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the limit to update",
+            type: 'string',
+            description: 'The ID of the limit to update',
           },
           limit_value: {
-            type: "number",
-            description: "The new limit value",
+            type: 'number',
+            description: 'The new limit value',
           },
         },
-        required: ["id", "limit_value"],
+        required: ['id', 'limit_value'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_DELETE_LIMIT_FULL_NAME,
-      title: "Delete Limit",
-      description: "Delete an existing limit by ID.",
+      title: 'Delete Limit',
+      description: 'Delete an existing limit by ID.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the limit to delete",
+            type: 'string',
+            description: 'The ID of the limit to delete',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_PROFILE_TOKEN_USAGE_FULL_NAME,
-      title: "Get Profile Token Usage",
+      title: 'Get Profile Token Usage',
       description:
-        "Get the total token usage (input and output) for a specific profile. If no profile_id is provided, returns usage for the current profile.",
+        'Get the total token usage (input and output) for a specific profile. If no profile_id is provided, returns usage for the current profile.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           profile_id: {
-            type: "string",
+            type: 'string',
             description:
-              "The ID of the profile to get usage for (optional, defaults to current profile)",
+              'The ID of the profile to get usage for (optional, defaults to current profile)',
           },
         },
         required: [],
@@ -1604,15 +1656,15 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_CREATE_PROFILE_FULL_NAME,
-      title: "Create Profile",
+      title: 'Create Profile',
       description:
-        "Create a new profile with the specified name and optional configuration. The profile will be automatically assigned Archestra built-in tools.",
+        'Create a new profile with the specified name and optional configuration. The profile will be automatically assigned Archestra built-in tools.',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           name: {
-            type: "string",
-            description: "The name of the profile (required)",
+            type: 'string',
+            description: 'The name of the profile (required)',
           },
           /**
            * TODO: in order to enable this we need to expose GET/CREATE /api/teams tools such that the profile
@@ -1627,36 +1679,36 @@ export function getArchestraMcpTools(): Tool[] {
           //   description: "Array of team IDs to assign the profile to (optional)",
           // },
           labels: {
-            type: "array",
+            type: 'array',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
                 key: {
-                  type: "string",
-                  description: "The label key",
+                  type: 'string',
+                  description: 'The label key',
                 },
                 value: {
-                  type: "string",
-                  description: "The value for the label",
+                  type: 'string',
+                  description: 'The value for the label',
                 },
               },
-              required: ["key", "value"],
+              required: ['key', 'value'],
             },
-            description: "Array of labels to assign to the profile (optional)",
+            description: 'Array of labels to assign to the profile (optional)',
           },
         },
-        required: ["name"],
+        required: ['name'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME,
-      title: "Get Autonomy Policy Operators",
+      title: 'Get Autonomy Policy Operators',
       description:
-        "Get all supported policy operators with their human-readable labels",
+        'Get all supported policy operators with their human-readable labels',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {},
         required: [],
       },
@@ -1665,10 +1717,10 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME,
-      title: "Get Tool Invocation Policies",
-      description: "Get all tool invocation policies",
+      title: 'Get Tool Invocation Policies',
+      description: 'Get all tool invocation policies',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {},
         required: [],
       },
@@ -1677,135 +1729,135 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME,
-      title: "Create Tool Invocation Policy",
-      description: "Create a new tool invocation policy",
+      title: 'Create Tool Invocation Policy',
+      description: 'Create a new tool invocation policy',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           profileToolId: {
-            type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            type: 'string',
+            description: 'The ID of the profile tool this policy applies to',
           },
           operator: {
-            type: "string",
+            type: 'string',
             enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
+              'equal',
+              'notEqual',
+              'contains',
+              'notContains',
+              'startsWith',
+              'endsWith',
+              'regex',
             ],
-            description: "The comparison operator to use",
+            description: 'The comparison operator to use',
           },
           path: {
-            type: "string",
+            type: 'string',
             description:
               "The path in the context to evaluate (e.g., 'user.email')",
           },
           value: {
-            type: "string",
-            description: "The value to compare against",
+            type: 'string',
+            description: 'The value to compare against',
           },
           action: {
-            type: "string",
-            enum: ["allow_when_context_is_untrusted", "block_always"],
-            description: "The action to take when the policy matches",
+            type: 'string',
+            enum: ['allow_when_context_is_untrusted', 'block_always'],
+            description: 'The action to take when the policy matches',
           },
         },
-        required: ["profileToolId", "operator", "path", "value", "action"],
+        required: ['profileToolId', 'operator', 'path', 'value', 'action'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME,
-      title: "Get Tool Invocation Policy",
-      description: "Get a specific tool invocation policy by ID",
+      title: 'Get Tool Invocation Policy',
+      description: 'Get a specific tool invocation policy by ID',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the tool invocation policy",
+            type: 'string',
+            description: 'The ID of the tool invocation policy',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME,
-      title: "Update Tool Invocation Policy",
-      description: "Update a tool invocation policy",
+      title: 'Update Tool Invocation Policy',
+      description: 'Update a tool invocation policy',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the tool invocation policy",
+            type: 'string',
+            description: 'The ID of the tool invocation policy',
           },
           profileToolId: {
-            type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            type: 'string',
+            description: 'The ID of the profile tool this policy applies to',
           },
           operator: {
-            type: "string",
+            type: 'string',
             enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
+              'equal',
+              'notEqual',
+              'contains',
+              'notContains',
+              'startsWith',
+              'endsWith',
+              'regex',
             ],
-            description: "The comparison operator to use",
+            description: 'The comparison operator to use',
           },
           path: {
-            type: "string",
-            description: "The path in the context to evaluate",
+            type: 'string',
+            description: 'The path in the context to evaluate',
           },
           value: {
-            type: "string",
-            description: "The value to compare against",
+            type: 'string',
+            description: 'The value to compare against',
           },
           action: {
-            type: "string",
-            enum: ["allow_when_context_is_untrusted", "block_always"],
-            description: "The action to take when the policy matches",
+            type: 'string',
+            enum: ['allow_when_context_is_untrusted', 'block_always'],
+            description: 'The action to take when the policy matches',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME,
-      title: "Delete Tool Invocation Policy",
-      description: "Delete a tool invocation policy by ID",
+      title: 'Delete Tool Invocation Policy',
+      description: 'Delete a tool invocation policy by ID',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the tool invocation policy",
+            type: 'string',
+            description: 'The ID of the tool invocation policy',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME,
-      title: "Get Trusted Data Policies",
-      description: "Get all trusted data policies",
+      title: 'Get Trusted Data Policies',
+      description: 'Get all trusted data policies',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {},
         required: [],
       },
@@ -1814,183 +1866,183 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME,
-      title: "Create Trusted Data Policy",
-      description: "Create a new trusted data policy",
+      title: 'Create Trusted Data Policy',
+      description: 'Create a new trusted data policy',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           profileToolId: {
-            type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            type: 'string',
+            description: 'The ID of the profile tool this policy applies to',
           },
           operator: {
-            type: "string",
+            type: 'string',
             enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
+              'equal',
+              'notEqual',
+              'contains',
+              'notContains',
+              'startsWith',
+              'endsWith',
+              'regex',
             ],
-            description: "The comparison operator to use",
+            description: 'The comparison operator to use',
           },
           path: {
-            type: "string",
-            description: "The path in the tool result to evaluate",
+            type: 'string',
+            description: 'The path in the tool result to evaluate',
           },
           value: {
-            type: "string",
-            description: "The value to compare against",
+            type: 'string',
+            description: 'The value to compare against',
           },
           action: {
-            type: "string",
-            enum: ["block_always", "mark_as_trusted", "sanitize_with_dual_llm"],
-            description: "The action to take when the policy matches",
+            type: 'string',
+            enum: ['block_always', 'mark_as_trusted', 'sanitize_with_dual_llm'],
+            description: 'The action to take when the policy matches',
           },
         },
-        required: ["profileToolId", "operator", "path", "value", "action"],
+        required: ['profileToolId', 'operator', 'path', 'value', 'action'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME,
-      title: "Get Trusted Data Policy",
-      description: "Get a specific trusted data policy by ID",
+      title: 'Get Trusted Data Policy',
+      description: 'Get a specific trusted data policy by ID',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the trusted data policy",
+            type: 'string',
+            description: 'The ID of the trusted data policy',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME,
-      title: "Update Trusted Data Policy",
-      description: "Update a trusted data policy",
+      title: 'Update Trusted Data Policy',
+      description: 'Update a trusted data policy',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the trusted data policy",
+            type: 'string',
+            description: 'The ID of the trusted data policy',
           },
           profileToolId: {
-            type: "string",
-            description: "The ID of the profile tool this policy applies to",
+            type: 'string',
+            description: 'The ID of the profile tool this policy applies to',
           },
           operator: {
-            type: "string",
+            type: 'string',
             enum: [
-              "equal",
-              "notEqual",
-              "contains",
-              "notContains",
-              "startsWith",
-              "endsWith",
-              "regex",
+              'equal',
+              'notEqual',
+              'contains',
+              'notContains',
+              'startsWith',
+              'endsWith',
+              'regex',
             ],
-            description: "The comparison operator to use",
+            description: 'The comparison operator to use',
           },
           path: {
-            type: "string",
-            description: "The path in the tool result to evaluate",
+            type: 'string',
+            description: 'The path in the tool result to evaluate',
           },
           value: {
-            type: "string",
-            description: "The value to compare against",
+            type: 'string',
+            description: 'The value to compare against',
           },
           action: {
-            type: "string",
-            enum: ["block_always", "mark_as_trusted", "sanitize_with_dual_llm"],
-            description: "The action to take when the policy matches",
+            type: 'string',
+            enum: ['block_always', 'mark_as_trusted', 'sanitize_with_dual_llm'],
+            description: 'The action to take when the policy matches',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME,
-      title: "Delete Trusted Data Policy",
-      description: "Delete a trusted data policy by ID",
+      title: 'Delete Trusted Data Policy',
+      description: 'Delete a trusted data policy by ID',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the trusted data policy",
+            type: 'string',
+            description: 'The ID of the trusted data policy',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_FULL_NAME,
-      title: "Bulk Assign Tools to Profiles",
+      title: 'Bulk Assign Tools to Profiles',
       description:
-        "Assign multiple tools to multiple profiles in bulk with validation and error handling",
+        'Assign multiple tools to multiple profiles in bulk with validation and error handling',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           assignments: {
-            type: "array",
-            description: "Array of tool assignments to create",
+            type: 'array',
+            description: 'Array of tool assignments to create',
             items: {
-              type: "object",
+              type: 'object',
               properties: {
                 profileId: {
-                  type: "string",
-                  description: "The ID of the profile to assign the tool to",
+                  type: 'string',
+                  description: 'The ID of the profile to assign the tool to',
                 },
                 toolId: {
-                  type: "string",
-                  description: "The ID of the tool to assign",
+                  type: 'string',
+                  description: 'The ID of the tool to assign',
                 },
                 credentialSourceMcpServerId: {
-                  type: "string",
+                  type: 'string',
                   description:
-                    "Optional ID of the MCP server to use as credential source",
+                    'Optional ID of the MCP server to use as credential source',
                 },
                 executionSourceMcpServerId: {
-                  type: "string",
+                  type: 'string',
                   description:
-                    "Optional ID of the MCP server to use as execution source",
+                    'Optional ID of the MCP server to use as execution source',
                 },
               },
-              required: ["profileId", "toolId"],
+              required: ['profileId', 'toolId'],
             },
           },
         },
-        required: ["assignments"],
+        required: ['assignments'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_MCP_SERVERS_FULL_NAME,
-      title: "Get MCP Servers",
+      title: 'Get MCP Servers',
       description:
-        "List all installed MCP servers with their catalog names and optional filtering",
+        'List all installed MCP servers with their catalog names and optional filtering',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           authType: {
-            type: "string",
-            enum: ["personal", "team"],
+            type: 'string',
+            enum: ['personal', 'team'],
             description:
-              "Optional filter to only return servers of a specific authentication type",
+              'Optional filter to only return servers of a specific authentication type',
           },
         },
         required: [],
@@ -2000,83 +2052,47 @@ export function getArchestraMcpTools(): Tool[] {
     },
     {
       name: TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME,
-      title: "Get MCP Server Tools",
-      description: "Get all tools available for a specific MCP server",
+      title: 'Get MCP Server Tools',
+      description: 'Get all tools available for a specific MCP server',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           mcpServerId: {
-            type: "string",
-            description: "The ID of the MCP server to get tools for",
+            type: 'string',
+            description: 'The ID of the MCP server to get tools for',
           },
         },
-        required: ["mcpServerId"],
+        required: ['mcpServerId'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: TOOL_GET_PROFILE_FULL_NAME,
-      title: "Get Profile",
+      title: 'Get Profile',
       description:
-        "Get a specific profile by ID with full details including labels and team assignments",
+        'Get a specific profile by ID with full details including labels and team assignments',
       inputSchema: {
-        type: "object",
+        type: 'object',
         properties: {
           id: {
-            type: "string",
-            description: "The ID of the profile to retrieve",
+            type: 'string',
+            description: 'The ID of the profile to retrieve',
           },
         },
-        required: ["id"],
+        required: ['id'],
       },
       annotations: {},
       _meta: {},
     },
     {
       name: _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-      title: "Create MCP Server Installation Request",
+      title: 'Create MCP Server Installation Request',
       description:
-        "Create a request to install an MCP server. This will open a dialog for the user to submit an installation request. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
+        'Create a request to install an MCP server. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information',
       inputSchema: {
-        type: "object",
-        properties: {
-          external_catalog_id: {
-            type: "string",
-            description:
-              "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
-          },
-          request_reason: {
-            type: "string",
-            description:
-              "Reason for requesting the installation (optional but recommended)",
-          },
-          custom_server_config: {
-            type: "object",
-            description:
-              "Custom server configuration (optional if external_catalog_id is provided)",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["remote", "local"],
-                description: "The type of the custom server",
-              },
-              label: {
-                type: "string",
-                description: "A label for the custom server",
-              },
-              name: {
-                type: "string",
-                description: "The name of the custom server",
-              },
-              version: {
-                type: "string",
-                description: "The version of the custom server (optional)",
-              },
-            },
-            required: ["type", "label", "name"],
-          },
-        },
+        type: 'object',
+        properties: {},
         required: [],
       },
       annotations: {},

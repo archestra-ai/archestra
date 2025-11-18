@@ -209,6 +209,116 @@ Note: `ARCHESTRA_AUTH_SECRET` is optional. It will be auto-generated if not spec
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 
+#### Cloud Provider Configuration (Streaming Timeout Settings)
+
+**⚠️ IMPORTANT**: Archestra Platform's chat feature and other streaming endpoints require proper timeout configuration on your cloud provider's load balancer. **Without this configuration, streaming responses will likely timeout too early**, causing chat responses and long-running MCP tool operations to fail.
+
+##### Google Cloud Platform (GKE)
+
+For GKE deployments using the GCE Ingress Controller, enable the BackendConfig resource to configure load balancer timeouts:
+
+**Enable BackendConfig**:
+
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set archestra.cloudProvider.gke.backendConfig.enabled=true \
+  --set archestra.cloudProvider.gke.backendConfig.timeoutSec=600 \
+  --wait
+```
+
+Then update your service to reference the BackendConfig (replace `archestra-platform` with your release name):
+
+```yaml
+archestra:
+  service:
+    annotations:
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+```
+
+**Settings**:
+- `archestra.cloudProvider.gke.backendConfig.enabled` - Enable BackendConfig creation (default: false, **must be true for streaming to work**)
+- `archestra.cloudProvider.gke.backendConfig.timeoutSec` - Request timeout in seconds (default: 600, minimum 30)
+- `archestra.cloudProvider.gke.backendConfig.connectionDraining.drainingTimeoutSec` - Connection draining timeout (default: 60)
+- `archestra.cloudProvider.gke.backendConfig.healthCheck.*` - Health check configuration (see values.yaml)
+
+##### Amazon Web Services (AWS EKS)
+
+For AWS EKS with Application Load Balancer (ALB), configure timeout annotations on the Service:
+
+```yaml
+archestra:
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+      service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "600"
+```
+
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http \
+  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="600" \
+  --wait
+```
+
+##### Microsoft Azure (AKS)
+
+For Azure AKS with Application Gateway Ingress Controller (AGIC), configure timeout annotations on the Ingress:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      appgw.ingress.kubernetes.io/request-timeout: "600"
+      appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
+```
+
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set archestra.ingress.enabled=true \
+  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/request-timeout"="600" \
+  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/connection-draining-timeout"="60" \
+  --wait
+```
+
+##### Other Ingress Controllers (nginx, Traefik, etc.)
+
+For nginx-ingress:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+```
+
+For Traefik:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      # Configure timeout via Traefik IngressRoute or Middleware
+```
+
 #### Database Configuration
 
 **PostgreSQL Settings**:

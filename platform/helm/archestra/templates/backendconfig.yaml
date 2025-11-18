@@ -1,0 +1,26 @@
+{{- if .Values.archestra.cloudProvider.gke.backendConfig.enabled }}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-backend-config
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  # Request timeout for backend services (important for streaming responses like chat)
+  # Default: 600 seconds (10 minutes) to support long-running MCP tool operations
+  timeoutSec: {{ .Values.archestra.cloudProvider.gke.backendConfig.timeoutSec | default 600 }}
+
+  # Connection draining timeout when pods are being terminated
+  connectionDraining:
+    drainingTimeoutSec: {{ .Values.archestra.cloudProvider.gke.backendConfig.connectionDraining.drainingTimeoutSec | default 60 }}
+
+  # Health check configuration
+  healthCheck:
+    checkIntervalSec: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.checkIntervalSec | default 10 }}
+    healthyThreshold: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.healthyThreshold | default 1 }}
+    port: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.port | default 9000 }}
+    requestPath: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.requestPath | default "/health" }}
+    timeoutSec: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.timeoutSec | default 5 }}
+    type: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.type | default "HTTP" }}
+    unhealthyThreshold: {{ .Values.archestra.cloudProvider.gke.backendConfig.healthCheck.unhealthyThreshold | default 3 }}
+{{- end }}

@@ -95,11 +95,56 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+  # Cloud Provider Specific Configurations
+  # These settings ensure streaming responses (like chat) don't timeout
+  cloudProvider:
+    # Google Cloud Platform (GKE) Configuration
+    gke:
+      # BackendConfig for GKE Ingress load balancer
+      # Required for streaming endpoints to work properly (e.g., chat feature)
+      backendConfig:
+        # Enable BackendConfig creation
+        enabled: false
+        # Request timeout in seconds - IMPORTANT: Must be long enough to support long-running MCP tool operations
+        # Default 600s (10 minutes) supports long-running MCP tool operations
+        timeoutSec: 600
+        # Connection draining timeout when pods terminate
+        connectionDraining:
+          drainingTimeoutSec: 60
+        # Health check configuration
+        healthCheck:
+          checkIntervalSec: 10
+          healthyThreshold: 1
+          port: 9000
+          requestPath: /health
+          timeoutSec: 5
+          type: HTTP
+          unhealthyThreshold: 3
+
+    # Amazon Web Services (AWS EKS) Configuration
+    # Add these annotations to archestra.service.annotations for ALB timeout:
+    # Example:
+    #   service:
+    #     annotations:
+    #       service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    #       service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "600"
+
+    # Microsoft Azure (AKS) Configuration
+    # Add these annotations to archestra.ingress.annotations for Application Gateway timeout:
+    # Example:
+    #   ingress:
+    #     annotations:
+    #       appgw.ingress.kubernetes.io/request-timeout: "600"
+    #       appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer
     type: ClusterIP
     # Annotations to add to the Kubernetes Service
+    # For GKE with BackendConfig, add:
+    #   cloud.google.com/backend-config: '{"ports": {"9000":"<release-name>-archestra-platform-backend-config"}}'
+    # For AWS ALB, see cloudProvider.aws comments above
     annotations: {}
     # Node ports for NodePort service type (optional)
     # Only used when service.type is NodePort

@@ -1,7 +1,4 @@
 archestra:
-  env:
-    ARCHESTRA_API_BASE_URL: https://backend.archestra.dev
-
   service:
     annotations:
       # GKE BackendConfig for custom health checks

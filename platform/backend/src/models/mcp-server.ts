@@ -94,26 +94,29 @@ class McpServerModel {
 
     const results = await query;
 
-    // Populate teams and user details for each MCP server
-    const serversWithRelations: McpServer[] = await Promise.all(
-      results.map(async (result) => {
-        const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
-          result.server.id,
-        );
-        const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
-          result.server.id,
-        );
-        return {
-          ...result.server,
-          ownerEmail: result.ownerEmail,
-          catalogName: result.catalogName,
-          teams: teamDetails.map((t) => t.teamId),
-          users: userDetails.map((u) => u.userId),
-          userDetails,
-          teamDetails,
-        };
-      }),
-    );
+    const serverIds = results.map((result) => result.server.id);
+
+    // Populate teams and user details for all MCP servers with bulk queries to avoid N+1
+    const [userDetailsMap, teamDetailsMap] = await Promise.all([
+      McpServerUserModel.getUserDetailsForMcpServers(serverIds),
+      McpServerTeamModel.getTeamDetailsForMcpServers(serverIds),
+    ]);
+
+    // Build the servers with relations
+    const serversWithRelations: McpServer[] = results.map((result) => {
+      const userDetails = userDetailsMap.get(result.server.id) || [];
+      const teamDetails = teamDetailsMap.get(result.server.id) || [];
+
+      return {
+        ...result.server,
+        ownerEmail: result.ownerEmail,
+        catalogName: result.catalogName,
+        teams: teamDetails.map((t) => t.teamId),
+        users: userDetails.map((u) => u.userId),
+        userDetails,
+        teamDetails,
+      };
+    });
 
     return serversWithRelations;
   }

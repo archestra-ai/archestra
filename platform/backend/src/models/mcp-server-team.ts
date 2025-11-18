@@ -164,6 +164,65 @@ class McpServerTeamModel {
   }
 
   /**
+   * Get team details for multiple MCP servers in one query to avoid N+1
+   */
+  static async getTeamDetailsForMcpServers(mcpServerIds: string[]): Promise<
+    Map<
+      string,
+      Array<{
+        teamId: string;
+        name: string;
+        createdAt: Date;
+      }>
+    >
+  > {
+    if (mcpServerIds.length === 0) {
+      return new Map();
+    }
+
+    const result = await db
+      .select({
+        mcpServerId: schema.mcpServerTeamsTable.mcpServerId,
+        teamId: schema.mcpServerTeamsTable.teamId,
+        name: schema.teamsTable.name,
+        createdAt: schema.mcpServerTeamsTable.createdAt,
+      })
+      .from(schema.mcpServerTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.mcpServerTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(inArray(schema.mcpServerTeamsTable.mcpServerId, mcpServerIds));
+
+    const detailsMap = new Map<
+      string,
+      Array<{
+        teamId: string;
+        name: string;
+        createdAt: Date;
+      }>
+    >();
+
+    // Initialize all MCP server IDs with empty arrays
+    for (const mcpServerId of mcpServerIds) {
+      detailsMap.set(mcpServerId, []);
+    }
+
+    // Populate the map with team details
+    for (const row of result) {
+      const details = detailsMap.get(row.mcpServerId) || [];
+      details.push({
+        teamId: row.teamId,
+        name: row.name,
+        createdAt: row.createdAt,
+      });
+      detailsMap.set(row.mcpServerId, details);
+    }
+
+    return detailsMap;
+  }
+
+  /**
    * Remove a team assignment from an MCP server
    */
   static async removeTeamFromMcpServer(

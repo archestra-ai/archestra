@@ -157,6 +157,41 @@ class AgentTeamModel {
   }
 
   /**
+   * Get team IDs for multiple agents in one query to avoid N+1
+   */
+  static async getTeamsForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (agentIds.length === 0) {
+      return new Map();
+    }
+
+    const agentTeams = await db
+      .select({
+        agentId: schema.agentTeamsTable.agentId,
+        teamId: schema.agentTeamsTable.teamId,
+      })
+      .from(schema.agentTeamsTable)
+      .where(inArray(schema.agentTeamsTable.agentId, agentIds));
+
+    const teamsMap = new Map<string, string[]>();
+
+    // Initialize all agent IDs with empty arrays
+    for (const agentId of agentIds) {
+      teamsMap.set(agentId, []);
+    }
+
+    // Populate the map with teams
+    for (const { agentId, teamId } of agentTeams) {
+      const teams = teamsMap.get(agentId) || [];
+      teams.push(teamId);
+      teamsMap.set(agentId, teams);
+    }
+
+    return teamsMap;
+  }
+
+  /**
    * Check if an agent and MCP server share any teams
    * Returns true if there's at least one team that both the agent and MCP server are assigned to
    */

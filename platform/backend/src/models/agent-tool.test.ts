@@ -677,4 +677,71 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(result.pagination.totalPages).toBe(2);
     });
   });
+
+  describe("createManyIfNotExists", () => {
+    test("creates multiple agent-tool relationships in bulk", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const tools = await Promise.all([
+        makeTool({ name: "tool-1" }),
+        makeTool({ name: "tool-2" }),
+        makeTool({ name: "tool-3" }),
+      ]);
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      await AgentToolModel.createManyIfNotExists(
+        agent.id,
+        tools.map((t) => t.id),
+      );
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length + 3);
+      expect(finalToolIds).toContain(tools[0].id);
+      expect(finalToolIds).toContain(tools[1].id);
+      expect(finalToolIds).toContain(tools[2].id);
+    });
+
+    test("skips existing relationships and only creates new ones", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool1 = await makeTool({ name: "tool-1" });
+      const tool2 = await makeTool({ name: "tool-2" });
+      const tool3 = await makeTool({ name: "tool-3" });
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      // Create one relationship manually
+      await makeAgentTool(agent.id, tool1.id);
+
+      // Try to create all three relationships in bulk
+      await AgentToolModel.createManyIfNotExists(agent.id, [
+        tool1.id,
+        tool2.id,
+        tool3.id,
+      ]);
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length + 3);
+      expect(finalToolIds).toContain(tool1.id);
+      expect(finalToolIds).toContain(tool2.id);
+      expect(finalToolIds).toContain(tool3.id);
+    });
+
+    test("handles empty tool IDs array", async ({ makeAgent }) => {
+      const agent = await makeAgent();
+
+      const initialToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+
+      await AgentToolModel.createManyIfNotExists(agent.id, []);
+
+      const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(finalToolIds.length).toBe(initialToolIds.length);
+    });
+  });
 });

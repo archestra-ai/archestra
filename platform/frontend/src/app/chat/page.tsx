@@ -19,6 +19,7 @@ import {
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -288,6 +289,7 @@ export default function ChatPage() {
         ) : (
           <div className="flex flex-col h-full">
             {error && <ChatError error={error} />}
+            <StreamTimeoutWarning status={status} messages={messages} />
 
             {/* Sticky top bar with agent name and toggle */}
             <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">

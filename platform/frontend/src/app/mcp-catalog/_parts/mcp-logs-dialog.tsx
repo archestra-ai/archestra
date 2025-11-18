@@ -19,6 +19,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface McpLogsDialogProps {
   open: boolean;
@@ -30,6 +37,12 @@ interface McpLogsDialogProps {
   isLoading: boolean;
   error?: Error | null;
   onRefresh: () => unknown;
+  installs?: Array<{
+    serverId: string;
+    name: string;
+  }>;
+  selectedInstallId?: string;
+  onInstallChange?: (serverId: string) => void;
 }
 
 export function McpLogsDialog({
@@ -42,6 +55,9 @@ export function McpLogsDialog({
   isLoading: initialIsLoading,
   error: initialError,
   onRefresh,
+  installs = [],
+  selectedInstallId,
+  onInstallChange,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
@@ -221,6 +237,8 @@ export function McpLogsDialog({
     }
   }, [onRefresh]);
 
+  const showInstallSelector = installs.length > 1;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
@@ -229,8 +247,31 @@ export function McpLogsDialog({
             <Terminal className="h-5 w-5 flex-shrink-0" />
             <span className="truncate">Logs: {serverName}</span>
           </DialogTitle>
-          <DialogDescription>
-            View the recent logs from the MCP server container
+          <DialogDescription className="flex flex-col gap-2">
+            <span>View the recent logs from the MCP server container</span>
+            {showInstallSelector && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Installation:</span>
+                <Select
+                  value={selectedInstallId}
+                  onValueChange={onInstallChange}
+                >
+                  <SelectTrigger className="w-[300px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {installs.map((install) => (
+                      <SelectItem
+                        key={install.serverId}
+                        value={install.serverId}
+                      >
+                        {install.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </DialogDescription>
         </DialogHeader>
 

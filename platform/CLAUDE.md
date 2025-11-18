@@ -196,6 +196,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - **Model Creation**: Create model files for any new database entities you need to interact with
 - **CRUD Centralization**: Models should handle all CRUD operations and complex queries
 - **No Business Logic**: Keep models focused on data access, business logic goes in services
+- **N+1 Query Prevention**: When fetching lists with related data, use batch loading methods (e.g., `getTeamsForAgents()`) instead of individual queries per item
 
 **Frontend**:
 

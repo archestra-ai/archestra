@@ -3,8 +3,7 @@ import { z } from "zod";
 /**
  * WebSocket Message Payload Schemas
  */
-
-export const McpInstallationRequestPayloadSchema = z.object({
+export const McpInstallationRequestWebsocketPayloadSchema = z.object({
   sessionId: z.string(),
   conversationId: z.string(),
   externalCatalogId: z.string().optional(),
@@ -12,7 +11,7 @@ export const McpInstallationRequestPayloadSchema = z.object({
   customServerConfig: z.record(z.string(), z.any()).optional(),
 });
 
-export const McpInstallationResponsePayloadSchema = z.object({
+export const McpInstallationResponseWebsocketPayloadSchema = z.object({
   sessionId: z.string(),
   conversationId: z.string(),
   success: z.boolean(),
@@ -25,31 +24,25 @@ export const McpInstallationResponsePayloadSchema = z.object({
 export const WebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("mcp-installation-request"),
-    payload: McpInstallationRequestPayloadSchema,
+    payload: McpInstallationRequestWebsocketPayloadSchema,
   }),
   z.object({
     type: z.literal("mcp-installation-response"),
-    payload: McpInstallationResponsePayloadSchema,
+    payload: McpInstallationResponseWebsocketPayloadSchema,
   }),
 ]);
 
 export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
-export type McpInstallationRequestPayload = z.infer<
-  typeof McpInstallationRequestPayloadSchema
+export type McpInstallationRequestWebsocketPayload = z.infer<
+  typeof McpInstallationRequestWebsocketPayloadSchema
 >;
-export type McpInstallationResponsePayload = z.infer<
-  typeof McpInstallationResponsePayloadSchema
+export type McpInstallationResponseWebsocketPayload = z.infer<
+  typeof McpInstallationResponseWebsocketPayloadSchema
 >;
 
 /**
  * Register schemas in global registry for OpenAPI generation
  */
-z.globalRegistry.add(McpInstallationRequestPayloadSchema, {
-  id: "McpInstallationRequest",
-});
-z.globalRegistry.add(McpInstallationResponsePayloadSchema, {
-  id: "McpInstallationResponse",
-});
 z.globalRegistry.add(WebSocketMessageSchema, {
   id: "WebSocketMessage",
 });

@@ -1,12 +1,9 @@
+import type { Server } from "node:http";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import type { Server } from "node:http";
 import config from "@/config";
 import logger from "@/logging";
-import {
-  WebSocketMessageSchema,
-  type WebSocketMessage,
-} from "./schemas";
+import { type WebSocketMessage, WebSocketMessageSchema } from "@/types";
 
 class WebSocketService {
   private wss: WebSocketServer | null = null;
@@ -22,13 +19,11 @@ class WebSocketService {
       path,
     });
 
-    logger.info(
-      `WebSocket server started on path ${path}`
-    );
+    logger.info(`WebSocket server started on path ${path}`);
 
     this.wss.on("connection", (ws: WebSocket) => {
       logger.info(
-        `WebSocket client connected. Total connections: ${this.wss?.clients.size}`
+        `WebSocket client connected. Total connections: ${this.wss?.clients.size}`,
       );
 
       ws.on("message", async (data) => {
@@ -42,7 +37,7 @@ class WebSocketService {
           // Handle different message types
           await this.handleMessage(validatedMessage, ws);
         } catch (error) {
-          logger.error("Failed to parse WebSocket message:", error);
+          logger.error({ error }, "Failed to parse WebSocket message");
 
           // Send error back to client
           ws.send(
@@ -52,24 +47,24 @@ class WebSocketService {
                 message:
                   error instanceof Error ? error.message : "Invalid message",
               },
-            })
+            }),
           );
         }
       });
 
       ws.on("close", () => {
         logger.info(
-          `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`
+          `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
         );
       });
 
       ws.on("error", (error) => {
-        logger.error("WebSocket error:", error);
+        logger.error({ error }, "WebSocket error");
       });
     });
 
     this.wss.on("error", (error) => {
-      logger.error("WebSocket server error:", error);
+      logger.error({ error }, "WebSocket server error");
     });
   }
 
@@ -78,17 +73,20 @@ class WebSocketService {
    */
   private async handleMessage(
     message: WebSocketMessage,
-    ws: WebSocket
+    _ws: WebSocket,
   ): Promise<void> {
     switch (message.type) {
       case "mcp-installation-response":
-        logger.info("Received MCP installation response:", message.payload);
+        logger.info(
+          { message: message.payload },
+          "Received MCP installation response",
+        );
         // The response from the frontend is just for logging/tracking
         // The actual installation happens via the regular HTTP API
         break;
 
       default:
-        logger.warn("Unknown WebSocket message type:", message);
+        logger.warn({ message }, "Unknown WebSocket message type");
     }
   }
 
@@ -114,11 +112,14 @@ class WebSocketService {
 
     if (sentCount < clientCount) {
       logger.info(
-        `Only sent to ${sentCount}/${clientCount} clients (some were not ready)`
+        `Only sent to ${sentCount}/${clientCount} clients (some were not ready)`,
       );
     }
 
-    logger.info(`Broadcasted message to ${sentCount} client(s)`, { type: message.type });
+    logger.info(
+      { message, sentCount },
+      `Broadcasted message to ${sentCount} client(s)`,
+    );
   }
 
   /**
@@ -126,7 +127,7 @@ class WebSocketService {
    */
   sendToClients(
     message: WebSocketMessage,
-    filter?: (client: WebSocket) => boolean
+    filter?: (client: WebSocket) => boolean,
   ) {
     if (!this.wss) {
       logger.warn("WebSocket server not initialized");
@@ -137,16 +138,16 @@ class WebSocketService {
     let sentCount = 0;
 
     this.wss.clients.forEach((client) => {
-      if (
-        client.readyState === WS.OPEN &&
-        (!filter || filter(client))
-      ) {
+      if (client.readyState === WS.OPEN && (!filter || filter(client))) {
         client.send(messageStr);
         sentCount++;
       }
     });
 
-    logger.info(`Sent message to ${sentCount} client(s)`, { type: message.type });
+    logger.info(
+      { message, sentCount },
+      `Sent message to ${sentCount} client(s)`,
+    );
   }
 
   /**

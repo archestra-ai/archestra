@@ -35,9 +35,8 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
+import websocketService from "@/websocket";
 import * as routes from "./routes";
-import websocketService from "@/websocket/service";
-import "@/websocket/schemas"; // Import to register schemas in global registry
 
 const {
   api: {

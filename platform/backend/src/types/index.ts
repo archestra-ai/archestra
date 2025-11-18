@@ -32,3 +32,4 @@ export * from "./token-price";
 export * from "./tool";
 export * from "./tool-execution";
 export * from "./user";
+export * from "./websocket";

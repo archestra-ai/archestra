@@ -20,7 +20,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
-import websocketService from "@/websocket/service";
+import websocketService from "@/websocket";
 
 /**
  * Constants for Archestra MCP server

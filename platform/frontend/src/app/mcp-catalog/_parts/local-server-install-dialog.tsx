@@ -177,7 +177,6 @@ export function LocalServerInstallDialog({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Team Selection for Team Auth */}
           {authType === "team" && (
             <div className="space-y-2">
               <Label htmlFor="select-team">
@@ -208,7 +207,6 @@ export function LocalServerInstallDialog({
                 </SelectContent>
               </Select>
 
-              {/* Selected Teams Display */}
               {selectedTeamIds.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {selectedTeamIds.map((teamId) => {
@@ -236,7 +234,6 @@ export function LocalServerInstallDialog({
               )}
             </div>
           )}
-          {/* User Config Fields */}
           {userConfigFields.length > 0 && (
             <div className="space-y-4">
               {userConfigFields.map((field) => (
@@ -336,7 +333,6 @@ export function LocalServerInstallDialog({
             </div>
           )}
 
-          {/* Environment Variables that need prompting */}
           {promptedEnvVars.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Environment Variables</h3>

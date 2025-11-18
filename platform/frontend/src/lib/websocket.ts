@@ -1,40 +1,17 @@
+import type { archestraApiTypes } from "@shared";
 import config from "@/lib/config";
 
-/**
- * WebSocket message types
- * These will be replaced by generated types from the backend OpenAPI spec after codegen
- */
-export type WebSocketMessage =
-  | {
-      type: "mcp-installation-request";
-      payload: {
-        sessionId: string;
-        conversationId: string;
-        externalCatalogId?: string;
-        requestReason?: string;
-        customServerConfig?: Record<string, any>;
-      };
-    }
-  | {
-      type: "mcp-installation-response";
-      payload: {
-        sessionId: string;
-        conversationId: string;
-        success: boolean;
-        message?: string;
-      };
-    };
+type WebSocketMessage = archestraApiTypes.WebSocketMessage;
 
 type MessageHandler<T extends WebSocketMessage = WebSocketMessage> = (
-  message: T
+  message: T,
 ) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
-  private handlers: Map<
-    WebSocketMessage["type"],
-    Set<MessageHandler<any>>
-  > = new Map();
+  // biome-ignore lint/suspicious/noExplicitAny: Generic message handler
+  private handlers: Map<WebSocketMessage["type"], Set<MessageHandler<any>>> =
+    new Map();
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = Infinity;
@@ -89,9 +66,7 @@ class WebSocketService {
 
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error(
-        "[WebSocket] Max reconnect attempts reached, giving up"
-      );
+      console.error("[WebSocket] Max reconnect attempts reached, giving up");
       return;
     }
 
@@ -101,12 +76,12 @@ class WebSocketService {
 
     this.reconnectAttempts++;
     const delay = Math.min(
-      this.reconnectDelay * Math.pow(1.3, this.reconnectAttempts),
-      this.maxReconnectDelay
+      this.reconnectDelay * 1.3 ** this.reconnectAttempts,
+      this.maxReconnectDelay,
     );
 
     console.log(
-      `[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
+      `[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
     );
 
     this.reconnectTimeout = setTimeout(() => {
@@ -130,7 +105,7 @@ class WebSocketService {
 
   subscribe<T extends WebSocketMessage["type"]>(
     type: T,
-    handler: MessageHandler<Extract<WebSocketMessage, { type: T }>>
+    handler: MessageHandler<Extract<WebSocketMessage, { type: T }>>,
   ): () => void {
     if (!this.handlers.has(type)) {
       this.handlers.set(type, new Set());

@@ -177,7 +177,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
         </DialogHeader>
         <ScrollArea className="h-[60vh] w-full py-4">
           <div className="space-y-6 pr-4">
-            {/* Overview Section */}
             <section>
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
                 <Info className="h-5 w-5" />
@@ -221,7 +220,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </div>
             </section>
 
-            {/* Author Section */}
             {server?.author && (
               <>
                 <Separator />
@@ -273,7 +271,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* Links Section */}
             {(server?.homepage ||
               server?.documentation ||
               server?.support ||
@@ -335,7 +332,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* Server Configuration Section */}
             {server?.server && (
               <>
                 <Separator />
@@ -434,7 +430,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* Tools Section */}
             {server?.tools && server.tools.length > 0 && (
               <>
                 <Separator />
@@ -464,7 +459,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* Prompts Section */}
             {server?.prompts && server.prompts.length > 0 && (
               <>
                 <Separator />
@@ -499,7 +493,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* User Configuration Section */}
             {server?.user_config &&
               Object.keys(server.user_config).length > 0 && (
                 <>
@@ -558,7 +551,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                 </>
               )}
 
-            {/* Compatibility Section */}
             {server?.compatibility && (
               <>
                 <Separator />
@@ -617,7 +609,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* GitHub Info Section */}
             {server?.github_info && (
               <>
                 <Separator />
@@ -660,7 +651,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* Metadata Section */}
             {server?.last_scraped_at && (
               <>
                 <Separator />
@@ -689,7 +679,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {/* README Section */}
             {content && (
               <>
                 <Separator />

@@ -8,6 +8,8 @@ import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import { RequestInstallationDialog } from "@/app/mcp-catalog/_parts/request-installation-dialog";
 import {
   PromptInput,
   PromptInputBody,
@@ -19,8 +21,6 @@ import {
 import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
-import { RequestInstallationDialog } from "@/app/mcp-catalog/_parts/request-installation-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,7 +96,7 @@ export default function ChatPage() {
       (message) => {
         console.log(
           "[Chat] Received MCP installation request:",
-          message.payload
+          message.payload,
         );
 
         // Open the appropriate dialog based on the payload
@@ -110,7 +110,7 @@ export default function ChatPage() {
         } else if (message.payload.customServerConfig) {
           setIsCustomServerDialogOpen(true);
         }
-      }
+      },
     );
 
     // Cleanup on unmount
@@ -338,7 +338,6 @@ export default function ChatPage() {
           <div className="flex flex-col h-full">
             {error && <ChatError error={error} />}
 
-            {/* Sticky top bar with agent name and toggle */}
             <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
               <div className="flex-1" />
               {conversation?.agent?.name && (
@@ -370,7 +369,6 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Scrollable messages area */}
             <div className="flex-1 overflow-y-auto">
               <ChatMessages
                 messages={messages}
@@ -379,7 +377,6 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* Sticky bottom input area */}
             <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgentId && Object.keys(groupedTools).length > 0 && (
@@ -456,7 +453,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* MCP Installation Request Dialogs */}
       <RequestInstallationDialog
         server={
           mcpInstallationRequestServer

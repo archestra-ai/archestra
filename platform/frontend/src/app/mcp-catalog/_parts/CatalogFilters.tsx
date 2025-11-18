@@ -23,7 +23,6 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
   const [selectedCategory, setSelectedCategory] =
     useState<SelectedCategory>("all");
 
-  // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
 
   const handleTypeChange = (type: ServerType) => {
@@ -41,7 +40,6 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
 
   return (
     <div className="space-y-3">
-      {/* Type Filter */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-muted-foreground">Type:</span>
         <Badge
@@ -67,7 +65,6 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
         </Badge>
       </div>
 
-      {/* Category Filter */}
       <div className="flex items-start gap-2 flex-wrap">
         <span className="text-sm font-medium text-muted-foreground pt-1">
           Category:

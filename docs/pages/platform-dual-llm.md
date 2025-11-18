@@ -68,7 +68,7 @@ graph LR
 
 Access the configuration interface at `http://localhost:3000/dual-llm`:
 
-![Dual LLM Configuration UI](/docs/platfrom/dual-llm-1.png)
+![Dual LLM Configuration UI](/docs/automated_screenshots/platform_dual_llm_configuration.png)
 _Screenshot: Configuration interface showing prompt templates and settings_
 
 ### Settings

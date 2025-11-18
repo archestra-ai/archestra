@@ -27,6 +27,30 @@ import {
 const CONVERSATION_QUERY_PARAM = "conversation";
 const VISIBLE_CHAT_COUNT = 10;
 
+// Helper to extract first 15 chars from first user message
+function getConversationDisplayTitle(
+  title: string | null,
+  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+  messages?: any[],
+): string {
+  if (title) return title;
+
+  // Try to extract from first user message
+  if (messages && messages.length > 0) {
+    for (const msg of messages) {
+      if (msg.role === "user" && msg.parts) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.text) {
+            return part.text.slice(0, 15);
+          }
+        }
+      }
+    }
+  }
+
+  return "New chat";
+}
+
 export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
@@ -131,6 +155,10 @@ export function ChatSidebarSection() {
               {/* Conversation List */}
               {visibleChats.map((conv) => {
                 const isCurrentConversation = currentConversationId === conv.id;
+                const displayTitle = getConversationDisplayTitle(
+                  conv.title,
+                  conv.messages,
+                );
 
                 return (
                   <SidebarMenuItem key={conv.id} className="group/chat-item">
@@ -162,11 +190,8 @@ export function ChatSidebarSection() {
                                 isActive={isCurrentConversation}
                                 className="cursor-pointer flex-1 pr-1 justify-start"
                               >
-                                <span
-                                  className="truncate"
-                                  title={conv.title || "New chat"}
-                                >
-                                  {conv.title || "New chat"}
+                                <span className="truncate" title={displayTitle}>
+                                  {displayTitle}
                                 </span>
                               </SidebarMenuButton>
                             </TooltipTrigger>

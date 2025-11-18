@@ -7,6 +7,30 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 
+// Helper to extract first 15 chars from first user message
+function getConversationDisplayTitle(
+  title: string | null,
+  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+  messages?: any[],
+): string {
+  if (title) return title;
+
+  // Try to extract from first user message
+  if (messages && messages.length > 0) {
+    for (const msg of messages) {
+      if (msg.role === "user" && msg.parts) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.text) {
+            return part.text.slice(0, 15);
+          }
+        }
+      }
+    }
+  }
+
+  return "New conversation";
+}
+
 interface Conversation {
   id: string;
   title: string | null;
@@ -20,6 +44,8 @@ interface Conversation {
   };
   createdAt: string;
   updatedAt: string;
+  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+  messages?: any[];
 }
 
 interface ConversationListProps {
@@ -82,79 +108,86 @@ export function ConversationList({
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {conversations.map((conv) => (
-            <div
-              key={conv.id}
-              className={`group relative flex items-center gap-1 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors ${
-                selectedConversationId === conv.id ? "bg-accent" : ""
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => onSelectConversation(conv.id)}
-                className="flex-1 min-w-0 text-left overflow-hidden"
+          {conversations.map((conv) => {
+            const displayTitle = getConversationDisplayTitle(
+              conv.title,
+              conv.messages,
+            );
+
+            return (
+              <div
+                key={conv.id}
+                className={`group relative flex items-center gap-1 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors ${
+                  selectedConversationId === conv.id ? "bg-accent" : ""
+                }`}
               >
-                {editingId === conv.id ? (
-                  <Input
-                    ref={inputRef}
-                    value={editingTitle}
-                    onChange={(e) => setEditingTitle(e.target.value)}
-                    onBlur={() => handleSaveEdit(conv.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleSaveEdit(conv.id);
-                      } else if (e.key === "Escape") {
-                        handleCancelEdit();
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-7 text-sm"
-                  />
-                ) : (
-                  <div
-                    className="truncate max-w-[140px]"
-                    title={conv.title || "New conversation"}
-                  >
-                    {conv.title || "New conversation"}
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation(conv.id)}
+                  className="flex-1 min-w-0 text-left overflow-hidden"
+                >
+                  {editingId === conv.id ? (
+                    <Input
+                      ref={inputRef}
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={() => handleSaveEdit(conv.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSaveEdit(conv.id);
+                        } else if (e.key === "Escape") {
+                          handleCancelEdit();
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-7 text-sm"
+                    />
+                  ) : (
+                    <div
+                      className="truncate max-w-[140px]"
+                      title={displayTitle}
+                    >
+                      {displayTitle}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 mt-0.5 w-full">
+                    <Badge
+                      variant="outline"
+                      className="text-xs py-0 px-1 truncate max-w-full"
+                    >
+                      {conv.agent.name}
+                    </Badge>
                   </div>
-                )}
-                <div className="flex items-center gap-1 mt-0.5 w-full">
-                  <Badge
-                    variant="outline"
-                    className="text-xs py-0 px-1 truncate max-w-full"
-                  >
-                    {conv.agent.name}
-                  </Badge>
-                </div>
-              </button>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                {editingId !== conv.id && (
+                </button>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {editingId !== conv.id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEdit(conv);
+                      }}
+                      className="p-1 hover:bg-muted rounded shrink-0"
+                      title="Edit conversation name"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleStartEdit(conv);
+                      onDeleteConversation(conv.id);
                     }}
-                    className="p-1 hover:bg-muted rounded shrink-0"
-                    title="Edit conversation name"
+                    className="p-1 hover:bg-destructive/10 rounded shrink-0"
+                    title="Delete conversation"
                   >
-                    <Edit2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteConversation(conv.id);
-                  }}
-                  className="p-1 hover:bg-destructive/10 rounded shrink-0"
-                  title="Delete conversation"
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
       <div className="p-4 border-t">

@@ -1,5 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { ChatStatus } from "ai";
+import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import Image from "next/image";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
@@ -123,12 +123,10 @@ export function ChatMessages({
 
                   case "dynamic-tool": {
                     if (!isToolPart(part)) return null;
-                    // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool parts have runtime-defined properties
-                    const toolName = (part as any).toolName;
+                    const toolName = part.toolName;
 
                     // Look ahead for tool result (same tool call ID)
-                    // biome-ignore lint/suspicious/noExplicitAny: Tool result structure varies by tool type
-                    let toolResultPart: any = null;
+                    let toolResultPart = null;
                     const nextPart = message.parts[i + 1];
                     if (
                       nextPart &&
@@ -141,39 +139,12 @@ export function ChatMessages({
                     }
 
                     return (
-                      <Tool key={`${message.id}-${part.toolCallId}`}>
-                        <ToolHeader
-                          type={`tool-${toolName}`}
-                          state={
-                            toolResultPart
-                              ? "output-available"
-                              : part.state || "input-available"
-                          }
-                          errorText={part.errorText}
-                        />
-                        <ToolContent>
-                          {part.input && Object.keys(part.input).length > 0 && (
-                            <ToolInput input={part.input} />
-                          )}
-                          {toolResultPart && (
-                            <ToolOutput
-                              label={
-                                toolResultPart.errorText ? "Error" : "Result"
-                              }
-                              output={toolResultPart.output}
-                              errorText={toolResultPart.errorText}
-                            />
-                          )}
-                          {!toolResultPart &&
-                            Boolean(part.output || part.errorText) && (
-                              <ToolOutput
-                                label={part.errorText ? "Error" : "Result"}
-                                output={part.output}
-                                errorText={part.errorText}
-                              />
-                            )}
-                        </ToolContent>
-                      </Tool>
+                      <MessageTool
+                        part={part}
+                        key={`${message.id}-${i}`}
+                        toolResultPart={toolResultPart}
+                        toolName={toolName}
+                      />
                     );
                   }
 
@@ -197,40 +168,12 @@ export function ChatMessages({
                       }
 
                       return (
-                        <Tool key={`${message.id}-${part.toolCallId}`}>
-                          <ToolHeader
-                            type={`tool-${toolName}`}
-                            state={
-                              toolResultPart
-                                ? "output-available"
-                                : part.state || "input-available"
-                            }
-                            errorText={part.errorText}
-                          />
-                          <ToolContent>
-                            {part.input &&
-                              Object.keys(part.input).length > 0 && (
-                                <ToolInput input={part.input} />
-                              )}
-                            {toolResultPart && (
-                              <ToolOutput
-                                label={
-                                  toolResultPart.errorText ? "Error" : "Result"
-                                }
-                                output={toolResultPart.output}
-                                errorText={toolResultPart.errorText}
-                              />
-                            )}
-                            {!toolResultPart &&
-                              Boolean(part.output || part.errorText) && (
-                                <ToolOutput
-                                  label={part.errorText ? "Error" : "Result"}
-                                  output={part.output}
-                                  errorText={part.errorText}
-                                />
-                              )}
-                          </ToolContent>
-                        </Tool>
+                        <MessageTool
+                          part={part}
+                          key={`${message.id}-${i}`}
+                          toolResultPart={toolResultPart}
+                          toolName={toolName}
+                        />
                       );
                     }
 
@@ -298,3 +241,82 @@ function useStreamingStallDetection(
 
   return isStreamingStalled;
 }
+
+function MessageTool({
+  part,
+  toolResultPart,
+  toolName,
+}: {
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  toolName: string;
+}) {
+  const outputError = toolResultPart
+    ? tryToExtractErrorFromOutput(toolResultPart.output)
+    : tryToExtractErrorFromOutput(part.output);
+  const errorText = toolResultPart
+    ? (toolResultPart.errorText ?? outputError)
+    : (part.errorText ?? outputError);
+
+  const hasInput = part.input && Object.keys(part.input).length > 0;
+  const hasContent = Boolean(
+    hasInput ||
+      (toolResultPart && Boolean(toolResultPart.output)) ||
+      (!toolResultPart && Boolean(part.output)),
+  );
+
+  return (
+    <Tool className={hasContent ? "cursor-pointer" : ""}>
+      <ToolHeader
+        type={`tool-${toolName}`}
+        state={getHeaderState({
+          state: part.state || "input-available",
+          toolResultPart,
+          errorText,
+        })}
+        errorText={errorText}
+        isCollapsible={hasContent}
+      />
+      <ToolContent>
+        {hasInput ? <ToolInput input={part.input} /> : null}
+        {toolResultPart && (
+          <ToolOutput
+            label={errorText ? "Error" : "Result"}
+            output={toolResultPart.output}
+            errorText={errorText}
+          />
+        )}
+        {!toolResultPart && Boolean(part.output) && (
+          <ToolOutput
+            label={errorText ? "Error" : "Result"}
+            output={part.output}
+            errorText={errorText}
+          />
+        )}
+      </ToolContent>
+    </Tool>
+  );
+}
+
+const tryToExtractErrorFromOutput = (output: unknown) => {
+  try {
+    if (typeof output !== "string") return undefined;
+    const json = JSON.parse(output);
+    return typeof json.error === "string" ? json.error : undefined;
+  } catch (_error) {
+    return undefined;
+  }
+};
+const getHeaderState = ({
+  state,
+  toolResultPart,
+  errorText,
+}: {
+  state: ToolUIPart["state"] | DynamicToolUIPart["state"];
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  errorText: string | undefined;
+}) => {
+  if (errorText) return "output-error";
+  if (toolResultPart) return "output-available";
+  return state;
+};

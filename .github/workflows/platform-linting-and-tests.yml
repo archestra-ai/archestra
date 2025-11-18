@@ -12,6 +12,8 @@ jobs:
   platform-linting-and-tests:
     name: Platform Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./platform
@@ -33,13 +35,24 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: cp .env.example .env
 
+      - name: Turbo Cache
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/cache@v4
+        with:
+          path: ./platform/.turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
 
   platform-e2e-tests:
     name: Platform e2e Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -82,7 +95,7 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -288,6 +301,8 @@ jobs:
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./platform/helm/archestra

@@ -57,13 +57,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Get MCP tools for the agent via MCP Gateway
-      const mcpTools = await getChatMcpTools(conversation.agentId);
-
-      // Get agent-specific prompts
-      const agentPrompts = await AgentPromptModel.findByAgentIdWithPrompts(
-        conversation.agentId,
-      );
+      // Fetch MCP tools, agent prompts, and chat settings in parallel
+      const [mcpTools, agentPrompts, chatSettings] = await Promise.all([
+        getChatMcpTools(conversation.agentId),
+        AgentPromptModel.findByAgentIdWithPrompts(conversation.agentId),
+        ChatSettingsModel.findByOrganizationId(organizationId),
+      ]);
 
       // Separate system and regular prompts
       const systemPrompts = agentPrompts.filter(
@@ -108,10 +107,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         "Starting chat stream",
       );
-
-      // Get Anthropic API key from database
-      const chatSettings =
-        await ChatSettingsModel.findByOrganizationId(organizationId);
 
       let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
 

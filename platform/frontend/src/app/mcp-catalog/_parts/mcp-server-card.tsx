@@ -163,8 +163,12 @@ export function McpServerCard({
   } | null>(null);
 
   // Aggregate all installations for this catalog item (for logs dropdown)
-  let localInstalls = [];
-  if (installedServer?.catalogId && variant === "local" && allMcpServers?.length > 0) {
+  let localInstalls: typeof allMcpServers = [];
+  if (
+    installedServer?.catalogId &&
+    variant === "local" &&
+    allMcpServers?.length > 0
+  ) {
     localInstalls = allMcpServers
       .filter(({ catalogId, serverType }) => {
         return (
@@ -176,7 +180,7 @@ export function McpServerCard({
         return (
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
-      })
+      });
   }
 
   const needsReinstall = installedServer?.reinstallRequired;

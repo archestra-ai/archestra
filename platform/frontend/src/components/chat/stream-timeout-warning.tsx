@@ -7,14 +7,14 @@ import { useEffect, useRef, useState } from "react";
 interface StreamTimeoutWarningProps {
   status: "ready" | "submitted" | "streaming" | "error";
   messages: UIMessage[];
-  thresholdSeconds?: number; // Default: 15
-  checkIntervalSeconds?: number; // Default: 5
+  thresholdSeconds?: number;
+  checkIntervalSeconds?: number;
 }
 
 export function StreamTimeoutWarning({
   status,
   messages,
-  thresholdSeconds = 20,
+  thresholdSeconds = 40,
   checkIntervalSeconds = 3,
 }: StreamTimeoutWarningProps) {
   const [showWarning, setShowWarning] = useState(false);
@@ -71,9 +71,11 @@ export function StreamTimeoutWarning({
         </div>
         <div className="ml-3">
           <p className="text-sm text-yellow-700 dark:text-yellow-200">
-            No new messages from assistant have been received for the last {thresholdSeconds} seconds as part of a single streaming response. This may
-            indicate that the timeout configured for your cloud provider's load balancer is too low.
-            We recommend increasing the timeout to at least 5 minutes.{" "}
+            No new messages from assistant have been received for the last{" "}
+            {thresholdSeconds} seconds as part of a single streaming response.
+            This may indicate that the timeout configured for your cloud
+            provider's load balancer is too low. We recommend increasing the
+            timeout to at least 5 minutes.{" "}
             <a
               href="https://www.archestra.ai/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings"
               target="_blank"

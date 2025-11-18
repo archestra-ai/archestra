@@ -73,12 +73,7 @@ export default function ChatPage() {
   useEffect(() => {
     const unsubscribe = websocketService.subscribe(
       "mcp-installation-request",
-      (message) => {
-        console.log(
-          "[Chat] Received MCP installation request:",
-          message.payload,
-        );
-
+      (_message) => {
         setIsCustomServerDialogOpen(true);
       },
     );

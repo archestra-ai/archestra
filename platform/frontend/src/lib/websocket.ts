@@ -21,7 +21,6 @@ class WebSocketService {
 
   async connect(): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log("[WebSocket] Already connected");
       return;
     }
 
@@ -31,14 +30,11 @@ class WebSocketService {
       this.ws = new WebSocket(config.websocket.url);
 
       this.ws.addEventListener("open", () => {
-        console.log("[WebSocket] Connected");
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
       });
 
-      this.ws.addEventListener("error", (error) => {
-        console.error("[WebSocket] Error:", error);
-      });
+      // this.ws.addEventListener("error", (_error) => {});
 
       this.ws.addEventListener("message", (event) => {
         try {
@@ -50,7 +46,6 @@ class WebSocketService {
       });
 
       this.ws.addEventListener("close", () => {
-        console.log("[WebSocket] Disconnected");
         this.ws = null;
 
         // Attempt to reconnect unless manually disconnected
@@ -80,10 +75,6 @@ class WebSocketService {
       this.maxReconnectDelay,
     );
 
-    console.log(
-      `[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
-    );
-
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
     }, delay);
@@ -111,7 +102,7 @@ class WebSocketService {
       this.handlers.set(type, new Set());
     }
 
-    this.handlers.get(type)!.add(handler);
+    this.handlers.get(type)?.add(handler);
 
     // Return unsubscribe function
     return () => {
@@ -126,8 +117,6 @@ class WebSocketService {
   }
 
   private handleMessage(message: WebSocketMessage): void {
-    console.log("[WebSocket] Received message:", message);
-
     const handlers = this.handlers.get(message.type);
     if (handlers) {
       handlers.forEach((handler) => {

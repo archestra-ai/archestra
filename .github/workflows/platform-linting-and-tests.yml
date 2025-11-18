@@ -91,7 +91,7 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

@@ -26,38 +26,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMcpServerLogs } from "@/lib/mcp-server.query";
 
 interface McpLogsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serverName: string;
-  serverId?: string;
-  logs: string;
-  command: string;
-  isLoading: boolean;
-  error?: Error | null;
-  onRefresh: () => unknown;
-  installs?: Array<{
-    serverId: string;
+  installs: {
+    id: string;
     name: string;
-  }>;
-  selectedInstallId?: string;
-  onInstallChange?: (serverId: string) => void;
+  }[];
 }
 
 export function McpLogsDialog({
   open,
   onOpenChange,
   serverName,
-  serverId,
-  logs: initialLogs,
-  command,
-  isLoading: initialIsLoading,
-  error: initialError,
-  onRefresh,
-  installs = [],
-  selectedInstallId,
-  onInstallChange,
+  installs,
 }: McpLogsDialogProps) {
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
@@ -69,10 +54,29 @@ export function McpLogsDialog({
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Use streamed logs when following, otherwise use initial logs
-  const displayLogs = isFollowing ? streamedLogs : initialLogs;
-  const displayError = isFollowing ? streamError : initialError?.message;
-  const displayIsLoading = isFollowing ? false : initialIsLoading;
+  // State for selected installation
+  const [serverId, setServerId] = useState<string | null>(null);
+
+  // Default to first installation when dialog opens
+  useEffect(() => {
+    if (installs.length > 0 && !serverId) {
+      setServerId(installs[0].id);
+    }
+  }, [installs, serverId]);
+
+  // Fetch logs for selected installation
+  const {
+    data: logsData,
+    isLoading,
+    error: logsError,
+    refetch,
+  } = useMcpServerLogs(open && serverId ? serverId : null);
+
+  // Use streamed logs when following, otherwise use fetched logs
+  const displayLogs = isFollowing ? streamedLogs : (logsData?.logs ?? "");
+  const displayError = isFollowing ? streamError : logsError?.message;
+  const displayIsLoading = isFollowing ? false : isLoading;
+  const command = logsData?.command ?? "";
 
   const startFollowing = useCallback(async () => {
     if (!serverId) {
@@ -228,16 +232,14 @@ export function McpLogsDialog({
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await onRefresh();
+      await refetch();
       toast.success("Logs refreshed");
     } catch (_error) {
       toast.error("Failed to refresh logs");
     } finally {
       setIsRefreshing(false);
     }
-  }, [onRefresh]);
-
-  const showInstallSelector = installs.length > 1;
+  }, [refetch]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -249,12 +251,12 @@ export function McpLogsDialog({
           </DialogTitle>
           <DialogDescription className="flex flex-col gap-2">
             <span>View the recent logs from the MCP server container</span>
-            {showInstallSelector && (
+            {installs.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Installation:</span>
                 <Select
-                  value={selectedInstallId}
-                  onValueChange={onInstallChange}
+                  value={serverId ?? undefined}
+                  onValueChange={setServerId}
                 >
                   <SelectTrigger className="w-[300px] h-8">
                     <SelectValue />
@@ -262,8 +264,8 @@ export function McpLogsDialog({
                   <SelectContent>
                     {installs.map((install) => (
                       <SelectItem
-                        key={install.serverId}
-                        value={install.serverId}
+                        key={install.id}
+                        value={install.id}
                       >
                         {install.name}
                       </SelectItem>

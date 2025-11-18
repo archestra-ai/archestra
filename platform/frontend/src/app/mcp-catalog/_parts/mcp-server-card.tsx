@@ -11,7 +11,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,6 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
-  useMcpServerLogs,
   useMcpServers,
   useMcpServerTools,
   useRevokeAllTeamsMcpServerAccess,
@@ -162,54 +161,23 @@ export function McpServerCard({
     id: string;
     name: string;
   } | null>(null);
-  const [selectedLogsServerId, setSelectedLogsServerId] = useState<
-    string | null
-  >(null);
 
   // Aggregate all installations for this catalog item (for logs dropdown)
-  const logInstalls: Array<{ serverId: string; name: string }> =
-    installedServer?.catalogId && variant === "local" && allMcpServers
-      ? allMcpServers
-          .filter(({ catalogId, serverType }) => {
-            return (
-              catalogId === installedServer.catalogId && serverType === "local"
-            );
-          })
-          .sort((a, b) => {
-            // Sort by createdAt ascending (oldest first, most recent last)
-            return (
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-          })
-          .map((s) => ({
-            serverId: s.id,
-            name: s.name,
-          }))
-      : [];
-
-  // Default to first installation when dialog opens
-  useEffect(() => {
-    if (isLogsDialogOpen && logInstalls.length > 0 && !selectedLogsServerId) {
-      setSelectedLogsServerId(logInstalls[0].serverId);
-    }
-  }, [isLogsDialogOpen, logInstalls, selectedLogsServerId]);
-
-  // Reset selected installation when dialog closes
-  useEffect(() => {
-    if (!isLogsDialogOpen) {
-      setSelectedLogsServerId(null);
-    }
-  }, [isLogsDialogOpen]);
-
-  // Fetch logs for the selected installation
-  const shouldFetchLogs =
-    isLogsDialogOpen && selectedLogsServerId && variant === "local";
-  const {
-    data: logsData,
-    isLoading: isLoadingLogs,
-    error: logsError,
-    refetch: refetchLogs,
-  } = useMcpServerLogs(shouldFetchLogs ? selectedLogsServerId : null);
+  let localInstalls = [];
+  if (installedServer?.catalogId && variant === "local" && allMcpServers?.length > 0) {
+    localInstalls = allMcpServers
+      .filter(({ catalogId, serverType }) => {
+        return (
+          catalogId === installedServer.catalogId && serverType === "local"
+        );
+      })
+      .sort((a, b) => {
+        // Sort by createdAt ascending (oldest first, most recent last)
+        return (
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      })
+  }
 
   const needsReinstall = installedServer?.reinstallRequired;
   const hasError = installedServer?.localInstallationStatus === "error";
@@ -686,15 +654,7 @@ export function McpServerCard({
         open={isLogsDialogOpen}
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
-        serverId={selectedLogsServerId ?? undefined}
-        logs={logsData?.logs ?? ""}
-        command={logsData?.command ?? "No command available"}
-        isLoading={isLoadingLogs}
-        error={logsError}
-        onRefresh={refetchLogs}
-        installs={logInstalls.length > 0 ? logInstalls : undefined}
-        selectedInstallId={selectedLogsServerId ?? undefined}
-        onInstallChange={setSelectedLogsServerId}
+        installs={localInstalls}
       />
 
       <BulkAssignAgentDialog

@@ -22,6 +22,22 @@ export const getDisplayProxyUrl = (): string => {
 };
 
 /**
+ * Get the WebSocket URL
+ */
+const getWebSocketUrl = (): string => {
+  const baseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+
+  // In development, use localhost
+  if (!baseUrl || typeof window === 'undefined') {
+    return "ws://localhost:9000/ws";
+  }
+
+  // Convert http(s) to ws(s)
+  const wsUrl = baseUrl.replace(/^http/, "ws");
+  return `${wsUrl}/ws`;
+};
+
+/**
  * Configuration object for the frontend application.
  */
 export default {
@@ -34,6 +50,12 @@ export default {
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).
      */
     baseUrl: "",
+  },
+  websocket: {
+    /**
+     * WebSocket URL for real-time communication
+     */
+    url: getWebSocketUrl(),
   },
   debug: process.env.NODE_ENV !== "production",
   posthog: {

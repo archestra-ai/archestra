@@ -36,6 +36,8 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import * as routes from "./routes";
+import websocketService from "@/websocket/service";
+import "@/websocket/schemas"; // Import to register schemas in global registry
 
 const {
   api: {
@@ -364,6 +366,10 @@ const start = async () => {
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+
+    // Start WebSocket server using the same HTTP server
+    websocketService.start(fastify.server);
+    fastify.log.info("WebSocket service started");
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

@@ -20,6 +20,7 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from '@/types';
+import websocketService from '@/websocket/service';
 
 /**
  * Constants for Archestra MCP server
@@ -286,20 +287,37 @@ export async function executeArchestraTool(
         };
       }
 
-      // Instead of creating the request directly (which requires a user context),
-      // return a special indicator that tells the UI to open the installation request dialog
-      const actionPayload = {
-        __archestra_action: 'open_mcp_installation_dialog',
-        externalCatalogId: externalCatalogId || null,
-        requestReason: requestReason || null,
-        customServerConfig: customServerConfig || null,
-      };
+      // Send websocket message to open the installation dialog in the frontend
+      // Use a generated session ID since we don't have the actual session here
+      const sessionId = `profile-${profile.id}-${Date.now()}`;
+      const conversationId = 'unknown'; // We don't have access to conversationId here
+
+      websocketService.broadcast({
+        type: 'mcp-installation-request',
+        payload: {
+          sessionId,
+          conversationId,
+          externalCatalogId,
+          requestReason,
+          customServerConfig,
+        },
+      });
+
+      logger.info(
+        { sessionId, externalCatalogId, customServerConfig: !!customServerConfig },
+        'Sent MCP installation request via WebSocket'
+      );
+
+      // Return a user-friendly message explaining what will happen
+      const message = externalCatalogId
+        ? `An installation request dialog for "${externalCatalogId}" should now be visible in your chat interface. Please review and submit the request to proceed with the installation.`
+        : 'An installation request dialog for a custom MCP server should now be visible in your chat interface. Please review and submit the request to proceed with the installation.';
 
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(actionPayload, null, 2),
+            text: message,
           },
         ],
         isError: false,

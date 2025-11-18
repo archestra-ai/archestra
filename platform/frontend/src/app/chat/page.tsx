@@ -42,6 +42,7 @@ import {
   useCreateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import websocketService from "@/lib/websocket";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -79,10 +80,43 @@ export default function ChatPage() {
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
 
-  // Initialize
+  // Initialize WebSocket connection
   useEffect(() => {
     if (hasInitialized) return;
     setHasInitialized(true);
+
+    // Connect to WebSocket
+    websocketService.connect().catch((error) => {
+      console.error("[Chat] Failed to connect to WebSocket:", error);
+    });
+
+    // Subscribe to MCP installation requests
+    const unsubscribe = websocketService.subscribe(
+      "mcp-installation-request",
+      (message) => {
+        console.log(
+          "[Chat] Received MCP installation request:",
+          message.payload
+        );
+
+        // Open the appropriate dialog based on the payload
+        if (message.payload.externalCatalogId) {
+          setMcpInstallationRequestServer({
+            name: message.payload.externalCatalogId,
+            display_name: message.payload.externalCatalogId,
+            description: "MCP Server from Archestra Catalog",
+            requestReason: message.payload.requestReason,
+          });
+        } else if (message.payload.customServerConfig) {
+          setIsCustomServerDialogOpen(true);
+        }
+      }
+    );
+
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+    };
   }, [hasInitialized]);
 
   // Sync conversation ID with URL
@@ -249,57 +283,6 @@ export default function ChatPage() {
       setMessages([]);
     }
   }, [conversationId, conversation, setMessages, sendMessage, status]);
-
-  // Detect special action indicator in messages to trigger MCP installation dialog
-  useEffect(() => {
-    // Look through messages for tool results containing the special action indicator
-    for (const message of messages) {
-      if (message.role === "assistant") {
-        for (const part of message.parts) {
-          // Check if this is a tool result part with output
-          // Handle both dynamic-tool and tool- prefixed types
-          const isToolWithOutput =
-            (part.type === "dynamic-tool" ||
-              (typeof part.type === "string" &&
-                part.type.startsWith("tool-"))) &&
-            "output" in part &&
-            part.output;
-
-          if (isToolWithOutput) {
-            const output =
-              typeof part.output === "string"
-                ? part.output
-                : JSON.stringify(part.output);
-
-            try {
-              const parsed = JSON.parse(output);
-              if (
-                parsed.__archestra_action === "open_mcp_installation_dialog"
-              ) {
-                // Handle opening the appropriate dialog
-                if (parsed.externalCatalogId) {
-                  // Open RequestInstallationDialog with minimal server info
-                  setMcpInstallationRequestServer({
-                    name: parsed.externalCatalogId,
-                    display_name: parsed.externalCatalogId,
-                    description: "MCP Server from Archestra Catalog",
-                    requestReason: parsed.requestReason || undefined,
-                  });
-                } else if (parsed.customServerConfig) {
-                  // Open CustomServerRequestDialog
-                  // Note: This would require additional state/logic to pre-fill the form
-                  setIsCustomServerDialogOpen(true);
-                }
-                return; // Only process the first action found
-              }
-            } catch {
-              // Not JSON or not our special action, continue
-            }
-          }
-        }
-      }
-    }
-  }, [messages]);
 
   const handleSubmit = (
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic

@@ -11,7 +11,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import { assignToolToAgent } from "@/routes/agent-tool";
-import type { Agent, InternalMcpCatalog } from "@/types";
+import type { InternalMcpCatalog } from "@/types";
 import {
   AutonomyPolicyOperator,
   type LimitEntityType,
@@ -81,7 +81,10 @@ const TOOL_GET_PROFILE_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEP
  * Context for the Archestra MCP server
  */
 export interface ArchestraContext {
-  profile: Agent;
+  profile: {
+    id: string;
+    name: string;
+  };
 }
 
 export const isArchestraMcpServerTool = (toolName: string): boolean => {

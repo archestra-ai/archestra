@@ -500,8 +500,6 @@ export async function executeArchestraTool(
           result += `\n  Entity ID: ${limit.entityId}`;
           result += `\n  Limit Type: ${limit.limitType}`;
           result += `\n  Limit Value: ${limit.limitValue}`;
-          result += `\n  Current Usage (In): ${limit.currentUsageTokensIn}`;
-          result += `\n  Current Usage (Out): ${limit.currentUsageTokensOut}`;
           if (limit.model) result += `\n  Model: ${limit.model}`;
           if (limit.mcpServerName)
             result += `\n  MCP Server: ${limit.mcpServerName}`;

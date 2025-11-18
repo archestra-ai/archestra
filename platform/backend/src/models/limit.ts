@@ -312,8 +312,7 @@ class LimitModel {
 
   /**
    * Reset usage counters for a specific limit
-   * Updates currentUsageTokensIn and currentUsageTokensOut to 0 and sets lastCleanup
-   * Also resets per-model usage records for token_cost limits
+   * Sets lastCleanup and resets per-model usage records for token_cost limits
    */
   static async resetLimitUsage(id: string): Promise<Limit | null> {
     const now = new Date();
@@ -321,15 +320,13 @@ class LimitModel {
     const [limit] = await db
       .update(schema.limitsTable)
       .set({
-        currentUsageTokensIn: 0,
-        currentUsageTokensOut: 0,
         lastCleanup: now,
         updatedAt: now,
       })
       .where(eq(schema.limitsTable.id, id))
       .returning();
 
-    // Also reset model usage records for token_cost limits
+    // Reset model usage records for token_cost limits
     if (limit && limit.limitType === "token_cost") {
       await db
         .update(schema.limitModelUsageTable)
@@ -448,13 +445,13 @@ class LimitModel {
       if (limitsToCleanup.length > 0) {
         for (const limit of limitsToCleanup) {
           logger.info(
-            `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, current usage: in=${limit.currentUsageTokensIn}, out=${limit.currentUsageTokensOut}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
+            `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
           );
 
           await LimitModel.resetLimitUsage(limit.id);
 
           logger.info(
-            `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset usage to 0 and set lastCleanup to ${now.toISOString()}`,
+            `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset model usage to 0 and set lastCleanup to ${now.toISOString()}`,
           );
         }
 
@@ -669,26 +666,15 @@ export class LimitValidationService {
       }
 
       for (const limit of limits) {
-        const currentUsage =
-          (limit.currentUsageTokensIn || 0) +
-          (limit.currentUsageTokensOut || 0);
-
-        const limitDetails = {
-          limitId: limit.id,
-          limitValue: limit.limitValue,
-          currentUsageTokensIn: limit.currentUsageTokensIn,
-          currentUsageTokensOut: limit.currentUsageTokensOut,
-          totalCurrentUsage: currentUsage,
-          isExceeded: currentUsage >= limit.limitValue,
-          fullLimitObject: limit,
-        };
         logger.info(
-          `[LimitValidation] Limit details for ${entityType} ${entityId}: ${JSON.stringify(limitDetails)}`,
+          `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
         // For token_cost limits, convert tokens to actual cost using token prices
-        let comparisonValue = currentUsage;
+        let comparisonValue = 0;
         let limitDescription = "tokens";
+        let totalTokensIn = 0;
+        let totalTokensOut = 0;
 
         if (limit.limitType === "token_cost") {
           try {
@@ -707,6 +693,10 @@ export class LimitValidationService {
               let totalCost = 0;
 
               for (const usage of modelUsages) {
+                // Track total tokens for metadata
+                totalTokensIn += usage.currentUsageTokensIn;
+                totalTokensOut += usage.currentUsageTokensOut;
+
                 const tokenPrice = await TokenPriceModel.findByModel(
                   usage.model,
                 );
@@ -756,15 +746,16 @@ export class LimitValidationService {
 
           // Calculate remaining based on the comparison type (tokens vs dollars)
           const remaining = Math.max(0, limit.limitValue - comparisonValue);
+          const totalTokens = totalTokensIn + totalTokensOut;
 
-          // For metadata, always use raw values for programmatic access
+          // For metadata, use token counts for programmatic access
           const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
-<archestra-limit-current-usage>${currentUsage}</archestra-limit-current-usage>
+<archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
 <archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, limit.limitValue - currentUsage)}</archestra-limit-remaining>`;
+<archestra-limit-remaining>${Math.max(0, limit.limitValue - totalTokens)}</archestra-limit-remaining>`;
 
           // For user message, use appropriate units based on limit type
           let contentMessage: string;
@@ -781,9 +772,9 @@ Please contact your administrator to increase the limit or wait for the usage to
             contentMessage = `
 I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
 
-Current usage: ${currentUsage.toLocaleString()} tokens
+Current usage: ${totalTokens.toLocaleString()} tokens
 Limit: ${limit.limitValue.toLocaleString()} tokens
-Remaining: ${Math.max(0, limit.limitValue - currentUsage).toLocaleString()} tokens
+Remaining: ${Math.max(0, limit.limitValue - totalTokens).toLocaleString()} tokens
 
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
           }
@@ -794,7 +785,7 @@ ${contentMessage}`;
           return [refusalMessage, contentMessage];
         } else {
           logger.info(
-            `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${currentUsage} < ${limit.limitValue}`,
+            `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
           );
         }
       }

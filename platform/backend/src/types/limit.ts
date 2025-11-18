@@ -42,8 +42,6 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   model: z.array(z.string()).nullable().optional(),
 }).omit({
   id: true,
-  currentUsageTokensIn: true,
-  currentUsageTokensOut: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -53,8 +51,6 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
  */
 export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
-  currentUsageTokensIn: true,
-  currentUsageTokensOut: true,
   createdAt: true,
   updatedAt: true,
 }).refine(

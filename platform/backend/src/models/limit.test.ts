@@ -24,8 +24,6 @@ describe("LimitModel", () => {
       expect(limit.limitType).toBe("token_cost");
       expect(limit.limitValue).toBe(1000000);
       expect(limit.model).toEqual(["claude-3-5-sonnet-20241022"]);
-      expect(limit.currentUsageTokensIn).toBe(0);
-      expect(limit.currentUsageTokensOut).toBe(0);
     });
 
     test("can create a token_cost limit for a team", async ({
@@ -717,7 +715,7 @@ describe("LimitModel", () => {
       expect(reset).toBeDefined();
       expect(modelUsage.length).toBe(1);
       expect(modelUsage[0].currentUsageTokensIn).toBe(0);
-      expect(reset?.currentUsageTokensOut).toBe(0);
+      expect(modelUsage[0].currentUsageTokensOut).toBe(0);
       expect(reset?.lastCleanup).toBeDefined();
       expect(reset?.lastCleanup).not.toBeNull();
     });

@@ -8118,8 +8118,6 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -8222,8 +8220,6 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -8392,8 +8388,6 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
@@ -8492,8 +8486,6 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;

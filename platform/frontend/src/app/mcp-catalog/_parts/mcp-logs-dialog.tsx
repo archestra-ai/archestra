@@ -336,30 +336,30 @@ export function McpLogsDialog({
               </div>
             </div>
 
-            <ScrollArea
-              ref={scrollAreaRef}
-              className="h-[450px] rounded-md border bg-slate-950"
-            >
-              <div className="p-4">
-                {displayIsLoading ? (
-                  <div className="text-slate-400 font-mono text-sm">
-                    Loading logs...
-                  </div>
-                ) : displayError ? (
-                  <div className="text-red-400 font-mono text-sm">
-                    Error loading logs: {displayError}
-                  </div>
-                ) : displayLogs ? (
-                  <pre className="text-slate-200 font-mono text-xs whitespace-pre-wrap">
+              <ScrollArea
+                ref={scrollAreaRef}
+                className="flex-[100%] min-h-[250px] rounded-md border bg-slate-950 overflow-auto"
+              >
+                <div className="p-4">
+                  {displayIsLoading ? (
+                    <div className="text-slate-400 font-mono text-sm">
+                      Loading logs...
+                    </div>
+                  ) : displayError ? (
+                    <div className="text-red-400 font-mono text-sm">
+                      Error loading logs: {displayError}
+                    </div>
+                  ) : displayLogs ? (
+                    <pre className="text-slate-200 font-mono text-xs whitespace-pre-wrap">
                     {displayLogs}
                   </pre>
-                ) : (
-                  <div className="text-slate-400 font-mono text-sm">
-                    No logs available
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
+                  ) : (
+                    <div className="text-slate-400 font-mono text-sm">
+                      No logs available
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
           </div>
 
           {/* Command section */}

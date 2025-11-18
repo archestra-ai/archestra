@@ -433,11 +433,65 @@ describe("PromptModel", () => {
         content: "Updated",
       });
 
-      expect(updated?.agents).toHaveLength(0); // New version starts with no agent relationships
+      // New version should maintain the agent relationships
+      expect(updated?.agents).toHaveLength(1);
+      expect(updated?.agents[0].id).toBe(agent.id);
+      expect(updated?.agents[0].name).toBe(agent.name);
 
-      // Original should still have the relationship
+      // Verify the old version no longer has relationships (migrated to new version)
       const originalWithAgents = await PromptModel.findById(original.id);
-      expect(originalWithAgents?.agents).toHaveLength(1);
+      expect(originalWithAgents?.agents).toHaveLength(0);
+    });
+
+    test("preserves agent-prompt order when creating new version", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+      const agent3 = await makeAgent({ name: "Agent 3" });
+
+      const original = await PromptModel.create(org.id, user.id, {
+        name: "Multi-Agent Prompt",
+        type: "system",
+        content: "Original",
+      });
+
+      // Create agent relationships with specific orders
+      await db.insert(schema.agentPromptsTable).values([
+        { agentId: agent1.id, promptId: original.id, order: 0 },
+        { agentId: agent2.id, promptId: original.id, order: 1 },
+        { agentId: agent3.id, promptId: original.id, order: 2 },
+      ]);
+
+      const updated = await PromptModel.update(original.id, user.id, {
+        content: "Updated",
+      });
+
+      if (!updated) {
+        throw new Error("Failed to update prompt");
+      }
+
+      // New version should maintain all agent relationships with same order
+      expect(updated.agents).toHaveLength(3);
+
+      // Verify order is preserved by checking the actual agent_prompts table
+      const newVersionRelationships = await db
+        .select()
+        .from(schema.agentPromptsTable)
+        .where(eq(schema.agentPromptsTable.promptId, updated.id))
+        .orderBy(schema.agentPromptsTable.order);
+
+      expect(newVersionRelationships).toHaveLength(3);
+      expect(newVersionRelationships[0].agentId).toBe(agent1.id);
+      expect(newVersionRelationships[0].order).toBe(0);
+      expect(newVersionRelationships[1].agentId).toBe(agent2.id);
+      expect(newVersionRelationships[1].order).toBe(1);
+      expect(newVersionRelationships[2].agentId).toBe(agent3.id);
+      expect(newVersionRelationships[2].order).toBe(2);
     });
   });
 

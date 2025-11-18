@@ -10,7 +10,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -90,19 +90,22 @@ function ChatSettingsContent() {
     }
   }, [chatSettings?.anthropicApiKeySecretId]);
 
-  const handleApiKeyChange = (value: string) => {
-    setApiKey(value);
-    // Mark as changed if user modified the field
-    if (chatSettings?.anthropicApiKeySecretId) {
-      // If key exists, changed means it's different from placeholder
-      setHasApiKeyChanged(value !== PLACEHOLDER_KEY);
-    } else {
-      // If no key exists, any non-empty value is a change
-      setHasApiKeyChanged(value !== "");
-    }
-  };
+  const handleApiKeyChange = useCallback(
+    (value: string) => {
+      setApiKey(value);
+      // Mark as changed if user modified the field
+      if (chatSettings?.anthropicApiKeySecretId) {
+        // If key exists, changed means it's different from placeholder
+        setHasApiKeyChanged(value !== PLACEHOLDER_KEY);
+      } else {
+        // If no key exists, any non-empty value is a change
+        setHasApiKeyChanged(value !== "");
+      }
+    },
+    [chatSettings?.anthropicApiKeySecretId],
+  );
 
-  const handleSaveApiKey = async () => {
+  const handleSaveApiKey = useCallback(async () => {
     try {
       // Only send the API key if it's been changed from the placeholder
       const keyToSend = hasApiKeyChanged ? apiKey : undefined;
@@ -122,9 +125,14 @@ function ChatSettingsContent() {
     } catch (_error) {
       toast.error("Failed to save API key");
     }
-  };
+  }, [
+    chatSettings?.anthropicApiKeySecretId,
+    hasApiKeyChanged,
+    apiKey,
+    updateChatSettings,
+  ]);
 
-  const handleCancelApiKey = () => {
+  const handleCancelApiKey = useCallback(() => {
     // Reset to placeholder dots if key exists, otherwise empty
     if (chatSettings?.anthropicApiKeySecretId) {
       setApiKey(PLACEHOLDER_KEY);
@@ -132,9 +140,9 @@ function ChatSettingsContent() {
       setApiKey("");
     }
     setHasApiKeyChanged(false);
-  };
+  }, [chatSettings?.anthropicApiKeySecretId]);
 
-  const handleResetApiKey = async () => {
+  const handleResetApiKey = useCallback(async () => {
     if (
       !confirm(
         "Are you sure you want to reset the Anthropic API key? Chat functionality will stop working until a new key is configured.",
@@ -153,30 +161,31 @@ function ChatSettingsContent() {
     } catch (_error) {
       toast.error("Failed to reset API key");
     }
-  };
+  }, [updateChatSettings]);
 
-  const handleCreatePrompt = () => {
+  const handleCreatePrompt = useCallback(() => {
     setEditingPrompt({
       name: "",
       type: "system",
       content: "",
     });
     setIsPromptDialogOpen(true);
-  };
+  }, []);
 
-  const handleEditPrompt = (
-    prompt: archestraApiTypes.GetPromptsResponses["200"][number],
-  ) => {
-    setEditingPrompt({
-      id: prompt.id,
-      name: prompt.name,
-      type: prompt.type,
-      content: prompt.content,
-    });
-    setIsPromptDialogOpen(true);
-  };
+  const handleEditPrompt = useCallback(
+    (prompt: archestraApiTypes.GetPromptsResponses["200"][number]) => {
+      setEditingPrompt({
+        id: prompt.id,
+        name: prompt.name,
+        type: prompt.type,
+        content: prompt.content,
+      });
+      setIsPromptDialogOpen(true);
+    },
+    [],
+  );
 
-  const handleSavePrompt = async () => {
+  const handleSavePrompt = useCallback(async () => {
     if (!editingPrompt) return;
 
     try {
@@ -202,22 +211,24 @@ function ChatSettingsContent() {
     } catch (_error) {
       toast.error("Failed to save prompt");
     }
-  };
+  }, [createPrompt, editingPrompt, updatePrompt]);
 
-  const handleDeletePrompt = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this prompt?")) return;
+  const handleDeletePrompt = useCallback(
+    async (id: string) => {
+      if (!confirm("Are you sure you want to delete this prompt?")) return;
 
-    try {
-      await deletePrompt.mutateAsync(id);
-      toast.success("Prompt deleted successfully");
-    } catch (_error) {
-      toast.error("Failed to delete prompt");
-    }
-  };
+      try {
+        await deletePrompt.mutateAsync(id);
+        toast.success("Prompt deleted successfully");
+      } catch (_error) {
+        toast.error("Failed to delete prompt");
+      }
+    },
+    [deletePrompt],
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full space-y-6">
-      {/* API Key Section */}
       <Card>
         <CardHeader>
           <CardTitle>Anthropic API Key</CardTitle>
@@ -285,13 +296,12 @@ function ChatSettingsContent() {
         </CardContent>
       </Card>
 
-      {/* Prompt Library Section */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Prompt Library</CardTitle>
             <CardDescription>
-              Manage system and regular prompts for your agents
+              Manage system and regular prompts for your profiles
             </CardDescription>
           </div>
           <Button onClick={handleCreatePrompt}>
@@ -371,7 +381,7 @@ function ChatSettingsContent() {
                     {prompt.agents && prompt.agents.length > 0 ? (
                       <div className="text-xs text-muted-foreground pt-2 border-t">
                         <span className="font-medium">
-                          Agents using: {prompt.agents.length}
+                          Profiles using: {prompt.agents.length}
                         </span>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {prompt.agents.map((agent) => (
@@ -387,7 +397,7 @@ function ChatSettingsContent() {
                     ) : (
                       <div className="text-xs text-muted-foreground pt-2 border-t">
                         <span className="font-medium">
-                          Not assigned to any agents
+                          Not assigned to any profiles
                         </span>
                       </div>
                     )}
@@ -406,7 +416,6 @@ function ChatSettingsContent() {
         </CardContent>
       </Card>
 
-      {/* Prompt Editor Dialog */}
       <Dialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -416,7 +425,7 @@ function ChatSettingsContent() {
             <DialogDescription>
               {editingPrompt?.id
                 ? "Update the prompt. This will create a new version."
-                : "Create a new prompt for your agents."}
+                : "Create a new prompt for your profiles."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

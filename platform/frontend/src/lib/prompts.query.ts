@@ -1,10 +1,10 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from '@shared';
 import {
   useMutation,
   useQuery,
   useQueryClient,
   useSuspenseQuery,
-} from "@tanstack/react-query";
+} from '@tanstack/react-query';
 
 const {
   getPrompts,
@@ -16,11 +16,11 @@ const {
 } = archestraApiSdk;
 
 export function usePrompts(params?: {
-  type?: "system" | "regular";
-  initialData?: archestraApiTypes.GetPromptsResponses["200"];
+  type?: 'system' | 'regular';
+  initialData?: archestraApiTypes.GetPromptsResponses['200'];
 }) {
   return useSuspenseQuery({
-    queryKey: ["prompts", params?.type],
+    queryKey: ['prompts', params?.type],
     queryFn: async () =>
       (await getPrompts({ query: { type: params?.type } })).data ?? [],
     initialData: params?.initialData,
@@ -29,7 +29,7 @@ export function usePrompts(params?: {
 
 export function usePrompt(id: string) {
   return useQuery({
-    queryKey: ["prompts", id],
+    queryKey: ['prompts', id],
     queryFn: async () => (await getPrompt({ path: { id } })).data ?? null,
     enabled: !!id,
   });
@@ -37,7 +37,7 @@ export function usePrompt(id: string) {
 
 export function usePromptVersions(id: string) {
   return useQuery({
-    queryKey: ["prompts", id, "versions"],
+    queryKey: ['prompts', id, 'versions'],
     queryFn: async () => (await getPromptVersions({ path: { id } })).data ?? [],
     enabled: !!id,
   });
@@ -48,14 +48,14 @@ export function useCreatePrompt() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      type: "system" | "regular";
+      type: 'system' | 'regular';
       content: string;
     }) => {
       const response = await createPrompt({ body: data });
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      queryClient.invalidateQueries({ queryKey: ['prompts'] });
     },
   });
 }
@@ -74,11 +74,13 @@ export function useUpdatePrompt() {
       return response.data;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["prompts"] });
-      queryClient.invalidateQueries({ queryKey: ["prompts", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['prompts'] });
+      queryClient.invalidateQueries({ queryKey: ['prompts', variables.id] });
       queryClient.invalidateQueries({
-        queryKey: ["prompts", variables.id, "versions"],
+        queryKey: ['prompts', variables.id, 'versions'],
       });
+      // Invalidate agent prompts cache since prompt migration updates agent relationships
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 }
@@ -91,7 +93,10 @@ export function useDeletePrompt() {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      queryClient.invalidateQueries({ queryKey: ['prompts'] });
+      // Invalidate agent prompts cache since deleting a prompt removes
+      // it from all agents (cascade delete on agent-prompt relationships)
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 }

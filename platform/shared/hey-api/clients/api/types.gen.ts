@@ -3326,9 +3326,9 @@ export type GetAllAgentToolsData = {
          */
         origin?: string;
         /**
-         * MCP server ID
+         * Filter by MCP server owner user ID
          */
-        credentialSourceMcpServerId?: string;
+        mcpServerOwnerId?: string;
         /**
          * For test isolation
          */
@@ -8118,14 +8118,18 @@ export type GetLimitsResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
     }>;
 };
 
@@ -8139,7 +8143,7 @@ export type CreateLimitData = {
         limitValue: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path?: never;
@@ -8216,11 +8220,9 @@ export type CreateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8386,11 +8388,9 @@ export type GetLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -8407,7 +8407,7 @@ export type UpdateLimitData = {
         limitValue?: number;
         mcpServerName?: string | null;
         toolName?: string | null;
-        model?: string | null;
+        model?: Array<string> | null;
         lastCleanup?: unknown;
     };
     path: {
@@ -8486,11 +8486,9 @@ export type UpdateLimitResponses = {
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
-        currentUsageTokensIn: number;
-        currentUsageTokensOut: number;
         mcpServerName: string | null;
         toolName: string | null;
-        model: string | null;
+        model?: Array<string> | null;
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -13078,7 +13076,7 @@ export type GetTeamStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/teams';
 };
@@ -13168,7 +13166,7 @@ export type GetAgentStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/agents';
 };
@@ -13257,7 +13255,7 @@ export type GetModelStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/models';
 };
@@ -13345,7 +13343,7 @@ export type GetOverviewStatisticsData = {
     body?: never;
     path?: never;
     query?: {
-        timeframe?: '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
     };
     url: '/api/statistics/overview';
 };

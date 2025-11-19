@@ -197,4 +197,53 @@ describe("AgentLabelModel", () => {
       expect(values).toContain("staging");
     });
   });
+
+  describe("getLabelsForAgents", () => {
+    test("returns labels for multiple agents in bulk", async ({
+      makeAgent,
+    }) => {
+      const { id: agent1Id } = await makeAgent();
+      const { id: agent2Id } = await makeAgent();
+      const { id: agent3Id } = await makeAgent();
+
+      await AgentLabelModel.syncAgentLabels(agent1Id, [
+        { key: "environment", value: "production", keyId: "", valueId: "" },
+        { key: "region", value: "us-west-2", keyId: "", valueId: "" },
+      ]);
+
+      await AgentLabelModel.syncAgentLabels(agent2Id, [
+        { key: "environment", value: "staging", keyId: "", valueId: "" },
+      ]);
+
+      // agent3 has no labels
+
+      const labelsMap = await AgentLabelModel.getLabelsForAgents([
+        agent1Id,
+        agent2Id,
+        agent3Id,
+      ]);
+
+      expect(labelsMap.size).toBe(3);
+
+      const agent1Labels = labelsMap.get(agent1Id);
+      expect(agent1Labels).toHaveLength(2);
+      expect(agent1Labels?.[0].key).toBe("environment");
+      expect(agent1Labels?.[0].value).toBe("production");
+      expect(agent1Labels?.[1].key).toBe("region");
+      expect(agent1Labels?.[1].value).toBe("us-west-2");
+
+      const agent2Labels = labelsMap.get(agent2Id);
+      expect(agent2Labels).toHaveLength(1);
+      expect(agent2Labels?.[0].key).toBe("environment");
+      expect(agent2Labels?.[0].value).toBe("staging");
+
+      const agent3Labels = labelsMap.get(agent3Id);
+      expect(agent3Labels).toHaveLength(0);
+    });
+
+    test("returns empty map for empty agent IDs array", async () => {
+      const labelsMap = await AgentLabelModel.getLabelsForAgents([]);
+      expect(labelsMap.size).toBe(0);
+    });
+  });
 });

@@ -56,21 +56,21 @@
     {
       "section": "Miscellaneous Chores",
       "type": "chore",
-      "hidden": true
+      "hidden": false
     },
     {
       "section": "Other",
       "type": "*",
-      "hidden": true
+      "hidden": false
     }
   ],
   "packages": {
     "platform": {
       "component": "platform",
       "release-type": "node",
+      "versioning": "always-bump-patch",
       "prerelease": true,
       "initial-version": "0.0.1",
-      "bump-patch-for-minor-pre-major": false,
       "extra-files": [
         {
           "type": "json",

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -142,7 +143,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       search: searchQuery || undefined,
       agentId: agentFilter !== "all" ? agentFilter : undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
-      credentialSourceMcpServerId:
+      mcpServerOwnerId:
         credentialFilter !== "all" ? credentialFilter : undefined,
     },
   });
@@ -707,9 +708,21 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     return Array.from(origins);
   }, [internalMcpCatalogItems]);
 
-  // Get unique credentials (MCP servers)
+  // Get unique credentials (MCP servers) deduplicated by owner email
   const uniqueCredentials = useMemo(() => {
-    return mcpServers || [];
+    if (!mcpServers) return [];
+
+    // Create a map of ownerEmail -> mcpServer to deduplicate
+    const ownerToMcpServerMap = new Map<string, (typeof mcpServers)[0]>();
+
+    for (const server of mcpServers) {
+      const key = server.ownerEmail || `__no_owner_${server.id}__`;
+      if (!ownerToMcpServerMap.has(key)) {
+        ownerToMcpServerMap.set(key, server);
+      }
+    }
+
+    return Array.from(ownerToMcpServerMap.values());
   }, [mcpServers]);
 
   return (
@@ -725,51 +738,48 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           />
         </div>
 
-        <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Agent" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Agents</SelectItem>
-            {agents?.map((agent) => (
-              <SelectItem key={agent.id} value={agent.id}>
-                {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={agentFilter}
+          onValueChange={handleAgentFilterChange}
+          placeholder="Filter by Profile"
+          items={[
+            { value: "all", label: "All Profiles" },
+            ...(agents?.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
 
-        <Select value={originFilter} onValueChange={handleOriginFilterChange}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Origin" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Origins</SelectItem>
-            <SelectItem value="llm-proxy">LLM Proxy</SelectItem>
-            {uniqueOrigins.map((origin) => (
-              <SelectItem key={origin.id} value={origin.id}>
-                {origin.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={originFilter}
+          onValueChange={handleOriginFilterChange}
+          placeholder="Filter by Origin"
+          items={[
+            { value: "all", label: "All Origins" },
+            { value: "llm-proxy", label: "LLM Proxy" },
+            ...uniqueOrigins.map((origin) => ({
+              value: origin.id,
+              label: origin.name,
+            })),
+          ]}
+          className="w-[200px]"
+        />
 
-        <Select
+        <SearchableSelect
           value={credentialFilter}
           onValueChange={handleCredentialFilterChange}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Credential" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Credentials</SelectItem>
-            {uniqueCredentials.map((credential) => (
-              <SelectItem key={credential.id} value={credential.id}>
-                {credential.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder="Filter by Credential"
+          items={[
+            { value: "all", label: "All Credentials" },
+            ...uniqueCredentials.map((credential) => ({
+              value: credential.ownerId || "",
+              label: credential.ownerEmail || credential.name,
+            })),
+          ]}
+          className="w-[200px]"
+        />
       </div>
 
       <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">

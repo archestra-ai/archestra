@@ -127,11 +127,18 @@ class AgentModel {
     }
 
     const agents = Array.from(agentsMap.values());
+    const agentIds = agents.map((agent) => agent.id);
 
-    // Populate teams and labels for each agent
+    // Populate teams and labels for all agents with bulk queries to avoid N+1
+    const [teamsMap, labelsMap] = await Promise.all([
+      AgentTeamModel.getTeamsForAgents(agentIds),
+      AgentLabelModel.getLabelsForAgents(agentIds),
+    ]);
+
+    // Assign teams and labels to each agent
     for (const agent of agents) {
-      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+      agent.teams = teamsMap.get(agent.id) || [];
+      agent.labels = labelsMap.get(agent.id) || [];
     }
 
     return agents;
@@ -293,11 +300,18 @@ class AgentModel {
     }
 
     const agents = Array.from(agentsMap.values());
+    const agentIds = agents.map((agent) => agent.id);
 
-    // Populate teams and labels for each agent
+    // Populate teams and labels for all agents with bulk queries to avoid N+1
+    const [teamsMap, labelsMap] = await Promise.all([
+      AgentTeamModel.getTeamsForAgents(agentIds),
+      AgentLabelModel.getLabelsForAgents(agentIds),
+    ]);
+
+    // Assign teams and labels to each agent
     for (const agent of agents) {
-      agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+      agent.teams = teamsMap.get(agent.id) || [];
+      agent.labels = labelsMap.get(agent.id) || [];
     }
 
     return createPaginatedResult(agents, Number(totalResult), pagination);

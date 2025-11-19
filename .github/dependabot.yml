@@ -14,7 +14,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: deps(platform)
+      prefix: deps
 
   - package-ecosystem: github-actions
     directory: .github

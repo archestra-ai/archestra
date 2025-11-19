@@ -29,18 +29,19 @@ export type LimitType = z.infer<typeof LimitTypeSchema>;
 export const SelectLimitSchema = createSelectSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
+  model: z.array(z.string()).nullable().optional(),
 });
 export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
+  model: z.array(z.string()).nullable().optional(),
 });
 export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
   entityType: LimitEntityTypeSchema,
   limitType: LimitTypeSchema,
+  model: z.array(z.string()).nullable().optional(),
 }).omit({
   id: true,
-  currentUsageTokensIn: true,
-  currentUsageTokensOut: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -50,8 +51,6 @@ export const UpdateLimitSchema = createUpdateSchema(schema.limitsTable, {
  */
 export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
-  currentUsageTokensIn: true,
-  currentUsageTokensOut: true,
   createdAt: true,
   updatedAt: true,
 }).refine(
@@ -74,9 +73,13 @@ export const CreateLimitSchema = InsertLimitSchema.omit({
         return false;
       }
     }
-    // Validation: token_cost requires model and should not have mcp or tool specificity
+    // Validation: token_cost requires non-empty model array and should not have mcp or tool specificity
     if (data.limitType === "token_cost") {
-      if (!data.model) {
+      if (
+        !data.model ||
+        !Array.isArray(data.model) ||
+        data.model.length === 0
+      ) {
         return false;
       }
       if (data.mcpServerName || data.toolName) {
@@ -108,3 +111,31 @@ export interface LimitUsageInfo {
   isExceeded: boolean;
   remainingUsage: number;
 }
+
+/**
+ * Per-model usage breakdown for a limit
+ */
+export interface ModelUsageBreakdown {
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+}
+
+/**
+ * Limit with per-model usage breakdown
+ */
+export const LimitWithUsageSchema = SelectLimitSchema.extend({
+  modelUsage: z
+    .array(
+      z.object({
+        model: z.string(),
+        tokensIn: z.number(),
+        tokensOut: z.number(),
+        cost: z.number(),
+      }),
+    )
+    .optional(),
+});
+
+export type LimitWithUsage = z.infer<typeof LimitWithUsageSchema>;

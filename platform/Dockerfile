@@ -36,7 +36,14 @@ COPY shared ./shared
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm build
+# Use Docker secret to securely pass Sentry auth token during build
+# The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
+# https://docs.docker.com/build/building/secrets/#using-build-secrets
+RUN --mount=type=secret,id=sentry_auth_token \
+    if [ -f /run/secrets/sentry_auth_token ]; then \
+        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    fi && \
+    pnpm build
 
 # <----- Final unified stage ----->
 FROM base AS unified
@@ -73,6 +80,10 @@ ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=""
 
 ENV ARCHESTRA_LOGGING_LEVEL="info"
 ENV ARCHESTRA_METRICS_SECRET="archestra-metrics-secret"
+
+ENV ARCHESTRA_SENTRY_BACKEND_DSN=""
+ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
+ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \
@@ -151,7 +162,7 @@ stderr_logfile_maxbytes=0
 priority=20
 # HOSTNAME is a hardcoded value, and NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s"
+environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)

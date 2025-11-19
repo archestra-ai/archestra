@@ -535,4 +535,208 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(2);
     });
   });
+
+  describe("assignArchestraToolsToAgent", () => {
+    test("assigns Archestra built-in tools to agent in bulk", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      // Agents should already have Archestra tools assigned when created
+      const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(toolIds.length).toBeGreaterThan(0);
+
+      // Verify some of the Archestra tools are assigned
+      const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
+      const archestraToolNames = mcpTools
+        .map((tool) => tool.name)
+        .filter((name) => name.startsWith("archestra__"));
+
+      expect(archestraToolNames.length).toBeGreaterThan(0);
+      expect(archestraToolNames).toContain("archestra__whoami");
+    });
+
+    test("is idempotent - does not create duplicates", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      const toolIdsAfterFirst = await AgentToolModel.findToolIdsByAgent(
+        agent.id,
+      );
+
+      await ToolModel.assignArchestraToolsToAgent(agent.id);
+      const toolIdsAfterSecond = await AgentToolModel.findToolIdsByAgent(
+        agent.id,
+      );
+
+      expect(toolIdsAfterSecond.length).toBe(toolIdsAfterFirst.length);
+    });
+  });
+
+  describe("findByMcpServerId", () => {
+    test("returns tools with assigned agents efficiently", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "test-catalog",
+        serverUrl: "https://api.test.com/mcp/",
+      });
+
+      const mcpServer = await makeMcpServer({
+        name: "test-server",
+        catalogId: catalogItem.id,
+        ownerId: user.id,
+      });
+
+      const tool1 = await makeTool({
+        name: "tool1",
+        description: "Tool 1",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      const tool2 = await makeTool({
+        name: "tool2",
+        description: "Tool 2",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign tools to agents
+      await AgentToolModel.create(agent1.id, tool1.id);
+      await AgentToolModel.create(agent1.id, tool2.id);
+      await AgentToolModel.create(agent2.id, tool1.id);
+
+      const result = await ToolModel.findByMcpServerId(mcpServer.id);
+
+      expect(result).toHaveLength(2);
+
+      const tool1Result = result.find((t) => t.name === "tool1");
+      expect(tool1Result?.assignedAgentCount).toBe(2);
+      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
+      expect(tool1Result?.assignedAgents.map((a) => a.id)).toContain(agent2.id);
+
+      const tool2Result = result.find((t) => t.name === "tool2");
+      expect(tool2Result?.assignedAgentCount).toBe(1);
+      expect(tool2Result?.assignedAgents.map((a) => a.id)).toContain(agent1.id);
+    });
+
+    test("returns empty array when MCP server has no tools", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "empty-catalog",
+        serverUrl: "https://api.empty.com/mcp/",
+      });
+
+      const mcpServer = await makeMcpServer({
+        name: "empty-server",
+        catalogId: catalogItem.id,
+        ownerId: user.id,
+      });
+
+      const result = await ToolModel.findByMcpServerId(mcpServer.id);
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe("findByCatalogId", () => {
+    test("returns tools with assigned agents for catalog efficiently", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const user = await makeUser();
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "shared-catalog",
+        serverUrl: "https://api.shared.com/mcp/",
+      });
+
+      // Create two servers with the same catalog
+      const mcpServer1 = await makeMcpServer({
+        name: "server1",
+        catalogId: catalogItem.id,
+        ownerId: user.id,
+      });
+
+      const mcpServer2 = await makeMcpServer({
+        name: "server2",
+        catalogId: catalogItem.id,
+        ownerId: user.id,
+      });
+
+      // Create tools for both servers (same catalog)
+      const tool1 = await makeTool({
+        name: "shared_tool",
+        description: "Shared Tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer1.id,
+      });
+
+      const tool2 = await makeTool({
+        name: "another_tool",
+        description: "Another Tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+        mcpServerId: mcpServer2.id,
+      });
+
+      // Assign tools to agents
+      await AgentToolModel.create(agent1.id, tool1.id);
+      await AgentToolModel.create(agent2.id, tool1.id);
+      await AgentToolModel.create(agent1.id, tool2.id);
+
+      const result = await ToolModel.findByCatalogId(catalogItem.id);
+
+      expect(result).toHaveLength(2);
+
+      const sharedToolResult = result.find((t) => t.name === "shared_tool");
+      expect(sharedToolResult?.assignedAgentCount).toBe(2);
+      expect(sharedToolResult?.assignedAgents.map((a) => a.id)).toContain(
+        agent1.id,
+      );
+      expect(sharedToolResult?.assignedAgents.map((a) => a.id)).toContain(
+        agent2.id,
+      );
+
+      const anotherToolResult = result.find((t) => t.name === "another_tool");
+      expect(anotherToolResult?.assignedAgentCount).toBe(1);
+      expect(anotherToolResult?.assignedAgents.map((a) => a.id)).toContain(
+        agent1.id,
+      );
+    });
+
+    test("returns empty array when catalog has no tools", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "empty-catalog",
+        serverUrl: "https://api.empty.com/mcp/",
+      });
+
+      const result = await ToolModel.findByCatalogId(catalogItem.id);
+      expect(result).toHaveLength(0);
+    });
+  });
 });

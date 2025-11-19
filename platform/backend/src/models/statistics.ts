@@ -49,6 +49,12 @@ class StatisticsModel {
     }
 
     switch (timeframe) {
+      case "5m":
+        return "5 minutes";
+      case "15m":
+        return "15 minutes";
+      case "30m":
+        return "30 minutes";
       case "1h":
         return "1 hour";
       case "24h":
@@ -87,6 +93,12 @@ class StatisticsModel {
     }
 
     switch (timeframe) {
+      case "5m":
+        return "minute"; // Will show individual minutes for 5-minute range
+      case "15m":
+        return "minute"; // Will show individual minutes for 15-minute range
+      case "30m":
+        return "minute"; // We'll round to 5-minute intervals in post-processing
       case "1h":
         return "minute"; // We'll round to 5-minute intervals in post-processing
       case "24h":
@@ -127,6 +139,12 @@ class StatisticsModel {
     }
 
     switch (timeframe) {
+      case "5m":
+        return 1; // 1-minute buckets for 5-minute range
+      case "15m":
+        return 1; // 1-minute buckets for 15-minute range
+      case "30m":
+        return 5; // 5-minute buckets for 30-minute range
       case "1h":
         return 5; // 5-minute buckets
       case "24h":

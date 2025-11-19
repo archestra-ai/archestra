@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "lodash-es";
 import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -125,22 +125,92 @@ class TrustedDataPolicyModel {
     shouldSanitizeWithDualLlm: boolean;
     reason: string;
   }> {
-    if (isArchestraMcpServerTool(toolName)) {
-      return {
-        isTrusted: true,
+    // Use bulk evaluation for single tool
+    const results = await TrustedDataPolicyModel.evaluateBulk(agentId, [
+      { toolName, toolOutput },
+    ]);
+    return (
+      results.get("0") || {
+        isTrusted: false,
         isBlocked: false,
         shouldSanitizeWithDualLlm: false,
-        reason: "Archestra MCP server tool",
-      };
+        reason: "Tool not found",
+      }
+    );
+  }
+
+  /**
+   * Bulk evaluate trusted data policies for multiple tool calls
+   * This method fetches all policies and tool configurations in one query to avoid N+1 issues
+   */
+  static async evaluateBulk(
+    agentId: string,
+    toolCalls: Array<{
+      toolName: string;
+      // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
+      toolOutput: any;
+    }>,
+  ): Promise<
+    Map<
+      string,
+      {
+        isTrusted: boolean;
+        isBlocked: boolean;
+        shouldSanitizeWithDualLlm: boolean;
+        reason: string;
+      }
+    >
+  > {
+    const results = new Map<
+      string,
+      {
+        isTrusted: boolean;
+        isBlocked: boolean;
+        shouldSanitizeWithDualLlm: boolean;
+        reason: string;
+      }
+    >();
+
+    // Create an index mapping for results
+    const callIndices: number[] = [];
+
+    // Handle Archestra MCP server tools
+    for (let i = 0; i < toolCalls.length; i++) {
+      const { toolName } = toolCalls[i];
+      if (isArchestraMcpServerTool(toolName)) {
+        // Store result by index converted to string
+        results.set(i.toString(), {
+          isTrusted: true,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: "Archestra MCP server tool",
+        });
+      } else {
+        callIndices.push(i);
+      }
     }
 
-    /**
-     * Get policies for the agent's tools that match the tool name,
-     * along with the tool's configuration.
-     */
-    const applicablePoliciesForAgent = await db
+    // Get all non-Archestra tool names
+    const nonArchestraToolCalls = toolCalls.filter(
+      ({ toolName }) => !isArchestraMcpServerTool(toolName),
+    );
+
+    if (nonArchestraToolCalls.length === 0) {
+      return results;
+    }
+
+    const toolNames = nonArchestraToolCalls.map(({ toolName }) => toolName);
+
+    // Fetch all policies and tool configurations for all tools in one query
+    const allPoliciesAndTools = await db
       .select({
-        ...getTableColumns(schema.trustedDataPoliciesTable),
+        toolName: schema.toolsTable.name,
+        policyId: schema.trustedDataPoliciesTable.id,
+        policyDescription: schema.trustedDataPoliciesTable.description,
+        attributePath: schema.trustedDataPoliciesTable.attributePath,
+        operator: schema.trustedDataPoliciesTable.operator,
+        policyValue: schema.trustedDataPoliciesTable.value,
+        action: schema.trustedDataPoliciesTable.action,
         toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.toolsTable)
@@ -148,7 +218,7 @@ class TrustedDataPolicyModel {
         schema.agentToolsTable,
         eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
       )
-      .innerJoin(
+      .leftJoin(
         schema.trustedDataPoliciesTable,
         eq(
           schema.agentToolsTable.id,
@@ -158,209 +228,258 @@ class TrustedDataPolicyModel {
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
-          eq(schema.toolsTable.name, toolName),
+          inArray(schema.toolsTable.name, toolNames),
         ),
       );
 
-    // Extract tool configuration (will be the same for all policies since they're for the same tool)
-    const toolResultTreatment =
-      applicablePoliciesForAgent.length > 0
-        ? applicablePoliciesForAgent[0].toolResultTreatment
-        : null;
+    // Group policies by tool name
+    const policiesByTool = new Map<
+      string,
+      Array<{
+        policyId: string | null;
+        policyDescription: string | null;
+        attributePath: string | null;
+        operator: AutonomyPolicyOperator.SupportedOperator | null;
+        policyValue: string | null;
+        action:
+          | "mark_as_trusted"
+          | "block_always"
+          | "sanitize_with_dual_llm"
+          | null;
+        toolResultTreatment:
+          | "trusted"
+          | "untrusted"
+          | "sanitize_with_dual_llm"
+          | null;
+      }>
+    >();
 
-    if (toolResultTreatment === null) {
-      // If no policies exist for this tool, check the tool's result treatment configuration
-      // Fetch the agent-tool relationship configuration
-      const [agentTool] = await db
-        .select({
-          toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
-        })
-        .from(schema.toolsTable)
-        .innerJoin(
-          schema.agentToolsTable,
-          eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
-        )
-        .where(
-          and(
-            eq(schema.agentToolsTable.agentId, agentId),
-            eq(schema.toolsTable.name, toolName),
-          ),
-        );
+    // Also track tools that have no agent-tool relationship
+    const toolsWithRelationship = new Set<string>();
 
-      // If no agent-tool relationship exists, default to untrusted
-      if (!agentTool) {
-        return {
+    for (const row of allPoliciesAndTools) {
+      toolsWithRelationship.add(row.toolName);
+
+      if (!policiesByTool.has(row.toolName)) {
+        policiesByTool.set(row.toolName, []);
+      }
+
+      policiesByTool.get(row.toolName)?.push({
+        policyId: row.policyId,
+        policyDescription: row.policyDescription,
+        attributePath: row.attributePath,
+        operator: row.operator,
+        policyValue: row.policyValue,
+        action: row.action,
+        toolResultTreatment: row.toolResultTreatment,
+      });
+    }
+
+    // Process each tool call individually with index
+    for (let i = 0; i < toolCalls.length; i++) {
+      const { toolName, toolOutput } = toolCalls[i];
+
+      // Skip Archestra tools (already handled)
+      if (isArchestraMcpServerTool(toolName)) {
+        continue;
+      }
+
+      // If tool has no agent-tool relationship
+      if (!toolsWithRelationship.has(toolName)) {
+        results.set(i.toString(), {
           isTrusted: false,
           isBlocked: false,
           shouldSanitizeWithDualLlm: false,
           reason: `Tool ${toolName} is not registered for this agent`,
-        };
+        });
+        continue;
       }
 
-      if (agentTool.toolResultTreatment === "trusted") {
-        return {
+      const policies = policiesByTool.get(toolName) || [];
+
+      // Get tool result treatment (will be same for all policies of the same tool)
+      const toolResultTreatment =
+        policies.length > 0 ? policies[0].toolResultTreatment : null;
+
+      // Check if there are any actual policies (not just the tool config)
+      const hasPolicies = policies.some((p) => p.policyId !== null);
+
+      if (!hasPolicies) {
+        // No policies, use tool's default treatment
+        if (toolResultTreatment === "trusted") {
+          results.set(i.toString(), {
+            isTrusted: true,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: false,
+            reason: `Tool ${toolName} is configured as trusted`,
+          });
+        } else if (toolResultTreatment === "sanitize_with_dual_llm") {
+          results.set(i.toString(), {
+            isTrusted: false,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: true,
+            reason: `Tool ${toolName} is configured for dual LLM sanitization`,
+          });
+        } else {
+          results.set(i.toString(), {
+            isTrusted: false,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: false,
+            reason: `Tool ${toolName} is configured as untrusted`,
+          });
+        }
+        continue;
+      }
+
+      // Process policies - first check for blocking policies
+      let isBlocked = false;
+      let blockReason = "";
+
+      for (const policy of policies) {
+        if (policy.action === "block_always" && policy.attributePath) {
+          const outputValue = toolOutput?.value || toolOutput;
+          const values = TrustedDataPolicyModel.extractValuesFromPath(
+            outputValue,
+            policy.attributePath,
+          );
+
+          for (const value of values) {
+            if (
+              policy.operator &&
+              policy.policyValue !== null &&
+              TrustedDataPolicyModel.evaluateCondition(
+                value,
+                policy.operator,
+                policy.policyValue,
+              )
+            ) {
+              isBlocked = true;
+              blockReason = `Data blocked by policy: ${policy.policyDescription}`;
+              break;
+            }
+          }
+          if (isBlocked) break;
+        }
+      }
+
+      if (isBlocked) {
+        results.set(i.toString(), {
+          isTrusted: false,
+          isBlocked: true,
+          shouldSanitizeWithDualLlm: false,
+          reason: blockReason,
+        });
+        continue;
+      }
+
+      // Check for trusted or sanitize policies
+      let isTrusted = false;
+      let shouldSanitize = false;
+      let policyReason = "";
+
+      for (const policy of policies) {
+        if (policy.action === "mark_as_trusted" && policy.attributePath) {
+          const outputValue = toolOutput?.value || toolOutput;
+          const values = TrustedDataPolicyModel.extractValuesFromPath(
+            outputValue,
+            policy.attributePath,
+          );
+
+          let allValuesTrusted = values.length > 0;
+          for (const value of values) {
+            if (
+              !policy.operator ||
+              policy.policyValue === null ||
+              !TrustedDataPolicyModel.evaluateCondition(
+                value,
+                policy.operator,
+                policy.policyValue,
+              )
+            ) {
+              allValuesTrusted = false;
+              break;
+            }
+          }
+
+          if (allValuesTrusted) {
+            isTrusted = true;
+            policyReason = `Data trusted by policy: ${policy.policyDescription}`;
+            break;
+          }
+        } else if (
+          policy.action === "sanitize_with_dual_llm" &&
+          policy.attributePath
+        ) {
+          const outputValue = toolOutput?.value || toolOutput;
+          const values = TrustedDataPolicyModel.extractValuesFromPath(
+            outputValue,
+            policy.attributePath,
+          );
+
+          let allValuesMatch = values.length > 0;
+          for (const value of values) {
+            if (
+              !policy.operator ||
+              policy.policyValue === null ||
+              !TrustedDataPolicyModel.evaluateCondition(
+                value,
+                policy.operator,
+                policy.policyValue,
+              )
+            ) {
+              allValuesMatch = false;
+              break;
+            }
+          }
+
+          if (allValuesMatch) {
+            shouldSanitize = true;
+            policyReason = `Data requires dual LLM sanitization by policy: ${policy.policyDescription}`;
+            break;
+          }
+        }
+      }
+
+      if (isTrusted) {
+        results.set(i.toString(), {
+          isTrusted: true,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: policyReason,
+        });
+      } else if (shouldSanitize) {
+        results.set(i.toString(), {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: true,
+          reason: policyReason,
+        });
+      } else if (toolResultTreatment === "trusted") {
+        results.set(i.toString(), {
           isTrusted: true,
           isBlocked: false,
           shouldSanitizeWithDualLlm: false,
           reason: `Tool ${toolName} is configured as trusted`,
-        };
-      }
-
-      if (agentTool.toolResultTreatment === "sanitize_with_dual_llm") {
-        return {
+        });
+      } else if (toolResultTreatment === "sanitize_with_dual_llm") {
+        results.set(i.toString(), {
           isTrusted: false,
           isBlocked: false,
           shouldSanitizeWithDualLlm: true,
           reason: `Tool ${toolName} is configured for dual LLM sanitization`,
-        };
-      }
-
-      return {
-        isTrusted: false,
-        isBlocked: false,
-        shouldSanitizeWithDualLlm: false,
-        reason: `Tool ${toolName} is configured as untrusted`,
-      };
-    }
-
-    // First, check if ANY policy blocks this data (blocked policies take precedence)
-    for (const {
-      attributePath,
-      operator,
-      value: policyValue,
-      description,
-      action,
-    } of applicablePoliciesForAgent) {
-      if (action === "block_always") {
-        // Extract values from the tool output using the attribute path
-        const outputValue = toolOutput?.value || toolOutput;
-        const values = TrustedDataPolicyModel.extractValuesFromPath(
-          outputValue,
-          attributePath,
-        );
-
-        // For blocked policies, if ANY extracted value meets the condition, data is blocked
-        for (const value of values) {
-          if (
-            TrustedDataPolicyModel.evaluateCondition(
-              value,
-              operator,
-              policyValue,
-            )
-          ) {
-            return {
-              isTrusted: false,
-              isBlocked: true,
-              shouldSanitizeWithDualLlm: false,
-              reason: `Data blocked by policy: ${description}`,
-            };
-          }
-        }
+        });
+      } else {
+        results.set(i.toString(), {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason:
+            "Data does not match any trust policies - considered untrusted",
+        });
       }
     }
 
-    // Check if ANY policy marks this data as trusted or for dual LLM sanitization (only if not blocked)
-    for (const {
-      attributePath,
-      operator,
-      value: policyValue,
-      description,
-      action,
-    } of applicablePoliciesForAgent) {
-      if (action === "mark_as_trusted") {
-        // Extract values from the tool output using the attribute path
-        const outputValue = toolOutput?.value || toolOutput;
-        const values = TrustedDataPolicyModel.extractValuesFromPath(
-          outputValue,
-          attributePath,
-        );
-
-        // For trusted data policies, ALL extracted values must meet the condition
-        let allValuesTrusted = values.length > 0;
-        for (const value of values) {
-          if (
-            !TrustedDataPolicyModel.evaluateCondition(
-              value,
-              operator,
-              policyValue,
-            )
-          ) {
-            allValuesTrusted = false;
-            break;
-          }
-        }
-
-        if (allValuesTrusted) {
-          // At least one policy trusts this data
-          return {
-            isTrusted: true,
-            isBlocked: false,
-            shouldSanitizeWithDualLlm: false,
-            reason: `Data trusted by policy: ${description}`,
-          };
-        }
-      }
-
-      if (action === "sanitize_with_dual_llm") {
-        // Extract values from the tool output using the attribute path
-        const outputValue = toolOutput?.value || toolOutput;
-        const values = TrustedDataPolicyModel.extractValuesFromPath(
-          outputValue,
-          attributePath,
-        );
-
-        // For sanitize policies, ALL extracted values must meet the condition
-        let allValuesMatch = values.length > 0;
-        for (const value of values) {
-          if (
-            !TrustedDataPolicyModel.evaluateCondition(
-              value,
-              operator,
-              policyValue,
-            )
-          ) {
-            allValuesMatch = false;
-            break;
-          }
-        }
-
-        if (allValuesMatch) {
-          // At least one policy requires dual LLM sanitization
-          return {
-            isTrusted: false,
-            isBlocked: false,
-            shouldSanitizeWithDualLlm: true,
-            reason: `Data requires dual LLM sanitization by policy: ${description}`,
-          };
-        }
-      }
-    }
-
-    if (toolResultTreatment === "trusted") {
-      // No policies matched, use the tool's default treatment
-      return {
-        isTrusted: true,
-        isBlocked: false,
-        shouldSanitizeWithDualLlm: false,
-        reason: `Tool ${toolName} is configured as trusted`,
-      };
-    }
-
-    if (toolResultTreatment === "sanitize_with_dual_llm") {
-      return {
-        isTrusted: false,
-        isBlocked: false,
-        shouldSanitizeWithDualLlm: true,
-        reason: `Tool ${toolName} is configured for dual LLM sanitization`,
-      };
-    }
-
-    return {
-      isTrusted: false,
-      isBlocked: false,
-      shouldSanitizeWithDualLlm: false,
-      reason: "Data does not match any trust policies - considered untrusted",
-    };
+    return results;
   }
 }
 

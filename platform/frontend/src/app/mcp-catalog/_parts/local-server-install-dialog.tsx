@@ -269,6 +269,18 @@ export function LocalServerInstallDialog({
                             : "False"}
                         </span>
                       </div>
+                    ) : env.type === "number" ? (
+                      // Number type: render number input
+                      <Input
+                        id={`env-${env.key}`}
+                        type="number"
+                        value={environmentValues[env.key] || ""}
+                        onChange={(e) =>
+                          handleEnvVarChange(env.key, e.target.value)
+                        }
+                        placeholder="0"
+                        className="font-mono"
+                      />
                     ) : (
                       // String/Secret types: render input
                       <Input

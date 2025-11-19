@@ -147,6 +147,7 @@ export function EnvironmentVariablesFormField<
                           <SelectItem value="plain_text">Plain text</SelectItem>
                           <SelectItem value="secret">Secret</SelectItem>
                           <SelectItem value="boolean">Boolean</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -208,6 +209,23 @@ export function EnvironmentVariablesFormField<
                                     : "False"}
                                 </span>
                               </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      // Number type: render number input
+                      if (envType === "number") {
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="font-mono"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

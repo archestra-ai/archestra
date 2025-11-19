@@ -100,15 +100,20 @@ export function ArchestraCatalogTab({
               type:
                 config.type === "boolean"
                   ? ("boolean" as const)
-                  : ((config.sensitive ? "secret" : "plain_text") as
-                      | "secret"
-                      | "plain_text"),
+                  : config.type === "number"
+                    ? ("number" as const)
+                    : ((config.sensitive ? "secret" : "plain_text") as
+                        | "secret"
+                        | "plain_text"),
               value:
                 config.type === "boolean"
                   ? typeof config.default === "boolean"
                     ? String(config.default)
                     : "false" // Default to "false" for boolean fields without default
-                  : undefined,
+                  : config.type === "number" &&
+                      typeof config.default === "number"
+                    ? String(config.default) // Convert number to string
+                    : undefined,
               promptOnInstallation: true,
             }))
           : []),
@@ -125,7 +130,7 @@ export function ArchestraCatalogTab({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
     environment?: Array<{
       key: string;
-      type: "plain_text" | "secret" | "boolean";
+      type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
     }>,

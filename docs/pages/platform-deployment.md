@@ -211,7 +211,7 @@ Note: `ARCHESTRA_AUTH_SECRET` is optional. It will be auto-generated if not spec
 
 #### Cloud Provider Configuration (Streaming Timeout Settings)
 
-**⚠️ IMPORTANT**: Archestra Platform's chat feature and other streaming endpoints require proper timeout configuration on your cloud provider's load balancer. **Without this configuration, streaming responses will likely timeout too early**, causing chat responses and long-running MCP tool operations to fail.
+**⚠️ IMPORTANT:** Archestra Platform requires proper timeout settings on the upstream load balancer. **Without longer timeouts, streaming responses may end prematurely**, resulting in a “network error”
 
 ##### Google Cloud Platform (GKE)
 

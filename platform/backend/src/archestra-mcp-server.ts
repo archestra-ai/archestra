@@ -20,7 +20,6 @@ import {
   type ToolInvocation,
   type TrustedData,
 } from "@/types";
-import websocketService from "@/websocket";
 
 /**
  * Constants for Archestra MCP server
@@ -28,8 +27,6 @@ import websocketService from "@/websocket";
 export const MCP_SERVER_NAME = "archestra";
 const TOOL_WHOAMI_NAME = "whoami";
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
-const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
-  "create_mcp_server_installation_request";
 const TOOL_CREATE_LIMIT_NAME = "create_limit";
 const TOOL_GET_LIMITS_NAME = "get_limits";
 const TOOL_UPDATE_LIMIT_NAME = "update_limit";
@@ -55,7 +52,6 @@ const TOOL_GET_PROFILE_NAME = "get_profile";
 // Construct fully-qualified tool names
 const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
-const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
 const TOOL_CREATE_LIMIT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_LIMIT_NAME}`;
 const TOOL_GET_LIMITS_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LIMITS_NAME}`;
 const TOOL_UPDATE_LIMIT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_LIMIT_NAME}`;
@@ -255,48 +251,6 @@ export async function executeArchestraTool(
           {
             type: "text",
             text: `Error creating profile: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  if (toolName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
-    logger.info(
-      { profileId: profile.id, requestArgs: args },
-      "create_mcp_server_installation_request tool called",
-    );
-
-    try {
-      // Send websocket message to open the installation dialog in the frontend
-      websocketService.broadcast({
-        type: "mcp-installation-request",
-        payload: {},
-      });
-
-      return {
-        content: [
-          {
-            type: "text",
-            // Return a user-friendly message explaining what will happen
-            text: "An installation request dialog for an MCP server should now be visible in the chat. Please review and submit the request to proceed with the installation.",
-          },
-        ],
-        isError: false,
-      };
-    } catch (error) {
-      logger.error(
-        { err: error },
-        "Error handling MCP server installation request",
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error handling installation request: ${
               error instanceof Error ? error.message : "Unknown error"
             }`,
           },
@@ -2069,19 +2023,6 @@ export function getArchestraMcpTools(): Tool[] {
           },
         },
         required: ["id"],
-      },
-      annotations: {},
-      _meta: {},
-    },
-    {
-      name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-      title: "Create MCP Server Installation Request",
-      description:
-        "Allows users from within a chat context to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
-      inputSchema: {
-        type: "object",
-        properties: {},
-        required: [],
       },
       annotations: {},
       _meta: {},

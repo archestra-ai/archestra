@@ -48,9 +48,16 @@ import {
   useCreateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
-import websocketService from "@/lib/websocket";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
+const ARCHESTRA_SERVER_NAME = "archestra";
+const SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME = `${ARCHESTRA_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
+const SPECIAL_CREATE_CUSTOM_SERVER_TOOL = {
+  name: SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME,
+  description:
+    "Request a new custom MCP server installation via the Archestra dialog.",
+  parameters: {},
+} as const;
 
 export default function ChatPage() {
   const router = useRouter();
@@ -73,24 +80,11 @@ export default function ChatPage() {
   // State for MCP installation request dialogs
   const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
     useState(false);
+  const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
+    useState<{ toolCallId: string; toolName: string } | null>(null);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
-
-  // Subscribe to MCP installation requests
-  useEffect(() => {
-    const unsubscribe = websocketService.subscribe(
-      "mcp-installation-request",
-      (_message) => {
-        setIsCustomServerDialogOpen(true);
-      },
-    );
-
-    // Cleanup on unmount
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -153,6 +147,23 @@ export default function ChatPage() {
   // Fetch MCP tools from gateway (same as used in chat backend)
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
+  const toolsForUseChat = useMemo(() => {
+    if (!currentAgentId) {
+      return [];
+    }
+
+    const combinedTools = [...mcpTools];
+    const hasSpecialTool = combinedTools.some(
+      (tool) => tool.name === SPECIAL_CREATE_CUSTOM_SERVER_TOOL.name,
+    );
+
+    if (!hasSpecialTool) {
+      combinedTools.push(SPECIAL_CREATE_CUSTOM_SERVER_TOOL);
+    }
+
+    return combinedTools;
+  }, [currentAgentId, mcpTools]);
+
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(
     () =>
@@ -203,12 +214,29 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
+  const chatTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        credentials: "include",
+        body: () => ({
+          tools: toolsForUseChat,
+        }),
+      }),
+    [toolsForUseChat],
+  );
+
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat", // Must match backend route
-      credentials: "include", // Send cookies for authentication
-    }),
+  const {
+    messages,
+    sendMessage,
+    status,
+    setMessages,
+    stop,
+    error,
+    addToolResult,
+  } = useChat({
+    transport: chatTransport,
     id: conversationId,
     onFinish: () => {
       // Invalidate the conversation query to refetch with new messages
@@ -226,7 +254,41 @@ export default function ChatPage() {
         stack: error.stack,
       });
     },
-  });
+    onToolCall: ({ toolCall }) => {
+      if (toolCall.toolName === SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME) {
+        setPendingCustomServerToolCall(toolCall);
+      }
+    },
+    tools: toolsForUseChat,
+  } as Parameters<typeof useChat>[0]);
+
+  useEffect(() => {
+    if (!pendingCustomServerToolCall) {
+      return;
+    }
+
+    setIsCustomServerDialogOpen(true);
+
+    void (async () => {
+      try {
+        await addToolResult({
+          tool: pendingCustomServerToolCall.toolName as never,
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          output: {
+            type: "text",
+            text: "Opening the custom MCP server installation dialog.",
+          } as never,
+        });
+      } catch (toolError) {
+        console.error("[Chat] Failed to add custom server tool result", {
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          toolError,
+        });
+      }
+    })();
+
+    setPendingCustomServerToolCall(null);
+  }, [pendingCustomServerToolCall, addToolResult]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {

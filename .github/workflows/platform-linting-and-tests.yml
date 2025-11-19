@@ -53,6 +53,9 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
+    container:
+      image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest
+      options: --user 0 --privileged --volume /var/run/docker.sock:/var/run/docker.sock
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -71,13 +74,14 @@ jobs:
         working-directory: ./platform
         run: cp .env.example .env
 
-      - name: Install Kind
+      - name: Create Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
-        with:
-          config: .github/kind.yaml
-          cluster_name: archestra-ci-cluster
-          install_only: false
+        run: |
+          if ! kind get clusters | grep -q "archestra-ci-cluster"; then
+            kind create cluster --name archestra-ci-cluster --config .github/kind.yaml
+          else
+            echo "Kind cluster already exists"
+          fi
 
       - name: Debug Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -232,34 +236,6 @@ jobs:
         run: |
           echo "::error::Database migrations need to be generated. Please run 'pnpm db:generate' locally and commit the changes."
           exit 1
-
-      - name: Get Playwright version
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: |
-          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
-
-      - name: Cache Playwright binaries and dependencies
-        id: playwright-cache
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
-
-      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
-      - name: Install Playwright browsers
-        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
-
-      # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
-      # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
-      # explicitly install, just the webkit ones, each time 🥲
-      - name: Install Playwright system dependencies for WebKit
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install-deps webkit
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

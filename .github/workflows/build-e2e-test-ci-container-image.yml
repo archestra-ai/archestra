@@ -1,13 +1,11 @@
 name: Build e2e test CI container image
 
 on:
-  pull_request:
-  # TODO: uncomment when done testing
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - .github/Dockerfile.e2e-tests
+  push:
+    branches:
+      - main
+    paths:
+      - .github/Dockerfile.e2e-tests
 
 jobs:
   build-and-push:

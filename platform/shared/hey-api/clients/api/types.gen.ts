@@ -7430,7 +7430,7 @@ export type GetInternalMcpCatalogResponses = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -7505,7 +7505,7 @@ export type CreateInternalMcpCatalogItemData = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -7642,7 +7642,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -7868,7 +7868,7 @@ export type GetInternalMcpCatalogItemResponses = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -7943,7 +7943,7 @@ export type UpdateInternalMcpCatalogItemData = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -8082,7 +8082,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             arguments?: Array<string>;
             environment?: Array<{
                 key: string;
-                type: 'plain_text' | 'secret';
+                type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
             }>;
@@ -8800,7 +8800,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -8875,7 +8875,7 @@ export type CreateMcpServerInstallationRequestData = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9004,7 +9004,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9232,7 +9232,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9307,7 +9307,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9448,7 +9448,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9599,7 +9599,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9750,7 +9750,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;
@@ -9901,7 +9901,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 arguments?: Array<string>;
                 environment?: Array<{
                     key: string;
-                    type: 'plain_text' | 'secret';
+                    type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
                 }>;

@@ -34,6 +34,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
+import config from "@/lib/config";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 
@@ -177,34 +178,38 @@ const MainSideBarSection = ({
   pathname: string;
   searchParams: URLSearchParams;
   starCount: number;
-}) => (
-  <>
-    <SidebarGroup className="px-4">
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {getNavigationItems(isAuthenticated).map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton
-                asChild
-                isActive={
-                  item.customIsActive?.(pathname, searchParams) ??
-                  pathname.startsWith(item.url)
-                }
-              >
-                <Link href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-    <ChatSidebarSection />
-    <CommunitySideBarSection starCount={starCount} />
-  </>
-);
+}) => {
+  return (
+    <>
+      <SidebarGroup className="px-4">
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {getNavigationItems(isAuthenticated).map((item) => (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={
+                    item.customIsActive?.(pathname, searchParams) ??
+                    pathname.startsWith(item.url)
+                  }
+                >
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <ChatSidebarSection />
+      {!config.hideArchestraBranding && (
+        <CommunitySideBarSection starCount={starCount} />
+      )}
+    </>
+  );
+};
 
 const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
   <SidebarFooter>

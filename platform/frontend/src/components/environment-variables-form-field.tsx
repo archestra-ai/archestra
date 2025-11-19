@@ -144,6 +144,8 @@ export function EnvironmentVariablesFormField<
                         <SelectContent>
                           <SelectItem value="plain_text">Plain text</SelectItem>
                           <SelectItem value="secret">Secret</SelectItem>
+                          <SelectItem value="boolean">Boolean</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -175,18 +177,73 @@ export function EnvironmentVariablesFormField<
                     name={
                       `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
                     }
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="your-value"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const envType = form.watch(
+                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+                      );
+
+                      // Boolean type: render checkbox with label
+                      if (envType === "boolean") {
+                        // Normalize empty/undefined values to "false"
+                        const normalizedValue =
+                          field.value === "true" ? "true" : "false";
+                        if (field.value !== normalizedValue) {
+                          field.onChange(normalizedValue);
+                        }
+
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <div className="flex items-center gap-2 h-10">
+                                <Checkbox
+                                  checked={normalizedValue === "true"}
+                                  onCheckedChange={(checked) =>
+                                    field.onChange(checked ? "true" : "false")
+                                  }
+                                />
+                                <span className="text-sm">
+                                  {normalizedValue === "true"
+                                    ? "True"
+                                    : "False"}
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      // Number type: render number input
+                      if (envType === "number") {
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      // String/Secret types: render input
+                      return (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="your-value"
+                              className="font-mono"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                 ) : (
                   <div className="flex items-center h-10">

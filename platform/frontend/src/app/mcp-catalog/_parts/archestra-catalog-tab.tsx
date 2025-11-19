@@ -27,7 +27,6 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
-import { ConfigureEnvironmentDialog } from "./configure-environment-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
@@ -45,8 +44,6 @@ export function ArchestraCatalogTab({
   const [readmeServer, setReadmeServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
-    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
-  const [configureEnvServer, setConfigureEnvServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
@@ -81,28 +78,63 @@ export function ArchestraCatalogTab({
   // Mutation for adding servers to catalog
   const createMutation = useCreateInternalMcpCatalogItem();
 
-  const addServerToCatalog = useCallback(
-    async (
-      server: archestraCatalogTypes.ArchestraMcpServerManifest,
-      environment?: Array<{
-        key: string;
-        type: "plain_text" | "secret";
-        value?: string;
-        promptOnInstallation: boolean;
-      }>,
+  const handleAddToCatalog = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
+    const getValue = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
     ) => {
-      // Rewrite redirect URIs to prefer platform callback (port 3000)
-      const rewrittenOauth =
-        server.oauth_config && !server.oauth_config.requires_proxy
-          ? {
-              ...server.oauth_config,
-              redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
-                u === "http://localhost:8080/oauth/callback"
-                  ? `${window.location.origin}/oauth-callback`
-                  : u,
-              ),
-            }
-          : undefined;
+      if (config.type === "boolean") {
+        return typeof config.default === "boolean"
+          ? String(config.default)
+          : "false";
+      }
+      if (config.type === "number" && typeof config.default === "number") {
+        return String(config.default);
+      }
+      return undefined;
+    };
+    const getValueType = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ): "boolean" | "number" | "secret" | "plain_text" => {
+      if (config.type === "boolean") {
+        return "boolean";
+      }
+      if (config.type === "number") {
+        return "number";
+      }
+      return config.sensitive ? "secret" : "plain_text";
+    };
+
+    // For local servers, construct environment from server.env and user_config
+    if (server.server.type === "local") {
+      const environment = [
+        // Transform server.env entries
+        ...(server.server.env
+          ? Object.entries(server.server.env).map(([key, value]) => ({
+              key,
+              type: "plain_text" as const,
+              value,
+              promptOnInstallation: false,
+            }))
+          : []),
+        // Transform user_config entries
+        ...(server.user_config
+          ? Object.entries(server.user_config).map(([key, config]) => ({
+              key,
+              type: getValueType(config),
+              value: getValue(config),
+              promptOnInstallation: true,
+            }))
+          : []),
+      ];
+      await addServerToCatalog(server, environment);
+      return;
+    }
 
       // For local servers, extract local_config from manifest
       const localConfig =
@@ -123,20 +155,27 @@ export function ArchestraCatalogTab({
             }
           : undefined;
 
-      await createMutation.mutateAsync({
-        name: server.name,
-        version: undefined, // No version in archestra catalog
-        serverType: server.server.type,
-        serverUrl:
-          server.server.type === "remote" ? server.server.url : undefined,
-        docsUrl:
-          server.server.type === "remote"
-            ? (server.server.docs_url ?? undefined)
-            : undefined,
-        localConfig,
-        userConfig: server.user_config,
-        oauthConfig: rewrittenOauth,
-      });
+  const addServerToCatalog = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+    environment?: Array<{
+      key: string;
+      type: "plain_text" | "secret" | "boolean" | "number";
+      value?: string;
+      promptOnInstallation: boolean;
+    }>,
+  ) => {
+    // Rewrite redirect URIs to prefer platform callback (port 3000)
+    const rewrittenOauth =
+      server.oauth_config && !server.oauth_config.requires_proxy
+        ? {
+            ...server.oauth_config,
+            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
+              u === "http://localhost:8080/oauth/callback"
+                ? `${window.location.origin}/oauth-callback`
+                : u,
+            ),
+          }
+        : undefined;
 
       // Close the dialog after adding
       onClose();
@@ -348,31 +387,6 @@ export function ArchestraCatalogTab({
       <RequestInstallationDialog
         server={requestServer}
         onClose={() => setRequestServer(null)}
-      />
-
-      <ConfigureEnvironmentDialog
-        isOpen={!!configureEnvServer}
-        onClose={() => setConfigureEnvServer(null)}
-        onConfirm={(environment) => {
-          if (configureEnvServer) {
-            addServerToCatalog(configureEnvServer, environment);
-            setConfigureEnvServer(null);
-          }
-        }}
-        serverName={configureEnvServer?.name || ""}
-        defaultEnvironment={
-          configureEnvServer?.server.type === "local" &&
-          configureEnvServer.server.env
-            ? Object.entries(configureEnvServer.server.env).map(
-                ([key, value]) => ({
-                  key,
-                  type: "plain_text" as const,
-                  value,
-                  promptOnInstallation: false,
-                }),
-              )
-            : []
-        }
       />
     </div>
   );

@@ -7,7 +7,14 @@ import { DefaultChatTransport } from "ai";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
   PromptInput,
@@ -94,14 +101,17 @@ export default function ChatPage() {
   }, [searchParams, conversationId]);
 
   // Update URL when conversation changes
-  const selectConversation = (id: string | undefined) => {
-    setConversationId(id);
-    if (id) {
-      router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
-    } else {
-      router.push(pathname);
-    }
-  };
+  const selectConversation = useCallback(
+    (id: string | undefined) => {
+      setConversationId(id);
+      if (id) {
+        router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
+      } else {
+        router.push(pathname);
+      }
+    },
+    [pathname, router],
+  );
 
   // Fetch conversation with messages
   const { data: conversation } = useConversation(conversationId);
@@ -144,50 +154,54 @@ export default function ChatPage() {
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
   // Group tools by MCP server name (everything before the last __)
-  const groupedTools = mcpTools.reduce(
-    (acc, tool) => {
-      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-      // Last part is tool name, everything else is server name
-      const serverName =
-        parts.length > 1
-          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-          : "default";
-      if (!acc[serverName]) {
-        acc[serverName] = [];
-      }
-      acc[serverName].push(tool);
-      return acc;
-    },
-    {} as Record<string, typeof mcpTools>,
+  const groupedTools = useMemo(
+    () =>
+      mcpTools.reduce(
+        (acc, tool) => {
+          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+          // Last part is tool name, everything else is server name
+          const serverName =
+            parts.length > 1
+              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+              : "default";
+          if (!acc[serverName]) {
+            acc[serverName] = [];
+          }
+          acc[serverName].push(tool);
+          return acc;
+        },
+        {} as Record<string, typeof mcpTools>,
+      ),
+    [mcpTools],
   );
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
   // Handle prompt selection from all agents view
-  const handleSelectPromptFromAllAgents = async (
-    agentId: string,
-    prompt: string,
-  ) => {
-    // Store the pending prompt to send after conversation loads
-    // Empty string means "free chat" - don't send a message
-    pendingPromptRef.current = prompt || undefined;
-    // Create conversation for the selected agent
-    const newConversation =
-      await createConversationMutation.mutateAsync(agentId);
-    if (newConversation) {
-      // Mark this as a newly created conversation
-      newlyCreatedConversationRef.current = newConversation.id;
-      selectConversation(newConversation.id);
-    }
-  };
+  const handleSelectPromptFromAllAgents = useCallback(
+    async (agentId: string, prompt: string) => {
+      // Store the pending prompt to send after conversation loads
+      // Empty string means "free chat" - don't send a message
+      pendingPromptRef.current = prompt || undefined;
+      // Create conversation for the selected agent
+      const newConversation =
+        await createConversationMutation.mutateAsync(agentId);
+      if (newConversation) {
+        // Mark this as a newly created conversation
+        newlyCreatedConversationRef.current = newConversation.id;
+        selectConversation(newConversation.id);
+      }
+    },
+    [createConversationMutation, selectConversation],
+  );
 
   // Persist hide tool calls preference
-  const toggleHideToolCalls = () => {
+  const toggleHideToolCalls = useCallback(() => {
     const newValue = !hideToolCalls;
     setHideToolCalls(newValue);
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
-  };
+  }, [hideToolCalls]);
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
   const { messages, sendMessage, status, setMessages, stop, error } = useChat({
@@ -250,25 +264,28 @@ export default function ChatPage() {
     }
   }, [conversationId, conversation, setMessages, sendMessage, status]);
 
-  const handleSubmit = (
-    // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-    message: { text?: string; files?: any[] },
-    e: FormEvent<HTMLFormElement>,
-  ) => {
-    e.preventDefault();
-    if (
-      !message.text?.trim() ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (
+        !message.text?.trim() ||
+        status === "submitted" ||
+        status === "streaming"
+      ) {
+        return;
+      }
 
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: message.text }],
-    });
-  };
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: message.text }],
+      });
+    },
+    [sendMessage, status],
+  );
 
   // If API key is not configured, show setup message
   if (chatSettings && !chatSettings.anthropicApiKeySecretId) {

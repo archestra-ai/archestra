@@ -86,9 +86,10 @@ export default {
     enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
   },
   /**
-   * Hide Archestra-specific branding and UI sections when enabled.
+   * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
    */
-  hideArchestraBranding: env("NEXT_PUBLIC_ARCHESTRA_HIDE_BRANDING") === "true",
+  enterpriseLicenseActivated:
+    env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true",
   sentry: {
     dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
     environment:

@@ -1,6 +1,7 @@
 # Container image used for platform end-to-end tests.
 # Based on the official Playwright image which already includes the browsers.
-FROM mcr.microsoft.com/playwright:v1.44.1-jammy
+# see https://playwright.dev/docs/docker
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy
 
 USER root
 
@@ -16,12 +17,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install kubectl
-RUN KUBECTL_VERSION="v1.30.2" && \
+RUN KUBECTL_VERSION="v1.32.7" && \
     curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl && \
     chmod +x /usr/local/bin/kubectl
 
 # Install kind
-RUN KIND_VERSION="v0.23.0" && \
+RUN KIND_VERSION="v0.30.0" && \
     curl -fsSL "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64" -o /usr/local/bin/kind && \
     chmod +x /usr/local/bin/kind
 

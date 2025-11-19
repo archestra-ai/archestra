@@ -720,17 +720,19 @@ export function InternalMCPCatalog({
         isInstalling={installMutation.isPending}
       />
 
-      <LocalServerInstallDialog
-        isOpen={isDialogOpened("local-install")}
-        onClose={() => {
-          closeDialog("local-install");
-          setLocalServerCatalogItem(null);
-        }}
-        onConfirm={handleLocalServerInstallConfirm}
-        catalogItem={localServerCatalogItem}
-        isInstalling={installMutation.isPending}
-        authType={isTeamMode ? "team" : "personal"}
-      />
+      {localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={isDialogOpened("local-install")}
+          onClose={() => {
+            closeDialog("local-install");
+            setLocalServerCatalogItem(null);
+          }}
+          onConfirm={handleLocalServerInstallConfirm}
+          catalogItem={localServerCatalogItem}
+          isInstalling={installMutation.isPending}
+          authType={isTeamMode ? "team" : "personal"}
+        />
+      )}
     </div>
   );
 }

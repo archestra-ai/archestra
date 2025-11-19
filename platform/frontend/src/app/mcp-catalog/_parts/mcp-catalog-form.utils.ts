@@ -135,7 +135,7 @@ export function transformCatalogItemToFormValues(
         arguments: string;
         environment: Array<{
           key: string;
-          type: "plain_text" | "secret";
+          type: "plain_text" | "secret" | "boolean";
           value?: string;
           promptOnInstallation: boolean;
         }>;

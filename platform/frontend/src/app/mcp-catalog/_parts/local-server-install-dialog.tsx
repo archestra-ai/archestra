@@ -57,11 +57,10 @@ export function LocalServerInstallDialog({
   const [environmentValues, setEnvironmentValues] = useState<
     Record<string, string>
   >(
-    promptedEnvVars.reduce(
-      // biome-ignore lint/performance/noAccumulatingSpread: it's okay here
-      (acc, env) => ({ ...acc, [env.key]: env.value }),
-      {},
-    ),
+    promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
+      acc[env.key] = env.value || "";
+      return acc;
+    }, {}),
   );
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [currentTeamId, setCurrentTeamId] = useState<string>("");

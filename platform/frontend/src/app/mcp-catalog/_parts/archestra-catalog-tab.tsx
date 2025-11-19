@@ -81,6 +81,35 @@ export function ArchestraCatalogTab({
   const handleAddToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
+    const getValue = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ) => {
+      if (config.type === "boolean") {
+        return typeof config.default === "boolean"
+          ? String(config.default)
+          : "false";
+      }
+      if (config.type === "number" && typeof config.default === "number") {
+        return String(config.default);
+      }
+      return undefined;
+    };
+    const getValueType = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ): "boolean" | "number" | "secret" | "plain_text" => {
+      if (config.type === "boolean") {
+        return "boolean";
+      }
+      if (config.type === "number") {
+        return "number";
+      }
+      return config.sensitive ? "secret" : "plain_text";
+    };
+
     // For local servers, construct environment from server.env and user_config
     if (server.server.type === "local") {
       const environment = [
@@ -97,23 +126,8 @@ export function ArchestraCatalogTab({
         ...(server.user_config
           ? Object.entries(server.user_config).map(([key, config]) => ({
               key,
-              type:
-                config.type === "boolean"
-                  ? ("boolean" as const)
-                  : config.type === "number"
-                    ? ("number" as const)
-                    : ((config.sensitive ? "secret" : "plain_text") as
-                        | "secret"
-                        | "plain_text"),
-              value:
-                config.type === "boolean"
-                  ? typeof config.default === "boolean"
-                    ? String(config.default)
-                    : "false" // Default to "false" for boolean fields without default
-                  : config.type === "number" &&
-                      typeof config.default === "number"
-                    ? String(config.default) // Convert number to string
-                    : undefined,
+              type: getValueType(config),
+              value: getValue(config),
               promptOnInstallation: true,
             }))
           : []),

@@ -151,6 +151,5 @@ class WebSocketService {
  * Open a single websocket connection to WebSocket server when the app is loaded
  */
 const websocketService = new WebSocketService();
-websocketService.connect().catch(console.error);
 
 export default websocketService;

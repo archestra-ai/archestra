@@ -26,6 +26,7 @@ export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
  * Format: {mcpServerName}__{toolName}
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
+export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 
 export const MCP_CATALOG_API_BASE_URL =
   "https://www.archestra.ai/mcp-catalog/api";

@@ -1,7 +1,10 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { Eye, EyeOff } from "lucide-react";
@@ -50,12 +53,11 @@ import {
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
-const ARCHESTRA_SERVER_NAME = "archestra";
-const SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME = `${ARCHESTRA_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
+const SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 const SPECIAL_CREATE_CUSTOM_SERVER_TOOL = {
   name: SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME,
   description:
-    "Request a new custom MCP server installation via the Archestra dialog.",
+    "Create a new custom MCP server installation request via a dialog here in the Archestra Platform chat UI.",
   parameters: {},
 } as const;
 

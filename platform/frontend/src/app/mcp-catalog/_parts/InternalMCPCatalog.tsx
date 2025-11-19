@@ -238,7 +238,6 @@ export function InternalMCPCatalog({
   };
 
   const handleLocalServerInstallConfirm = async (
-    userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
   ) => {
@@ -249,7 +248,6 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       teams: teams || [],
-      userConfigValues,
       environmentValues,
       dontShowToast: true,
     });

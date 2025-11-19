@@ -32,7 +32,6 @@ interface LocalServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (
-    userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
   ) => Promise<void>;
@@ -115,7 +114,6 @@ export function LocalServerInstallDialog({
     }
 
     await onConfirm(
-      {}, // No separate user config values anymore
       environmentValues,
       authType === "team" ? selectedTeamIds : undefined,
     );

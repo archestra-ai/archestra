@@ -39,6 +39,7 @@ import { useAgents } from "@/lib/agent.query";
 import {
   useAgentToolPatchMutation,
   useAllAgentTools,
+  useBulkUpdateAgentTools,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -83,6 +84,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 
 export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useAgentToolPatchMutation();
+  const bulkUpdateMutation = useBulkUpdateAgentTools();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
@@ -264,7 +266,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     ) => {
       setIsBulkUpdating(true);
 
-      const mutations = selectedTools
+      // Filter out tools with custom policies
+      const toolIds = selectedTools
         .filter((tool) => {
           if (field === "allowUsageWhenUntrustedDataIsPresent") {
             const hasCustomInvocationPolicy =
@@ -280,22 +283,26 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
           return true;
         })
-        .map((tool) =>
-          agentToolPatchMutation.mutateAsync({
-            id: tool.id,
-            [field]: value,
-          }),
-        );
+        .map((tool) => tool.id);
+
+      if (toolIds.length === 0) {
+        setIsBulkUpdating(false);
+        return;
+      }
 
       try {
-        await Promise.all(mutations);
+        await bulkUpdateMutation.mutateAsync({
+          ids: toolIds,
+          field,
+          value,
+        });
       } catch (error) {
         console.error("Bulk update failed:", error);
       } finally {
         setIsBulkUpdating(false);
       }
     },
-    [selectedTools, agentToolPatchMutation, invocationPolicies, resultPolicies],
+    [selectedTools, bulkUpdateMutation, invocationPolicies, resultPolicies],
   );
 
   const clearSelection = useCallback(() => {

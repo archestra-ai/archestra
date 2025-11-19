@@ -89,3 +89,23 @@ export type AgentToolSortBy = z.infer<typeof AgentToolSortBySchema>;
 export type AgentToolSortDirection = z.infer<
   typeof AgentToolSortDirectionSchema
 >;
+
+export const BulkUpdateAgentToolsRequestSchema = z.object({
+  ids: z.array(UuidIdSchema).min(1, "At least one ID is required"),
+  field: z.enum([
+    "allowUsageWhenUntrustedDataIsPresent",
+    "toolResultTreatment",
+  ]),
+  value: z.union([z.boolean(), ToolResultTreatmentSchema]),
+});
+
+export const BulkUpdateAgentToolsResponseSchema = z.object({
+  updatedCount: z.number(),
+});
+
+export type BulkUpdateAgentToolsRequest = z.infer<
+  typeof BulkUpdateAgentToolsRequestSchema
+>;
+export type BulkUpdateAgentToolsResponse = z.infer<
+  typeof BulkUpdateAgentToolsResponseSchema
+>;

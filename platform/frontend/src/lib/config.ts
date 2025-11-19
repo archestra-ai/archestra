@@ -2,7 +2,9 @@ import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
-const backendBaseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+
+const getBackendBaseUrl = (): string | undefined =>
+  env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
 /**
  * Get the display proxy URL for showing to users.
@@ -10,6 +12,7 @@ const backendBaseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
  */
 export const getDisplayProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
+  const backendBaseUrl = getBackendBaseUrl();
 
   if (!backendBaseUrl) {
     return `http://localhost:9000${proxyUrlSuffix}`;
@@ -25,6 +28,8 @@ export const getDisplayProxyUrl = (): string => {
  * Get the WebSocket URL
  */
 const getWebSocketUrl = (): string => {
+  const backendBaseUrl = getBackendBaseUrl();
+
   // In development, use localhost
   if (!backendBaseUrl || typeof window === "undefined") {
     return "ws://localhost:9000/ws";

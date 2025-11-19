@@ -1026,7 +1026,7 @@ export type AnthropicMessagesResponseInput = {
 };
 
 export type WebSocketMessageInput = {
-    type: 'mcp-installation-request';
+    type: 'hello-world';
     payload: {
         [key: string]: unknown;
     };
@@ -2054,7 +2054,7 @@ export type AnthropicMessagesResponse = {
 };
 
 export type WebSocketMessage = {
-    type: 'mcp-installation-request';
+    type: 'hello-world';
     payload: {
         [key: string]: never;
     };

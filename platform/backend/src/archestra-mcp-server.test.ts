@@ -14,10 +14,10 @@ import {
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
-  test("should return an array of 23 tools", () => {
+  test("should return an array of 24 tools", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(23);
+    expect(tools).toHaveLength(24);
     expect(tools[0]).toHaveProperty("name");
     expect(tools[0]).toHaveProperty("title");
     expect(tools[0]).toHaveProperty("description");
@@ -322,22 +322,23 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  // MCP server installation request tool is temporarily disabled
-  describe("create_mcp_server_installation_request tool (disabled)", () => {
-    test("should throw error for disabled tool", async () => {
-      await expect(
-        executeArchestraTool(
-          `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-          {
-            external_catalog_id: "catalog-123",
-            request_reason: "Need this server for testing",
-          },
-          mockContext,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: `Tool '${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request' not found`,
-      });
+  describe("create_mcp_server_installation_request tool", () => {
+    test("should return instructions for completing the dialog", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        {
+          external_catalog_id: "catalog-123",
+          request_reason: "Need this server for testing",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0]).toMatchObject({ type: "text" });
+      expect((result.content[0] as any).text).toContain(
+        "installation request dialog",
+      );
     });
   });
 

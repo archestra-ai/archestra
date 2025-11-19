@@ -56,6 +56,11 @@ jobs:
     container:
       image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest
       options: --user 0 --privileged --volume /var/run/docker.sock:/var/run/docker.sock
+      # https://docs.blacksmith.sh/blacksmith-caching/dependencies-actions#using-the-blacksmith-cache-inside-a-container
+      env:
+        BLACKSMITH_CACHE_TOKEN: ${{ env.BLACKSMITH_CACHE_TOKEN }}
+        BLACKSMITH_CACHE_URL: ${{ env.BLACKSMITH_CACHE_URL }}
+        GITHUB_REPO_NAME: ${{ env.GITHUB_REPO_NAME }}
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

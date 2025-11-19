@@ -2,8 +2,8 @@
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
-  ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
@@ -53,13 +53,6 @@ import {
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
-const SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
-const SPECIAL_CREATE_CUSTOM_SERVER_TOOL = {
-  name: SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME,
-  description:
-    "Create a new custom MCP server installation request via a dialog here in the Archestra Platform chat UI.",
-  parameters: {},
-} as const;
 
 export default function ChatPage() {
   const router = useRouter();
@@ -149,23 +142,6 @@ export default function ChatPage() {
   // Fetch MCP tools from gateway (same as used in chat backend)
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
-  const toolsForUseChat = useMemo(() => {
-    if (!currentAgentId) {
-      return [];
-    }
-
-    const combinedTools = [...mcpTools];
-    const hasSpecialTool = combinedTools.some(
-      (tool) => tool.name === SPECIAL_CREATE_CUSTOM_SERVER_TOOL.name,
-    );
-
-    if (!hasSpecialTool) {
-      combinedTools.push(SPECIAL_CREATE_CUSTOM_SERVER_TOOL);
-    }
-
-    return combinedTools;
-  }, [currentAgentId, mcpTools]);
-
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(
     () =>
@@ -216,18 +192,6 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
-  const chatTransport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        credentials: "include",
-        body: () => ({
-          tools: toolsForUseChat,
-        }),
-      }),
-    [toolsForUseChat],
-  );
-
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
   const {
     messages,
@@ -238,7 +202,10 @@ export default function ChatPage() {
     error,
     addToolResult,
   } = useChat({
-    transport: chatTransport,
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      credentials: "include",
+    }),
     id: conversationId,
     onFinish: () => {
       // Invalidate the conversation query to refetch with new messages
@@ -257,11 +224,13 @@ export default function ChatPage() {
       });
     },
     onToolCall: ({ toolCall }) => {
-      if (toolCall.toolName === SPECIAL_CREATE_CUSTOM_SERVER_TOOL_NAME) {
+      if (
+        toolCall.toolName ===
+        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
+      ) {
         setPendingCustomServerToolCall(toolCall);
       }
     },
-    tools: toolsForUseChat,
   } as Parameters<typeof useChat>[0]);
 
   useEffect(() => {

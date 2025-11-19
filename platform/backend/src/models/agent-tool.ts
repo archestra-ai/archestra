@@ -268,6 +268,26 @@ class AgentToolModel {
     return agentTool;
   }
 
+  static async bulkUpdateSameValue(
+    ids: string[],
+    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const result = await db
+      .update(schema.agentToolsTable)
+      .set({
+        [field]: value,
+        updatedAt: new Date(),
+      })
+      .where(inArray(schema.agentToolsTable.id, ids));
+
+    return result.rowCount ?? 0;
+  }
+
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,

@@ -5,6 +5,7 @@ const {
   assignToolToAgent,
   bulkAssignTools,
   getAllAgentTools,
+  bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
@@ -231,6 +232,24 @@ export function useAgentToolPatchMutation() {
         path: { id: updatedAgentTool.id },
       });
       return result.data ?? null;
+    },
+    onSuccess: () => {
+      // Invalidate all agent-tools queries to refetch updated data
+      queryClient.invalidateQueries({
+        queryKey: ["agent-tools"],
+      });
+    },
+  });
+}
+
+export function useBulkUpdateAgentTools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      bulkUpdate: archestraApiTypes.BulkUpdateAgentToolsData["body"],
+    ) => {
+      const result = await bulkUpdateAgentTools({ body: bulkUpdate });
+      return result.data;
     },
     onSuccess: () => {
       // Invalidate all agent-tools queries to refetch updated data

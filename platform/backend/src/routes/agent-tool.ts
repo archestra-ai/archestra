@@ -17,6 +17,8 @@ import {
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
+  BulkUpdateAgentToolsRequestSchema,
+  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -212,6 +214,30 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send({ succeeded, failed, duplicates });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/bulk-update",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateAgentTools,
+        description: "Update multiple agent tools with the same value in bulk",
+        tags: ["Agent Tools"],
+        body: BulkUpdateAgentToolsRequestSchema,
+        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { ids, field, value } = request.body;
+
+      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
+        ids,
+        field,
+        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      );
+
+      return reply.send({ updatedCount });
     },
   );
 

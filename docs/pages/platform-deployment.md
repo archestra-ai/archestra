@@ -209,6 +209,134 @@ Note: `ARCHESTRA_AUTH_SECRET` is optional. It will be auto-generated if not spec
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
 
+#### Cloud Provider Configuration (Streaming Timeout Settings)
+
+**⚠️ IMPORTANT:** Archestra Platform requires proper timeout settings on the upstream load balancer. **Without longer timeouts, streaming responses may end prematurely**, resulting in a “network error”
+
+##### Google Cloud Platform (GKE)
+
+For GKE deployments using the GCE Ingress Controller, configure load balancer timeouts using a BackendConfig resource. **BackendConfig is cloud-provider-specific and should be managed through your infrastructure-as-code** (Terraform, Pulumi, etc.) rather than the Helm chart.
+
+**Create BackendConfig Resource**:
+
+The BackendConfig should be created in the same namespace as your Archestra Platform deployment:
+
+```yaml
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: archestra-platform-backend-config
+  namespace: archestra  # Same namespace as Helm release
+spec:
+  timeoutSec: 600  # 10 minutes for streaming responses and long-running MCP operations
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /health
+    port: 9000
+```
+
+**Reference BackendConfig in Service**:
+
+After creating the BackendConfig resource, configure the Helm chart to reference it via service annotations:
+
+```yaml
+archestra:
+  service:
+    annotations:
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+```
+
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set-string archestra.service.annotations."cloud\.google\.com/backend-config"='{"ports": {"9000":"archestra-platform-backend-config"}}' \
+  --wait
+```
+
+##### Amazon Web Services (AWS EKS)
+
+For AWS EKS with Application Load Balancer (ALB), configure timeout annotations on the Service:
+
+```yaml
+archestra:
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+      service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "600"
+```
+
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http \
+  --set-string archestra.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="600" \
+  --wait
+```
+
+##### Microsoft Azure (AKS)
+
+For Azure AKS with Application Gateway Ingress Controller (AGIC), configure timeout annotations on the Ingress:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      appgw.ingress.kubernetes.io/request-timeout: "600"
+      appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
+```
+
+Apply via Helm:
+```bash
+helm upgrade archestra-platform \
+  oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
+  --install \
+  --namespace archestra \
+  --create-namespace \
+  --set archestra.ingress.enabled=true \
+  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/request-timeout"="600" \
+  --set-string archestra.ingress.annotations."appgw\.ingress\.kubernetes\.io/connection-draining-timeout"="60" \
+  --wait
+```
+
+##### Other Ingress Controllers (nginx, Traefik, etc.)
+
+For nginx-ingress:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+```
+
+For Traefik:
+
+```yaml
+archestra:
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      # Configure timeout via Traefik IngressRoute or Middleware
+```
+
 #### Database Configuration
 
 **PostgreSQL Settings**:

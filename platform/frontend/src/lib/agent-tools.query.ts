@@ -5,7 +5,7 @@ const {
   assignToolToAgent,
   bulkAssignTools,
   getAllAgentTools,
-  postApiAgentToolsBulkUpdate,
+  bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
@@ -246,9 +246,9 @@ export function useBulkUpdateAgentTools() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      bulkUpdate: archestraApiTypes.PostApiAgentToolsBulkUpdateData["body"],
+      bulkUpdate: archestraApiTypes.BulkUpdateAgentToolsData["body"],
     ) => {
-      const result = await postApiAgentToolsBulkUpdate({ body: bulkUpdate });
+      const result = await bulkUpdateAgentTools({ body: bulkUpdate });
       return result.data;
     },
     onSuccess: () => {

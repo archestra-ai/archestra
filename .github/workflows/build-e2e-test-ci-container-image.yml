@@ -2,10 +2,11 @@ name: Build e2e test CI container image
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - .github/Dockerfile.e2e-tests
+    # TODO: uncomment when done testing
+    # branches:
+    #   - main
+    # paths:
+    #   - .github/Dockerfile.e2e-tests
 
 jobs:
   build-and-push:
@@ -35,6 +36,5 @@ jobs:
           context: .
           file: .github/Dockerfile.e2e-tests
           push: true
-          platforms: linux/amd64
           tags: |
             europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest

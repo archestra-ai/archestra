@@ -3717,7 +3717,7 @@ export type BulkAssignToolsResponses = {
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
 
-export type PostApiAgentToolsBulkUpdateData = {
+export type BulkUpdateAgentToolsData = {
     body: {
         ids: Array<string>;
         field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
@@ -3728,7 +3728,7 @@ export type PostApiAgentToolsBulkUpdateData = {
     url: '/api/agent-tools/bulk-update';
 };
 
-export type PostApiAgentToolsBulkUpdateErrors = {
+export type BulkUpdateAgentToolsErrors = {
     /**
      * Default Response
      */
@@ -3785,9 +3785,9 @@ export type PostApiAgentToolsBulkUpdateErrors = {
     };
 };
 
-export type PostApiAgentToolsBulkUpdateError = PostApiAgentToolsBulkUpdateErrors[keyof PostApiAgentToolsBulkUpdateErrors];
+export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
 
-export type PostApiAgentToolsBulkUpdateResponses = {
+export type BulkUpdateAgentToolsResponses = {
     /**
      * Default Response
      */
@@ -3796,7 +3796,7 @@ export type PostApiAgentToolsBulkUpdateResponses = {
     };
 };
 
-export type PostApiAgentToolsBulkUpdateResponse = PostApiAgentToolsBulkUpdateResponses[keyof PostApiAgentToolsBulkUpdateResponses];
+export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
 
 export type GetAgentToolsData = {
     body?: never;

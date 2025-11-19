@@ -3,7 +3,7 @@
 import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
 
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -136,24 +136,9 @@ export function ArchestraCatalogTab({
       return;
     }
 
-      // For local servers, extract local_config from manifest
-      const localConfig =
-        server.server.type === "local"
-          ? {
-              command: server.server.command,
-              arguments: server.server.args,
-              environment:
-                environment ||
-                (server.server.env
-                  ? Object.entries(server.server.env).map(([key, value]) => ({
-                      key,
-                      type: "plain_text" as const,
-                      value,
-                      promptOnInstallation: false,
-                    }))
-                  : undefined),
-            }
-          : undefined;
+    // For remote servers, proceed with direct addition
+    await addServerToCatalog(server, undefined);
+  };
 
   const addServerToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
@@ -177,33 +162,50 @@ export function ArchestraCatalogTab({
           }
         : undefined;
 
-      // Close the dialog after adding
-      onClose();
-    },
-    [createMutation, onClose],
-  );
+    // For local servers, extract local_config from manifest
+    const localConfig =
+      server.server.type === "local"
+        ? {
+            command: server.server.command,
+            arguments: server.server.args,
+            environment:
+              environment ||
+              (server.server.env
+                ? Object.entries(server.server.env).map(([key, value]) => ({
+                    key,
+                    type: "plain_text" as const,
+                    value,
+                    promptOnInstallation: false,
+                  }))
+                : undefined),
+          }
+        : undefined;
 
-  const handleAddToCatalog = useCallback(
-    async (server: archestraCatalogTypes.ArchestraMcpServerManifest) => {
-      // For local servers, open the environment configuration dialog
-      if (server.server.type === "local") {
-        setConfigureEnvServer(server);
-        return;
-      }
+    await createMutation.mutateAsync({
+      name: server.name,
+      version: undefined, // No version in archestra catalog
+      serverType: server.server.type,
+      serverUrl:
+        server.server.type === "remote" ? server.server.url : undefined,
+      docsUrl:
+        server.server.type === "remote"
+          ? (server.server.docs_url ?? undefined)
+          : undefined,
+      localConfig,
+      userConfig: server.user_config,
+      oauthConfig: rewrittenOauth,
+    });
 
-      // For remote servers, proceed with direct addition
-      await addServerToCatalog(server, undefined);
-    },
-    [addServerToCatalog],
-  );
+    // Close the dialog after adding
+    onClose();
+  };
 
-  const handleRequestInstallation = useCallback(
-    async (server: archestraCatalogTypes.ArchestraMcpServerManifest) => {
-      // Just open the request dialog with the server data
-      setRequestServer(server);
-    },
-    [],
-  );
+  const handleRequestInstallation = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
+    // Just open the request dialog with the server data
+    setRequestServer(server);
+  };
 
   // Flatten all pages into a single array of servers
   const servers = useMemo(() => {

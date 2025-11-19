@@ -61,6 +61,7 @@ jobs:
         BLACKSMITH_CACHE_TOKEN: ${{ env.BLACKSMITH_CACHE_TOKEN }}
         BLACKSMITH_CACHE_URL: ${{ env.BLACKSMITH_CACHE_URL }}
         GITHUB_REPO_NAME: ${{ env.GITHUB_REPO_NAME }}
+        KUBECONFIG: /github/home/.kube/config
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -82,11 +83,17 @@ jobs:
       - name: Create Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
+          NETWORK_NAME=$(docker network ls --filter "label=bdf586" --format "{{.Name}}" | head -n 1)
+          export KIND_EXPERIMENTAL_DOCKER_NETWORK="${NETWORK_NAME:-kind}"
+
           if ! kind get clusters | grep -q "archestra-ci-cluster"; then
-            kind create cluster --name archestra-ci-cluster --config .github/kind.yaml
+            kind create cluster --name archestra-ci-cluster --config .github/kind.yaml --wait 120s
           else
             echo "Kind cluster already exists"
           fi
+
+          mkdir -p ~/.kube
+          kind get kubeconfig --name archestra-ci-cluster --internal > ~/.kube/config
 
       - name: Debug Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

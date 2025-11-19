@@ -3,15 +3,15 @@ import { z } from "zod";
 /**
  * WebSocket Message Payload Schemas
  */
-const McpInstallationRequestWebsocketPayloadSchema = z.object({});
+const HelloWorldWebsocketPayloadSchema = z.object({});
 
 /**
  * Discriminated union of all possible websocket messages
  */
 export const WebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.enum(["mcp-installation-request"]),
-    payload: McpInstallationRequestWebsocketPayloadSchema,
+    type: z.enum(["hello-world"]),
+    payload: HelloWorldWebsocketPayloadSchema,
   }),
 ]);
 

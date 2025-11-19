@@ -179,8 +179,6 @@ const MainSideBarSection = ({
   searchParams: URLSearchParams;
   starCount: number;
 }) => {
-  const showCommunitySection = !config.branding.hideArchestraBranding;
-
   return (
     <>
       <SidebarGroup className="px-4">
@@ -206,7 +204,7 @@ const MainSideBarSection = ({
         </SidebarGroupContent>
       </SidebarGroup>
       <ChatSidebarSection />
-      {showCommunitySection && (
+      {!config.hideArchestraBranding && (
         <CommunitySideBarSection starCount={starCount} />
       )}
     </>

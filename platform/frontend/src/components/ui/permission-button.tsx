@@ -71,7 +71,7 @@ export function PermissionButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span>
+        <span className="cursor-not-allowed">
           <Button
             disabled={true}
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {

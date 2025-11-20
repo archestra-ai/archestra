@@ -47,7 +47,7 @@ interface MenuItem {
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
-const getAllNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {
     return [];
   }
@@ -180,7 +180,7 @@ const MainSideBarSection = ({
   searchParams: URLSearchParams;
   starCount: number;
 }) => {
-  const allItems = getAllNavigationItems(isAuthenticated);
+  const allItems = getNavigationItems(isAuthenticated);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const permittedItems = allItems.filter(
     (item) => permissionMap[item.url] ?? true,

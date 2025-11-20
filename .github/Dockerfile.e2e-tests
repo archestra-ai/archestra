@@ -24,6 +24,7 @@ RUN apt-get update && \
       docker.io \
       git \
       jq \
+      sudo \
       unzip && \
     rm -rf /var/lib/apt/lists/*
 

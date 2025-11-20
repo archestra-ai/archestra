@@ -1,6 +1,8 @@
 name: Build e2e test CI container image
 
 on:
+  # TODO: remove this line when done testing..
+  pull_request:
   push:
     branches:
       - main

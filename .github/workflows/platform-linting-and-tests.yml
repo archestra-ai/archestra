@@ -92,6 +92,14 @@ jobs:
             echo "Kind cluster already exists"
           fi
 
+          RUNNER_CONTAINER_ID=$(cat /etc/hostname 2>/dev/null || true)
+          if [ -n "$RUNNER_CONTAINER_ID" ]; then
+            echo "Connecting runner container ${RUNNER_CONTAINER_ID} to $KIND_EXPERIMENTAL_DOCKER_NETWORK network"
+            docker network connect "$KIND_EXPERIMENTAL_DOCKER_NETWORK" "$RUNNER_CONTAINER_ID" >/dev/null 2>&1 || echo "Runner container already connected to $KIND_EXPERIMENTAL_DOCKER_NETWORK"
+          else
+            echo "Unable to determine runner container id; skipping network connect"
+          fi
+
           mkdir -p ~/.kube
           kind get kubeconfig --name archestra-ci-cluster --internal > ~/.kube/config
 
@@ -112,6 +120,15 @@ jobs:
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Turbo Cache
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/cache@v4
+        with:
+          path: ./platform/.turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

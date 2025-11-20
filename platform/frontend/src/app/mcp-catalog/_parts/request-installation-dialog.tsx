@@ -2,7 +2,7 @@
 
 import type { archestraCatalogTypes } from "@shared";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +26,7 @@ export function RequestInstallationDialog({
   const [requestReason, setRequestReason] = useState("");
   const createRequest = useCreateMcpServerInstallationRequest();
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!server) return;
 
     await createRequest.mutateAsync({
@@ -37,7 +37,7 @@ export function RequestInstallationDialog({
 
     setRequestReason("");
     onClose();
-  };
+  }, [server, requestReason, createRequest, onClose]);
 
   return (
     <Dialog open={!!server} onOpenChange={(open) => !open && onClose()}>

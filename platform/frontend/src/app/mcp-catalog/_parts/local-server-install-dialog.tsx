@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
@@ -33,7 +32,6 @@ interface LocalServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (
-    userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
   ) => Promise<void>;
@@ -50,38 +48,27 @@ export function LocalServerInstallDialog({
   isInstalling,
   authType = "personal",
 }: LocalServerInstallDialogProps) {
-  const [userConfigValues, setUserConfigValues] = useState<
-    Record<string, string>
-  >({});
-  const [environmentValues, setEnvironmentValues] = useState<
-    Record<string, string>
-  >({});
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
-  const [currentTeamId, setCurrentTeamId] = useState<string>("");
-
-  const { data: allTeams } = useTeams();
-
-  // Extract user config fields
-  const userConfigFields = catalogItem?.userConfig
-    ? Object.entries(catalogItem.userConfig).map(([key, config]) => ({
-        key,
-        title: config.title,
-        description: config.description,
-        type: config.type,
-        required: config.required,
-        sensitive: config.sensitive,
-      }))
-    : [];
-
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
     catalogItem?.localConfig?.environment?.filter(
       (env) => env.promptOnInstallation === true,
     ) || [];
 
-  const handleUserConfigChange = (key: string, value: string | boolean) => {
-    setUserConfigValues((prev) => ({ ...prev, [key]: String(value) }));
-  };
+  const [environmentValues, setEnvironmentValues] = useState<
+    Record<string, string>
+  >(
+    promptedEnvVars.reduce<Record<string, string>>((acc, env) => {
+      acc[env.key] = env.value || "";
+      return acc;
+    }, {}),
+  );
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [currentTeamId, setCurrentTeamId] = useState<string>("");
+
+  const { data: allTeams } = useTeams();
+
+  // Create a map of user_config for looking up descriptions
+  const userConfigMap = catalogItem?.userConfig || {};
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
@@ -106,37 +93,37 @@ export function LocalServerInstallDialog({
     if (!catalogItem) return;
 
     // Validate required fields
-    const missingUserConfigFields = userConfigFields.filter(
-      (field) => field.required && !userConfigValues[field.key]?.trim(),
-    );
-    const missingEnvVars = promptedEnvVars.filter(
-      (env) => !environmentValues[env.key]?.trim(),
-    );
+    const missingEnvVars = promptedEnvVars.filter((env) => {
+      const value = environmentValues[env.key];
+      // Boolean fields are always valid if they have a value (should be "true" or "false")
+      if (env.type === "boolean") {
+        return !value;
+      }
+      // For other types, check if the trimmed value is non-empty
+      return !value?.trim();
+    });
 
     // For team installations, require at least one team
     if (authType === "team" && selectedTeamIds.length === 0) {
       return;
     }
 
-    if (missingUserConfigFields.length > 0 || missingEnvVars.length > 0) {
+    if (missingEnvVars.length > 0) {
       return;
     }
 
     await onConfirm(
-      userConfigValues,
       environmentValues,
       authType === "team" ? selectedTeamIds : undefined,
     );
 
     // Reset form
-    setUserConfigValues({});
     setEnvironmentValues({});
     setSelectedTeamIds([]);
     setCurrentTeamId("");
   };
 
   const handleClose = () => {
-    setUserConfigValues({});
     setEnvironmentValues({});
     setSelectedTeamIds([]);
     setCurrentTeamId("");
@@ -144,10 +131,7 @@ export function LocalServerInstallDialog({
   };
 
   // Check if there are any fields to show
-  const hasFields =
-    userConfigFields.length > 0 ||
-    promptedEnvVars.length > 0 ||
-    authType === "team";
+  const hasFields = promptedEnvVars.length > 0 || authType === "team";
 
   if (!hasFields && authType === "personal") {
     // If no configuration is needed, don't show the dialog
@@ -155,10 +139,15 @@ export function LocalServerInstallDialog({
   }
 
   const isValid =
-    userConfigFields.every(
-      (field) => !field.required || userConfigValues[field.key]?.trim(),
-    ) &&
-    promptedEnvVars.every((env) => environmentValues[env.key]?.trim()) &&
+    promptedEnvVars.every((env) => {
+      const value = environmentValues[env.key];
+      // Boolean fields are always valid if they have a value (should be "true" or "false")
+      if (env.type === "boolean") {
+        return !!value;
+      }
+      // For other types, check if the trimmed value is non-empty
+      return !!value?.trim();
+    }) &&
     (authType === "personal" || selectedTeamIds.length > 0);
 
   return (
@@ -236,128 +225,75 @@ export function LocalServerInstallDialog({
               )}
             </div>
           )}
-          {/* User Config Fields */}
-          {userConfigFields.length > 0 && (
-            <div className="space-y-4">
-              {userConfigFields.map((field) => (
-                <div key={field.key} className="space-y-2">
-                  <Label htmlFor={field.key}>
-                    {field.title}
-                    {field.required && (
-                      <span className="text-destructive ml-1">*</span>
-                    )}
-                  </Label>
-                  {field.description && (
-                    <p className="text-xs text-muted-foreground">
-                      {field.description}
-                    </p>
-                  )}
-                  {field.type === "boolean" ? (
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={field.key}
-                        checked={userConfigValues[field.key] === "true"}
-                        onCheckedChange={(checked) =>
-                          handleUserConfigChange(field.key, checked === true)
-                        }
-                      />
-                      <Label
-                        htmlFor={field.key}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        Enable {field.title.toLowerCase()}
-                      </Label>
-                    </div>
-                  ) : field.type === "number" ? (
-                    <Input
-                      id={field.key}
-                      type="number"
-                      value={userConfigValues[field.key] || ""}
-                      onChange={(e) =>
-                        handleUserConfigChange(field.key, e.target.value)
-                      }
-                      placeholder={`Enter ${field.title.toLowerCase()}`}
-                    />
-                  ) : field.type === "directory" ? (
-                    <>
-                      <Input
-                        id={field.key}
-                        type="text"
-                        value={userConfigValues[field.key] || ""}
-                        onChange={(e) =>
-                          handleUserConfigChange(field.key, e.target.value)
-                        }
-                        placeholder="/path/to/directory"
-                        className="font-mono"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Enter the directory path on the server
-                      </p>
-                    </>
-                  ) : field.type === "file" ? (
-                    <>
-                      <Input
-                        id={field.key}
-                        type="text"
-                        value={userConfigValues[field.key] || ""}
-                        onChange={(e) =>
-                          handleUserConfigChange(field.key, e.target.value)
-                        }
-                        placeholder="/path/to/file"
-                        className="font-mono"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Enter the file path on the server
-                      </p>
-                    </>
-                  ) : field.sensitive ? (
-                    <Input
-                      id={field.key}
-                      type="password"
-                      value={userConfigValues[field.key] || ""}
-                      onChange={(e) =>
-                        handleUserConfigChange(field.key, e.target.value)
-                      }
-                      placeholder={`Enter ${field.title.toLowerCase()}`}
-                    />
-                  ) : (
-                    <Textarea
-                      id={field.key}
-                      value={userConfigValues[field.key] || ""}
-                      onChange={(e) =>
-                        handleUserConfigChange(field.key, e.target.value)
-                      }
-                      placeholder={`Enter ${field.title.toLowerCase()}`}
-                      rows={3}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Environment Variables that need prompting */}
           {promptedEnvVars.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Environment Variables</h3>
-              {promptedEnvVars.map((env) => (
-                <div key={env.key} className="space-y-2">
-                  <Label htmlFor={`env-${env.key}`}>
-                    {env.key}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <Input
-                    id={`env-${env.key}`}
-                    type={env.type === "secret" ? "password" : "text"}
-                    value={environmentValues[env.key] || ""}
-                    onChange={(e) =>
-                      handleEnvVarChange(env.key, e.target.value)
-                    }
-                    placeholder={`Enter value for ${env.key}`}
-                    className="font-mono"
-                  />
-                </div>
-              ))}
+              {promptedEnvVars.map((env) => {
+                // Look up description from user_config if it exists
+                const userConfigEntry = userConfigMap[env.key];
+                const description = userConfigEntry?.description;
+
+                return (
+                  <div key={env.key} className="space-y-2">
+                    <Label htmlFor={`env-${env.key}`}>
+                      {env.key}
+                      <span className="text-destructive ml-1">*</span>
+                    </Label>
+                    {description && (
+                      <p className="text-xs text-muted-foreground">
+                        {description}
+                      </p>
+                    )}
+
+                    {env.type === "boolean" ? (
+                      // Boolean type: render checkbox with True/False label
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`env-${env.key}`}
+                          checked={environmentValues[env.key] === "true"}
+                          onCheckedChange={(checked) =>
+                            handleEnvVarChange(
+                              env.key,
+                              checked ? "true" : "false",
+                            )
+                          }
+                        />
+                        <span className="text-sm">
+                          {environmentValues[env.key] === "true"
+                            ? "True"
+                            : "False"}
+                        </span>
+                      </div>
+                    ) : env.type === "number" ? (
+                      // Number type: render number input
+                      <Input
+                        id={`env-${env.key}`}
+                        type="number"
+                        value={environmentValues[env.key] || ""}
+                        onChange={(e) =>
+                          handleEnvVarChange(env.key, e.target.value)
+                        }
+                        placeholder="0"
+                        className="font-mono"
+                      />
+                    ) : (
+                      // String/Secret types: render input
+                      <Input
+                        id={`env-${env.key}`}
+                        type={env.type === "secret" ? "password" : "text"}
+                        value={environmentValues[env.key] || ""}
+                        onChange={(e) =>
+                          handleEnvVarChange(env.key, e.target.value)
+                        }
+                        placeholder={`Enter value for ${env.key}`}
+                        className="font-mono"
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

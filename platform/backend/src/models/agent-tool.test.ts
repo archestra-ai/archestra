@@ -252,7 +252,6 @@ describe("AgentToolModel.findAllPaginated", () => {
         { excludeArchestraTools: true },
       );
 
-      // true comes before false
       expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
         true,
       );
@@ -424,36 +423,72 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(result.data[0].tool.catalogId).toBe(catalog1.id);
     });
 
-    test("filters by credentialSourceMcpServerId", async ({
+    test("filters by mcpServerOwnerId", async ({
       makeAgent,
       makeTool,
       makeAgentTool,
       makeMcpServer,
+      makeUser,
     }) => {
       const agent = await makeAgent();
-      const server1 = await makeMcpServer({ name: "Server 1" });
-      const server2 = await makeMcpServer({ name: "Server 2" });
+      const owner = await makeUser();
+      const otherOwner = await makeUser();
+
+      const ownerServer1 = await makeMcpServer({
+        name: "Server 1",
+        ownerId: owner.id,
+      });
+      const ownerServer2 = await makeMcpServer({
+        name: "Server 2",
+        ownerId: owner.id,
+      });
+      const otherOwnerServer = await makeMcpServer({
+        name: "Server 3",
+        ownerId: otherOwner.id,
+      });
 
       const tool1 = await makeTool({ name: "tool-1" });
       const tool2 = await makeTool({ name: "tool-2" });
       const tool3 = await makeTool({ name: "tool-3" });
+      const tool4 = await makeTool({ name: "tool-4" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        credentialSourceMcpServerId: server1.id,
+        credentialSourceMcpServerId: ownerServer1.id,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        credentialSourceMcpServerId: server2.id,
+        executionSourceMcpServerId: ownerServer2.id,
       });
-      await makeAgentTool(agent.id, tool3.id);
+      await makeAgentTool(agent.id, tool3.id, {
+        credentialSourceMcpServerId: otherOwnerServer.id,
+      });
+      await makeAgentTool(agent.id, tool4.id);
 
       const result = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
         undefined,
-        { credentialSourceMcpServerId: server1.id },
+        { mcpServerOwnerId: owner.id },
       );
 
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0].credentialSourceMcpServerId).toBe(server1.id);
+      expect(result.data).toHaveLength(2);
+      expect(
+        result.data.some(
+          (agentTool) =>
+            agentTool.credentialSourceMcpServerId === ownerServer1.id,
+        ),
+      ).toBe(true);
+      expect(
+        result.data.some(
+          (agentTool) =>
+            agentTool.executionSourceMcpServerId === ownerServer2.id,
+        ),
+      ).toBe(true);
+      expect(
+        result.data.every(
+          (agentTool) =>
+            agentTool.credentialSourceMcpServerId === ownerServer1.id ||
+            agentTool.executionSourceMcpServerId === ownerServer2.id,
+        ),
+      ).toBe(true);
     });
   });
 

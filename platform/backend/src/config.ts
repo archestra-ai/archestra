@@ -156,6 +156,9 @@ export default {
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
   },
+  websocket: {
+    path: "/ws",
+  },
   mcpGateway: {
     endpoint: "/v1/mcp",
   },

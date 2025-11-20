@@ -21,7 +21,42 @@ class LimitModel {
       .values(data)
       .returning();
 
+    // For token_cost limits, initialize model usage records
+    if (
+      limit.limitType === "token_cost" &&
+      limit.model &&
+      Array.isArray(limit.model)
+    ) {
+      await LimitModel.initializeModelUsageRecords(limit.id, limit.model);
+    }
+
     return limit;
+  }
+
+  /**
+   * Initialize model usage records for a limit
+   * Creates a record in limit_model_usage for each model in the limit
+   */
+  static async initializeModelUsageRecords(
+    limitId: string,
+    models: string[],
+  ): Promise<void> {
+    if (!models || models.length === 0) {
+      return;
+    }
+
+    const records = models.map((model) => ({
+      limitId,
+      model,
+      currentUsageTokensIn: 0,
+      currentUsageTokensOut: 0,
+    }));
+
+    await db.insert(schema.limitModelUsageTable).values(records);
+
+    logger.info(
+      `[LimitModel] Initialized ${models.length} model usage records for limit ${limitId}`,
+    );
   }
 
   /**
@@ -55,6 +90,59 @@ class LimitModel {
       .where(whereClause);
 
     return limits;
+  }
+
+  /**
+   * Get per-model usage breakdown for a token_cost limit
+   * Returns the cost for each model in the limit
+   */
+  static async getModelUsageBreakdown(
+    limitId: string,
+  ): Promise<
+    Array<{ model: string; tokensIn: number; tokensOut: number; cost: number }>
+  > {
+    // Get the model usage records
+    const modelUsages = await db
+      .select()
+      .from(schema.limitModelUsageTable)
+      .where(eq(schema.limitModelUsageTable.limitId, limitId));
+
+    // Calculate cost for each model
+    const breakdown = await Promise.all(
+      modelUsages.map(async (usage) => {
+        const tokenPrice = await TokenPriceModel.findByModel(usage.model);
+
+        if (!tokenPrice) {
+          logger.warn(
+            `[LimitModel] No pricing found for model ${usage.model}, defaulting to $0`,
+          );
+          return {
+            model: usage.model,
+            tokensIn: usage.currentUsageTokensIn,
+            tokensOut: usage.currentUsageTokensOut,
+            cost: 0,
+          };
+        }
+
+        const inputCost =
+          (usage.currentUsageTokensIn *
+            parseFloat(tokenPrice.pricePerMillionInput)) /
+          1_000_000;
+        const outputCost =
+          (usage.currentUsageTokensOut *
+            parseFloat(tokenPrice.pricePerMillionOutput)) /
+          1_000_000;
+
+        return {
+          model: usage.model,
+          tokensIn: usage.currentUsageTokensIn,
+          tokensOut: usage.currentUsageTokensOut,
+          cost: inputCost + outputCost,
+        };
+      }),
+    );
+
+    return breakdown;
   }
 
   /**
@@ -130,34 +218,67 @@ class LimitModel {
   }
 
   /**
-   * Update token usage for limits of a specific entity
+   * Update token usage for limits of a specific entity and model
    * Used by usage tracking service after interactions
    */
   static async updateTokenLimitUsage(
     entityType: LimitEntityType,
     entityId: string,
+    model: string,
     inputTokens: number,
     outputTokens: number,
   ): Promise<void> {
     try {
-      // Update currentUsageTokensIn and currentUsageTokensOut by incrementing with the token usage
-      await db
-        .update(schema.limitsTable)
-        .set({
-          currentUsageTokensIn: sql`${schema.limitsTable.currentUsageTokensIn} + ${inputTokens}`,
-          currentUsageTokensOut: sql`${schema.limitsTable.currentUsageTokensOut} + ${outputTokens}`,
-          updatedAt: new Date(),
-        })
+      // Find all token_cost limits for this entity that include this model
+      const limits = await db
+        .select({ id: schema.limitsTable.id })
+        .from(schema.limitsTable)
         .where(
           and(
             eq(schema.limitsTable.entityType, entityType),
             eq(schema.limitsTable.entityId, entityId),
             eq(schema.limitsTable.limitType, "token_cost"),
+            // Check if model is in the JSONB array
+            sql`${schema.limitsTable.model} ? ${model}`,
           ),
         );
+
+      if (limits.length === 0) {
+        logger.debug(
+          `[LimitModel] No limits found for ${entityType} ${entityId} with model ${model}`,
+        );
+        return;
+      }
+
+      // Update model usage for each limit
+      for (const limit of limits) {
+        await db
+          .insert(schema.limitModelUsageTable)
+          .values({
+            limitId: limit.id,
+            model,
+            currentUsageTokensIn: inputTokens,
+            currentUsageTokensOut: outputTokens,
+          })
+          .onConflictDoUpdate({
+            target: [
+              schema.limitModelUsageTable.limitId,
+              schema.limitModelUsageTable.model,
+            ],
+            set: {
+              currentUsageTokensIn: sql`${schema.limitModelUsageTable.currentUsageTokensIn} + ${inputTokens}`,
+              currentUsageTokensOut: sql`${schema.limitModelUsageTable.currentUsageTokensOut} + ${outputTokens}`,
+              updatedAt: new Date(),
+            },
+          });
+
+        logger.debug(
+          `[LimitModel] Updated model usage for limit ${limit.id}, model ${model}: +${inputTokens} in, +${outputTokens} out`,
+        );
+      }
     } catch (error) {
       logger.error(
-        `Error updating ${entityType} token limit for ${entityId}: ${error}`,
+        `Error updating ${entityType} token limit for ${entityId}, model ${model}: ${error}`,
       );
       // Don't throw - continue with other updates
     }
@@ -191,7 +312,7 @@ class LimitModel {
 
   /**
    * Reset usage counters for a specific limit
-   * Updates currentUsageTokensIn and currentUsageTokensOut to 0 and sets lastCleanup
+   * Sets lastCleanup and resets per-model usage records for token_cost limits
    */
   static async resetLimitUsage(id: string): Promise<Limit | null> {
     const now = new Date();
@@ -199,13 +320,23 @@ class LimitModel {
     const [limit] = await db
       .update(schema.limitsTable)
       .set({
-        currentUsageTokensIn: 0,
-        currentUsageTokensOut: 0,
         lastCleanup: now,
         updatedAt: now,
       })
       .where(eq(schema.limitsTable.id, id))
       .returning();
+
+    // Reset model usage records for token_cost limits
+    if (limit && limit.limitType === "token_cost") {
+      await db
+        .update(schema.limitModelUsageTable)
+        .set({
+          currentUsageTokensIn: 0,
+          currentUsageTokensOut: 0,
+          updatedAt: now,
+        })
+        .where(eq(schema.limitModelUsageTable.limitId, id));
+    }
 
     return limit || null;
   }
@@ -314,13 +445,13 @@ class LimitModel {
       if (limitsToCleanup.length > 0) {
         for (const limit of limitsToCleanup) {
           logger.info(
-            `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, current usage: in=${limit.currentUsageTokensIn}, out=${limit.currentUsageTokensOut}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
+            `[LimitsCleanup] Cleaning up limit ${limit.id}: ${limit.limitType}, lastCleanup=${limit.lastCleanup ? limit.lastCleanup.toISOString() : "never"}`,
           );
 
           await LimitModel.resetLimitUsage(limit.id);
 
           logger.info(
-            `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset usage to 0 and set lastCleanup to ${now.toISOString()}`,
+            `[LimitsCleanup] Successfully cleaned up limit ${limit.id}, reset model usage to 0 and set lastCleanup to ${now.toISOString()}`,
           );
         }
 
@@ -535,64 +666,76 @@ export class LimitValidationService {
       }
 
       for (const limit of limits) {
-        const currentUsage =
-          (limit.currentUsageTokensIn || 0) +
-          (limit.currentUsageTokensOut || 0);
-
-        const limitDetails = {
-          limitId: limit.id,
-          limitValue: limit.limitValue,
-          currentUsageTokensIn: limit.currentUsageTokensIn,
-          currentUsageTokensOut: limit.currentUsageTokensOut,
-          totalCurrentUsage: currentUsage,
-          isExceeded: currentUsage >= limit.limitValue,
-          fullLimitObject: limit,
-        };
         logger.info(
-          `[LimitValidation] Limit details for ${entityType} ${entityId}: ${JSON.stringify(limitDetails)}`,
+          `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
         // For token_cost limits, convert tokens to actual cost using token prices
-        let comparisonValue = currentUsage;
+        let comparisonValue = 0;
         let limitDescription = "tokens";
+        let totalTokensIn = 0;
+        let totalTokensOut = 0;
 
         if (limit.limitType === "token_cost") {
-          if (!limit.model) {
-            logger.warn(
-              `[LimitValidation] token_cost limit ${limit.id} has no model specified - cannot convert to cost`,
-            );
-            // Fall back to token comparison (will likely fail, but better than crashing)
-          } else {
-            try {
-              // Look up token pricing for this model
-              const tokenPrice = await TokenPriceModel.findByModel(limit.model);
+          try {
+            // Get per-model usage from limit_model_usage table
+            const modelUsages = await db
+              .select()
+              .from(schema.limitModelUsageTable)
+              .where(eq(schema.limitModelUsageTable.limitId, limit.id));
 
-              if (!tokenPrice) {
-                logger.warn(
-                  `[LimitValidation] No pricing found for model ${limit.model} - cannot convert to cost`,
+            if (modelUsages.length === 0) {
+              logger.warn(
+                `[LimitValidation] No model usage records found for limit ${limit.id}`,
+              );
+              comparisonValue = 0;
+            } else {
+              let totalCost = 0;
+
+              for (const usage of modelUsages) {
+                // Track total tokens for metadata
+                totalTokensIn += usage.currentUsageTokensIn;
+                totalTokensOut += usage.currentUsageTokensOut;
+
+                const tokenPrice = await TokenPriceModel.findByModel(
+                  usage.model,
                 );
-              } else {
-                // Convert tokens to cost using the model's pricing
-                const inputTokens = limit.currentUsageTokensIn || 0;
-                const outputTokens = limit.currentUsageTokensOut || 0;
+
+                if (!tokenPrice) {
+                  logger.warn(
+                    `[LimitValidation] No pricing found for model ${usage.model}`,
+                  );
+                  continue;
+                }
 
                 const inputCost =
-                  (inputTokens * parseFloat(tokenPrice.pricePerMillionInput)) /
+                  (usage.currentUsageTokensIn *
+                    parseFloat(tokenPrice.pricePerMillionInput)) /
                   1000000;
                 const outputCost =
-                  (outputTokens *
+                  (usage.currentUsageTokensOut *
                     parseFloat(tokenPrice.pricePerMillionOutput)) /
                   1000000;
-                const totalCost = inputCost + outputCost;
+                const modelCost = inputCost + outputCost;
 
-                comparisonValue = totalCost;
-                limitDescription = "cost_dollars";
+                totalCost += modelCost;
+
+                logger.debug(
+                  `[LimitValidation] Model ${usage.model}: ${usage.currentUsageTokensIn} in + ${usage.currentUsageTokensOut} out = $${modelCost.toFixed(2)}`,
+                );
               }
-            } catch (error) {
-              logger.error(
-                `[LimitValidation] Error converting tokens to cost for model ${limit.model}: ${error}`,
+
+              comparisonValue = totalCost;
+              limitDescription = "cost_dollars";
+
+              logger.debug(
+                `[LimitValidation] Total cost for limit ${limit.id}: $${totalCost.toFixed(2)} across ${modelUsages.length} models`,
               );
             }
+          } catch (error) {
+            logger.error(
+              `[LimitValidation] Error calculating cost for limit ${limit.id}: ${error}`,
+            );
           }
         }
 
@@ -603,15 +746,16 @@ export class LimitValidationService {
 
           // Calculate remaining based on the comparison type (tokens vs dollars)
           const remaining = Math.max(0, limit.limitValue - comparisonValue);
+          const totalTokens = totalTokensIn + totalTokensOut;
 
-          // For metadata, always use raw values for programmatic access
+          // For metadata, use token counts for programmatic access
           const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
-<archestra-limit-current-usage>${currentUsage}</archestra-limit-current-usage>
+<archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
 <archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, limit.limitValue - currentUsage)}</archestra-limit-remaining>`;
+<archestra-limit-remaining>${Math.max(0, limit.limitValue - totalTokens)}</archestra-limit-remaining>`;
 
           // For user message, use appropriate units based on limit type
           let contentMessage: string;
@@ -628,9 +772,9 @@ Please contact your administrator to increase the limit or wait for the usage to
             contentMessage = `
 I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
 
-Current usage: ${currentUsage.toLocaleString()} tokens
+Current usage: ${totalTokens.toLocaleString()} tokens
 Limit: ${limit.limitValue.toLocaleString()} tokens
-Remaining: ${Math.max(0, limit.limitValue - currentUsage).toLocaleString()} tokens
+Remaining: ${Math.max(0, limit.limitValue - totalTokens).toLocaleString()} tokens
 
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
           }
@@ -641,7 +785,7 @@ ${contentMessage}`;
           return [refusalMessage, contentMessage];
         } else {
           logger.info(
-            `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${currentUsage} < ${limit.limitValue}`,
+            `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
           );
         }
       }

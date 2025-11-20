@@ -99,7 +99,6 @@ function ChatConfigDialogContent({
           <DialogDescription>Assign prompts to this profile.</DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
-          {/* System Prompt Selection */}
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt (Optional)</Label>
             <Select
@@ -122,7 +121,6 @@ function ChatConfigDialogContent({
             </Select>
           </div>
 
-          {/* Regular Prompts Selection */}
           <div className="space-y-2">
             <Label>Regular Prompts (Optional)</Label>
             {regularPrompts && regularPrompts.length > 0 ? (

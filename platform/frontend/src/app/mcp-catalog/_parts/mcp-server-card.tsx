@@ -35,7 +35,7 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
-  useMcpServerLogs,
+  useMcpServers,
   useMcpServerTools,
   useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
@@ -141,6 +141,9 @@ export function McpServerCard({
   });
   const isLocalMcpEnabled = useFeatureFlag("orchestrator-k8s-runtime");
 
+  // Fetch all MCP servers to get installations for logs dropdown
+  const { data: allMcpServers } = useMcpServers();
+
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
@@ -159,15 +162,26 @@ export function McpServerCard({
     name: string;
   } | null>(null);
 
-  // Fetch logs when dialog is opened (only if server is installed and is local)
-  const shouldFetchLogs =
-    isLogsDialogOpen && installedServer?.id && variant === "local";
-  const {
-    data: logsData,
-    isLoading: isLoadingLogs,
-    error: logsError,
-    refetch: refetchLogs,
-  } = useMcpServerLogs(shouldFetchLogs ? installedServer.id : null);
+  // Aggregate all installations for this catalog item (for logs dropdown)
+  let localInstalls: typeof allMcpServers = [];
+  if (
+    installedServer?.catalogId &&
+    variant === "local" &&
+    allMcpServers?.length > 0
+  ) {
+    localInstalls = allMcpServers
+      .filter(({ catalogId, serverType }) => {
+        return (
+          catalogId === installedServer.catalogId && serverType === "local"
+        );
+      })
+      .sort((a, b) => {
+        // Sort by createdAt ascending (oldest first, most recent last)
+        return (
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      });
+  }
 
   const needsReinstall = installedServer?.reinstallRequired;
   const hasError = installedServer?.localInstallationStatus === "error";
@@ -644,12 +658,7 @@ export function McpServerCard({
         open={isLogsDialogOpen}
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
-        serverId={installedServer?.id}
-        logs={logsData?.logs ?? ""}
-        command={logsData?.command ?? "No command available"}
-        isLoading={isLoadingLogs}
-        error={logsError}
-        onRefresh={refetchLogs}
+        installs={localInstalls}
       />
 
       <BulkAssignAgentDialog

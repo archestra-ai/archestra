@@ -242,6 +242,45 @@ describe("PromptModel", () => {
       expect(prompts[0].id).toBe(prompt2.id); // Newest first
       expect(prompts[1].id).toBe(prompt1.id);
     });
+
+    test("includes associated agents sorted by name", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const promptOne = await PromptModel.create(org.id, user.id, {
+        name: "Prompt One",
+        type: "system",
+        content: "System",
+      });
+      const promptTwo = await PromptModel.create(org.id, user.id, {
+        name: "Prompt Two",
+        type: "regular",
+        content: "Regular",
+      });
+
+      const agentZ = await makeAgent({ name: "Zebra" });
+      const agentA = await makeAgent({ name: "Alpha" });
+      const agentM = await makeAgent({ name: "Mango" });
+
+      await db.insert(schema.agentPromptsTable).values([
+        { agentId: agentZ.id, promptId: promptOne.id },
+        { agentId: agentA.id, promptId: promptOne.id },
+        { agentId: agentM.id, promptId: promptTwo.id },
+      ]);
+
+      const prompts = await PromptModel.findByOrganizationId(org.id);
+      const first = prompts.find((prompt) => prompt.id === promptOne.id);
+      const second = prompts.find((prompt) => prompt.id === promptTwo.id);
+
+      expect(first?.agents.map((agent) => agent.name)).toEqual([
+        "Alpha",
+        "Zebra",
+      ]);
+      expect(second?.agents.map((agent) => agent.name)).toEqual(["Mango"]);
+    });
   });
 
   describe("findVersions", () => {

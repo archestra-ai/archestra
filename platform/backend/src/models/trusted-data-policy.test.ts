@@ -3,6 +3,186 @@ import { beforeEach, describe, expect, test } from "@/test";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
 describe("TrustedDataPolicyModel", () => {
+  describe("evaluateBulk", () => {
+    test("evaluates multiple tools in one query to avoid N+1", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const agent = await makeAgent();
+
+      // Create multiple tools
+      const tool1 = await makeTool({ name: "tool-1" });
+      const tool2 = await makeTool({ name: "tool-2" });
+      const tool3 = await makeTool({ name: "tool-3" });
+
+      // Assign tools to agent with different treatments
+      await makeAgentTool(agent.id, tool1.id, {
+        toolResultTreatment: "trusted",
+      });
+      const agentTool2 = await makeAgentTool(agent.id, tool2.id, {
+        toolResultTreatment: "untrusted",
+      });
+      await makeAgentTool(agent.id, tool3.id, {
+        toolResultTreatment: "sanitize_with_dual_llm",
+      });
+
+      // Create a policy for tool-2
+      await makeTrustedDataPolicy(agentTool2.id, {
+        attributePath: "status",
+        operator: "equal",
+        value: "safe",
+        action: "mark_as_trusted",
+      });
+
+      // Evaluate multiple tools in bulk
+      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
+        { toolName: "tool-1", toolOutput: { value: "data1" } },
+        { toolName: "tool-2", toolOutput: { status: "safe" } },
+        { toolName: "tool-3", toolOutput: { value: "data3" } },
+        { toolName: "unknown-tool", toolOutput: { value: "data4" } },
+      ]);
+
+      expect(results.size).toBe(4);
+
+      // Tool 1 - trusted by default (index 0)
+      const tool1Result = results.get("0");
+      expect(tool1Result?.isTrusted).toBe(true);
+      expect(tool1Result?.isBlocked).toBe(false);
+      expect(tool1Result?.shouldSanitizeWithDualLlm).toBe(false);
+      expect(tool1Result?.reason).toContain("configured as trusted");
+
+      // Tool 2 - trusted by policy (index 1)
+      const tool2Result = results.get("1");
+      expect(tool2Result?.isTrusted).toBe(true);
+      expect(tool2Result?.isBlocked).toBe(false);
+      expect(tool2Result?.shouldSanitizeWithDualLlm).toBe(false);
+      expect(tool2Result?.reason).toContain("trusted by policy");
+
+      // Tool 3 - sanitize with dual LLM (index 2)
+      const tool3Result = results.get("2");
+      expect(tool3Result?.isTrusted).toBe(false);
+      expect(tool3Result?.isBlocked).toBe(false);
+      expect(tool3Result?.shouldSanitizeWithDualLlm).toBe(true);
+      expect(tool3Result?.reason).toContain("dual LLM sanitization");
+
+      // Unknown tool (index 3)
+      const unknownResult = results.get("3");
+      expect(unknownResult?.isTrusted).toBe(false);
+      expect(unknownResult?.isBlocked).toBe(false);
+      expect(unknownResult?.shouldSanitizeWithDualLlm).toBe(false);
+      expect(unknownResult?.reason).toContain("not registered");
+    });
+
+    test("handles blocking policies in bulk evaluation", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeTrustedDataPolicy,
+    }) => {
+      const agent = await makeAgent();
+
+      const tool1 = await makeTool({ name: "email-tool" });
+      const tool2 = await makeTool({ name: "file-tool" });
+
+      const agentTool1 = await makeAgentTool(agent.id, tool1.id, {
+        toolResultTreatment: "untrusted",
+      });
+      const agentTool2 = await makeAgentTool(agent.id, tool2.id, {
+        toolResultTreatment: "untrusted",
+      });
+
+      // Create blocking policies
+      await makeTrustedDataPolicy(agentTool1.id, {
+        attributePath: "from",
+        operator: "endsWith",
+        value: "@spam.com",
+        action: "block_always",
+        description: "Block spam emails",
+      });
+
+      await makeTrustedDataPolicy(agentTool2.id, {
+        attributePath: "path",
+        operator: "contains",
+        value: "/etc/passwd",
+        action: "block_always",
+        description: "Block sensitive files",
+      });
+
+      // Test with spam email (should be blocked)
+      const spamResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
+        { toolName: "email-tool", toolOutput: { from: "user@spam.com" } },
+        { toolName: "file-tool", toolOutput: { path: "/etc/passwd" } },
+      ]);
+
+      // Email with spam.com - blocked (index 0)
+      const spamEmailResult = spamResults.get("0");
+      expect(spamEmailResult?.isBlocked).toBe(true);
+      expect(spamEmailResult?.reason).toContain("Block spam emails");
+
+      // File with /etc/passwd - blocked (index 1)
+      const fileResult = spamResults.get("1");
+      expect(fileResult?.isBlocked).toBe(true);
+      expect(fileResult?.reason).toContain("Block sensitive files");
+
+      // Test with safe email (should not be blocked)
+      const safeResults = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
+        { toolName: "email-tool", toolOutput: { from: "user@safe.com" } },
+      ]);
+
+      const safeEmailResult = safeResults.get("0");
+      expect(safeEmailResult?.isBlocked).toBe(false);
+      expect(safeEmailResult?.isTrusted).toBe(false); // Still untrusted but not blocked
+    });
+
+    test("handles Archestra tools in bulk", async ({ makeAgent }) => {
+      const agent = await makeAgent();
+
+      const results = await TrustedDataPolicyModel.evaluateBulk(agent.id, [
+        { toolName: "archestra__whoami", toolOutput: { user: "test" } },
+        { toolName: "regular-tool", toolOutput: { data: "test" } },
+        { toolName: "archestra__create_profile", toolOutput: { id: "123" } },
+      ]);
+
+      // Archestra tools should be trusted (indices 0 and 2)
+      const whoamiResult = results.get("0");
+      expect(whoamiResult?.isTrusted).toBe(true);
+      expect(whoamiResult?.reason).toBe("Archestra MCP server tool");
+
+      const createProfileResult = results.get("2");
+      expect(createProfileResult?.isTrusted).toBe(true);
+      expect(createProfileResult?.reason).toBe("Archestra MCP server tool");
+
+      // Regular tool should be untrusted (not registered) - index 1
+      const regularResult = results.get("1");
+      expect(regularResult?.isTrusted).toBe(false);
+      expect(regularResult?.reason).toContain("not registered");
+    });
+
+    test("single evaluate method uses bulk internally", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ name: "test-tool" });
+      await makeAgentTool(agent.id, tool.id, {
+        toolResultTreatment: "trusted",
+      });
+
+      // Single evaluation should still work
+      const result = await TrustedDataPolicyModel.evaluate(
+        agent.id,
+        "test-tool",
+        { data: "test" },
+      );
+
+      expect(result.isTrusted).toBe(true);
+      expect(result.reason).toContain("configured as trusted");
+    });
+  });
+
   const toolName = "test-tool";
 
   let agentId: string;

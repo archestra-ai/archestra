@@ -208,9 +208,17 @@ class InteractionModel {
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
       const outputTokens = interaction.outputTokens || 0;
+      const model = interaction.model;
 
       if (inputTokens === 0 && outputTokens === 0) {
         // No tokens used, nothing to update
+        return;
+      }
+
+      if (!model) {
+        logger.warn(
+          `Interaction ${interaction.id} has no model - cannot update limits`,
+        );
         return;
       }
 
@@ -240,6 +248,7 @@ class InteractionModel {
               LimitModel.updateTokenLimitUsage(
                 "organization",
                 existingOrgLimits[0].entityId,
+                model,
                 inputTokens,
                 outputTokens,
               ),
@@ -264,6 +273,7 @@ class InteractionModel {
             LimitModel.updateTokenLimitUsage(
               "organization",
               teams[0].organizationId,
+              model,
               inputTokens,
               outputTokens,
             ),
@@ -276,6 +286,7 @@ class InteractionModel {
             LimitModel.updateTokenLimitUsage(
               "team",
               team.id,
+              model,
               inputTokens,
               outputTokens,
             ),
@@ -288,6 +299,7 @@ class InteractionModel {
         LimitModel.updateTokenLimitUsage(
           "agent",
           interaction.agentId,
+          model,
           inputTokens,
           outputTokens,
         ),

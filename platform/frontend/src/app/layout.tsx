@@ -17,6 +17,7 @@ import { OnboardingDialogWrapper } from "@/components/onboarding-dialog-wrapper"
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
+import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { AuthProvider } from "./auth/auth-provider";
 
@@ -77,6 +78,7 @@ export default function RootLayout({
               <PostHogProviderWrapper>
                 <OrgThemeLoader />
                 <WithAuthCheck>
+                  <WebsocketInitializer />
                   <SidebarProvider>
                     <AppSidebar />
                     <main className="h-screen w-full flex flex-col bg-background min-w-0">

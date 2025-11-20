@@ -61,12 +61,3 @@ local_resource(
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
 )
-
-local_resource(
-  'observability',
-  serve_cmd='docker compose -f docker-compose.observability.yml up',
-  serve_dir='.',
-  labels=['observability'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
-)

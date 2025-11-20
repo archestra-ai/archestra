@@ -27,6 +27,10 @@ on:
         required: false
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
         required: false
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: false
 
 jobs:
   # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3
@@ -40,13 +44,16 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         include:
-          - platform: blacksmith-4vcpu-ubuntu-2404
+          - platform: blacksmith-16vcpu-ubuntu-2404
             os_and_arch: linux/amd64
-          - platform: blacksmith-4vcpu-ubuntu-2404-arm
+          - platform: blacksmith-16vcpu-ubuntu-2404-arm
             os_and_arch: linux/arm64
     permissions:
       contents: read
       id-token: write
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -62,7 +69,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build and push Docker image
         id: build
@@ -74,6 +81,8 @@ jobs:
           platforms: ${{ matrix.os_and_arch }}
           build-args: |
             VERSION=${{ inputs.version }}
+            TURBO_TEAM=${{ env.TURBO_TEAM }}
+            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
             sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
@@ -114,7 +123,7 @@ jobs:
           merge-multiple: true
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0

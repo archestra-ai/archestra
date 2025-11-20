@@ -128,7 +128,6 @@ export function McpCatalogForm({
             )}
           />
 
-          {/* Conditional fields based on server type */}
           {currentServerType === "remote" && (
             <FormField
               control={form.control}
@@ -335,7 +334,6 @@ export function McpCatalogForm({
           )}
         </div>
 
-        {/* Authentication Section - Only for remote servers */}
         {currentServerType === "remote" && (
           <div className="space-y-4 pt-4 border-t">
             <div className="flex items-center gap-2">

@@ -327,18 +327,49 @@ class ToolModel {
   static async assignArchestraToolsToAgent(agentId: string): Promise<void> {
     const archestraTools = getArchestraMcpTools();
 
-    // Create all Archestra tools if they don't exist
+    // Get all existing Archestra tools in a single query
+    const existingTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          isNull(schema.toolsTable.agentId),
+          isNull(schema.toolsTable.catalogId),
+          inArray(
+            schema.toolsTable.name,
+            archestraTools.map((t) => t.name),
+          ),
+        ),
+      );
+
+    const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
+
+    // Prepare tools to insert (only those that don't exist)
+    const toolsToInsert: InsertTool[] = [];
     const toolIds: string[] = [];
+
     for (const archestraTool of archestraTools) {
-      // Create or get the tool (stored globally with catalogId and agentId both null)
-      const tool = await ToolModel.createToolIfNotExists({
-        name: archestraTool.name,
-        description: archestraTool.description || null,
-        parameters: archestraTool.inputSchema,
-        catalogId: null,
-        agentId: null,
-      });
-      toolIds.push(tool.id);
+      const existingTool = existingToolsByName.get(archestraTool.name);
+      if (existingTool) {
+        toolIds.push(existingTool.id);
+      } else {
+        toolsToInsert.push({
+          name: archestraTool.name,
+          description: archestraTool.description || null,
+          parameters: archestraTool.inputSchema,
+          catalogId: null,
+          agentId: null,
+        });
+      }
+    }
+
+    // Bulk insert new tools if any
+    if (toolsToInsert.length > 0) {
+      const insertedTools = await db
+        .insert(schema.toolsTable)
+        .values(toolsToInsert)
+        .returning();
+      toolIds.push(...insertedTools.map((t) => t.id));
     }
 
     // Assign all tools to agent in bulk to avoid N+1

@@ -67,9 +67,9 @@ jobs:
           # These instructions modify Claude's behavior but don't replace the triggering comment.
           custom_instructions: |
             Respond to $TRIGGER_USERNAME's comment: "$TRIGGER_COMMENT"
-            
+
             Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested.
-            
+
             Context: PR #$PR_NUMBER in $REPOSITORY
 
           # Optional: Custom environment variables for Claude

@@ -216,7 +216,6 @@ export function CustomServerRequestDialog({
               />
             </div>
 
-            {/* Conditional fields based on server type */}
             {form.watch("serverType") === "remote" && (
               <>
                 <FormField

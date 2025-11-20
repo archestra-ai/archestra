@@ -33,7 +33,8 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 ### Important Notes
 
 - **Use Chat Completions API**: Ensure your application uses the `/chat/completions` endpoint (not `/responses`). Many frameworks default to this, but some like Vercel AI SDK require explicit configuration (add `.chat` to the provider instance).
-- **Streaming**: Not yet supported
+- **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
+
 
 ## Anthropic
 
@@ -47,3 +48,4 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 - **Base URL**: `http://localhost:9000/v1/anthropic` (default agent) or `http://localhost:9000/v1/anthropic/{agent-id}` (specific agent)
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
+

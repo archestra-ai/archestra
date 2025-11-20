@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ import { useAgents } from "@/lib/agent.query";
 import {
   useAgentToolPatchMutation,
   useAllAgentTools,
+  useBulkUpdateAgentTools,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -82,6 +84,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 
 export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentToolPatchMutation = useAgentToolPatchMutation();
+  const bulkUpdateMutation = useBulkUpdateAgentTools();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
@@ -123,6 +126,10 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
+  const [updatingRows, setUpdatingRows] = useState<
+    Set<{ id: string; field: string }>
+  >(new Set());
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
   const { data: agentToolsData, isLoading } = useAllAgentTools({
@@ -138,7 +145,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       search: searchQuery || undefined,
       agentId: agentFilter !== "all" ? agentFilter : undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
-      credentialSourceMcpServerId:
+      mcpServerOwnerId:
         credentialFilter !== "all" ? credentialFilter : undefined,
     },
   });
@@ -253,40 +260,90 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   );
 
   const handleBulkAction = useCallback(
-    (
+    async (
       field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
       value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
     ) => {
-      selectedTools.forEach((tool) => {
-        if (field === "allowUsageWhenUntrustedDataIsPresent") {
-          const hasCustomInvocationPolicy =
-            invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
-          if (hasCustomInvocationPolicy) {
-            return;
-          }
-        }
+      setIsBulkUpdating(true);
 
-        if (field === "toolResultTreatment") {
-          const hasCustomResultPolicy =
-            resultPolicies?.byAgentToolId[tool.id]?.length > 0;
-          if (hasCustomResultPolicy) {
-            return;
+      // Filter out tools with custom policies
+      const toolIds = selectedTools
+        .filter((tool) => {
+          if (field === "allowUsageWhenUntrustedDataIsPresent") {
+            const hasCustomInvocationPolicy =
+              invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
+            return !hasCustomInvocationPolicy;
           }
-        }
 
-        agentToolPatchMutation.mutate({
-          id: tool.id,
-          [field]: value,
+          if (field === "toolResultTreatment") {
+            const hasCustomResultPolicy =
+              resultPolicies?.byAgentToolId[tool.id]?.length > 0;
+            return !hasCustomResultPolicy;
+          }
+
+          return true;
+        })
+        .map((tool) => tool.id);
+
+      if (toolIds.length === 0) {
+        setIsBulkUpdating(false);
+        return;
+      }
+
+      try {
+        await bulkUpdateMutation.mutateAsync({
+          ids: toolIds,
+          field,
+          value,
         });
-      });
+      } catch (error) {
+        console.error("Bulk update failed:", error);
+      } finally {
+        setIsBulkUpdating(false);
+      }
     },
-    [selectedTools, agentToolPatchMutation, invocationPolicies, resultPolicies],
+    [selectedTools, bulkUpdateMutation, invocationPolicies, resultPolicies],
   );
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
     setSelectedTools([]);
   }, []);
+
+  const isRowFieldUpdating = useCallback(
+    (
+      id: string,
+      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+    ) => {
+      return Array.from(updatingRows).some(
+        (row) => row.id === id && row.field === field,
+      );
+    },
+    [updatingRows],
+  );
+
+  const handleSingleRowUpdate = useCallback(
+    async (id: string, field: string, updates: Partial<AgentToolData>) => {
+      setUpdatingRows((prev) => new Set(prev).add({ id, field }));
+      try {
+        await agentToolPatchMutation.mutateAsync({ id, ...updates });
+      } catch (error) {
+        console.error("Update failed:", error);
+      } finally {
+        setUpdatingRows((prev) => {
+          const next = new Set(prev);
+          for (const item of next) {
+            if (item.id === id && item.field === field) {
+              next.delete(item);
+              break;
+            }
+          }
+          return next;
+        });
+      }
+    },
+    [agentToolPatchMutation],
+  );
 
   const columns: ColumnDef<AgentToolData>[] = useMemo(
     () => [
@@ -536,15 +593,24 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             );
           }
 
+          const isUpdating = isRowFieldUpdating(
+            row.original.id,
+            "allowUsageWhenUntrustedDataIsPresent",
+          );
+
           return (
             <div className="flex items-center gap-2">
               <Switch
                 checked={row.original.allowUsageWhenUntrustedDataIsPresent}
+                disabled={isUpdating}
                 onCheckedChange={(checked) => {
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    allowUsageWhenUntrustedDataIsPresent: checked,
-                  });
+                  handleSingleRowUpdate(
+                    row.original.id,
+                    "allowUsageWhenUntrustedDataIsPresent",
+                    {
+                      allowUsageWhenUntrustedDataIsPresent: checked,
+                    },
+                  );
                 }}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Allow ${row.original.tool.name} in untrusted context`}
@@ -554,6 +620,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   ? "Allowed"
                   : "Blocked"}
               </span>
+              {isUpdating && (
+                <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+              )}
             </div>
           );
         },
@@ -578,33 +647,47 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             sanitize_with_dual_llm: "Sanitize with Dual LLM",
           };
 
+          const isUpdating = isRowFieldUpdating(
+            row.original.id,
+            "toolResultTreatment",
+          );
+
           return (
-            <Select
-              value={row.original.toolResultTreatment}
-              onValueChange={(value: ToolResultTreatment) => {
-                agentToolPatchMutation.mutate({
-                  id: row.original.id,
-                  toolResultTreatment: value,
-                });
-              }}
-            >
-              <SelectTrigger
-                className="h-8 w-[180px] text-xs"
-                onClick={(e) => e.stopPropagation()}
-                size="sm"
+            <div className="flex items-center gap-2">
+              <Select
+                value={row.original.toolResultTreatment}
+                disabled={isUpdating}
+                onValueChange={(value: ToolResultTreatment) => {
+                  handleSingleRowUpdate(
+                    row.original.id,
+                    "toolResultTreatment",
+                    {
+                      toolResultTreatment: value,
+                    },
+                  );
+                }}
               >
-                <SelectValue>
-                  {treatmentLabels[row.original.toolResultTreatment]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(treatmentLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  className="h-8 w-[180px] text-xs"
+                  onClick={(e) => e.stopPropagation()}
+                  size="sm"
+                >
+                  <SelectValue>
+                    {treatmentLabels[row.original.toolResultTreatment]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(treatmentLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isUpdating && (
+                <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
+              )}
+            </div>
           );
         },
         size: 190,
@@ -615,7 +698,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
       resultPolicies,
       agentToolPatchMutation,
       unassignToolMutation,
-      internalMcpCatalogItems?.find,
+      internalMcpCatalogItems,
+      isRowFieldUpdating,
+      handleSingleRowUpdate,
     ],
   );
 
@@ -630,9 +715,21 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     return Array.from(origins);
   }, [internalMcpCatalogItems]);
 
-  // Get unique credentials (MCP servers)
+  // Get unique credentials (MCP servers) deduplicated by owner email
   const uniqueCredentials = useMemo(() => {
-    return mcpServers || [];
+    if (!mcpServers) return [];
+
+    // Create a map of ownerEmail -> mcpServer to deduplicate
+    const ownerToMcpServerMap = new Map<string, (typeof mcpServers)[0]>();
+
+    for (const server of mcpServers) {
+      const key = server.ownerEmail || `__no_owner_${server.id}__`;
+      if (!ownerToMcpServerMap.has(key)) {
+        ownerToMcpServerMap.set(key, server);
+      }
+    }
+
+    return Array.from(ownerToMcpServerMap.values());
   }, [mcpServers]);
 
   return (
@@ -648,51 +745,48 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           />
         </div>
 
-        <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Agent" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Agents</SelectItem>
-            {agents?.map((agent) => (
-              <SelectItem key={agent.id} value={agent.id}>
-                {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={agentFilter}
+          onValueChange={handleAgentFilterChange}
+          placeholder="Filter by Profile"
+          items={[
+            { value: "all", label: "All Profiles" },
+            ...(agents?.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+            })) || []),
+          ]}
+          className="w-[200px]"
+        />
 
-        <Select value={originFilter} onValueChange={handleOriginFilterChange}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Origin" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Origins</SelectItem>
-            <SelectItem value="llm-proxy">LLM Proxy</SelectItem>
-            {uniqueOrigins.map((origin) => (
-              <SelectItem key={origin.id} value={origin.id}>
-                {origin.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchableSelect
+          value={originFilter}
+          onValueChange={handleOriginFilterChange}
+          placeholder="Filter by Origin"
+          items={[
+            { value: "all", label: "All Origins" },
+            { value: "llm-proxy", label: "LLM Proxy" },
+            ...uniqueOrigins.map((origin) => ({
+              value: origin.id,
+              label: origin.name,
+            })),
+          ]}
+          className="w-[200px]"
+        />
 
-        <Select
+        <SearchableSelect
           value={credentialFilter}
           onValueChange={handleCredentialFilterChange}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by Credential" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Credentials</SelectItem>
-            {uniqueCredentials.map((credential) => (
-              <SelectItem key={credential.id} value={credential.id}>
-                {credential.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder="Filter by Credential"
+          items={[
+            { value: "all", label: "All Credentials" },
+            ...uniqueCredentials.map((credential) => ({
+              value: credential.ownerId || "",
+              label: credential.ownerEmail || credential.name,
+            })),
+          ]}
+          className="w-[200px]"
+        />
       </div>
 
       <div className="flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
@@ -709,6 +803,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   ? "tool selected"
                   : "tools selected"}
               </span>
+              {isBulkUpdating && (
+                <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
+              )}
             </>
           ) : (
             <span className="text-sm text-muted-foreground">
@@ -728,7 +825,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 onClick={() =>
                   handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
                 }
-                disabled={!hasSelection}
+                disabled={!hasSelection || isBulkUpdating}
               >
                 Allow
               </Button>
@@ -741,7 +838,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                     false,
                   )
                 }
-                disabled={!hasSelection}
+                disabled={!hasSelection || isBulkUpdating}
               >
                 Block
               </Button>
@@ -757,7 +854,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   onClick={() =>
                     handleBulkAction("toolResultTreatment", "trusted")
                   }
-                  disabled={!hasSelection}
+                  disabled={!hasSelection || isBulkUpdating}
                 >
                   Trusted
                 </Button>
@@ -767,7 +864,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   onClick={() =>
                     handleBulkAction("toolResultTreatment", "untrusted")
                   }
-                  disabled={!hasSelection}
+                  disabled={!hasSelection || isBulkUpdating}
                 >
                   Untrusted
                 </Button>
@@ -782,7 +879,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                           "sanitize_with_dual_llm",
                         )
                       }
-                      disabled={!hasSelection}
+                      disabled={!hasSelection || isBulkUpdating}
                     >
                       Dual LLM
                     </Button>
@@ -799,7 +896,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             size="sm"
             variant="ghost"
             onClick={clearSelection}
-            disabled={!hasSelection}
+            disabled={!hasSelection || isBulkUpdating}
           >
             Clear selection
           </Button>

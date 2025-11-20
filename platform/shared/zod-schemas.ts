@@ -27,8 +27,8 @@ export const OAuthConfigSchema = z.object({
 // Environment variable schema for UI forms
 export const EnvironmentVariableSchema = z.object({
   key: z.string().min(1, "Key is required"),
-  type: z.enum(["plain_text", "secret"]),
-  value: z.string().optional(), // Optional static value (when not prompted)
+  type: z.enum(["plain_text", "secret", "boolean", "number"]),
+  value: z.string().optional(), // Optional static value (when not prompted). Boolean type uses "true"/"false" strings, number type uses numeric strings
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
 });
 

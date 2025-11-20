@@ -23,14 +23,14 @@ DO $$
 DECLARE
   fallback_org_id text;
 BEGIN
-  SELECT id INTO fallback_org_id FROM "public"."organization" LIMIT 1;
+  SELECT id INTO fallback_org_id FROM "organization" LIMIT 1;
 
   IF fallback_org_id IS NULL THEN
-    INSERT INTO "public"."organization" (id, name, slug, created_at)
+    INSERT INTO "organization" (id, name, slug, created_at)
     VALUES ('default-org', 'Default Organization', 'default', now())
     ON CONFLICT (id) DO NOTHING;
 
-    SELECT id INTO fallback_org_id FROM "public"."organization" LIMIT 1;
+    SELECT id INTO fallback_org_id FROM "organization" LIMIT 1;
   END IF;
 
   WITH agent_orgs AS (
@@ -39,14 +39,14 @@ BEGIN
       COALESCE(
         (
           SELECT tm.organization_id
-          FROM "public"."agent_team" agt
-          JOIN "public"."team" tm ON tm.id = agt.team_id
+          FROM "agent_team" agt
+          JOIN "team" tm ON tm.id = agt.team_id
           WHERE agt.agent_id = ag.id
           LIMIT 1
         ),
         fallback_org_id
       ) AS organization_id
-    FROM "public"."agents" ag
+    FROM "agents" ag
   ),
   unique_configs AS (
     SELECT DISTINCT
@@ -55,7 +55,7 @@ BEGIN
       at.allow_usage_when_untrusted_data_is_present,
       at.tool_result_treatment,
       at.response_modifier_template
-    FROM "public"."agent_tools" at
+    FROM "agent_tools" at
     JOIN agent_orgs ao ON ao.agent_id = at.agent_id
   ),
   numbered_policies AS (
@@ -75,7 +75,7 @@ BEGIN
     FROM unique_configs
   ),
   inserted AS (
-    INSERT INTO "public"."tool_policies" (
+    INSERT INTO "tool_policies" (
       name,
       tool_id,
       organization_id,
@@ -91,28 +91,31 @@ BEGIN
       np.tool_result_treatment,
       np.response_modifier_template
     FROM numbered_policies np
-    LEFT JOIN "public"."tools" t ON t.id = np.tool_id
+    LEFT JOIN "tools" t ON t.id = np.tool_id
     RETURNING id,
       tool_id,
       organization_id,
       allow_usage_when_untrusted_data_is_present,
       tool_result_treatment,
       response_modifier_template
+  ),
+  assignments AS (
+    SELECT
+      at.id AS agent_tool_id,
+      inserted.id AS policy_id
+    FROM agent_tools at
+    JOIN agent_orgs ao ON ao.agent_id = at.agent_id
+    JOIN inserted ON
+      inserted.tool_id = at.tool_id
+      AND inserted.organization_id = ao.organization_id
+      AND inserted.allow_usage_when_untrusted_data_is_present =
+        at.allow_usage_when_untrusted_data_is_present
+      AND inserted.tool_result_treatment = at.tool_result_treatment
+      AND COALESCE(inserted.response_modifier_template, '') =
+        COALESCE(at.response_modifier_template, '')
   )
-  UPDATE "public"."agent_tools" at
-  SET tool_policy_id = inserted.id
-  FROM inserted
-  JOIN agent_orgs ao ON ao.agent_id = at.agent_id
-  WHERE
-    inserted.tool_id = at.tool_id
-    AND inserted.organization_id = ao.organization_id
-    AND inserted.allow_usage_when_untrusted_data_is_present = at.allow_usage_when_untrusted_data_is_present
-    AND inserted.tool_result_treatment = at.tool_result_treatment
-    AND COALESCE(inserted.response_modifier_template, '') = COALESCE(at.response_modifier_template, '');
+  UPDATE agent_tools
+  SET tool_policy_id = assignments.policy_id
+  FROM assignments
+  WHERE assignments.agent_tool_id = agent_tools.id;
 END $$;
---> statement-breakpoint
-ALTER TABLE "agent_tools" DROP COLUMN "allow_usage_when_untrusted_data_is_present";
---> statement-breakpoint
-ALTER TABLE "agent_tools" DROP COLUMN "tool_result_treatment";
---> statement-breakpoint
-ALTER TABLE "agent_tools" DROP COLUMN "response_modifier_template";

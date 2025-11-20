@@ -5,8 +5,10 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  OrganizationModel,
   SecretModel,
   ToolModel,
+  ToolPolicyModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
@@ -49,12 +51,14 @@ describe("McpClient", () => {
   let agentId: string;
   let mcpServerId: string;
   let catalogId: string;
+  let organizationId: string;
 
   beforeEach(async () => {
     // Create test agent
     const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
     agentId = agent.id;
-
+    organizationId = (await OrganizationModel.getOrCreateDefaultOrganization())
+      .id;
     // Create secret with access token
     const secret = await SecretModel.create({
       secret: {
@@ -89,6 +93,24 @@ describe("McpClient", () => {
     mockGetPod.mockReset();
   });
 
+  async function assignToolWithPolicy(
+    toolId: string,
+    responseModifierTemplate: string | null = null,
+  ) {
+    const policy = await ToolPolicyModel.create({
+      name: `Test Policy ${Math.random()}`,
+      toolId,
+      organizationId,
+      allowUsageWhenUntrustedDataIsPresent: false,
+      toolResultTreatment: "untrusted",
+      responseModifierTemplate,
+    });
+
+    await AgentToolModel.create(agentId, toolId, {
+      toolPolicyId: policy.id,
+    });
+  }
+
   describe("executeToolCall", () => {
     test("returns error when tool not found for agent", async () => {
       const toolCall = {
@@ -116,11 +138,10 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        // Assign tool to agent with response modifier
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate:
-            'Modified: {{{lookup (lookup response 0) "text"}}}',
-        });
+        await assignToolWithPolicy(
+          tool.id,
+          'Modified: {{{lookup (lookup response 0) "text"}}}',
+        );
 
         // Mock the MCP client response with realistic GitHub issues data
         mockCallTool.mockResolvedValueOnce({
@@ -164,10 +185,10 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate:
-            '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
-        });
+        await assignToolWithPolicy(
+          tool.id,
+          '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
+        );
 
         mockCallTool.mockResolvedValueOnce({
           content: [{ type: "text", text: "test data" }],
@@ -199,15 +220,16 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
-  {
-  {{#each this.issues}}
-    "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
-  {{/each}}
+        await assignToolWithPolicy(
+          tool.id,
+          `{{#with (lookup response 0)}}{{#with (json this.text)}}
+{
+{{#each this.issues}}
+  "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
+{{/each}}
 }
 {{/with}}{{/with}}`,
-        });
+        );
 
         // Realistic GitHub MCP response with stringified JSON
         mockCallTool.mockResolvedValueOnce({
@@ -248,9 +270,7 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate: "{{{json response}}}",
-        });
+        await assignToolWithPolicy(tool.id, "{{{json response}}}");
 
         mockCallTool.mockResolvedValueOnce({
           content: [
@@ -284,9 +304,7 @@ describe("McpClient", () => {
         });
 
         // Invalid Handlebars template
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate: "{{#invalid",
-        });
+        await assignToolWithPolicy(tool.id, "{{#invalid");
 
         const originalContent = [{ type: "text", text: "Original" }];
         mockCallTool.mockResolvedValueOnce({
@@ -321,10 +339,10 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate:
-            'Type: {{lookup (lookup response 0) "type"}}',
-        });
+        await assignToolWithPolicy(
+          tool.id,
+          'Type: {{lookup (lookup response 0) "type"}}',
+        );
 
         // Response with image instead of text
         mockCallTool.mockResolvedValueOnce({
@@ -355,9 +373,7 @@ describe("McpClient", () => {
         });
 
         // Assign tool without response modifier template
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate: null,
-        });
+        await assignToolWithPolicy(tool.id, null);
 
         const originalContent = [{ type: "text", text: "Unmodified" }];
         mockCallTool.mockResolvedValueOnce({
@@ -399,15 +415,15 @@ describe("McpClient", () => {
           mcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool1.id, {
-          responseModifierTemplate:
-            'Template 1: {{lookup (lookup response 0) "text"}}',
-        });
+        await assignToolWithPolicy(
+          tool1.id,
+          'Template 1: {{lookup (lookup response 0) "text"}}',
+        );
 
-        await AgentToolModel.create(agentId, tool2.id, {
-          responseModifierTemplate:
-            'Template 2: {{lookup (lookup response 0) "text"}}',
-        });
+        await assignToolWithPolicy(
+          tool2.id,
+          'Template 2: {{lookup (lookup response 0) "text"}}',
+        );
 
         mockCallTool
           .mockResolvedValueOnce({
@@ -591,10 +607,10 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id, {
-          responseModifierTemplate:
-            'Result: {{{lookup (lookup response 0) "text"}}}',
-        });
+        await assignToolWithPolicy(
+          tool.id,
+          'Result: {{{lookup (lookup response 0) "text"}}}',
+        );
 
         // Mock runtime manager responses
         mockUsesStreamableHttp.mockResolvedValue(true);

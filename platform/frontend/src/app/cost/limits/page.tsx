@@ -35,6 +35,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Popover,
   PopoverContent,
@@ -547,18 +548,24 @@ function LimitRow({
       </td>
       <td className="p-4">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
+          <PermissionButton
+            permissions={{ limit: ["update"] }}
+            variant="ghost"
+            size="sm"
+            onClick={onEdit}
+          >
             <Edit className="h-4 w-4" />
-          </Button>
+          </PermissionButton>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button
+              <PermissionButton
+                permissions={{ limit: ["delete"] }}
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </PermissionButton>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -777,14 +784,15 @@ export default function LimitsPage() {
                 Token cost limits for LLM usage across teams and organization
               </CardDescription>
             </div>
-            <Button
+            <PermissionButton
+              permissions={{ limit: ["create"] }}
               onClick={() => setIsAddingLlmLimit(true)}
               size="sm"
               disabled={isAddingLlmLimit || editingLimitId !== null}
             >
               <Plus className="h-4 w-4 mr-1" />
               Add LLM Limit
-            </Button>
+            </PermissionButton>
           </div>
         </CardHeader>
         <CardContent>
@@ -862,14 +870,15 @@ export default function LimitsPage() {
                 MCP server and tool call limits across teams and organization
               </CardDescription>
             </div>
-            <Button
+            <PermissionButton
+              permissions={{ limit: ["create"] }}
               onClick={() => setIsAddingMcpLimit(true)}
               size="sm"
               disabled={true}
             >
               <Plus className="h-4 w-4 mr-1" />
               Add MCP Limit
-            </Button>
+            </PermissionButton>
           </div>
         </CardHeader>
         <CardContent className="relative">

@@ -26,6 +26,29 @@ test.describe("Auth Permissions API", () => {
     });
   };
 
+  test("should return all user permissions", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    const response = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/user/permissions",
+    });
+
+    expect(response.status()).toBe(200);
+
+    const permissions = await response.json();
+
+    // Admin should have all permissions
+    expect(permissions).toBeDefined();
+    expect(permissions.organization).toContain("read");
+    expect(permissions.organization).toContain("update");
+    expect(permissions.organization).toContain("delete");
+    expect(permissions.profile).toBeDefined();
+    expect(permissions.tool).toBeDefined();
+  });
+
   test("should allow admin to access all resource permissions", async ({
     request,
     makeApiRequest,

@@ -1,5 +1,6 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
+import { requiredPagePermissionsMap } from "@shared";
 import {
   BookOpen,
   Bot,
@@ -34,6 +35,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
+import { usePermissionMap } from "@/lib/auth.query";
 import config from "@/lib/config";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrgTheme } from "@/lib/theme.hook";
@@ -49,7 +51,6 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {
     return [];
   }
-
   return [
     {
       title: "New Chat",
@@ -179,12 +180,18 @@ const MainSideBarSection = ({
   searchParams: URLSearchParams;
   starCount: number;
 }) => {
+  const allItems = getNavigationItems(isAuthenticated);
+  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permittedItems = allItems.filter(
+    (item) => permissionMap[item.url] ?? true,
+  );
+
   return (
     <>
       <SidebarGroup className="px-4">
         <SidebarGroupContent>
           <SidebarMenu>
-            {getNavigationItems(isAuthenticated).map((item) => (
+            {permittedItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
                   asChild

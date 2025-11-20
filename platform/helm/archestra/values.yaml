@@ -3,6 +3,15 @@ archestra:
   # This image contains both the backend API and frontend
   image: archestra/platform:latest
 
+  # Image pull policy for the Archestra container
+  # Options: Always, IfNotPresent, Never
+  imagePullPolicy: IfNotPresent
+
+  # Deployment strategy configuration for the Deployment
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
+  # When null, the default Kubernetes strategy is used
+  deploymentStrategy: null
+
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
   # Example:

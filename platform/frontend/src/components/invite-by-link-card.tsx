@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -133,7 +134,8 @@ function InviteByLinkCardContent({
               </p>
             </div>
 
-            <Button
+            <PermissionButton
+              permissions={{ invitation: ["create"] }}
               onClick={handleGenerateLink}
               disabled={createMutation.isPending || !isValidEmail}
               className="w-full"
@@ -142,7 +144,7 @@ function InviteByLinkCardContent({
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Generate Invitation Link
-            </Button>
+            </PermissionButton>
           </>
         ) : (
           <>

@@ -25,7 +25,6 @@ import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
-import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -61,7 +61,6 @@ import {
   useLabelKeys,
   useUpdateAgent,
 } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth.query";
 import { formatDate } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
@@ -158,13 +157,6 @@ function Agents() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-
-  const { data: userCanCreateAgents } = useHasPermissions({
-    profile: ["create"],
-  });
-  const { data: userCanDeleteAgents } = useHasPermissions({
-    profile: ["delete"],
-  });
 
   // Get pagination/filter params from URL
   const pageFromUrl = searchParams.get("page");
@@ -385,13 +377,16 @@ function Agents() {
         return (
           <div className="flex items-center gap-2">
             {row.original.tools.length}
-            <ActionButton
+            <PermissionButton
+              permissions={{ profile: ["update"] }}
               tooltip="Assign Tools"
               aria-label="Assign Tools"
+              variant="outline"
+              size="icon-sm"
               onClick={() => setAssigningToolsAgent(agent)}
             >
               <Wrench className="h-4 w-4" />
-            </ActionButton>
+            </PermissionButton>
           </div>
         );
       },
@@ -422,7 +417,6 @@ function Agents() {
         return (
           <AgentActions
             agent={agent}
-            userCanDeleteAgents={userCanDeleteAgents || false}
             onConnect={setConnectingAgent}
             onConfigureChat={setChatConfigAgent}
             onEdit={setEditingAgent}
@@ -457,15 +451,14 @@ function Agents() {
                 </a>
               </p>
             </div>
-            {userCanCreateAgents && (
-              <Button
-                onClick={() => setIsCreateDialogOpen(true)}
-                data-testid={E2eTestId.CreateAgentButton}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Create Profile
-              </Button>
-            )}
+            <PermissionButton
+              permissions={{ profile: ["create"] }}
+              onClick={() => setIsCreateDialogOpen(true)}
+              data-testid={E2eTestId.CreateAgentButton}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Profile
+            </PermissionButton>
           </div>
         </div>
       </div>

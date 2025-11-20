@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -434,23 +435,19 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           return (
             <div className="flex items-center gap-2">
               {TruncatedAgentName}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={handleUnassign}
-                      disabled={unassignToolMutation.isPending}
-                      className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                    >
-                      <Unplug className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Unassign from agent</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <PermissionButton
+                permissions={{ tool: ["delete"] }}
+                variant="ghost"
+                size="icon-sm"
+                tooltip="Unassign from agent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUnassign(e);
+                }}
+                disabled={unassignToolMutation.isPending}
+              >
+                <Unplug className="h-4 w-4" />
+              </PermissionButton>
             </div>
           );
         },
@@ -819,7 +816,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
               In untrusted context:
             </span>
             <ButtonGroup>
-              <Button
+              <PermissionButton
+                permissions={{ tool: ["update"] }}
                 size="sm"
                 variant="outline"
                 onClick={() =>
@@ -828,8 +826,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 disabled={!hasSelection || isBulkUpdating}
               >
                 Allow
-              </Button>
-              <Button
+              </PermissionButton>
+              <PermissionButton
+                permissions={{ tool: ["update"] }}
                 size="sm"
                 variant="outline"
                 onClick={() =>
@@ -841,55 +840,56 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 disabled={!hasSelection || isBulkUpdating}
               >
                 Block
-              </Button>
+              </PermissionButton>
             </ButtonGroup>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Results are:</span>
-            <TooltipProvider>
-              <ButtonGroup>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "trusted")
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Trusted
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "untrusted")
-                  }
-                  disabled={!hasSelection || isBulkUpdating}
-                >
-                  Untrusted
-                </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        handleBulkAction(
-                          "toolResultTreatment",
-                          "sanitize_with_dual_llm",
-                        )
-                      }
-                      disabled={!hasSelection || isBulkUpdating}
-                    >
-                      Dual LLM
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sanitize with Dual LLM</p>
-                  </TooltipContent>
-                </Tooltip>
-              </ButtonGroup>
-            </TooltipProvider>
+            <ButtonGroup>
+              <PermissionButton
+                permissions={{ tool: ["update"] }}
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  handleBulkAction("toolResultTreatment", "trusted")
+                }
+                disabled={!hasSelection || isBulkUpdating}
+              >
+                Trusted
+              </PermissionButton>
+              <PermissionButton
+                permissions={{ tool: ["update"] }}
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  handleBulkAction("toolResultTreatment", "untrusted")
+                }
+                disabled={!hasSelection || isBulkUpdating}
+              >
+                Untrusted
+              </PermissionButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PermissionButton
+                    size="sm"
+                    variant="outline"
+                    permissions={{ tool: ["update"] }}
+                    onClick={() =>
+                      handleBulkAction(
+                        "toolResultTreatment",
+                        "sanitize_with_dual_llm",
+                      )
+                    }
+                    disabled={!hasSelection || isBulkUpdating}
+                  >
+                    Dual LLM
+                  </PermissionButton>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Sanitize with Dual LLM</p>
+                </TooltipContent>
+              </Tooltip>
+            </ButtonGroup>
           </div>
           <div className="ml-2 h-4 w-px bg-border" />
           <Button

@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
   TooltipContent,
@@ -410,7 +411,8 @@ export function McpServerCard({
         </div>
       )}
       {isCurrentUserAuthenticated && (needsReinstall || hasError) && (
-        <Button
+        <PermissionButton
+          permissions={{ mcpServer: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
@@ -419,13 +421,14 @@ export function McpServerCard({
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           {isInstalling ? "Reconnecting..." : "Reconnect Required"}
-        </Button>
+        </PermissionButton>
       )}
       {requiresAuth && !isCurrentUserAuthenticated && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
+              <PermissionButton
+                permissions={{ mcpServer: ["create"] }}
                 onClick={onInstallRemoteServer}
                 disabled={isInstalling}
                 size="sm"
@@ -434,7 +437,7 @@ export function McpServerCard({
               >
                 <User className="mr-2 h-4 w-4" />
                 {isInstalling ? "Connecting..." : "Connect"}
-              </Button>
+              </PermissionButton>
             </TooltipTrigger>
             <TooltipContent>
               <p>Provide your credentials to connect this server</p>
@@ -466,12 +469,12 @@ export function McpServerCard({
         )}
       {config.features.enableTeamAuth &&
         requiresAuth &&
-        !currentUserHasTeamAuth &&
-        userIsMcpServerAdmin && (
+        !currentUserHasTeamAuth && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
+                <PermissionButton
+                  permissions={{ mcpServer: ["admin"] }}
                   onClick={onInstallRemoteServerTeam}
                   disabled={isInstalling}
                   size="sm"
@@ -480,7 +483,7 @@ export function McpServerCard({
                 >
                   <Building2 className="mr-2 h-4 w-4" />
                   {isInstalling ? "Connecting..." : "Auth for teams"}
-                </Button>
+                </PermissionButton>
               </TooltipTrigger>
               <TooltipContent>
                 <p>Authenticate and allow teams to use my token</p>
@@ -517,7 +520,8 @@ export function McpServerCard({
         </div>
       )}
       {isCurrentUserAuthenticated && needsReinstall && (
-        <Button
+        <PermissionButton
+          permissions={{ mcpServer: ["update"] }}
           onClick={onReinstall}
           size="sm"
           variant="default"
@@ -526,14 +530,15 @@ export function McpServerCard({
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
-        </Button>
+        </PermissionButton>
       )}
       {!isCurrentUserAuthenticated && !isInstalling && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="w-full">
-                <Button
+                <PermissionButton
+                  permissions={{ mcpServer: ["create"] }}
                   onClick={onInstallLocalServer}
                   disabled={isInstalling || !isLocalMcpEnabled}
                   size="sm"
@@ -542,7 +547,7 @@ export function McpServerCard({
                 >
                   <User className="mr-2 h-4 w-4" />
                   Connect
-                </Button>
+                </PermissionButton>
               </div>
             </TooltipTrigger>
             <TooltipContent>
@@ -604,7 +609,8 @@ export function McpServerCard({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
+                <PermissionButton
+                  permissions={{ mcpServer: ["admin"] }}
                   onClick={onInstallLocalServerTeam}
                   disabled={isInstalling || !isLocalMcpEnabled}
                   size="sm"
@@ -613,7 +619,7 @@ export function McpServerCard({
                 >
                   <Building2 className="mr-2 h-4 w-4" />
                   {isInstalling ? localInstalllingLabel : "Install for teams"}
-                </Button>
+                </PermissionButton>
               </TooltipTrigger>
               <TooltipContent>
                 <p>

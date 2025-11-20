@@ -56,6 +56,31 @@ tests:
           path: spec.replicas
           value: 1
 
+  - it: should not configure deployment strategy by default
+    documentIndex: 1
+    asserts:
+      - isNull:
+          path: spec.strategy
+
+  - it: should configure deployment strategy when provided
+    documentIndex: 1
+    set:
+      archestra.deploymentStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: "25%"
+          maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: "25%"
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 0
+
   - it: should configure container with correct image
     documentIndex: 1
     set:
@@ -64,6 +89,15 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: archestra/platform:test-version
+
+  - it: should allow configuring image pull policy
+    documentIndex: 1
+    set:
+      archestra.imagePullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
 
   - it: should expose backend, metrics, and frontend ports
     documentIndex: 1

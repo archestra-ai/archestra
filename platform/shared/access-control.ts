@@ -309,6 +309,9 @@ export const RouteId = {
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
 
+  // User Routes
+  GetUserPermissions: "getUserPermissions",
+
   // Token Price Routes
   GetTokenPrices: "getTokenPrices",
   CreateTokenPrice: "createTokenPrice",
@@ -670,6 +673,7 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["update"],
   },
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetTokenPrices]: {
     tokenPrice: ["read"],
   },
@@ -712,10 +716,84 @@ export const requiredEndpointPermissionsMap: Partial<
 };
 
 /**
- * TODO: flesh out all pages and their required permissions here
+ * Maps frontend routes to their required permissions.
+ * Used to control page-level access and UI element visibility.
  */
 export const requiredPagePermissionsMap: Record<string, Permissions> = {
-  "/gateways": {
+  "/chat": {
+    conversation: ["read"],
+  },
+
+  "/profiles": {
+    profile: ["read"],
+  },
+
+  "/logs": {
+    interaction: ["read"],
+  },
+  "/logs/llm-proxy": {
+    interaction: ["read"],
+  },
+  "/logs/mcp-gateway": {
+    mcpToolCall: ["read"],
+  },
+
+  "/tools": {
+    tool: ["read"],
+  },
+
+  "/mcp-catalog": {
+    internalMcpCatalog: ["read"],
+  },
+  "/mcp-catalog/registry": {
+    internalMcpCatalog: ["read"],
+  },
+  "/mcp-catalog/installation-requests": {
+    mcpServerInstallationRequest: ["read"],
+  },
+
+  "/settings": {
+    organization: ["read"],
+  },
+  "/settings/gateways": {
     mcpServer: ["read"],
+  },
+  "/settings/dual-llm": {
+    dualLlmConfig: ["read"],
+  },
+  "/settings/account": {
+    organization: ["read"],
+  },
+  "/settings/members": {
+    organization: ["read"],
+  },
+  "/settings/teams": {
+    team: ["read"],
+  },
+  "/settings/roles": {
+    organization: ["read"],
+  },
+  "/settings/appearance": {
+    organization: ["update"],
+  },
+  "/settings/chat": {
+    chatSettings: ["read"],
+  },
+
+  // Cost & Limits
+  "/cost": {
+    interaction: ["read"],
+  },
+  "/cost/statistics": {
+    interaction: ["read"],
+  },
+  "/cost/limits": {
+    limit: ["read"],
+  },
+  "/cost/token-price": {
+    tokenPrice: ["read"],
+  },
+  "/cost/optimization-rules": {
+    profile: ["read"],
   },
 };

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { TeamMembersDialog } from "./team-members-dialog";
 
@@ -122,10 +123,13 @@ export function TeamsList() {
                 Manage teams to organize access to agents and MCP servers
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <PermissionButton
+              permissions={{ team: ["create"] }}
+              onClick={() => setCreateDialogOpen(true)}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Team
-            </Button>
+            </PermissionButton>
           </div>
         </CardHeader>
         <CardContent>
@@ -156,7 +160,8 @@ export function TeamsList() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button
+                    <PermissionButton
+                      permissions={{ team: ["update"] }}
                       variant="outline"
                       size="sm"
                       onClick={() => {
@@ -166,8 +171,9 @@ export function TeamsList() {
                     >
                       <Settings className="mr-2 h-4 w-4" />
                       Manage Members
-                    </Button>
-                    <Button
+                    </PermissionButton>
+                    <PermissionButton
+                      permissions={{ team: ["delete"] }}
                       variant="outline"
                       size="sm"
                       onClick={() => {
@@ -176,7 +182,7 @@ export function TeamsList() {
                       }}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    </PermissionButton>
                   </div>
                 </div>
               ))}

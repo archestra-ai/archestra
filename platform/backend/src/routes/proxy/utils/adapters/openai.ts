@@ -5,6 +5,7 @@ import type {
   OpenAi,
   ToolResultUpdates,
 } from "@/types";
+import { encode as toonEncode } from "@toon-format/toon";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -175,13 +176,16 @@ export function toolCallsToCommon(
  */
 export function toolResultsToMessages(
   results: CommonToolResult[],
+  convertToToon = false,
 ): Array<{ role: "tool"; tool_call_id: string; content: string }> {
   return results.map((result) => ({
     role: "tool" as const,
     tool_call_id: result.id,
     content: result.isError
       ? `Error: ${result.error || "Tool execution failed"}`
-      : JSON.stringify(result.content),
+      : convertToToon
+        ? toonEncode(result.content)
+        : JSON.stringify(result.content),
   }));
 }
 

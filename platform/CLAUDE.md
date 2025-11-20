@@ -151,7 +151,7 @@ ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
 
 **Workspaces**:
 
@@ -305,6 +305,14 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - Real-time theme and font preview in settings
 - Custom logos display with "Powered by Archestra" attribution
 - Database columns: theme, customFont, logo
+
+**TOON Format Conversion**:
+
+- Profiles support optional TOON (Token-Oriented Object Notation) conversion for tool results
+- Reduces token usage by 30-60% for uniform arrays of objects
+- Enabled via `convert_tool_results_to_toon` boolean field on profiles
+- Automatically converts JSON tool results to TOON format before sending to LLM
+- Particularly useful for profiles dealing with structured data from database or API tools
 
 **Chat Feature**:
 

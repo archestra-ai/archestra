@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -202,28 +203,34 @@ export function ChatSidebarSection() {
                       )}
                       {editingId !== conv.id && (
                         <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
-                          <button
+                          <PermissionButton
+                            permissions={{ conversation: ["update"] }}
                             type="button"
+                            size="icon-sm"
+                            variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStartEdit(conv.id, conv.title);
                             }}
-                            className="p-1 hover:bg-muted rounded shrink-0"
+                            className="hover:bg-muted"
                             title="Edit chat name"
                           >
-                            <Edit2 className="h-3 w-3" />
-                          </button>
-                          <button
+                            <Edit2 className="h-4 w-4" />
+                          </PermissionButton>
+                          <PermissionButton
+                            permissions={{ conversation: ["delete"] }}
                             type="button"
+                            size="icon-sm"
+                            variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteConversation(conv.id);
                             }}
-                            className="p-1 hover:bg-destructive/10 rounded shrink-0"
+                            className="hover:bg-destructive/10"
                             title="Delete chat"
                           >
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </button>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </PermissionButton>
                         </div>
                       )}
                     </div>

@@ -8,7 +8,10 @@ import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   organizationKeys,
   useCancelInvitation,
@@ -76,25 +79,24 @@ function InvitationsListContent({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    size="icon"
-                    variant="ghost"
+                <ButtonGroup>
+                  <TooltipButton
+                    tooltip="Copy invitation link"
                     onClick={() => handleCopy(inv.id, inv.email)}
-                    title="Copy invitation link"
                   >
                     <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
+                  </TooltipButton>
+                  <PermissionButton
+                    permissions={{ invitation: ["cancel"] }}
+                    tooltip="Delete invitation"
+                    variant="outline"
+                    size="icon-sm"
                     onClick={() => handleDelete(inv.id)}
                     disabled={cancelMutation.isPending}
-                    title="Delete invitation"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </PermissionButton>
+                </ButtonGroup>
               </div>
             ))}
           </div>

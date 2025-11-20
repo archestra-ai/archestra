@@ -5,9 +5,9 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { CodeText } from "@/components/code-text";
 import { LoadingSpinner } from "@/components/loading";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useDualLlmConfig,
@@ -404,13 +404,14 @@ function DualLLMContent({
               className="w-32"
             />
             {maxRounds !== config?.maxRounds && (
-              <Button
+              <PermissionButton
+                permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
                 onClick={handleSave}
                 disabled={updateConfig.isPending}
               >
                 {updateConfig.isPending ? "Saving..." : "Save"}
-              </Button>
+              </PermissionButton>
             )}
           </div>
         </div>
@@ -433,13 +434,14 @@ function DualLLMContent({
               </p>
             </div>
             {mainAgentPrompt !== config?.mainAgentPrompt && (
-              <Button
+              <PermissionButton
+                permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
                 onClick={handleSave}
                 disabled={updateConfig.isPending}
               >
                 {updateConfig.isPending ? "Saving..." : "Save"}
-              </Button>
+              </PermissionButton>
             )}
           </div>
           <Textarea
@@ -485,13 +487,14 @@ function DualLLMContent({
               </p>
             </div>
             {quarantinedAgentPrompt !== config?.quarantinedAgentPrompt && (
-              <Button
+              <PermissionButton
+                permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
                 onClick={handleSave}
                 disabled={updateConfig.isPending}
               >
                 {updateConfig.isPending ? "Saving..." : "Save"}
-              </Button>
+              </PermissionButton>
             )}
           </div>
           <Textarea
@@ -519,13 +522,14 @@ function DualLLMContent({
               </p>
             </div>
             {summaryPrompt !== config?.summaryPrompt && (
-              <Button
+              <PermissionButton
+                permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
                 onClick={handleSave}
                 disabled={updateConfig.isPending}
               >
                 {updateConfig.isPending ? "Saving..." : "Save"}
-              </Button>
+              </PermissionButton>
             )}
           </div>
           <Textarea

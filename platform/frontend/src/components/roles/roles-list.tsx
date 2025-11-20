@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   useCreateRole,
   useDeleteRole,
@@ -180,10 +181,13 @@ export function RolesList() {
                 permissions.
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <PermissionButton
+              permissions={{ ac: ["create"] }}
+              onClick={() => setCreateDialogOpen(true)}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Custom Role
-            </Button>
+            </PermissionButton>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -260,14 +264,16 @@ export function RolesList() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button
+                      <PermissionButton
+                        permissions={{ ac: ["update"] }}
                         variant="outline"
                         size="sm"
                         onClick={() => openEditDialog(role)}
                       >
                         Edit
-                      </Button>
-                      <Button
+                      </PermissionButton>
+                      <PermissionButton
+                        permissions={{ ac: ["delete"] }}
                         variant="outline"
                         size="sm"
                         onClick={() => {
@@ -277,7 +283,7 @@ export function RolesList() {
                         // disabled={role.memberCount > 0}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      </PermissionButton>
                     </div>
                   </div>
                 ))}

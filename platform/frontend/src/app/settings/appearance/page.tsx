@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useOnUnmount } from "@/lib/lifecycle.hook";
 import {
   organizationKeys,
@@ -96,7 +97,8 @@ export default function AppearanceSettingsPage() {
         />
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-0 bg-background p-4 rounded-lg border border-border shadow-lg">
-            <Button
+            <PermissionButton
+              permissions={{ organization: ["update"] }}
               onClick={() => {
                 saveTheme?.(currentUITheme || DEFAULT_THEME);
                 saveFont?.(currentUIFont || DEFAULT_FONT);
@@ -105,7 +107,7 @@ export default function AppearanceSettingsPage() {
               disabled={updateAppearanceSettingsMutation.isPending}
             >
               Save
-            </Button>
+            </PermissionButton>
             <Button
               variant="outline"
               onClick={() => {

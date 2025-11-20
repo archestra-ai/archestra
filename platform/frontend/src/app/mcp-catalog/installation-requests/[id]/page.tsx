@@ -13,6 +13,7 @@ import { use, useCallback, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -370,21 +371,27 @@ export default function InstallationRequestDetailPage({
                 <CardContent className="space-y-4">
                   {!showApprovalForm && !showDeclineForm && (
                     <div className="flex gap-3">
-                      <Button
+                      <PermissionButton
+                        permissions={{
+                          mcpServerInstallationRequest: ["admin"],
+                        }}
                         onClick={() => setShowApprovalForm(true)}
                         className="flex-1"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Approve Request
-                      </Button>
-                      <Button
+                      </PermissionButton>
+                      <PermissionButton
+                        permissions={{
+                          mcpServerInstallationRequest: ["admin"],
+                        }}
                         variant="destructive"
                         onClick={() => setShowDeclineForm(true)}
                         className="flex-1"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
                         Decline Request
-                      </Button>
+                      </PermissionButton>
                     </div>
                   )}
 
@@ -397,7 +404,10 @@ export default function InstallationRequestDetailPage({
                         rows={3}
                       />
                       <div className="flex gap-2">
-                        <Button
+                        <PermissionButton
+                          permissions={{
+                            mcpServerInstallationRequest: ["admin"],
+                          }}
                           onClick={handleApprove}
                           disabled={approveMutation.isPending}
                           className="flex-1"
@@ -406,7 +416,7 @@ export default function InstallationRequestDetailPage({
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
                           Confirm Approval
-                        </Button>
+                        </PermissionButton>
                         <Button
                           variant="outline"
                           onClick={() => {
@@ -429,7 +439,10 @@ export default function InstallationRequestDetailPage({
                         rows={3}
                       />
                       <div className="flex gap-2">
-                        <Button
+                        <PermissionButton
+                          permissions={{
+                            mcpServerInstallationRequest: ["admin"],
+                          }}
                           variant="destructive"
                           onClick={handleDecline}
                           disabled={declineMutation.isPending}
@@ -439,7 +452,7 @@ export default function InstallationRequestDetailPage({
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
                           Confirm Decline
-                        </Button>
+                        </PermissionButton>
                         <Button
                           variant="outline"
                           onClick={() => {

@@ -3,7 +3,6 @@
 import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateOrganization } from "@/lib/organization.query";
 
 interface LogoUploadProps {
@@ -106,7 +106,8 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
           </div>
 
           <div className="flex gap-2">
-            <Button
+            <PermissionButton
+              permissions={{ organization: ["update"] }}
               variant="outline"
               size="sm"
               onClick={handleUploadClick}
@@ -114,10 +115,11 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
             >
               <Upload className="h-4 w-4 mr-2" />
               {hasPreviewOrCurrentLogo ? "Change" : "Upload"}
-            </Button>
+            </PermissionButton>
 
             {hasPreviewOrCurrentLogo && (
-              <Button
+              <PermissionButton
+                permissions={{ organization: ["update"] }}
                 variant="outline"
                 size="sm"
                 onClick={handleRemoveLogo}
@@ -125,7 +127,7 @@ export function LogoUpload({ currentLogo, onLogoChange }: LogoUploadProps) {
               >
                 <X className="h-4 w-4 mr-2" />
                 Remove
-              </Button>
+              </PermissionButton>
             )}
           </div>
         </div>

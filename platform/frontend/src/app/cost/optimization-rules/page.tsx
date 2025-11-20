@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -330,18 +331,24 @@ function OptimizationRuleRow({
       <TableCell>{rule.priority}</TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
+          <PermissionButton
+            permissions={{ limit: ["update"] }}
+            variant="ghost"
+            size="sm"
+            onClick={onEdit}
+          >
             <Edit className="h-4 w-4" />
-          </Button>
+          </PermissionButton>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button
+              <PermissionButton
+                permissions={{ limit: ["delete"] }}
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </PermissionButton>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -473,14 +480,15 @@ export default function OptimizationRulesPage() {
               </SelectContent>
             </Select>
             {selectedAgentId && !isAddingRule && (
-              <Button
+              <PermissionButton
+                permissions={{ limit: ["create"] }}
                 onClick={() => setIsAddingRule(true)}
                 size="sm"
                 variant="outline"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add Rule
-              </Button>
+              </PermissionButton>
             )}
           </div>
         </div>

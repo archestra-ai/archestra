@@ -46,6 +46,12 @@ spec:
   selector:
     matchLabels:
       {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
+  {{- with .Values.archestra.rollingUpdate }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -71,7 +77,7 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.archestra.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - name: backend
               containerPort: 9000

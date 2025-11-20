@@ -3,6 +3,14 @@ archestra:
   # This image contains both the backend API and frontend
   image: archestra/platform:latest
 
+  # Image pull policy for the Archestra container
+  # Options: Always, IfNotPresent, Never
+  imagePullPolicy: IfNotPresent
+
+  # Rolling update configuration for the Deployment
+  # When null, the default Kubernetes rolling update strategy is used
+  rollingUpdate: null
+
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable
   # Example:

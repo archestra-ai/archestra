@@ -34,6 +34,7 @@ A central place for teams and enterprises to manage MCP and agents at scale.
 1. Start with Docker
 
    ```bash
+   docker pull archestra/platform:latest;
    docker run -p 9000:9000 -p 3000:3000 archestra/platform
    ```
 

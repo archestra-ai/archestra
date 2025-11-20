@@ -22,6 +22,7 @@ Put the screenshot of the main page here as the last step after deployment.
 1. Start with Docker
 
    ```bash
+   docker pull archestra/platform:latest;
    docker run -p 9000:9000 -p 3000:3000 archestra/platform
    ```
 

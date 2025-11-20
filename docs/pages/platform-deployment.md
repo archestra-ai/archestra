@@ -102,6 +102,7 @@ Docker deployment provides the fastest way to get started with Archestra Platfor
 Run the platform with a single command:
 
 ```bash
+docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 archestra/platform
 ```
 
@@ -116,6 +117,7 @@ This will start the platform with:
 To use an external PostgreSQL database, pass the `DATABASE_URL` environment variable:
 
 ```bash
+docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 \
   -e DATABASE_URL=postgresql://user:password@host:5432/database \
   archestra/platform

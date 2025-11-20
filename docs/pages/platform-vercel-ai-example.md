@@ -77,6 +77,7 @@ For OpenAI, you can get an API key from:
 ## Step 2. Run Archestra Platform locally
 
 ```shell
+docker pull archestra/platform:latest;
 docker run -p 9000:9000 -p 3000:3000 archestra/platform
 ```
 

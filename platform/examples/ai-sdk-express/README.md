@@ -9,6 +9,7 @@ It demonstrates how to use AI SDK in an [Express.js](https://expressjs.com/) ser
 1. Start the Archestra Platform:
 
     ```sh
+    docker pull archestra/platform:latest;
     docker run -p 9000:9000 -p 3000:3000 archestra/platform
     ```
 

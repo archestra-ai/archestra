@@ -7,6 +7,11 @@ on:
         description: "Whether to force the checks to succeed"
         required: false
         type: boolean
+    secrets:
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: true
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: true
 
 jobs:
   platform-linting-and-tests:
@@ -250,6 +255,14 @@ jobs:
         if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: ./platform/e2e-tests
         run: pnpm exec playwright install --with-deps chromium webkit firefox
+
+      # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
+      # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
+      # explicitly install, just the webkit ones, each time 🥲
+      - name: Install Playwright system dependencies for WebKit
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform/e2e-tests
+        run: pnpm exec playwright install-deps webkit
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

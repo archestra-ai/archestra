@@ -242,6 +242,45 @@ describe("PromptModel", () => {
       expect(prompts[0].id).toBe(prompt2.id); // Newest first
       expect(prompts[1].id).toBe(prompt1.id);
     });
+
+    test("includes associated agents sorted by name", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const promptOne = await PromptModel.create(org.id, user.id, {
+        name: "Prompt One",
+        type: "system",
+        content: "System",
+      });
+      const promptTwo = await PromptModel.create(org.id, user.id, {
+        name: "Prompt Two",
+        type: "regular",
+        content: "Regular",
+      });
+
+      const agentZ = await makeAgent({ name: "Zebra" });
+      const agentA = await makeAgent({ name: "Alpha" });
+      const agentM = await makeAgent({ name: "Mango" });
+
+      await db.insert(schema.agentPromptsTable).values([
+        { agentId: agentZ.id, promptId: promptOne.id },
+        { agentId: agentA.id, promptId: promptOne.id },
+        { agentId: agentM.id, promptId: promptTwo.id },
+      ]);
+
+      const prompts = await PromptModel.findByOrganizationId(org.id);
+      const first = prompts.find((prompt) => prompt.id === promptOne.id);
+      const second = prompts.find((prompt) => prompt.id === promptTwo.id);
+
+      expect(first?.agents.map((agent) => agent.name)).toEqual([
+        "Alpha",
+        "Zebra",
+      ]);
+      expect(second?.agents.map((agent) => agent.name)).toEqual(["Mango"]);
+    });
   });
 
   describe("findVersions", () => {
@@ -433,11 +472,65 @@ describe("PromptModel", () => {
         content: "Updated",
       });
 
-      expect(updated?.agents).toHaveLength(0); // New version starts with no agent relationships
+      // New version should maintain the agent relationships
+      expect(updated?.agents).toHaveLength(1);
+      expect(updated?.agents[0].id).toBe(agent.id);
+      expect(updated?.agents[0].name).toBe(agent.name);
 
-      // Original should still have the relationship
+      // Verify the old version no longer has relationships (migrated to new version)
       const originalWithAgents = await PromptModel.findById(original.id);
-      expect(originalWithAgents?.agents).toHaveLength(1);
+      expect(originalWithAgents?.agents).toHaveLength(0);
+    });
+
+    test("preserves agent-prompt order when creating new version", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+      const agent3 = await makeAgent({ name: "Agent 3" });
+
+      const original = await PromptModel.create(org.id, user.id, {
+        name: "Multi-Agent Prompt",
+        type: "system",
+        content: "Original",
+      });
+
+      // Create agent relationships with specific orders
+      await db.insert(schema.agentPromptsTable).values([
+        { agentId: agent1.id, promptId: original.id, order: 0 },
+        { agentId: agent2.id, promptId: original.id, order: 1 },
+        { agentId: agent3.id, promptId: original.id, order: 2 },
+      ]);
+
+      const updated = await PromptModel.update(original.id, user.id, {
+        content: "Updated",
+      });
+
+      if (!updated) {
+        throw new Error("Failed to update prompt");
+      }
+
+      // New version should maintain all agent relationships with same order
+      expect(updated.agents).toHaveLength(3);
+
+      // Verify order is preserved by checking the actual agent_prompts table
+      const newVersionRelationships = await db
+        .select()
+        .from(schema.agentPromptsTable)
+        .where(eq(schema.agentPromptsTable.promptId, updated.id))
+        .orderBy(schema.agentPromptsTable.order);
+
+      expect(newVersionRelationships).toHaveLength(3);
+      expect(newVersionRelationships[0].agentId).toBe(agent1.id);
+      expect(newVersionRelationships[0].order).toBe(0);
+      expect(newVersionRelationships[1].agentId).toBe(agent2.id);
+      expect(newVersionRelationships[1].order).toBe(1);
+      expect(newVersionRelationships[2].agentId).toBe(agent3.id);
+      expect(newVersionRelationships[2].order).toBe(2);
     });
   });
 

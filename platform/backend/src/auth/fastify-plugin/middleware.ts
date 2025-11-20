@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { type RouteId, requiredEndpointPermissionsMap } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
@@ -17,6 +18,11 @@ export class Authnz {
 
     // Populate request.user and request.organizationId after successful authentication
     await this.populateUserInfo(request);
+
+    // Set Sentry user context after successful authentication
+    if (request.user) {
+      this.setSentryUserContext(request.user, request);
+    }
 
     const { success } = await this.isAuthorized(request);
     if (success) {
@@ -163,6 +169,32 @@ export class Authnz {
     } catch (_error) {
       // If population fails, leave decorators unpopulated
       // The route handlers should handle missing user info gracefully
+    }
+  };
+
+  /**
+   * Sets the Sentry user context for better error tracking and attribution
+   */
+  public setSentryUserContext = (
+    user: { id: string; email?: string; name?: string },
+    request: FastifyRequest,
+  ): void => {
+    try {
+      // Extract IP address from request headers
+      const ipAddress =
+        (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        (request.headers["x-real-ip"] as string) ||
+        request.ip;
+
+      Sentry.setUser({
+        id: user.id,
+        email: user.email,
+        username: user.name || user.email,
+        ip_address: ipAddress,
+      });
+    } catch (_error) {
+      // Silently fail if Sentry is not configured or there's an error
+      // We don't want authentication to fail due to Sentry issues
     }
   };
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertPrompt,
@@ -58,6 +58,44 @@ class PromptModel {
   }
 
   /**
+   * Batch-load agents for multiple prompts to avoid N+1 queries
+   */
+  private static async getAgentsForPrompts(
+    promptIds: string[],
+  ): Promise<Map<string, PromptWithAgents["agents"]>> {
+    if (promptIds.length === 0) {
+      return new Map();
+    }
+
+    const assignments = await db
+      .select({
+        promptId: schema.agentPromptsTable.promptId,
+        agentId: schema.agentsTable.id,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.agentPromptsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentPromptsTable.agentId, schema.agentsTable.id),
+      )
+      .where(inArray(schema.agentPromptsTable.promptId, promptIds))
+      .orderBy(schema.agentPromptsTable.promptId, schema.agentsTable.name);
+
+    const agentMap = new Map<string, PromptWithAgents["agents"]>();
+
+    for (const assignment of assignments) {
+      const agents = agentMap.get(assignment.promptId) ?? [];
+      agents.push({
+        id: assignment.agentId,
+        name: assignment.agentName,
+      });
+      agentMap.set(assignment.promptId, agents);
+    }
+
+    return agentMap;
+  }
+
+  /**
    * Find all prompts for an organization
    * Returns only active (latest) versions with agent information
    */
@@ -80,19 +118,14 @@ class PromptModel {
       .where(and(...baseConditions))
       .orderBy(desc(schema.promptsTable.createdAt));
 
-    // For each prompt, fetch the agents that use it
-    const promptsWithAgents = await Promise.all(
-      prompts.map(async (prompt) => {
-        const agents = await PromptModel.getAgentsForPrompt(prompt.id);
-
-        return {
-          ...prompt,
-          agents,
-        };
-      }),
+    const agentMap = await PromptModel.getAgentsForPrompts(
+      prompts.map((prompt) => prompt.id),
     );
 
-    return promptsWithAgents;
+    return prompts.map((prompt) => ({
+      ...prompt,
+      agents: agentMap.get(prompt.id) ?? [],
+    }));
   }
 
   /**
@@ -136,24 +169,20 @@ class PromptModel {
       )
       .orderBy(schema.promptsTable.version);
 
-    // For each prompt, fetch the agents that use it
-    const versionsWithAgents = await Promise.all(
-      versions.map(async (version) => {
-        const agents = await PromptModel.getAgentsForPrompt(version.id);
-
-        return {
-          ...version,
-          agents,
-        };
-      }),
+    const agentMap = await PromptModel.getAgentsForPrompts(
+      versions.map((version) => version.id),
     );
 
-    return versionsWithAgents;
+    return versions.map((version) => ({
+      ...version,
+      agents: agentMap.get(version.id) ?? [],
+    }));
   }
 
   /**
    * Update a prompt - creates a new version
    * Deactivates the old version and creates a new active version
+   * Migrates agent-prompt relationships to the new version
    */
   static async update(
     id: string,
@@ -164,6 +193,12 @@ class PromptModel {
     if (!currentPrompt) {
       return null;
     }
+
+    // Get existing agent-prompt relationships before deactivating
+    const existingRelationships = await db
+      .select()
+      .from(schema.agentPromptsTable)
+      .where(eq(schema.agentPromptsTable.promptId, id));
 
     // Deactivate current version
     await db
@@ -185,6 +220,15 @@ class PromptModel {
         createdBy,
       })
       .returning();
+
+    // Migrate agent-prompt relationships to the new version
+    if (existingRelationships.length > 0) {
+      // Update existing relationships to point to the new prompt version
+      await db
+        .update(schema.agentPromptsTable)
+        .set({ promptId: newVersion.id })
+        .where(eq(schema.agentPromptsTable.promptId, id));
+    }
 
     return {
       ...newVersion,

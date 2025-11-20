@@ -89,7 +89,6 @@ export function EnvironmentVariablesFormField<
         </p>
       ) : (
         <div className="border rounded-lg">
-          {/* Header Row */}
           <div className="grid grid-cols-[2fr_1.5fr_1fr_2fr_auto] gap-2 p-3 bg-muted/50 border-b">
             <div className="text-xs font-medium">Key</div>
             <div className="text-xs font-medium">Type</div>
@@ -97,9 +96,8 @@ export function EnvironmentVariablesFormField<
               Prompt on each installation
             </div>
             <div className="text-xs font-medium">Value</div>
-            <div className="w-9" /> {/* Spacer for trash icon */}
+            <div className="w-9" />
           </div>
-          {/* Data Rows */}
           {fields.map((field, index) => {
             const promptOnInstallation = form.watch(
               `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
@@ -146,6 +144,8 @@ export function EnvironmentVariablesFormField<
                         <SelectContent>
                           <SelectItem value="plain_text">Plain text</SelectItem>
                           <SelectItem value="secret">Secret</SelectItem>
+                          <SelectItem value="boolean">Boolean</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -177,18 +177,73 @@ export function EnvironmentVariablesFormField<
                     name={
                       `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
                     }
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="your-value"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const envType = form.watch(
+                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+                      );
+
+                      // Boolean type: render checkbox with label
+                      if (envType === "boolean") {
+                        // Normalize empty/undefined values to "false"
+                        const normalizedValue =
+                          field.value === "true" ? "true" : "false";
+                        if (field.value !== normalizedValue) {
+                          field.onChange(normalizedValue);
+                        }
+
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <div className="flex items-center gap-2 h-10">
+                                <Checkbox
+                                  checked={normalizedValue === "true"}
+                                  onCheckedChange={(checked) =>
+                                    field.onChange(checked ? "true" : "false")
+                                  }
+                                />
+                                <span className="text-sm">
+                                  {normalizedValue === "true"
+                                    ? "True"
+                                    : "False"}
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      // Number type: render number input
+                      if (envType === "number") {
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="font-mono"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
+
+                      // String/Secret types: render input
+                      return (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="your-value"
+                              className="font-mono"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                 ) : (
                   <div className="flex items-center h-10">

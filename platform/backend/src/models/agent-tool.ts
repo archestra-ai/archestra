@@ -6,6 +6,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -135,6 +136,39 @@ class AgentToolModel {
   }
 
   /**
+   * Bulk create agent-tool relationships in one query to avoid N+1
+   */
+  static async createManyIfNotExists(
+    agentId: string,
+    toolIds: string[],
+  ): Promise<void> {
+    if (toolIds.length === 0) return;
+
+    // Check which tools are already assigned
+    const existingAssignments = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
+      );
+
+    const existingToolIds = new Set(existingAssignments.map((a) => a.toolId));
+    const newToolIds = toolIds.filter((toolId) => !existingToolIds.has(toolId));
+
+    if (newToolIds.length > 0) {
+      await db.insert(schema.agentToolsTable).values(
+        newToolIds.map((toolId) => ({
+          agentId,
+          toolId,
+        })),
+      );
+    }
+  }
+
+  /**
    * Creates a new agent-tool assignment or updates credentials if it already exists.
    * Returns the status: "created", "updated", or "unchanged".
    */
@@ -232,6 +266,26 @@ class AgentToolModel {
       .where(eq(schema.agentToolsTable.id, id))
       .returning();
     return agentTool;
+  }
+
+  static async bulkUpdateSameValue(
+    ids: string[],
+    field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+    value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const result = await db
+      .update(schema.agentToolsTable)
+      .set({
+        [field]: value,
+        updatedAt: new Date(),
+      })
+      .where(inArray(schema.agentToolsTable.id, ids));
+
+    return result.rowCount ?? 0;
   }
 
   static async findAll(
@@ -348,14 +402,30 @@ class AgentToolModel {
       }
     }
 
-    // Filter by credential source
-    if (filters?.credentialSourceMcpServerId) {
-      whereConditions.push(
-        eq(
-          schema.agentToolsTable.credentialSourceMcpServerId,
-          filters.credentialSourceMcpServerId,
-        ),
-      );
+    // Filter by credential owner (check both credential source and execution source)
+    if (filters?.mcpServerOwnerId) {
+      // First, get all MCP server IDs owned by this user
+      const mcpServerIds = await db
+        .select({ id: schema.mcpServersTable.id })
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId))
+        .then((rows) => rows.map((r) => r.id));
+
+      if (mcpServerIds.length > 0) {
+        const credentialCondition = or(
+          inArray(
+            schema.agentToolsTable.credentialSourceMcpServerId,
+            mcpServerIds,
+          ),
+          inArray(
+            schema.agentToolsTable.executionSourceMcpServerId,
+            mcpServerIds,
+          ),
+        );
+        if (credentialCondition) {
+          whereConditions.push(credentialCondition);
+        }
+      }
     }
 
     // Exclude Archestra built-in tools for test isolation

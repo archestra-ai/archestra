@@ -1,7 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
+import {
+  ChevronsUpDown,
+  Edit,
+  Plus,
+  Save,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
@@ -24,8 +32,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -104,12 +118,19 @@ function LimitInlineForm({
   hasOrganizationMcpLimit?: (mcpServerName?: string) => boolean;
   getTeamsWithMcpLimits?: (mcpServerName?: string) => string[];
 }) {
-  const [formData, setFormData] = useState({
-    entityType: initialData?.entityType || "team",
+  const [formData, setFormData] = useState<{
+    entityType: "organization" | "team" | "agent";
+    entityId: string;
+    mcpServerName: string;
+    limitValue: string;
+    model: string[];
+  }>({
+    entityType:
+      (initialData?.entityType as "organization" | "team" | "agent") || "team",
     entityId: initialData?.entityId || "",
     mcpServerName: initialData?.mcpServerName || "",
     limitValue: initialData?.limitValue?.toString() || "",
-    model: initialData?.model || "",
+    model: (initialData?.model as string[]) || [],
   });
 
   const handleSubmit = useCallback(
@@ -129,14 +150,13 @@ function LimitInlineForm({
   const isValid =
     formData.limitValue &&
     (formData.entityType === "organization" || formData.entityId) &&
-    (limitType === "token_cost" ? formData.model : formData.mcpServerName);
+    (limitType === "token_cost"
+      ? Array.isArray(formData.model) && formData.model.length > 0
+      : formData.mcpServerName);
 
   return (
     <tr className="border-b">
-      <td
-        colSpan={limitType === "token_cost" ? 4 : 5}
-        className="p-4 bg-muted/30"
-      >
+      <td colSpan={5} className="p-4 bg-muted/30">
         <TooltipProvider>
           <form
             onSubmit={handleSubmit}
@@ -257,25 +277,90 @@ function LimitInlineForm({
             {limitType === "token_cost" && (
               <div className="flex items-center gap-2">
                 <Label htmlFor="model" className="text-sm whitespace-nowrap">
-                  Model
+                  Models
                 </Label>
-                <Select
-                  value={formData.model || ""}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, model: value }))
-                  }
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tokenPrices?.map((price) => (
-                      <SelectItem key={price.model} value={price.model}>
-                        {price.model}
-                      </SelectItem>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="flex-1 justify-between"
+                    >
+                      {Array.isArray(formData.model) &&
+                      formData.model.length > 0
+                        ? `${formData.model.length} model${formData.model.length > 1 ? "s" : ""} selected`
+                        : "Select models"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      {tokenPrices?.map((price) => (
+                        <button
+                          key={price.model}
+                          type="button"
+                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-sm cursor-pointer w-full text-left"
+                          onClick={() => {
+                            const currentModels = Array.isArray(formData.model)
+                              ? formData.model
+                              : [];
+                            const isSelected = currentModels.includes(
+                              price.model,
+                            );
+                            const newModels = isSelected
+                              ? currentModels.filter((m) => m !== price.model)
+                              : [...currentModels, price.model];
+                            setFormData((prev) => ({
+                              ...prev,
+                              model: newModels,
+                            }));
+                          }}
+                        >
+                          <Checkbox
+                            checked={
+                              Array.isArray(formData.model) &&
+                              formData.model.includes(price.model)
+                            }
+                            onCheckedChange={() => {
+                              // Handled by parent onClick
+                            }}
+                          />
+                          <span className="flex-1 cursor-pointer text-sm">
+                            {price.model}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {Array.isArray(formData.model) && formData.model.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {formData.model.map((modelName) => (
+                      <Badge
+                        key={modelName}
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        {modelName}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newModels = formData.model.filter(
+                              (m: string) => m !== modelName,
+                            );
+                            setFormData((prev) => ({
+                              ...prev,
+                              model: newModels,
+                            }));
+                          }}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -354,10 +439,14 @@ function LimitRow({
   tokenPrices: TokenPriceData[];
   getEntityName: (limit: LimitData) => string;
   getUsageStatus: (
-    currentUsageTokensIn: number,
-    currentUsageTokensOut: number,
     limitValue: number,
     limitType: string,
+    modelUsage?: Array<{
+      model: string;
+      tokensIn: number;
+      tokensOut: number;
+      cost: number;
+    }>,
   ) => {
     percentage: number;
     status: UsageStatus;
@@ -386,10 +475,9 @@ function LimitRow({
   }
 
   const { percentage, status, actualUsage, actualLimit } = getUsageStatus(
-    limit.currentUsageTokensIn || 0,
-    limit.currentUsageTokensOut || 0,
     limit.limitValue,
     limit.limitType,
+    limit.modelUsage,
   );
 
   return (
@@ -416,7 +504,21 @@ function LimitRow({
       <td className="p-4 text-sm text-muted-foreground">
         {getEntityName(limit)}
       </td>
-      {limit.limitType !== "token_cost" && (
+      {limit.limitType === "token_cost" ? (
+        <td className="p-4">
+          <div className="flex flex-wrap gap-1">
+            {Array.isArray(limit.model) && limit.model.length > 0 ? (
+              (limit.model as string[]).map((modelName: string) => (
+                <Badge key={modelName} variant="outline" className="text-xs">
+                  {modelName}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-muted-foreground">-</span>
+            )}
+          </div>
+        </td>
+      ) : (
         <td className="p-4 text-sm text-muted-foreground">
           {limit.mcpServerName || "-"}
         </td>
@@ -427,7 +529,7 @@ function LimitRow({
             <span>
               {limit.limitType === "token_cost"
                 ? `$${actualUsage.toFixed(2)} / $${actualLimit.toFixed(2)}`
-                : `${(limit.currentUsageTokensIn || 0).toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
+                : `${actualUsage.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
             </span>
             <span>{percentage.toFixed(1)}%</span>
           </div>
@@ -557,54 +659,32 @@ export default function LimitsPage() {
     [teams],
   );
 
-  // Helper function to calculate real cost for token limits
-  const calculateTokenCost = useCallback(
-    (inputTokens: number, outputTokens: number): number => {
-      if (tokenPrices.length === 0) {
-        console.warn("No token prices available for cost calculation");
-        return 0;
-      }
-
-      const averageInputPrice =
-        tokenPrices.reduce(
-          (sum, tp) => sum + parseFloat(tp.pricePerMillionInput),
-          0,
-        ) / tokenPrices.length;
-
-      const averageOutputPrice =
-        tokenPrices.reduce(
-          (sum, tp) => sum + parseFloat(tp.pricePerMillionOutput),
-          0,
-        ) / tokenPrices.length;
-
-      const inputCost = (inputTokens * averageInputPrice) / 1000000;
-      const outputCost = (outputTokens * averageOutputPrice) / 1000000;
-      const totalCost = inputCost + outputCost;
-
-      return totalCost;
-    },
-    [tokenPrices],
-  );
-
   // Helper function to get usage percentage and status
   const getUsageStatus = useCallback(
     (
-      currentUsageTokensIn: number,
-      currentUsageTokensOut: number,
       limitValue: number,
       limitType: string,
+      modelUsage?: Array<{
+        model: string;
+        tokensIn: number;
+        tokensOut: number;
+        cost: number;
+      }>,
     ) => {
       let actualUsage: number;
       const actualLimit = limitValue;
 
       if (limitType === "token_cost") {
-        actualUsage = calculateTokenCost(
-          currentUsageTokensIn,
-          currentUsageTokensOut,
-        );
+        // Use precise per-model cost sum from backend
+        if (modelUsage && modelUsage.length > 0) {
+          actualUsage = modelUsage.reduce((sum, usage) => sum + usage.cost, 0);
+        } else {
+          // No usage tracked yet
+          actualUsage = 0;
+        }
       } else {
-        // For MCP server calls, use the input tokens field as call count
-        actualUsage = currentUsageTokensIn;
+        // MCP server calls and tool calls limits are not currently tracked
+        actualUsage = 0;
       }
 
       const percentage = (actualUsage / actualLimit) * 100;
@@ -615,7 +695,7 @@ export default function LimitsPage() {
 
       return { percentage, status, actualUsage, actualLimit };
     },
-    [calculateTokenCost],
+    [],
   );
 
   const handleDeleteLimit = useCallback(
@@ -716,6 +796,7 @@ export default function LimitsPage() {
                 <TableRow>
                   <TableHead>Status</TableHead>
                   <TableHead>Applied to</TableHead>
+                  <TableHead>Models</TableHead>
                   <TableHead>Usage</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -736,7 +817,7 @@ export default function LimitsPage() {
                 {llmLimits.length === 0 && !isAddingLlmLimit ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="text-center py-8 text-muted-foreground"
                     >
                       <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />

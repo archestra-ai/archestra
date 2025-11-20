@@ -190,6 +190,58 @@ class AgentLabelModel {
   }
 
   /**
+   * Get labels for multiple agents in one query to avoid N+1
+   */
+  static async getLabelsForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, AgentLabelWithDetails[]>> {
+    if (agentIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .select({
+        agentId: schema.agentLabelsTable.agentId,
+        keyId: schema.agentLabelsTable.keyId,
+        valueId: schema.agentLabelsTable.valueId,
+        key: schema.labelKeysTable.key,
+        value: schema.labelValuesTable.value,
+      })
+      .from(schema.agentLabelsTable)
+      .leftJoin(
+        schema.labelKeysTable,
+        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+      )
+      .leftJoin(
+        schema.labelValuesTable,
+        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+      )
+      .where(inArray(schema.agentLabelsTable.agentId, agentIds))
+      .orderBy(asc(schema.labelKeysTable.key));
+
+    const labelsMap = new Map<string, AgentLabelWithDetails[]>();
+
+    // Initialize all agent IDs with empty arrays
+    for (const agentId of agentIds) {
+      labelsMap.set(agentId, []);
+    }
+
+    // Populate the map with labels
+    for (const row of rows) {
+      const labels = labelsMap.get(row.agentId) || [];
+      labels.push({
+        keyId: row.keyId,
+        valueId: row.valueId,
+        key: row.key || "",
+        value: row.value || "",
+      });
+      labelsMap.set(row.agentId, labels);
+    }
+
+    return labelsMap;
+  }
+
+  /**
    * Get all available label values for a specific key
    */
   static async getValuesByKey(key: string): Promise<string[]> {

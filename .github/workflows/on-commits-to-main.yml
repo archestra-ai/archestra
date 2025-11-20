@@ -15,10 +15,13 @@ concurrency:
 jobs:
   build-dev-image:
     name: Build Platform Dev Docker Image
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
       id-token: write # Required for Workload Identity Federation
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -32,7 +35,7 @@ jobs:
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build Docker image
         uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
@@ -46,6 +49,8 @@ jobs:
           platforms: linux/amd64
           build-args: |
             VERSION=${{ github.sha }}
+            TURBO_TEAM=${{ env.TURBO_TEAM }}
+            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
             sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           push: true
@@ -95,10 +100,14 @@ jobs:
             --create-namespace \
             --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
+            --set archestra.env.ARCHESTRA_API_BASE_URL="https://backend.archestra.dev" \
             --set archestra.env.ARCHESTRA_METRICS_SECRET="${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}" \
             --set archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}" \
             --set archestra.env.ARCHESTRA_AUTH_SECRET="${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}" \
             --set archestra.env.ARCHESTRA_AUTH_ADMIN_EMAIL="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_EMAIL }}" \
             --set archestra.env.ARCHESTRA_AUTH_ADMIN_PASSWORD="${{ secrets.ARCHESTRA_STAGING_AUTH_ADMIN_PASSWORD }}" \
+            --set archestra.env.ARCHESTRA_SENTRY_ENVIRONMENT="archestra.dev" \
+            --set archestra.env.ARCHESTRA_SENTRY_BACKEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_BACKEND_DSN }}" \
+            --set archestra.env.ARCHESTRA_SENTRY_FRONTEND_DSN="${{ secrets.ARCHESTRA_STAGING_SENTRY_FRONTEND_DSN }}" \
             --values .github/values-staging.yaml \
             --wait

@@ -14,12 +14,12 @@ next_pubic_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
 if not next_pubic_api_base_url and api_base_url and api_base_url != "":
   os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
 
-# set NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME to the same value as ARCHESTRA_SENTRY_SERVER_NAME
+# set NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT to the same value as ARCHESTRA_SENTRY_ENVIRONMENT
 # so it's accessible by the frontend
-sentry_server_name = os.getenv("ARCHESTRA_SENTRY_SERVER_NAME")
-next_public_sentry_server_name = os.getenv("NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME")
+sentry_server_name = os.getenv("ARCHESTRA_SENTRY_ENVIRONMENT")
+next_public_sentry_server_name = os.getenv("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")
 if not next_public_sentry_server_name and sentry_server_name and sentry_server_name != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME', sentry_server_name)
+  os.putenv('NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT', sentry_server_name)
 
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):

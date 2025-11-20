@@ -1,22 +1,43 @@
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
+const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
+
+const getBackendBaseUrl = (): string | undefined =>
+  env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+
 /**
  * Get the display proxy URL for showing to users.
  * This is the URL that external agents should use to connect to Archestra.
  */
 export const getDisplayProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const baseUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+  const backendBaseUrl = getBackendBaseUrl();
 
-  if (!baseUrl) {
+  if (!backendBaseUrl) {
     return `http://localhost:9000${proxyUrlSuffix}`;
-  } else if (baseUrl.endsWith(proxyUrlSuffix)) {
-    return baseUrl;
-  } else if (baseUrl.endsWith("/")) {
-    return `${baseUrl.slice(0, -1)}${proxyUrlSuffix}`;
+  } else if (backendBaseUrl.endsWith(proxyUrlSuffix)) {
+    return backendBaseUrl;
+  } else if (backendBaseUrl.endsWith("/")) {
+    return `${backendBaseUrl.slice(0, -1)}${proxyUrlSuffix}`;
   }
-  return `${baseUrl}${proxyUrlSuffix}`;
+  return `${backendBaseUrl}${proxyUrlSuffix}`;
+};
+
+/**
+ * Get the WebSocket URL
+ */
+const getWebSocketUrl = (): string => {
+  const backendBaseUrl = getBackendBaseUrl();
+
+  // In development, use localhost
+  if (!backendBaseUrl || typeof window === "undefined") {
+    return "ws://localhost:9000/ws";
+  }
+
+  // Convert http(s) to ws(s)
+  const wsUrl = backendBaseUrl.replace(/^http/, "ws");
+  return `${wsUrl}/ws`;
 };
 
 /**
@@ -32,6 +53,12 @@ export default {
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).
      */
     baseUrl: "",
+  },
+  websocket: {
+    /**
+     * WebSocket URL for real-time communication
+     */
+    url: getWebSocketUrl(),
   },
   debug: process.env.NODE_ENV !== "production",
   posthog: {
@@ -58,14 +85,15 @@ export default {
      */
     enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
   },
+  /**
+   * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
+   */
+  enterpriseLicenseActivated:
+    env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true",
   sentry: {
-    /**
-     * Sentry DSN for error tracking (empty to disable).
-     */
     dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
-    /**
-     * Sentry server name for error tracking (empty to disable).
-     */
-    serverName: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_SERVER_NAME"),
+    environment:
+      env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
+      environment,
   },
 };

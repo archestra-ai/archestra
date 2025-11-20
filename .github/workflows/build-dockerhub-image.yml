@@ -27,6 +27,10 @@ on:
         required: false
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
         required: false
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: false
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: false
 
 jobs:
   # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3

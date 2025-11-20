@@ -44,13 +44,10 @@ ENV TURBO_TOKEN=$TURBO_TOKEN
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN mkdir -p frontend/.next/cache
 # Use Docker secret to securely pass Sentry auth token during build
 # The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 RUN --mount=type=secret,id=sentry_auth_token \
-    --mount=type=cache,id=turbo-cache,target=/app/.turbo \
-    --mount=type=cache,id=next-cache,target=/app/frontend/.next/cache \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \

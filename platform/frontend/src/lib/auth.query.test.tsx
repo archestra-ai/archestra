@@ -9,7 +9,6 @@ import {
   usePermissionMap,
   useSession,
 } from "./auth.query";
-import { hasPermission } from "./auth.utils";
 import { authClient } from "./clients/auth/auth-client";
 
 // Mock the auth client and SDK
@@ -264,7 +263,7 @@ describe("usePermissionMap", () => {
       data: userPermissions,
     } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
 
-    const permissionMap = {
+    const permissionMap: Record<string, Permissions> = {
       canReadOrg: { organization: ["read"] },
       canCreateOrg: { organization: ["create"] },
       canDeleteOrg: { organization: ["delete"] }, // User doesn't have this
@@ -298,7 +297,7 @@ describe("usePermissionMap", () => {
       data: userPermissions,
     } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
 
-    const permissionMap = {
+    const permissionMap: Record<string, Permissions> = {
       noPermissionsRequired: {},
       hasPermissions: { organization: ["read"] },
     };
@@ -320,7 +319,7 @@ describe("usePermissionMap", () => {
       data: {},
     } as Awaited<ReturnType<typeof archestraApiSdk.getUserPermissions>>);
 
-    const permissionMap = {
+    const permissionMap: Record<string, Permissions> = {
       canRead: { organization: ["read"] },
       canCreate: { organization: ["create"] },
     };

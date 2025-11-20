@@ -35,8 +35,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
-import config from "@/lib/config";
 import { usePermissionMap } from "@/lib/auth.query";
+import config from "@/lib/config";
 import { useGithubStars } from "@/lib/github.query";
 import { useOrgTheme } from "@/lib/theme.hook";
 

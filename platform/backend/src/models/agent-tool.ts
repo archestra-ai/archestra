@@ -38,6 +38,7 @@ class AgentToolModel {
         | "responseModifierTemplate"
         | "credentialSourceMcpServerId"
         | "executionSourceMcpServerId"
+        | "toolPolicyId"
       >
     >,
   ) {

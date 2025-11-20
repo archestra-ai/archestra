@@ -8,7 +8,7 @@ import { schema } from "@/database";
 import { UuidIdSchema } from "./api";
 import { ToolParametersContentSchema } from "./tool";
 
-const ToolResultTreatmentSchema = z.enum([
+export const ToolResultTreatmentSchema = z.enum([
   "trusted",
   "sanitize_with_dual_llm",
   "untrusted",

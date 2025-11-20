@@ -10,6 +10,7 @@ import type { ToolResultTreatment } from "@/types";
 import agentsTable from "./agent";
 import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";
+import toolPoliciesTable from "./tool-policy";
 
 const agentToolsTable = pgTable(
   "agent_tools",
@@ -31,6 +32,12 @@ const agentToolsTable = pgTable(
       .notNull()
       .default("untrusted"),
     responseModifierTemplate: text("response_modifier_template"),
+    toolPolicyId: uuid("tool_policy_id").references(
+      () => toolPoliciesTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     credentialSourceMcpServerId: uuid(
       "credential_source_mcp_server_id",
     ).references(() => mcpServerTable.id, { onDelete: "set null" }),

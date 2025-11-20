@@ -65,7 +65,7 @@ tests:
   - it: should configure deployment strategy when provided
     documentIndex: 1
     set:
-      archestra.strategy:
+      archestra.deploymentStrategy:
         type: RollingUpdate
         rollingUpdate:
           maxSurge: "25%"

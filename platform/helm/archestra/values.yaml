@@ -10,7 +10,7 @@ archestra:
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # When null, the default Kubernetes strategy is used
-  strategy: null
+  deploymentStrategy: null
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable

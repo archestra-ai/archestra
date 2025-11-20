@@ -46,7 +46,7 @@ spec:
   selector:
     matchLabels:
       {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
-  {{- with .Values.archestra.strategy }}
+  {{- with .Values.archestra.deploymentStrategy }}
   strategy:
     {{- toYaml . | nindent 4 }}
   {{- end }}

@@ -17,6 +17,9 @@ jobs:
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -35,15 +38,6 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: cp .env.example .env
 
-      - name: Turbo Cache
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ./platform/.turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
       - name: Type checking, linting, formatting checks
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
@@ -51,18 +45,11 @@ jobs:
   platform-e2e-tests:
     name: Platform e2e Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # runs-on: ubuntu-latest
     permissions:
       contents: read
-    # container:
-    #   image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest
-    #   options: --user 0 --privileged --volume /var/run/docker.sock:/var/run/docker.sock
-    #   # https://docs.blacksmith.sh/blacksmith-caching/dependencies-actions#using-the-blacksmith-cache-inside-a-container
-    #   env:
-    #     # BLACKSMITH_CACHE_TOKEN: ${{ env.BLACKSMITH_CACHE_TOKEN }}
-    #     # BLACKSMITH_CACHE_URL: ${{ env.BLACKSMITH_CACHE_URL }}
-    #     # GITHUB_REPO_NAME: ${{ env.GITHUB_REPO_NAME }}
-    #     KUBECONFIG: /github/home/.kube/config
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -89,29 +76,6 @@ jobs:
           cluster_name: archestra-ci-cluster
           install_only: false
 
-      # - name: Create Kind cluster
-      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-      #   run: |
-      #     NETWORK_NAME=$(docker network ls --filter "label=bdf586" --format "{{.Name}}" | head -n 1)
-      #     export KIND_EXPERIMENTAL_DOCKER_NETWORK="${NETWORK_NAME:-kind}"
-
-      #     if ! kind get clusters | grep -q "archestra-ci-cluster"; then
-      #       kind create cluster --name archestra-ci-cluster --config .github/kind.yaml --wait 120s
-      #     else
-      #       echo "Kind cluster already exists"
-      #     fi
-
-      #     RUNNER_CONTAINER_ID=$(cat /etc/hostname 2>/dev/null || true)
-      #     if [ -n "$RUNNER_CONTAINER_ID" ]; then
-      #       echo "Connecting runner container ${RUNNER_CONTAINER_ID} to $KIND_EXPERIMENTAL_DOCKER_NETWORK network"
-      #       docker network connect "$KIND_EXPERIMENTAL_DOCKER_NETWORK" "$RUNNER_CONTAINER_ID" >/dev/null 2>&1 || echo "Runner container already connected to $KIND_EXPERIMENTAL_DOCKER_NETWORK"
-      #     else
-      #       echo "Unable to determine runner container id; skipping network connect"
-      #     fi
-
-      #     mkdir -p ~/.kube
-      #     kind get kubeconfig --name archestra-ci-cluster --internal > ~/.kube/config
-
       - name: Debug Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
@@ -126,19 +90,6 @@ jobs:
           echo "=== Kubectl cluster info ==="
           kubectl cluster-info || echo "Cluster info failed"
 
-      # - name: Setup Blacksmith Builder
-      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-      #   uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
-      - name: Turbo Cache
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ./platform/.turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
@@ -150,23 +101,11 @@ jobs:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
+          build-args: |
+            TURBO_TEAM=${{ env.TURBO_TEAM }}
+            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
-
-      # - name: Set up Docker Buildx
-      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-      #   uses: docker/setup-buildx-action@v3
-
-      # - name: Build Docker image
-      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-      #   # uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: ./platform
-      #     file: ./platform/Dockerfile
-      #     push: false
-      #     load: true
-      #     tags: archestra/platform:ci-test
 
       - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

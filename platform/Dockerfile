@@ -34,6 +34,14 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 
+# Turbo remote caching
+# https://turborepo.com/docs/guides/tools/docker#example
+ARG TURBO_TEAM
+ENV TURBO_TEAM=$TURBO_TEAM
+
+ARG TURBO_TOKEN
+ENV TURBO_TOKEN=$TURBO_TOKEN
+
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN mkdir -p frontend/.next/cache

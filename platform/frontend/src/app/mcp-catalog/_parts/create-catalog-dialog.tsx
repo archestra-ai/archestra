@@ -69,18 +69,21 @@ export function CreateCatalogDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add MCP Server</DialogTitle>
+          <DialogTitle>Add MCP Server to the Private Registry</DialogTitle>
           <DialogDescription>
-            Add a new MCP server to your private registry from the Archestra
-            Catalog or configure a custom server.
+            Once you add an MCP server here, it will be available for
+            installation.
           </DialogDescription>
         </DialogHeader>
 
         <div className="border-b border-border">
           <div className="flex gap-4">
             {[
-              { value: "archestra-catalog", label: "Archestra Catalog" },
-              { value: "remote", label: "Remote" },
+              { value: "archestra-catalog", label: "Online Catalog" },
+              {
+                value: "remote",
+                label: "Remote (orchestrated not by Archestra)",
+              },
             ].map((tab) => (
               <button
                 type="button"
@@ -117,7 +120,7 @@ export function CreateCatalogDialog({
                       : "text-muted-foreground",
                   )}
                 >
-                  Local
+                  Self-hosted (orchestrated by Archestra in K8S)
                   {activeTab === "local" && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                   )}

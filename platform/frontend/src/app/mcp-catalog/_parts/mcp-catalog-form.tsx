@@ -197,12 +197,18 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      Custom Docker image URL. If not specified, Archestra's
-                      default base image will be used (
-                      <code className="text-xs">
-                        {baseMcpServerDockerImage}
-                      </code>
-                      ).
+                      Use your own image if you need additional packages, or
+                      just want to deploy your own MCP server. See the{" "}
+                      <a
+                        href="https://github.com/archestra-ai/archestra/tree/main/platform/mcp_server_docker_image"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline hover:no-underline"
+                      >
+                        Dockerfile
+                      </a>{" "}
+                      for what's included in the default image (alpine, npx,
+                      mcp[cli]).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -36,6 +36,8 @@ function useAllPermissions() {
       const { data } = await archestraApiSdk.getUserPermissions();
       return data;
     },
+    retry: false,
+    throwOnError: false,
   });
 }
 

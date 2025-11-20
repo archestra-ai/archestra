@@ -50,7 +50,7 @@ jobs:
 
   platform-e2e-tests:
     name: Platform e2e Tests
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     container:
@@ -117,9 +117,9 @@ jobs:
           echo "=== Kubectl cluster info ==="
           kubectl cluster-info || echo "Cluster info failed"
 
-      - name: Setup Blacksmith Builder
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+      # - name: Setup Blacksmith Builder
+      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      #   uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Turbo Cache
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -132,7 +132,8 @@ jobs:
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        # uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: docker/build-push-action@v6
         with:
           context: ./platform
           file: ./platform/Dockerfile

@@ -3421,7 +3421,6 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            toolPolicyId: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             createdAt: string;

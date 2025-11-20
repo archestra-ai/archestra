@@ -29,6 +29,7 @@ export * from "./session";
 export * from "./statistics";
 export * from "./team";
 export * from "./token-price";
+export * from "./tool-policy";
 export * from "./tool";
 export * from "./tool-execution";
 export * from "./tool-policy";

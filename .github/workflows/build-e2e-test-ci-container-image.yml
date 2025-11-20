@@ -1,8 +1,9 @@
 name: Build e2e test CI container image
 
 on:
-  # TODO: remove this line when done testing..
   pull_request:
+    paths:
+      - .github/Dockerfile.e2e-tests
   push:
     branches:
       - main

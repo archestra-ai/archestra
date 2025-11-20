@@ -1,4 +1,9 @@
-import { AgentToolModel, ToolModel } from "@/models";
+import {
+  AgentToolModel,
+  OrganizationModel,
+  ToolModel,
+  ToolPolicyModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -189,7 +194,7 @@ describe("TrustedDataPolicyModel", () => {
   let toolId: string;
   let agentToolId: string;
 
-  beforeEach(async ({ makeAgent, makeTool }) => {
+  beforeEach(async ({ makeAgent, makeTool, makeAgentTool }) => {
     // Create test agent
     const agent = await makeAgent({ name: "Test Agent" });
     agentId = agent.id;
@@ -199,12 +204,33 @@ describe("TrustedDataPolicyModel", () => {
     toolId = tool.id;
 
     // Create agent-tool relationship with default untrusted configuration
-    const agentTool = await AgentToolModel.create(agentId, toolId, {
+    const agentTool = await makeAgentTool(agentId, toolId, {
       allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
     });
     agentToolId = agentTool.id;
   });
+
+  async function createPolicyForTool(
+    toolId: string,
+    overrides?: Partial<{
+      allowUsageWhenUntrustedDataIsPresent: boolean;
+      toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      responseModifierTemplate: string | null;
+    }>,
+  ) {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    return ToolPolicyModel.create({
+      name: `Trusted Policy ${Math.random()}`,
+      toolId,
+      organizationId: organization.id,
+      allowUsageWhenUntrustedDataIsPresent:
+        overrides?.allowUsageWhenUntrustedDataIsPresent ?? false,
+      toolResultTreatment: overrides?.toolResultTreatment ?? "untrusted",
+      responseModifierTemplate: overrides?.responseModifierTemplate ?? null,
+    });
+  }
 
   describe("evaluate", () => {
     describe("basic trust evaluation", () => {
@@ -288,9 +314,11 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-by-default-tool",
         );
         if (!trustedTool) throw new Error("Tool not found");
-        await AgentToolModel.create(agentId, trustedTool.id, {
-          allowUsageWhenUntrustedDataIsPresent: false,
+        const policy = await createPolicyForTool(trustedTool.id, {
           toolResultTreatment: "trusted",
+        });
+        await AgentToolModel.create(agentId, trustedTool.id, {
+          toolPolicyId: policy.id,
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
@@ -320,12 +348,14 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-by-default-with-policies",
         );
         if (!trustedTool) throw new Error("Tool not found");
+        const policy = await createPolicyForTool(trustedTool.id, {
+          toolResultTreatment: "trusted",
+        });
         const trustedAgentTool = await AgentToolModel.create(
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
-            toolResultTreatment: "trusted",
+            toolPolicyId: policy.id,
           },
         );
 
@@ -365,12 +395,14 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-default-with-matching-policy",
         );
         if (!trustedTool) throw new Error("Tool not found");
+        const policy = await createPolicyForTool(trustedTool.id, {
+          toolResultTreatment: "trusted",
+        });
         const trustedAgentTool = await AgentToolModel.create(
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
-            toolResultTreatment: "trusted",
+            toolPolicyId: policy.id,
           },
         );
 
@@ -903,12 +935,14 @@ describe("TrustedDataPolicyModel", () => {
 
         const trustedTool = await ToolModel.findByName("default-trusted-tool");
         if (!trustedTool) throw new Error("Tool not found");
+        const policy = await createPolicyForTool(trustedTool.id, {
+          toolResultTreatment: "trusted",
+        });
         const trustedAgentTool = await AgentToolModel.create(
           agentId,
           trustedTool.id,
           {
-            allowUsageWhenUntrustedDataIsPresent: false,
-            toolResultTreatment: "trusted",
+            toolPolicyId: policy.id,
           },
         );
 

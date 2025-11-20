@@ -237,11 +237,15 @@ describe("AgentToolModel.findAllPaginated", () => {
       );
 
       // false comes before true
-      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
-        false,
-      );
-      expect(resultAsc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
-      expect(resultAsc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(true);
+      expect(
+        resultAsc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(false);
+      expect(
+        resultAsc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(true);
+      expect(
+        resultAsc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(true);
 
       const resultDesc = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -252,15 +256,15 @@ describe("AgentToolModel.findAllPaginated", () => {
         { excludeArchestraTools: true },
       );
 
-      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
-        true,
-      );
-      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(
-        true,
-      );
-      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(
-        false,
-      );
+      expect(
+        resultDesc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(true);
+      expect(
+        resultDesc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(true);
+      expect(
+        resultDesc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
+      ).toBe(false);
     });
 
     test("sorts by createdAt by default", async ({

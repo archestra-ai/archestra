@@ -55,12 +55,13 @@ describe("ToolPolicyModel", () => {
       toolResultTreatment: "untrusted",
     });
 
-    const { data, pagination } = await ToolPolicyModel.search({
-      limit: 10,
-      offset: 0,
-      toolId: tool.id,
-      organizationId: organization.id,
-    });
+    const { data, pagination } = await ToolPolicyModel.search(
+      { limit: 10, offset: 0 },
+      {
+        toolId: tool.id,
+        organizationId: organization.id,
+      },
+    );
 
     expect(data).toHaveLength(1);
     expect(data[0].name).toBe("Primary policy");

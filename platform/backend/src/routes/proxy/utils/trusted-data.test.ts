@@ -1,4 +1,10 @@
-import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import {
+  AgentToolModel,
+  OrganizationModel,
+  ToolModel,
+  ToolPolicyModel,
+  TrustedDataPolicyModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
@@ -7,6 +13,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
   let toolId: string;
   let agentToolId: string;
+  let organizationId: string;
 
   beforeEach(async ({ makeAgent }) => {
     // Create test agent
@@ -24,13 +31,42 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     const tool = await ToolModel.findByName("get_emails");
     toolId = (tool as Tool).id;
 
-    // Create agent-tool relationship with security settings
-    const agentTool = await AgentToolModel.create(agentId, toolId, {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    organizationId = organization.id;
+
+    const policy = await ToolPolicyModel.create({
+      name: "Default policy",
+      toolId,
+      organizationId,
       allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
+      responseModifierTemplate: null,
+    });
+
+    const agentTool = await AgentToolModel.create(agentId, toolId, {
+      toolPolicyId: policy.id,
     });
     agentToolId = agentTool.id;
   });
+
+  async function createPolicyForTool(
+    toolId: string,
+    overrides?: Partial<{
+      allowUsageWhenUntrustedDataIsPresent: boolean;
+      toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+    }>,
+  ) {
+    return ToolPolicyModel.create({
+      name: `Proxy Policy ${Math.random()}`,
+      toolId,
+      organizationId,
+      allowUsageWhenUntrustedDataIsPresent:
+        overrides?.allowUsageWhenUntrustedDataIsPresent ?? false,
+      toolResultTreatment: overrides?.toolResultTreatment ?? "untrusted",
+      responseModifierTemplate: null,
+    });
+  }
 
   describe("evaluateIfContextIsTrusted", () => {
     test("returns trusted context when no tool calls exist", async () => {
@@ -326,10 +362,11 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const trustedTool = await ToolModel.findByName("trusted_tool");
       const trustedToolId = (trustedTool as Tool).id;
 
-      // Create agent-tool relationship with trusted treatment
-      await AgentToolModel.create(agentId, trustedToolId, {
-        allowUsageWhenUntrustedDataIsPresent: false,
+      const policy = await createPolicyForTool(trustedToolId, {
         toolResultTreatment: "trusted",
+      });
+      await AgentToolModel.create(agentId, trustedToolId, {
+        toolPolicyId: policy.id,
       });
 
       const commonMessages: CommonMessage[] = [
@@ -370,13 +407,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const tool = await ToolModel.findByName("default_trusted_tool");
       const trustedToolId = (tool as Tool).id;
 
-      // Create agent-tool relationship with trusted treatment
+      const policy = await createPolicyForTool(trustedToolId, {
+        toolResultTreatment: "trusted",
+      });
       const trustedAgentTool = await AgentToolModel.create(
         agentId,
         trustedToolId,
         {
-          allowUsageWhenUntrustedDataIsPresent: false,
-          toolResultTreatment: "trusted",
+          toolPolicyId: policy.id,
         },
       );
 

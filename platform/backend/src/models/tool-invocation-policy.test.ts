@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
+import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import ToolPolicyModel from "./tool-policy";
 
 describe("ToolInvocationPolicyModel", () => {
   const toolName = "test-tool";
@@ -10,7 +12,7 @@ describe("ToolInvocationPolicyModel", () => {
   let toolId: string;
   let agentToolId: string;
 
-  beforeEach(async ({ makeAgent, makeTool }) => {
+  beforeEach(async ({ makeAgent, makeTool, makeAgentTool }) => {
     // Create test agent
     const agent = await makeAgent();
     agentId = agent.id;
@@ -19,13 +21,33 @@ describe("ToolInvocationPolicyModel", () => {
     const tool = await makeTool({ agentId: agent.id, name: toolName });
     toolId = tool.id;
 
-    // Create agent-tool relationship with security config
-    const agentTool = await AgentToolModel.create(agentId, toolId, {
+    const agentTool = await makeAgentTool(agent.id, toolId, {
       allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
     });
     agentToolId = agentTool.id;
   });
+
+  async function createPolicyForTool(
+    toolId: string,
+    overrides?: Partial<{
+      allowUsageWhenUntrustedDataIsPresent: boolean;
+      toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      responseModifierTemplate: string | null;
+    }>,
+  ) {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    return ToolPolicyModel.create({
+      name: `Policy ${Math.random()}`,
+      toolId,
+      organizationId: organization.id,
+      allowUsageWhenUntrustedDataIsPresent:
+        overrides?.allowUsageWhenUntrustedDataIsPresent ?? false,
+      toolResultTreatment: overrides?.toolResultTreatment ?? "untrusted",
+      responseModifierTemplate: overrides?.responseModifierTemplate ?? null,
+    });
+  }
 
   describe("evaluate", () => {
     describe("basic policy evaluation", () => {
@@ -191,10 +213,11 @@ describe("ToolInvocationPolicyModel", () => {
           permissiveTool as NonNullable<typeof permissiveTool>
         ).id;
 
-        // Create agent-tool relationship with permissive security config
-        await AgentToolModel.create(agentId, permissiveToolId, {
+        const policy = await createPolicyForTool(permissiveToolId, {
           allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: "untrusted",
+        });
+        await AgentToolModel.create(agentId, permissiveToolId, {
+          toolPolicyId: policy.id,
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -222,13 +245,14 @@ describe("ToolInvocationPolicyModel", () => {
         );
         const permissiveToolId = (tool as NonNullable<typeof tool>).id;
 
-        // Create agent-tool relationship with permissive security config
+        const policy = await createPolicyForTool(permissiveToolId, {
+          allowUsageWhenUntrustedDataIsPresent: true,
+        });
         const permissiveAgentTool = await AgentToolModel.create(
           agentId,
           permissiveToolId,
           {
-            allowUsageWhenUntrustedDataIsPresent: true,
-            toolResultTreatment: "untrusted",
+            toolPolicyId: policy.id,
           },
         );
 
@@ -267,10 +291,12 @@ describe("ToolInvocationPolicyModel", () => {
         const tool = await ToolModel.findByName("gmail-sendEmail");
         const toolId = (tool as NonNullable<typeof tool>).id;
 
-        // Create agent-tool relationship with permissive security config
-        const agentTool = await AgentToolModel.create(agentId, toolId, {
+        const policy = await createPolicyForTool(toolId, {
           allowUsageWhenUntrustedDataIsPresent: true,
           toolResultTreatment: "untrusted",
+        });
+        const agentTool = await AgentToolModel.create(agentId, toolId, {
+          toolPolicyId: policy.id,
         });
 
         // Create a block_always policy that checks for suspicious content in email body

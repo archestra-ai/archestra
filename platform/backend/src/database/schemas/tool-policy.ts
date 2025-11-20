@@ -6,6 +6,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { ToolResultTreatment } from "@/types";
 
 import organizationsTable from "./organization";
 import toolsTable from "./tool";
@@ -30,6 +31,7 @@ const toolPoliciesTable = pgTable("tool_policies", {
     .notNull()
     .default(false),
   toolResultTreatment: varchar("tool_result_treatment", { length: 50 })
+    .$type<ToolResultTreatment>()
     .notNull()
     .default("untrusted"),
   responseModifierTemplate: text("response_modifier_template"),

@@ -3421,9 +3421,7 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-            responseModifierTemplate: string | null;
+            toolPolicyId: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             createdAt: string;
@@ -3458,6 +3456,17 @@ export type GetAllAgentToolsResponses = {
                 mcpServerName: string | null;
                 mcpServerCatalogId: string | null;
             };
+            toolPolicy: {
+                id: string;
+                createdAt: string;
+                updatedAt: string;
+                name: string;
+                toolId: string;
+                organizationId: string;
+                allowUsageWhenUntrustedDataIsPresent: boolean;
+                toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+                responseModifierTemplate: string | null;
+            } | null;
         }>;
         pagination: {
             currentPage: number;
@@ -3556,6 +3565,7 @@ export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        toolPolicyId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -3642,6 +3652,7 @@ export type BulkAssignToolsData = {
             toolId: string;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
+            toolPolicyId?: string | null;
         }>;
     };
     path?: never;
@@ -3730,87 +3741,6 @@ export type BulkAssignToolsResponses = {
 };
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
-
-export type BulkUpdateAgentToolsData = {
-    body: {
-        ids: Array<string>;
-        field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
-        value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agent-tools/bulk-update';
-};
-
-export type BulkUpdateAgentToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
-
-export type BulkUpdateAgentToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        updatedCount: number;
-    };
-};
-
-export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
 
 export type GetAgentToolsData = {
     body?: never;
@@ -3915,11 +3845,9 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        toolPolicyId?: string | null;
     };
     path: {
         id: string;
@@ -3995,9 +3923,7 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate?: string | null;
+        toolPolicyId?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         createdAt?: string;

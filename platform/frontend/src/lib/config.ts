@@ -42,13 +42,20 @@ const getWebSocketUrl = (): string => {
 
 /**
  * Configuration object for the frontend application.
+ * Use process.env.NEXT_PUBLIC_xxxx to access build-time variables in build-time,
+ * and env('NEXT_PUBLIC_xxxx') to access the runtime variables in runtime.
+ *
+ * For example, doing `enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS")` results in `enabled: undefined`,
+ * because the runtime variable isn't yet available in build-time.
  */
 export default {
   api: {
     /**
      * Display URL for showing to users (absolute URL for external agents).
      */
-    displayProxyUrl: getDisplayProxyUrl(),
+    get displayProxyUrl() {
+      return getDisplayProxyUrl();
+    },
     /**
      * Base URL for frontend requests (empty to use relative URLs with Next.js rewrites).
      */
@@ -58,12 +65,16 @@ export default {
     /**
      * WebSocket URL for real-time communication
      */
-    url: getWebSocketUrl(),
+    get url() {
+      return getWebSocketUrl();
+    },
   },
   debug: process.env.NODE_ENV !== "production",
   posthog: {
     // Analytics is enabled by default, disabled only when explicitly set to "disabled"
-    enabled: env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled",
+    get enabled() {
+      return env("NEXT_PUBLIC_ARCHESTRA_ANALYTICS") !== "disabled";
+    },
     token: "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7",
     config: {
       api_host: "https://eu.i.posthog.com",
@@ -74,26 +85,37 @@ export default {
     /**
      * Base Docker image used for MCP servers (shown in UI for reference).
      */
-    baseMcpServerDockerImage:
-      env("NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE") ||
-      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+    get baseMcpServerDockerImage() {
+      return (
+        env("NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE") ||
+        "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+      );
+    },
   },
   features: {
     /**
      * Enable team-based authentication/installation for MCP servers.
      * Disabled by default.
      */
-    enableTeamAuth: env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true",
+    get enableTeamAuth() {
+      return env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true";
+    },
   },
   /**
    * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
    */
-  enterpriseLicenseActivated:
-    env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true",
+  get enterpriseLicenseActivated() {
+    return env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true";
+  },
   sentry: {
-    dsn: env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "",
-    environment:
-      env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
-      environment,
+    get dsn() {
+      return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "";
+    },
+    get environment() {
+      return (
+        env("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")?.toLowerCase() ||
+        environment
+      );
+    },
   },
 };

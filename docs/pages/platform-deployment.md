@@ -12,83 +12,6 @@ This document is human-built, shouldn't be updated with AI. Don't change anythin
 
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
 
-## Environment Variables
-
-The following environment variables can be used to configure Archestra Platform:
-
-- **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
-  - Format: `postgresql://user:password@host:5432/database`
-  - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
-  - Required for production deployments with external database
-
-- **`ARCHESTRA_API_BASE_URL`** - Base URL for the Archestra API proxy. This is where your agents should connect to instead of the LLM provider directly.
-  - Default: `http://localhost:9000`
-  - Example: `http://localhost:9001` or `https://api.example.com`
-  - Note: This configures both the port where the backend API server listens (parsed from the URL) and the base URL that the frontend uses to connect to the backend
-
-- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
-  - Example: `https://frontend.example.com`
-  - Optional for local development
-
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
-
-- **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
-  - Auto-generated once on first run. Set manually if you need to control the secret value.
-  - Example: `something-really-really-secret-12345`
-
-- **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
-  - Default: `admin@localhost.ai`
-
-- **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password for the default Archestra Admin user. Set once on first-run.
-  - Default: `password`
-  - Note: Change this to a secure password for production deployments
-
-- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
-  - Default: `default`
-  - Example: `archestra-mcp` or `production`
-
-- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
-  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
-  - Can be overridden per individual MCP server.
-
-- **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
-  - Default: `true`
-  - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
-
-- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to custom kubeconfig file. Mount the required kubeconfig as volume inside the
-  - Optional: Uses default locations if not specified
-  - Example: `/path/to/kubeconfig`
-
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
-  - Default: `http://localhost:4318/v1/traces`
-
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication
-  - Optional: Only used if both username and password are provided
-  - Example: `your-username`
-
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication
-  - Optional: Only used if both username and password are provided
-  - Example: `your-password`
-
-- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication
-  - Optional: Takes precedence over basic authentication if provided
-  - Example: `your-bearer-token`
-
-- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
-
-- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
-  - Default: `info`
-  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-
-- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access
-  - Default: `archestra-metrics-secret`
-  - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
-
 ## Docker Deployment
 
 Docker deployment provides the fastest way to get started with Archestra Platform, ideal for development and testing purposes.
@@ -253,3 +176,80 @@ Then visit:
 For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
 
 For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+
+## Environment Variables
+
+The following environment variables can be used to configure Archestra Platform:
+
+- **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
+  - Format: `postgresql://user:password@host:5432/database`
+  - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
+  - Required for production deployments with external database
+
+- **`ARCHESTRA_API_BASE_URL`** - Base URL for the Archestra API proxy. This is where your agents should connect to instead of the LLM provider directly.
+  - Default: `http://localhost:9000`
+  - Example: `http://localhost:9001` or `https://api.example.com`
+  - Note: This configures both the port where the backend API server listens (parsed from the URL) and the base URL that the frontend uses to connect to the backend
+
+- **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
+  - Example: `https://frontend.example.com`
+  - Optional for local development
+
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
+  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
+  - Required when using different domains or subdomains for frontend and backend
+
+- **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
+  - Auto-generated once on first run. Set manually if you need to control the secret value.
+  - Example: `something-really-really-secret-12345`
+
+- **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
+  - Default: `admin@localhost.ai`
+
+- **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password for the default Archestra Admin user. Set once on first-run.
+  - Default: `password`
+  - Note: Change this to a secure password for production deployments
+
+- **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
+  - Default: `default`
+  - Example: `archestra-mcp` or `production`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
+  - Can be overridden per individual MCP server.
+
+- **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
+  - Default: `true`
+  - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
+
+- **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to custom kubeconfig file. Mount the required kubeconfig as volume inside the
+  - Optional: Uses default locations if not specified
+  - Example: `/path/to/kubeconfig`
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
+  - Default: `http://localhost:4318/v1/traces`
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication
+  - Optional: Only used if both username and password are provided
+  - Example: `your-username`
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication
+  - Optional: Only used if both username and password are provided
+  - Example: `your-password`
+
+- **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication
+  - Optional: Takes precedence over basic authentication if provided
+  - Example: `your-bearer-token`
+
+- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
+  - Default: `enabled`
+  - Set to `disabled` to opt-out of analytics
+
+- **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
+  - Default: `info`
+  - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
+
+- **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access
+  - Default: `archestra-metrics-secret`
+  - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`

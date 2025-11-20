@@ -50,18 +50,19 @@ jobs:
 
   platform-e2e-tests:
     name: Platform e2e Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # runs-on: ubuntu-latest
     permissions:
       contents: read
-    container:
-      image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest
-      options: --user 0 --privileged --volume /var/run/docker.sock:/var/run/docker.sock
-      # https://docs.blacksmith.sh/blacksmith-caching/dependencies-actions#using-the-blacksmith-cache-inside-a-container
-      env:
-        # BLACKSMITH_CACHE_TOKEN: ${{ env.BLACKSMITH_CACHE_TOKEN }}
-        # BLACKSMITH_CACHE_URL: ${{ env.BLACKSMITH_CACHE_URL }}
-        # GITHUB_REPO_NAME: ${{ env.GITHUB_REPO_NAME }}
-        KUBECONFIG: /github/home/.kube/config
+    # container:
+    #   image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/e2e-test-ci:latest
+    #   options: --user 0 --privileged --volume /var/run/docker.sock:/var/run/docker.sock
+    #   # https://docs.blacksmith.sh/blacksmith-caching/dependencies-actions#using-the-blacksmith-cache-inside-a-container
+    #   env:
+    #     # BLACKSMITH_CACHE_TOKEN: ${{ env.BLACKSMITH_CACHE_TOKEN }}
+    #     # BLACKSMITH_CACHE_URL: ${{ env.BLACKSMITH_CACHE_URL }}
+    #     # GITHUB_REPO_NAME: ${{ env.GITHUB_REPO_NAME }}
+    #     KUBECONFIG: /github/home/.kube/config
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -80,28 +81,36 @@ jobs:
         working-directory: ./platform
         run: cp .env.example .env
 
-      - name: Create Kind cluster
+      - name: Install Kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          NETWORK_NAME=$(docker network ls --filter "label=bdf586" --format "{{.Name}}" | head -n 1)
-          export KIND_EXPERIMENTAL_DOCKER_NETWORK="${NETWORK_NAME:-kind}"
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        with:
+          config: .github/kind.yaml
+          cluster_name: archestra-ci-cluster
+          install_only: false
 
-          if ! kind get clusters | grep -q "archestra-ci-cluster"; then
-            kind create cluster --name archestra-ci-cluster --config .github/kind.yaml --wait 120s
-          else
-            echo "Kind cluster already exists"
-          fi
+      # - name: Create Kind cluster
+      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      #   run: |
+      #     NETWORK_NAME=$(docker network ls --filter "label=bdf586" --format "{{.Name}}" | head -n 1)
+      #     export KIND_EXPERIMENTAL_DOCKER_NETWORK="${NETWORK_NAME:-kind}"
 
-          RUNNER_CONTAINER_ID=$(cat /etc/hostname 2>/dev/null || true)
-          if [ -n "$RUNNER_CONTAINER_ID" ]; then
-            echo "Connecting runner container ${RUNNER_CONTAINER_ID} to $KIND_EXPERIMENTAL_DOCKER_NETWORK network"
-            docker network connect "$KIND_EXPERIMENTAL_DOCKER_NETWORK" "$RUNNER_CONTAINER_ID" >/dev/null 2>&1 || echo "Runner container already connected to $KIND_EXPERIMENTAL_DOCKER_NETWORK"
-          else
-            echo "Unable to determine runner container id; skipping network connect"
-          fi
+      #     if ! kind get clusters | grep -q "archestra-ci-cluster"; then
+      #       kind create cluster --name archestra-ci-cluster --config .github/kind.yaml --wait 120s
+      #     else
+      #       echo "Kind cluster already exists"
+      #     fi
 
-          mkdir -p ~/.kube
-          kind get kubeconfig --name archestra-ci-cluster --internal > ~/.kube/config
+      #     RUNNER_CONTAINER_ID=$(cat /etc/hostname 2>/dev/null || true)
+      #     if [ -n "$RUNNER_CONTAINER_ID" ]; then
+      #       echo "Connecting runner container ${RUNNER_CONTAINER_ID} to $KIND_EXPERIMENTAL_DOCKER_NETWORK network"
+      #       docker network connect "$KIND_EXPERIMENTAL_DOCKER_NETWORK" "$RUNNER_CONTAINER_ID" >/dev/null 2>&1 || echo "Runner container already connected to $KIND_EXPERIMENTAL_DOCKER_NETWORK"
+      #     else
+      #       echo "Unable to determine runner container id; skipping network connect"
+      #     fi
+
+      #     mkdir -p ~/.kube
+      #     kind get kubeconfig --name archestra-ci-cluster --internal > ~/.kube/config
 
       - name: Debug Kind cluster
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -130,20 +139,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
-      - name: Set up Docker Buildx
+      - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: docker/setup-buildx-action@v3
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        # uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
           load: true
           tags: archestra/platform:ci-test
+
+      # - name: Set up Docker Buildx
+      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      #   uses: docker/setup-buildx-action@v3
+
+      # - name: Build Docker image
+      #   if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+      #   # uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: ./platform
+      #     file: ./platform/Dockerfile
+      #     push: false
+      #     load: true
+      #     tags: archestra/platform:ci-test
 
       - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -268,6 +291,26 @@ jobs:
         run: |
           echo "::error::Database migrations need to be generated. Please run 'pnpm db:generate' locally and commit the changes."
           exit 1
+
+      - name: Get Playwright version
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform/e2e-tests
+        run: |
+          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
+
+      - name: Cache Playwright binaries and dependencies
+        id: playwright-cache
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
+
+      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
+      - name: Install Playwright browsers
+        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: ./platform/e2e-tests
+        run: pnpm exec playwright install --with-deps chromium webkit firefox
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

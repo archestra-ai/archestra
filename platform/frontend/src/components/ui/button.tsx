@@ -42,19 +42,20 @@ export type ButtonProps = React.ComponentProps<"button"> &
   };
 
 function Button({
-  className: defaultClassName,
+  className,
   variant,
   size,
   asChild = false,
   ...props
 }: ButtonProps) {
   const Comp = asChild ? Slot : "button";
-  const className = cn(
-    props.disabled ? "cursor-not-allowed" : "cursor-pointer",
-    buttonVariants({ variant, size, className: defaultClassName }),
+  return (
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
   );
-
-  return <Comp data-slot="button" className={className} {...props} />;
 }
 
 export { Button, buttonVariants };

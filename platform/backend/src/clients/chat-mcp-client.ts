@@ -16,6 +16,28 @@ const MCP_GATEWAY_URL = "http://localhost:9000/v1/mcp";
 const clientCache = new Map<string, Client>();
 
 /**
+ * Tool cache per agent with TTL to avoid hammering MCP Gateway
+ */
+const TOOL_CACHE_TTL_MS = 30_000; // 30 seconds
+const toolCache = new Map<
+  string,
+  { tools: Record<string, Tool>; expiresAt: number }
+>();
+
+export const __test = {
+  setCachedClient(agentId: string, client: Client) {
+    clientCache.set(agentId, client);
+  },
+  clearToolCache(agentId?: string) {
+    if (agentId) {
+      toolCache.delete(agentId);
+    } else {
+      toolCache.clear();
+    }
+  },
+};
+
+/**
  * Clear cached client for a specific agent
  * Should be called when MCP Gateway sessions are cleared
  *
@@ -53,6 +75,7 @@ export function clearChatMcpClient(agentId: string): void {
       },
       "Removed MCP client from cache",
     );
+    toolCache.delete(agentId);
   } else {
     logger.info(
       { agentId },
@@ -176,6 +199,20 @@ function normalizeJsonSchema(schema: any): any {
 export async function getChatMcpTools(
   agentId: string,
 ): Promise<Record<string, Tool>> {
+  const cachedTools = toolCache.get(agentId);
+  if (cachedTools && cachedTools.expiresAt > Date.now()) {
+    logger.info(
+      {
+        agentId,
+        toolCount: Object.keys(cachedTools.tools).length,
+      },
+      "Returning cached MCP tools for chat",
+    );
+    return cachedTools.tools;
+  } else if (cachedTools) {
+    toolCache.delete(agentId);
+  }
+
   logger.info({ agentId }, "getChatMcpTools() called - fetching client...");
   const client = await getChatMcpClient(agentId);
 
@@ -278,6 +315,11 @@ export async function getChatMcpTools(
       { agentId, convertedToolCount: Object.keys(aiTools).length },
       "Successfully converted MCP tools to AI SDK Tool format",
     );
+
+    toolCache.set(agentId, {
+      tools: aiTools,
+      expiresAt: Date.now() + TOOL_CACHE_TTL_MS,
+    });
 
     return aiTools;
   } catch (error) {

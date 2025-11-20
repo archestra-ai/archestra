@@ -117,7 +117,12 @@ class TokenPriceModel {
         pricePerMillionOutput: "50.00", // Default $50 per million tokens
       }));
 
-      await db.insert(schema.tokenPricesTable).values(defaultPrices);
+      await db
+        .insert(schema.tokenPricesTable)
+        .values(defaultPrices)
+        .onConflictDoNothing({
+          target: schema.tokenPricesTable.model,
+        });
     }
   }
 }

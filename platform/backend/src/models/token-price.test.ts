@@ -532,5 +532,29 @@ describe("TokenPriceModel", () => {
 
       expect(afterCount).toBe(beforeCount);
     });
+
+    test("is idempotent even when called concurrently", async ({
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const agent = await makeAgent({ name: "Concurrency Agent" });
+
+      await makeInteraction(agent.id, {
+        model: "gpt-concurrent",
+        inputTokens: 80,
+        outputTokens: 120,
+      });
+
+      await Promise.all([
+        TokenPriceModel.ensureAllModelsHavePricing(),
+        TokenPriceModel.ensureAllModelsHavePricing(),
+      ]);
+
+      const prices = await TokenPriceModel.findAll();
+      const matches = prices.filter(
+        (price) => price.model === "gpt-concurrent",
+      );
+      expect(matches).toHaveLength(1);
+    });
   });
 });

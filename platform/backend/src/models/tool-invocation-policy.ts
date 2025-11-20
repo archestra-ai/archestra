@@ -82,7 +82,7 @@ class ToolInvocationPolicyModel {
       .select({
         ...getTableColumns(schema.toolInvocationPoliciesTable),
         allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+          schema.toolPoliciesTable.allowUsageWhenUntrustedDataIsPresent,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -95,6 +95,10 @@ class ToolInvocationPolicyModel {
       .innerJoin(
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         // Filter to policies that match the agent and tool

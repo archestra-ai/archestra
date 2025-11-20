@@ -428,7 +428,7 @@ class ToolModel {
       .select({
         toolName: schema.toolsTable.name,
         responseModifierTemplate:
-          schema.agentToolsTable.responseModifierTemplate,
+          schema.toolPoliciesTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
@@ -452,6 +452,10 @@ class ToolModel {
       .leftJoin(
         schema.internalMcpCatalogTable,
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         and(

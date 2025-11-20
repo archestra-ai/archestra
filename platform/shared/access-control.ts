@@ -158,7 +158,6 @@ export const RouteId = {
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
-  BulkUpdateAgentTools: "bulkUpdateAgentTools",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -384,10 +383,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.BulkAssignTools]: {
     profile: ["update"],
-  },
-  [RouteId.BulkUpdateAgentTools]: {
-    profile: ["update"],
-    tool: ["update"],
   },
   [RouteId.UnassignToolFromAgent]: {
     profile: ["update"],

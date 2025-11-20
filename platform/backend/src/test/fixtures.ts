@@ -9,15 +9,16 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
   ToolInvocationPolicyModel,
   ToolModel,
+  ToolPolicyModel,
   TrustedDataPolicyModel,
 } from "@/models";
 import type {
   Agent,
-  AgentTool,
   InsertAccount,
   InsertConversation,
   InsertInteraction,
@@ -196,23 +197,65 @@ async function makeTool(
 /**
  * Creates a test agent-tool relationship using the AgentTool model
  */
+type AgentToolOverrides = {
+  credentialSourceMcpServerId?: string | null;
+  executionSourceMcpServerId?: string | null;
+  toolPolicy?: Partial<{
+    name: string;
+    allowUsageWhenUntrustedDataIsPresent: boolean;
+    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+    responseModifierTemplate: string | null;
+    organizationId: string;
+  }>;
+  allowUsageWhenUntrustedDataIsPresent?: boolean;
+  toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+  responseModifierTemplate?: string | null;
+};
+
 async function makeAgentTool(
   agentId: string,
   toolId: string,
-  overrides: Partial<
-    Pick<
-      AgentTool,
-      | "allowUsageWhenUntrustedDataIsPresent"
-      | "toolResultTreatment"
-      | "credentialSourceMcpServerId"
-      | "executionSourceMcpServerId"
-    >
-  > = {},
+  overrides: AgentToolOverrides = {},
 ) {
+  let toolPolicyId: string | null = null;
+
+  if (
+    overrides.toolPolicy ||
+    overrides.allowUsageWhenUntrustedDataIsPresent !== undefined ||
+    overrides.toolResultTreatment ||
+    overrides.responseModifierTemplate !== undefined
+  ) {
+    const policyOverrides = overrides.toolPolicy ?? {};
+    const organization =
+      policyOverrides.organizationId ??
+      (await OrganizationModel.getOrCreateDefaultOrganization()).id;
+
+    const policy = await ToolPolicyModel.create({
+      name:
+        policyOverrides.name || `Policy ${crypto.randomUUID().substring(0, 8)}`,
+      toolId,
+      organizationId: organization,
+      allowUsageWhenUntrustedDataIsPresent:
+        policyOverrides.allowUsageWhenUntrustedDataIsPresent ??
+        overrides.allowUsageWhenUntrustedDataIsPresent ??
+        false,
+      toolResultTreatment:
+        policyOverrides.toolResultTreatment ??
+        overrides.toolResultTreatment ??
+        "untrusted",
+      responseModifierTemplate:
+        policyOverrides.responseModifierTemplate ??
+        overrides.responseModifierTemplate ??
+        null,
+    });
+
+    toolPolicyId = policy.id;
+  }
+
   return await AgentToolModel.create(agentId, toolId, {
-    allowUsageWhenUntrustedDataIsPresent: false,
-    toolResultTreatment: "untrusted" as const,
-    ...overrides,
+    credentialSourceMcpServerId: overrides.credentialSourceMcpServerId ?? null,
+    executionSourceMcpServerId: overrides.executionSourceMcpServerId ?? null,
+    toolPolicyId,
   });
 }
 

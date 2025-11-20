@@ -1,5 +1,4 @@
 import { and, count, eq, getTableColumns } from "drizzle-orm";
-
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -7,8 +6,8 @@ import {
 } from "@/database/utils/pagination";
 import type {
   InsertToolPolicy,
+  PaginationQuery,
   ToolPolicy,
-  ToolPolicyFilters,
   UpdateToolPolicy,
 } from "@/types";
 
@@ -18,116 +17,94 @@ class ToolPolicyModel {
       .insert(schema.toolPoliciesTable)
       .values(policy)
       .returning();
-
-    return created as ToolPolicy;
+    return created;
   }
 
-  static async findById(id: string): Promise<ToolPolicy | undefined> {
+  static async findById(id: string): Promise<ToolPolicy | null> {
     const [policy] = await db
       .select()
       .from(schema.toolPoliciesTable)
-      .where(eq(schema.toolPoliciesTable.id, id))
-      .limit(1);
-
-    return policy as ToolPolicy | undefined;
+      .where(eq(schema.toolPoliciesTable.id, id));
+    return policy;
   }
 
   static async findAllByToolId(toolId: string): Promise<ToolPolicy[]> {
-    const results = await db
+    const rows = await db
       .select()
       .from(schema.toolPoliciesTable)
-      .where(eq(schema.toolPoliciesTable.toolId, toolId))
-      .orderBy(schema.toolPoliciesTable.createdAt);
-
-    return results as ToolPolicy[];
-  }
-
-  static async findAllByOrganization(
-    organizationId: string,
-  ): Promise<ToolPolicy[]> {
-    const results = await db
-      .select()
-      .from(schema.toolPoliciesTable)
-      .where(eq(schema.toolPoliciesTable.organizationId, organizationId))
-      .orderBy(schema.toolPoliciesTable.createdAt);
-
-    return results as ToolPolicy[];
+      .where(eq(schema.toolPoliciesTable.toolId, toolId));
+    return rows;
   }
 
   static async search(
-    filters: ToolPolicyFilters,
+    pagination: PaginationQuery,
+    filters: { toolId?: string; organizationId?: string } = {},
   ): Promise<PaginatedResult<ToolPolicy>> {
-    const { limit, offset, toolId, organizationId } = filters;
-    const conditions = [] as Array<ReturnType<typeof eq>>;
+    const conditions = [];
 
-    if (toolId) {
-      conditions.push(eq(schema.toolPoliciesTable.toolId, toolId));
+    if (filters.toolId) {
+      conditions.push(eq(schema.toolPoliciesTable.toolId, filters.toolId));
     }
 
-    if (organizationId) {
+    if (filters.organizationId) {
       conditions.push(
-        eq(schema.toolPoliciesTable.organizationId, organizationId),
+        eq(schema.toolPoliciesTable.organizationId, filters.organizationId),
       );
     }
 
-    const whereClause = conditions.length ? and(...conditions) : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [data, totalResult] = await Promise.all([
+    const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(schema.toolPoliciesTable)
         .where(whereClause)
         .orderBy(schema.toolPoliciesTable.createdAt)
-        .limit(limit)
-        .offset(offset),
+        .limit(pagination.limit)
+        .offset(pagination.offset),
       db
-        .select({ count: count() })
+        .select({ total: count() })
         .from(schema.toolPoliciesTable)
         .where(whereClause),
     ]);
 
-    const total = Number(totalResult[0]?.count ?? 0);
+    return createPaginatedResult(data, Number(total), pagination);
+  }
 
-    return createPaginatedResult(data as ToolPolicy[], total, {
-      limit,
-      offset,
-    });
+  static async findByAgentTool(
+    agentToolId: string,
+  ): Promise<ToolPolicy | null> {
+    const [policy] = await db
+      .select({
+        ...getTableColumns(schema.toolPoliciesTable),
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
+      )
+      .where(eq(schema.agentToolsTable.id, agentToolId));
+
+    return (policy as ToolPolicy) ?? null;
   }
 
   static async update(
     id: string,
-    updates: UpdateToolPolicy,
-  ): Promise<ToolPolicy | undefined> {
-    const [updated] = await db
+    data: UpdateToolPolicy,
+  ): Promise<ToolPolicy | null> {
+    const [policy] = await db
       .update(schema.toolPoliciesTable)
-      .set(updates)
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(schema.toolPoliciesTable.id, id))
       .returning();
-
-    return updated as ToolPolicy | undefined;
+    return policy;
   }
 
   static async delete(id: string): Promise<boolean> {
     const result = await db
       .delete(schema.toolPoliciesTable)
       .where(eq(schema.toolPoliciesTable.id, id));
-
     return (result.rowCount ?? 0) > 0;
-  }
-
-  static async findByAgentTool(
-    agentToolId: string,
-  ): Promise<ToolPolicy | null> {
-    const [assignment] = await db
-      .select({ policy: getTableColumns(schema.toolPoliciesTable) })
-      .from(schema.agentToolsTable)
-      .leftJoin(
-        schema.toolPoliciesTable,
-        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
-      )
-      .where(eq(schema.agentToolsTable.id, agentToolId));
-
-    return (assignment?.policy as ToolPolicy | undefined) ?? null;
   }
 }
 

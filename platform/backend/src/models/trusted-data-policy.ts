@@ -211,7 +211,7 @@ class TrustedDataPolicyModel {
         operator: schema.trustedDataPoliciesTable.operator,
         policyValue: schema.trustedDataPoliciesTable.value,
         action: schema.trustedDataPoliciesTable.action,
-        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+        toolResultTreatment: schema.toolPoliciesTable.toolResultTreatment,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -224,6 +224,10 @@ class TrustedDataPolicyModel {
           schema.agentToolsTable.id,
           schema.trustedDataPoliciesTable.agentToolId,
         ),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         and(

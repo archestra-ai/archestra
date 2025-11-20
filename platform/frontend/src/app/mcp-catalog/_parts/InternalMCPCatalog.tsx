@@ -238,7 +238,6 @@ export function InternalMCPCatalog({
   };
 
   const handleLocalServerInstallConfirm = async (
-    userConfigValues: Record<string, string>,
     environmentValues: Record<string, string>,
     teams?: string[],
   ) => {
@@ -249,7 +248,6 @@ export function InternalMCPCatalog({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
       teams: teams || [],
-      userConfigValues,
       environmentValues,
       dontShowToast: true,
     });
@@ -720,17 +718,19 @@ export function InternalMCPCatalog({
         isInstalling={installMutation.isPending}
       />
 
-      <LocalServerInstallDialog
-        isOpen={isDialogOpened("local-install")}
-        onClose={() => {
-          closeDialog("local-install");
-          setLocalServerCatalogItem(null);
-        }}
-        onConfirm={handleLocalServerInstallConfirm}
-        catalogItem={localServerCatalogItem}
-        isInstalling={installMutation.isPending}
-        authType={isTeamMode ? "team" : "personal"}
-      />
+      {localServerCatalogItem && (
+        <LocalServerInstallDialog
+          isOpen={isDialogOpened("local-install")}
+          onClose={() => {
+            closeDialog("local-install");
+            setLocalServerCatalogItem(null);
+          }}
+          onConfirm={handleLocalServerInstallConfirm}
+          catalogItem={localServerCatalogItem}
+          isInstalling={installMutation.isPending}
+          authType={isTeamMode ? "team" : "personal"}
+        />
+      )}
     </div>
   );
 }

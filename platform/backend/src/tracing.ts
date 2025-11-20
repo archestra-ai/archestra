@@ -7,6 +7,10 @@ import {
 } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
+  BatchSpanProcessor,
+  type SpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
+import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
@@ -39,10 +43,32 @@ const resource = defaultResource().merge(
   }),
 );
 
+// Create span processors array
+// Always include the OTLP exporter for regular telemetry
+const spanProcessors: SpanProcessor[] = [new BatchSpanProcessor(traceExporter)];
+
+// Add Sentry span processor if Sentry is enabled
+if (sentryEnabled) {
+  spanProcessors.push(new SentrySpanProcessor());
+}
+
 // Initialize the OpenTelemetry SDK with auto-instrumentations
 const sdk = new NodeSDK({
   resource,
-  traceExporter,
+  /**
+   * IMPORTANT: We DON'T set `traceExporter` here because we're using custom `spanProcessors`.
+   *
+   * When you provide `traceExporter` to NodeSDK, it automatically wraps it in a
+   * BatchSpanProcessor internally. However, when you also provide `spanProcessors`,
+   * NodeSDK will ignore the `traceExporter` and only use the processors in `spanProcessors`.
+   *
+   * Since we need to send traces to BOTH Sentry and our OTLP endpoint, we manually
+   * create our span processors array below:
+   * 1. BatchSpanProcessor with OTLPTraceExporter - sends traces to our telemetry backend
+   * 2. SentrySpanProcessor (when enabled) - sends traces to Sentry
+   *
+   * This ensures traces are sent to both destinations simultaneously.
+   */
   instrumentations: [
     /**
      * If Sentry is configured, we don't need to instrument Fastify
@@ -73,11 +99,23 @@ const sdk = new NodeSDK({
   sampler:
     sentryEnabled && sentryClient ? new SentrySampler(sentryClient) : undefined,
   textMapPropagator: sentryEnabled ? new SentryPropagator() : undefined,
-  spanProcessors: sentryEnabled ? [new SentrySpanProcessor()] : undefined,
+  // Use multiple span processors to send traces to both Sentry and OTLP endpoints
+  spanProcessors,
 });
 
 // Start the SDK
 sdk.start();
+
+// Log telemetry configuration details
+logger.info(
+  {
+    sentryEnabled,
+    otlpEndpoint: traceExporterConfig.url,
+    spanProcessorCount: spanProcessors.length,
+    processors: spanProcessors.map((p) => p.constructor.name),
+  },
+  "OpenTelemetry SDK initialized with multiple span processors",
+);
 
 // Validate Sentry + OpenTelemetry integration if Sentry is configured
 if (sentryClient) {

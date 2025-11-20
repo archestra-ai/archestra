@@ -1,10 +1,9 @@
 "use client";
 
 import { CheckCircle, Clock, XCircle } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -66,7 +65,6 @@ export default function InstallationRequestsPage() {
                       <TableHead>Status</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead>Requested</TableHead>
-                      <TableHead className="w-24">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -89,9 +87,6 @@ export default function InstallationRequestsPage() {
                         <TableCell>
                           <Skeleton className="h-4 w-24" />
                         </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-8 w-16" />
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -108,7 +103,6 @@ export default function InstallationRequestsPage() {
                       <TableHead>Status</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead>Requested</TableHead>
-                      <TableHead className="w-24">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -135,6 +129,7 @@ export default function InstallationRequestsPage() {
 }
 
 function RequestRow({ request }: { request: McpServerInstallationRequest }) {
+  const router = useRouter();
   const statusConfig = {
     pending: {
       icon: Clock,
@@ -157,7 +152,12 @@ function RequestRow({ request }: { request: McpServerInstallationRequest }) {
   const StatusIcon = status.icon;
 
   return (
-    <TableRow className="cursor-pointer hover:bg-muted/50">
+    <TableRow
+      className="cursor-pointer hover:bg-muted/50"
+      onClick={() =>
+        router.push(`/mcp-catalog/installation-requests/${request.id}`)
+      }
+    >
       <TableCell>
         <div className="space-y-1">
           <p className="font-medium">Installation Request</p>
@@ -203,13 +203,6 @@ function RequestRow({ request }: { request: McpServerInstallationRequest }) {
             day: "numeric",
           })}
         </p>
-      </TableCell>
-      <TableCell>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/mcp-catalog/installation-requests/${request.id}`}>
-            View
-          </Link>
-        </Button>
       </TableCell>
     </TableRow>
   );

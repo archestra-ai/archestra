@@ -40,8 +40,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     arguments?: Array<string>;
     environment?: Array<{
       key: string;
-      type: "plain_text" | "secret";
-      value?: string;
+      type: "plain_text" | "secret" | "boolean" | "number";
+      value?: string; // Boolean type uses "true"/"false" strings, number type uses numeric strings
       promptOnInstallation: boolean;
     }>;
     dockerImage?: string;

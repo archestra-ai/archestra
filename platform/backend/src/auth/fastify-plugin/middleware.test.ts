@@ -1,6 +1,13 @@
+import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { describe, expect, test, vi } from "@/test";
+import { vi } from "vitest";
+import { describe, expect, test } from "@/test";
 import { Authnz } from "./middleware";
+
+// Mock Sentry
+vi.mock("@sentry/node", () => ({
+  setUser: vi.fn(),
+}));
 
 describe("Authnz", () => {
   const authnz = new Authnz();
@@ -135,6 +142,90 @@ describe("Authnz", () => {
           "Unauthenticated",
         );
       }
+    });
+  });
+
+  describe("setSentryUserContext", () => {
+    test("should set Sentry user context with all available fields", () => {
+      const mockUser = {
+        id: "user-123",
+        email: "test@example.com",
+        name: "Test User",
+      };
+
+      const mockRequest = {
+        headers: {
+          "x-forwarded-for": "192.168.1.1, 10.0.0.1",
+        },
+        ip: "127.0.0.1",
+        // biome-ignore lint/suspicious/noExplicitAny: test...
+      } as any;
+
+      authnz.setSentryUserContext(mockUser, mockRequest);
+
+      expect(Sentry.setUser).toHaveBeenCalledWith({
+        id: "user-123",
+        email: "test@example.com",
+        username: "Test User",
+        ip_address: "192.168.1.1",
+      });
+    });
+
+    test("should use email as username when name is not available", () => {
+      const mockUser = {
+        id: "user-456",
+        email: "another@example.com",
+      };
+
+      const mockRequest = {
+        headers: {},
+        ip: "127.0.0.1",
+      } as FastifyRequest;
+
+      authnz.setSentryUserContext(mockUser, mockRequest);
+
+      expect(Sentry.setUser).toHaveBeenCalledWith({
+        id: "user-456",
+        email: "another@example.com",
+        username: "another@example.com",
+        ip_address: "127.0.0.1",
+      });
+    });
+
+    test("should extract IP from x-real-ip header", () => {
+      const mockUser = { id: "user-789" };
+
+      const mockRequest = {
+        headers: {
+          "x-real-ip": "203.0.113.0",
+        },
+        ip: "127.0.0.1",
+        // biome-ignore lint/suspicious/noExplicitAny: test...
+      } as any;
+
+      authnz.setSentryUserContext(mockUser, mockRequest);
+
+      expect(Sentry.setUser).toHaveBeenCalledWith({
+        id: "user-789",
+        email: undefined,
+        username: undefined,
+        ip_address: "203.0.113.0",
+      });
+    });
+
+    test("should handle errors silently", () => {
+      const mockUser = { id: "user-error" };
+      const mockRequest = {} as FastifyRequest;
+
+      // Mock Sentry.setUser to throw an error
+      vi.mocked(Sentry.setUser).mockImplementationOnce(() => {
+        throw new Error("Sentry error");
+      });
+
+      // Should not throw
+      expect(() => {
+        authnz.setSentryUserContext(mockUser, mockRequest);
+      }).not.toThrow();
     });
   });
 });

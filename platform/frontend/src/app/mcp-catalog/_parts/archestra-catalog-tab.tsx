@@ -27,7 +27,6 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
-import { ConfigureEnvironmentDialog } from "./configure-environment-dialog";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
@@ -45,8 +44,6 @@ export function ArchestraCatalogTab({
   const [readmeServer, setReadmeServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
-    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
-  const [configureEnvServer, setConfigureEnvServer] =
     useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
@@ -84,9 +81,58 @@ export function ArchestraCatalogTab({
   const handleAddToCatalog = async (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
-    // For local servers, open the environment configuration dialog
+    const getValue = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ) => {
+      if (config.type === "boolean") {
+        return typeof config.default === "boolean"
+          ? String(config.default)
+          : "false";
+      }
+      if (config.type === "number" && typeof config.default === "number") {
+        return String(config.default);
+      }
+      return undefined;
+    };
+    const getValueType = (
+      config: NonNullable<
+        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+      >[string],
+    ): "boolean" | "number" | "secret" | "plain_text" => {
+      if (config.type === "boolean") {
+        return "boolean";
+      }
+      if (config.type === "number") {
+        return "number";
+      }
+      return config.sensitive ? "secret" : "plain_text";
+    };
+
+    // For local servers, construct environment from server.env and user_config
     if (server.server.type === "local") {
-      setConfigureEnvServer(server);
+      const environment = [
+        // Transform server.env entries
+        ...(server.server.env
+          ? Object.entries(server.server.env).map(([key, value]) => ({
+              key,
+              type: "plain_text" as const,
+              value,
+              promptOnInstallation: false,
+            }))
+          : []),
+        // Transform user_config entries
+        ...(server.user_config
+          ? Object.entries(server.user_config).map(([key, config]) => ({
+              key,
+              type: getValueType(config),
+              value: getValue(config),
+              promptOnInstallation: true,
+            }))
+          : []),
+      ];
+      await addServerToCatalog(server, environment);
       return;
     }
 
@@ -98,7 +144,7 @@ export function ArchestraCatalogTab({
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
     environment?: Array<{
       key: string;
-      type: "plain_text" | "secret";
+      type: "plain_text" | "secret" | "boolean" | "number";
       value?: string;
       promptOnInstallation: boolean;
     }>,
@@ -343,31 +389,6 @@ export function ArchestraCatalogTab({
       <RequestInstallationDialog
         server={requestServer}
         onClose={() => setRequestServer(null)}
-      />
-
-      <ConfigureEnvironmentDialog
-        isOpen={!!configureEnvServer}
-        onClose={() => setConfigureEnvServer(null)}
-        onConfirm={(environment) => {
-          if (configureEnvServer) {
-            addServerToCatalog(configureEnvServer, environment);
-            setConfigureEnvServer(null);
-          }
-        }}
-        serverName={configureEnvServer?.name || ""}
-        defaultEnvironment={
-          configureEnvServer?.server.type === "local" &&
-          configureEnvServer.server.env
-            ? Object.entries(configureEnvServer.server.env).map(
-                ([key, value]) => ({
-                  key,
-                  type: "plain_text" as const,
-                  value,
-                  promptOnInstallation: false,
-                }),
-              )
-            : []
-        }
       />
     </div>
   );

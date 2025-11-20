@@ -7,14 +7,24 @@ on:
         description: "Whether to force the checks to succeed"
         required: false
         type: boolean
+    secrets:
+      TURBOREPO_REMOTE_CACHING_TOKEN:
+        required: true
+      TURBOREPO_REMOTE_CACHING_TEAM:
+        required: true
 
 jobs:
   platform-linting-and-tests:
     name: Platform Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -39,7 +49,12 @@ jobs:
 
   platform-e2e-tests:
     name: Platform e2e Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -82,7 +97,7 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -91,6 +106,9 @@ jobs:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
+          build-args: |
+            TURBO_TEAM=${{ env.TURBO_TEAM }}
+            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
 
@@ -98,14 +116,12 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
 
-      - name: Deploy WireMock to Kubernetes
+      - name: Deploy Archestra Platform (and WireMock) with Helm
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          helm install wiremock ./platform/helm/wiremock --wait --timeout=2m
+          # No need to wait for wiremock as we wait in the next step when installing the platform
+          helm install wiremock ./platform/helm/wiremock
 
-      - name: Deploy Archestra Platform with Helm
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
           helm install archestra-platform ./platform/helm/archestra \
             --values .github/values-ci.yaml \
             --set archestra.image=archestra/platform:ci-test \
@@ -288,6 +304,8 @@ jobs:
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ./platform/helm/archestra

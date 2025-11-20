@@ -1,5 +1,8 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test...
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import { InternalMcpCatalogModel } from "@/models";
 import { beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent } from "@/types";
@@ -8,14 +11,13 @@ import {
   executeArchestraTool,
   getArchestraMcpTools,
   isArchestraMcpServerTool,
-  MCP_SERVER_NAME,
 } from "./archestra-mcp-server";
 
 describe("getArchestraMcpTools", () => {
-  test("should return an array of 23 tools", () => {
+  test("should return an array of 24 tools", () => {
     const tools = getArchestraMcpTools();
 
-    expect(tools).toHaveLength(23);
+    expect(tools).toHaveLength(24);
     expect(tools[0]).toHaveProperty("name");
     expect(tools[0]).toHaveProperty("title");
     expect(tools[0]).toHaveProperty("description");
@@ -106,14 +108,17 @@ describe("executeArchestraTool", () => {
   beforeEach(async ({ makeAgent }) => {
     testProfile = await makeAgent({ name: "Test Profile" });
     mockContext = {
-      profile: testProfile,
+      profile: {
+        id: testProfile.id,
+        name: testProfile.name,
+      },
     };
   });
 
   describe("whoami tool", () => {
     test("should return profile information", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}whoami`,
         undefined,
         mockContext,
       );
@@ -140,7 +145,7 @@ describe("executeArchestraTool", () => {
       });
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
         mockContext,
       );
@@ -156,7 +161,7 @@ describe("executeArchestraTool", () => {
     test("should return empty message when no items found", async () => {
       // No items created, so search should return empty
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
         mockContext,
       );
@@ -182,7 +187,7 @@ describe("executeArchestraTool", () => {
       });
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         { query: "Test" },
         mockContext,
       );
@@ -203,7 +208,7 @@ describe("executeArchestraTool", () => {
         .mockRejectedValue(new Error("Database error"));
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
         undefined,
         mockContext,
       );
@@ -221,7 +226,7 @@ describe("executeArchestraTool", () => {
   describe("create_profile tool", () => {
     test("should create a new profile with required fields only", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
         { name: "New Test Profile" },
         mockContext,
       );
@@ -247,7 +252,7 @@ describe("executeArchestraTool", () => {
       });
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
         {
           name: "Full Featured Profile",
           teams: [team.id],
@@ -268,7 +273,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when name is missing", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
         {},
         mockContext,
       );
@@ -281,7 +286,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when name is empty string", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
         { name: "   " },
         mockContext,
       );
@@ -301,7 +306,7 @@ describe("executeArchestraTool", () => {
         .mockRejectedValue(new Error("Database error"));
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_profile`,
         { name: "Test Profile" },
         mockContext,
       );
@@ -317,35 +322,36 @@ describe("executeArchestraTool", () => {
     });
   });
 
-  // MCP server installation request tool is temporarily disabled
-  describe("create_mcp_server_installation_request tool (disabled)", () => {
-    test("should throw error for disabled tool", async () => {
-      await expect(
-        executeArchestraTool(
-          `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-          {
-            external_catalog_id: "catalog-123",
-            request_reason: "Need this server for testing",
-          },
-          mockContext,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: `Tool '${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request' not found`,
-      });
+  describe("create_mcp_server_installation_request tool", () => {
+    test("should return instructions for completing the dialog", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
+        {
+          external_catalog_id: "catalog-123",
+          request_reason: "Need this server for testing",
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0]).toMatchObject({ type: "text" });
+      expect((result.content[0] as any).text).toContain(
+        "installation request dialog",
+      );
     });
   });
 
   describe("create_limit tool", () => {
     test("should create a token_cost limit", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -361,7 +367,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when required fields are missing", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
         },
@@ -374,7 +380,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when model is missing for token_cost limit", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
@@ -393,19 +399,19 @@ describe("executeArchestraTool", () => {
     test("should return all limits", async () => {
       // Create a limit first
       await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
         undefined,
         mockContext,
       );
@@ -416,19 +422,19 @@ describe("executeArchestraTool", () => {
 
     test("should filter limits by entity type", async () => {
       await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
         { entity_type: "profile" },
         mockContext,
       );
@@ -439,7 +445,7 @@ describe("executeArchestraTool", () => {
 
     test("should return message when no limits found", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_limits`,
         undefined,
         mockContext,
       );
@@ -452,13 +458,13 @@ describe("executeArchestraTool", () => {
   describe("update_limit tool", () => {
     test("should update a limit value", async () => {
       const createResult = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -469,7 +475,7 @@ describe("executeArchestraTool", () => {
       )?.[1];
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
         {
           id: limitId,
           limit_value: 2000000,
@@ -486,7 +492,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when id is missing", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
         {
           limit_value: 2000000,
         },
@@ -499,7 +505,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when limit not found", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}update_limit`,
         {
           id: "00000000-0000-0000-0000-000000000000",
           limit_value: 2000000,
@@ -515,13 +521,13 @@ describe("executeArchestraTool", () => {
   describe("delete_limit tool", () => {
     test("should delete a limit", async () => {
       const createResult = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
         {
           entity_type: "profile",
           entity_id: testProfile.id,
           limit_type: "token_cost",
           limit_value: 1000000,
-          model: "claude-3-5-sonnet-20241022",
+          model: ["claude-3-5-sonnet-20241022"],
         },
         mockContext,
       );
@@ -532,7 +538,7 @@ describe("executeArchestraTool", () => {
       )?.[1];
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
         {
           id: limitId,
         },
@@ -547,7 +553,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when id is missing", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
         {},
         mockContext,
       );
@@ -558,7 +564,7 @@ describe("executeArchestraTool", () => {
 
     test("should return error when limit not found", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}delete_limit`,
         {
           id: "00000000-0000-0000-0000-000000000000",
         },
@@ -573,7 +579,7 @@ describe("executeArchestraTool", () => {
   describe("get_profile_token_usage tool", () => {
     test("should return token usage for current profile", async () => {
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
         undefined,
         mockContext,
       );
@@ -593,7 +599,7 @@ describe("executeArchestraTool", () => {
       const otherProfile = await makeAgent({ name: "Other Profile" });
 
       const result = await executeArchestraTool(
-        `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_profile_token_usage`,
         { profile_id: otherProfile.id },
         mockContext,
       );

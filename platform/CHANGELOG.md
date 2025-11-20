@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.6.5](https://github.com/archestra-ai/archestra/compare/platform-v0.6.4...platform-v0.6.5) (2025-11-19)
+
+
+### Features
+
+* add MCP server installation request tool with UI dialog integration ([#1185](https://github.com/archestra-ai/archestra/issues/1185)) ([cf7a348](https://github.com/archestra-ai/archestra/commit/cf7a3486528630ca26d1d67110601d8f30bbd7dc))
+
+
+### Bug Fixes
+
+* add limit usage polling ([#1187](https://github.com/archestra-ai/archestra/issues/1187)) ([367e1fe](https://github.com/archestra-ai/archestra/commit/367e1fe794d83c9c6de54cc4d566529224d43651))
+* address `PromptModel` N+1 query ([#1195](https://github.com/archestra-ai/archestra/issues/1195)) ([ef66a97](https://github.com/archestra-ai/archestra/commit/ef66a97c015f234637d9f0d755a0b412ada58fcd))
+
+
+### Miscellaneous Chores
+
+* add env var to hide community section in sidebar ([#1191](https://github.com/archestra-ai/archestra/issues/1191)) ([e519de4](https://github.com/archestra-ai/archestra/commit/e519de4712614841b930f188e2c810cf0457cfd7))
+* add symlinked `AGENTS.md` ([#1190](https://github.com/archestra-ai/archestra/issues/1190)) ([1e9ddd8](https://github.com/archestra-ai/archestra/commit/1e9ddd81b66a29f446d9ae5a14dd99861bc6b0ca))
+* bulk update and loading indicator on tool assignment ([#1152](https://github.com/archestra-ai/archestra/issues/1152)) ([2a18e36](https://github.com/archestra-ai/archestra/commit/2a18e36b4aabef2a74b5fda99548388f3f178a1f))
+* handle LB request timeout ([#1182](https://github.com/archestra-ai/archestra/issues/1182)) ([348f6bb](https://github.com/archestra-ai/archestra/commit/348f6bbc4cf33fd30fa191348d0e1b06bff46697))
+* improve install from catalog ([#1189](https://github.com/archestra-ai/archestra/issues/1189)) ([01aca73](https://github.com/archestra-ai/archestra/commit/01aca73ade58739eb5c69e1778e8f6f79db52aa2))
+* rename branding toggle env to enterprise license activation ([#1196](https://github.com/archestra-ai/archestra/issues/1196)) ([5d08e45](https://github.com/archestra-ai/archestra/commit/5d08e45aa5d0b20e3d1cf7b1a0655c7e3e9bf1db))
+
+## [0.6.4](https://github.com/archestra-ai/archestra/compare/platform-v0.6.3...platform-v0.6.4) (2025-11-18)
+
+
+### Features
+
+* add ability to select all models in the cost limiter ([#1146](https://github.com/archestra-ai/archestra/issues/1146)) ([3618108](https://github.com/archestra-ai/archestra/commit/3618108c6cef0212f059a5bcb6e7b848927cdb76))
+* update `CLAUDE.md` ([#1168](https://github.com/archestra-ai/archestra/issues/1168)) ([0e5f764](https://github.com/archestra-ai/archestra/commit/0e5f764af7bff4e7b340acff5527b1a05a229a60))
+
+
+### Bug Fixes
+
+* address several (more) N+1 queries ([#1181](https://github.com/archestra-ai/archestra/issues/1181)) ([ffdc56d](https://github.com/archestra-ai/archestra/commit/ffdc56d6a4741300a29a91c8c5ebaa542a1dee34))
+* MCP install dropdown in logs dialog ([#1176](https://github.com/archestra-ai/archestra/issues/1176)) ([6607040](https://github.com/archestra-ai/archestra/commit/66070400673b115fdf753b5004815e0f00041afa))
+* otel exporter (when using Sentry) + parallelize consecutive DB queries in 2 spots ([#1184](https://github.com/archestra-ai/archestra/issues/1184)) ([c93807b](https://github.com/archestra-ai/archestra/commit/c93807b69f3121e644181e64ef982c8be6a155a2))
+* several N+1 query performance issues ([#1170](https://github.com/archestra-ai/archestra/issues/1170)) ([47ccf91](https://github.com/archestra-ai/archestra/commit/47ccf918bb654866217c7d35e11a98caa0a6e696))
+* show full error in chat ([#1157](https://github.com/archestra-ai/archestra/issues/1157)) ([e10928b](https://github.com/archestra-ai/archestra/commit/e10928b5857b2d5529928c157bb1c36ad66d577b))
+* show mcp server errors ([#1175](https://github.com/archestra-ai/archestra/issues/1175)) ([20e555b](https://github.com/archestra-ai/archestra/commit/20e555b8ac3c1d8639a76478bf2affbdf599904e))
+* show tool output errors ([#1174](https://github.com/archestra-ai/archestra/issues/1174)) ([92cbbb2](https://github.com/archestra-ai/archestra/commit/92cbbb23558cd2f566dbba9f1cef9fdb3beb06f2))
+* use first 15 characters of first message as chat fallback title ([#1177](https://github.com/archestra-ai/archestra/issues/1177)) ([bbaa1f9](https://github.com/archestra-ai/archestra/commit/bbaa1f9de86e794c00daf5bd44dcf1ee56d042db))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump glob from 10.4.5 to 10.5.0 in /platform/examples/mastra-ai ([#1180](https://github.com/archestra-ai/archestra/issues/1180)) ([ee6ed8c](https://github.com/archestra-ai/archestra/commit/ee6ed8ce95cd6eccb6434087fe47d1c77d0348de))
+* generated docs ([#1171](https://github.com/archestra-ai/archestra/issues/1171)) ([20ff591](https://github.com/archestra-ai/archestra/commit/20ff591b60b57afa9215a5f85e4a13e16ccbeded))
+* implement filtering by credential ([#1147](https://github.com/archestra-ai/archestra/issues/1147)) ([52e0e64](https://github.com/archestra-ai/archestra/commit/52e0e64dca6d8c4d9520fc8606fa7f29bf099d13))
+* several performance improvements + make `/tools` filters searchable ([#1183](https://github.com/archestra-ai/archestra/issues/1183)) ([1c770dc](https://github.com/archestra-ai/archestra/commit/1c770dcabaf1e4a87f91617beb9dd65109efe686))
+
 ## [0.6.3](https://github.com/archestra-ai/archestra/compare/platform-v0.6.2...platform-v0.6.3) (2025-11-18)
 
 

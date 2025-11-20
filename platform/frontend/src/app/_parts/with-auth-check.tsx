@@ -3,7 +3,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { requiredPagePermissionsMap } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactElement } from "react";
+import type React from "react";
 import { useEffect } from "react";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -16,11 +16,9 @@ const pathCorrespondsToAnAuthPage = (pathname: string) => {
   );
 };
 
-export function WithAuthCheck({
+export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   children,
-}: {
-  children: ReactElement;
-}): ReactElement | null {
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, isPending: isAuthCheckPending } =
@@ -100,4 +98,4 @@ export function WithAuthCheck({
   }
 
   return <>{children}</>;
-}
+};

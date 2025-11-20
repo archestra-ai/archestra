@@ -1025,6 +1025,13 @@ export type AnthropicMessagesResponseInput = {
     };
 };
 
+export type WebSocketMessageInput = {
+    type: 'hello-world';
+    payload: {
+        [key: string]: unknown;
+    };
+};
+
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
 
 export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
@@ -2043,6 +2050,13 @@ export type AnthropicMessagesResponse = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+    };
+};
+
+export type WebSocketMessage = {
+    type: 'hello-world';
+    payload: {
+        [key: string]: never;
     };
 };
 

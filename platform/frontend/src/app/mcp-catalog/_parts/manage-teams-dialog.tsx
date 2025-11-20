@@ -215,7 +215,6 @@ export function ManageTeamsDialog({
         <div className="py-4 space-y-4">
           {hasTeamAuthServer ? (
             <>
-              {/* Token Owner Selection */}
               <div className="space-y-2">
                 <Label htmlFor="select-owner">
                   Token Owner (which admin's credentials to use)
@@ -248,7 +247,6 @@ export function ManageTeamsDialog({
                 )}
               </div>
 
-              {/* Team Selection Section */}
               <div className="space-y-2">
                 <Label htmlFor="select-team">
                   Select Teams to Grant Access
@@ -284,7 +282,6 @@ export function ManageTeamsDialog({
                   )}
                 </div>
 
-                {/* Selected Teams for Granting Access */}
                 {selectedTeamIds.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {selectedTeamIds.map((teamId) => {
@@ -312,7 +309,6 @@ export function ManageTeamsDialog({
                 )}
               </div>
 
-              {/* Existing Teams Table */}
               {teamDetails.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No teams have been assigned to this server yet.

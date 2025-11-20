@@ -89,7 +89,6 @@ export function EnvironmentVariablesFormField<
         </p>
       ) : (
         <div className="border rounded-lg">
-          {/* Header Row */}
           <div className="grid grid-cols-[2fr_1.5fr_1fr_2fr_auto] gap-2 p-3 bg-muted/50 border-b">
             <div className="text-xs font-medium">Key</div>
             <div className="text-xs font-medium">Type</div>
@@ -97,9 +96,8 @@ export function EnvironmentVariablesFormField<
               Prompt on each installation
             </div>
             <div className="text-xs font-medium">Value</div>
-            <div className="w-9" /> {/* Spacer for trash icon */}
+            <div className="w-9" />
           </div>
-          {/* Data Rows */}
           {fields.map((field, index) => {
             const promptOnInstallation = form.watch(
               `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,

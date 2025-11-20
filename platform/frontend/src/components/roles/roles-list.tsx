@@ -227,7 +227,6 @@ export function RolesList() {
             </div>
           )}
 
-          {/* Custom Roles */}
           <div>
             <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
               Custom Roles

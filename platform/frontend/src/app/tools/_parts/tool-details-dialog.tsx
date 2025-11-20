@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -48,9 +49,11 @@ export function ToolDetailsDialog({
                 {agentTool.tool.name}
               </DialogTitle>
               {agentTool.tool.description && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {agentTool.tool.description}
-                </p>
+                <TruncatedText
+                  message={agentTool.tool.description}
+                  maxLength={200}
+                  className="text-sm text-muted-foreground mt-1"
+                />
               )}
             </div>
             <div className="flex gap-6 text-sm ml-6">

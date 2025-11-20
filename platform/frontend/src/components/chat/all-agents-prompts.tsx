@@ -82,7 +82,6 @@ function AgentSection({
   // Render agent section with header and prompts
   return (
     <div className="space-y-4">
-      {/* Agent Header */}
       <div className="flex items-center gap-3 pb-2 border-b">
         <h3 className="text-xl font-semibold">{agent.name}</h3>
         <Badge variant="secondary" className="text-xs">
@@ -109,7 +108,6 @@ function AgentSection({
         )}
       </div>
 
-      {/* Prompts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Empty prompt card - always first if agent matches search */}
         {agentMatchesSearch && (
@@ -134,7 +132,6 @@ function AgentSection({
           </Card>
         )}
 
-        {/* Regular prompt cards */}
         {filteredPrompts.map((prompt) => (
           <Card
             key={`${agent.id}-${prompt.id}`}
@@ -216,19 +213,17 @@ export function AllAgentsPrompts({ onSelectPrompt }: AllAgentsPromptsProps) {
           </p>
         </div>
 
-        {/* Search Input */}
         <div className="relative max-w-xl mx-auto">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search agents and prompts..."
+            placeholder="Search profiles and prompts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>
 
-        {/* Agent Sections */}
         {agents && agents.length > 0 ? (
           <div className="space-y-8">
             {agents.map((agent) => (
@@ -240,7 +235,6 @@ export function AllAgentsPrompts({ onSelectPrompt }: AllAgentsPromptsProps) {
               />
             ))}
 
-            {/* Unassigned Prompts Section */}
             {unassignedPrompts.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b">
@@ -290,13 +284,12 @@ export function AllAgentsPrompts({ onSelectPrompt }: AllAgentsPromptsProps) {
           </div>
         ) : (
           <div className="text-center py-12 text-muted-foreground">
-            <p>No agents available</p>
-            <p className="text-sm mt-1">Create an agent to get started</p>
+            <p>No profiles available</p>
+            <p className="text-sm mt-1">Create a profile to get started</p>
           </div>
         )}
       </div>
 
-      {/* Agent Selection Dialog */}
       <Dialog
         open={selectedPrompt !== null}
         onOpenChange={(open) => {
@@ -308,21 +301,21 @@ export function AllAgentsPrompts({ onSelectPrompt }: AllAgentsPromptsProps) {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Select an Agent</DialogTitle>
+            <DialogTitle>Select a Profile</DialogTitle>
             <DialogDescription>
-              Choose which agent to use with the prompt &quot;
+              Choose which profile to use with the prompt &quot;
               {selectedPrompt?.name}&quot;
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="agent-select">Agent</Label>
+              <Label htmlFor="agent-select">Profile</Label>
               <Select
                 value={selectedAgentId}
                 onValueChange={setSelectedAgentId}
               >
                 <SelectTrigger id="agent-select">
-                  <SelectValue placeholder="Select an agent..." />
+                  <SelectValue placeholder="Select a profile..." />
                 </SelectTrigger>
                 <SelectContent>
                   {agents?.map((agent) => (

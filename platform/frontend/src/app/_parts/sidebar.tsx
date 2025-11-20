@@ -204,7 +204,7 @@ const MainSideBarSection = ({
         </SidebarGroupContent>
       </SidebarGroup>
       <ChatSidebarSection />
-      {!config.hideArchestraBranding && (
+      {!config.enterpriseLicenseActivated && (
         <CommunitySideBarSection starCount={starCount} />
       )}
     </>

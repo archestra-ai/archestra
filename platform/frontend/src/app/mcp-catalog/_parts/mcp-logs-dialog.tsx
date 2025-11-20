@@ -275,7 +275,6 @@ export function McpLogsDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4 flex-1 min-h-0">
-          {/* Logs section */}
           <div className="flex flex-col gap-2 flex-1 min-h-0">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Container Logs</h3>
@@ -359,7 +358,6 @@ export function McpLogsDialog({
             </ScrollArea>
           </div>
 
-          {/* Command section */}
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold">Manual Command</h3>
             <div className="relative">

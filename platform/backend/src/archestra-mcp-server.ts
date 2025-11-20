@@ -1,5 +1,9 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+} from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -24,11 +28,8 @@ import {
 /**
  * Constants for Archestra MCP server
  */
-export const MCP_SERVER_NAME = "archestra";
 const TOOL_WHOAMI_NAME = "whoami";
 const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME = "search_private_mcp_registry";
-const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME =
-  "create_mcp_server_installation_request";
 const TOOL_CREATE_LIMIT_NAME = "create_limit";
 const TOOL_GET_LIMITS_NAME = "get_limits";
 const TOOL_UPDATE_LIMIT_NAME = "update_limit";
@@ -52,30 +53,29 @@ const TOOL_GET_MCP_SERVER_TOOLS_NAME = "get_mcp_server_tools";
 const TOOL_GET_PROFILE_NAME = "get_profile";
 
 // Construct fully-qualified tool names
-const TOOL_WHOAMI_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
-const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
-const _TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_NAME}`;
-const TOOL_CREATE_LIMIT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_LIMIT_NAME}`;
-const TOOL_GET_LIMITS_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LIMITS_NAME}`;
-const TOOL_UPDATE_LIMIT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_LIMIT_NAME}`;
-const TOOL_DELETE_LIMIT_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_LIMIT_NAME}`;
-const TOOL_GET_PROFILE_TOKEN_USAGE_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_TOKEN_USAGE_NAME}`;
-const TOOL_CREATE_PROFILE_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_PROFILE_NAME}`;
-const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICIES_NAME}`;
-const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICIES_NAME}`;
-const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TRUSTED_DATA_POLICY_NAME}`;
-const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME}`;
-const TOOL_GET_MCP_SERVERS_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVERS_NAME}`;
-const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVER_TOOLS_NAME}`;
-const TOOL_GET_PROFILE_FULL_NAME = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_NAME}`;
+const TOOL_WHOAMI_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_WHOAMI_NAME}`;
+const TOOL_SEARCH_PRIVATE_MCP_REGISTRY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_SEARCH_PRIVATE_MCP_REGISTRY_NAME}`;
+const TOOL_CREATE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_LIMIT_NAME}`;
+const TOOL_GET_LIMITS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_LIMITS_NAME}`;
+const TOOL_UPDATE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_LIMIT_NAME}`;
+const TOOL_DELETE_LIMIT_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_LIMIT_NAME}`;
+const TOOL_GET_PROFILE_TOKEN_USAGE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_TOKEN_USAGE_NAME}`;
+const TOOL_CREATE_PROFILE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_PROFILE_NAME}`;
+const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_NAME}`;
+const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICIES_NAME}`;
+const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TOOL_INVOCATION_POLICY_NAME}`;
+const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TOOL_INVOCATION_POLICY_NAME}`;
+const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_NAME}`;
+const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TOOL_INVOCATION_POLICY_NAME}`;
+const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICIES_NAME}`;
+const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_TRUSTED_DATA_POLICY_NAME}`;
+const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_TRUSTED_DATA_POLICY_NAME}`;
+const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_UPDATE_TRUSTED_DATA_POLICY_NAME}`;
+const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_DELETE_TRUSTED_DATA_POLICY_NAME}`;
+const TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_BULK_ASSIGN_TOOLS_TO_PROFILES_NAME}`;
+const TOOL_GET_MCP_SERVERS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVERS_NAME}`;
+const TOOL_GET_MCP_SERVER_TOOLS_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_MCP_SERVER_TOOLS_NAME}`;
+const TOOL_GET_PROFILE_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_GET_PROFILE_NAME}`;
 
 /**
  * Context for the Archestra MCP server
@@ -89,7 +89,7 @@ export interface ArchestraContext {
 
 export const isArchestraMcpServerTool = (toolName: string): boolean => {
   return toolName.startsWith(
-    `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
+    `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
   );
 };
 
@@ -264,12 +264,9 @@ export async function executeArchestraTool(
   }
 
   /**
-   * TODO: Currently there is no user available in the mcp-gateway context. In order to be able to create
-   * an MCP server installation request, we'd either need to have an explicit user, create a "fake archestra mcp server" user
-   * (probably a bad idea), or modify McpServerInstallationRequestModel such that createdBy is renamed to createdByUser
-   * (and can be null) + we add createdByProfile
+   * This tool is quite unique in that the tool handler doesn't actually need to do anything
+   * see the useChat() usage in the chat UI for more details
    */
-  /*
   if (toolName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME) {
     logger.info(
       { profileId: profile.id, requestArgs: args },
@@ -277,59 +274,12 @@ export async function executeArchestraTool(
     );
 
     try {
-      const externalCatalogId = args?.external_catalog_id as string | undefined;
-      const requestReason = args?.request_reason as string | undefined;
-      const customServerConfig = args?.custom_server_config as
-        | InsertMcpServerInstallationRequest["customServerConfig"]
-        | undefined;
-
-      // Validate that either externalCatalogId or customServerConfig is provided
-      if (!externalCatalogId && !customServerConfig) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: Either external_catalog_id or custom_server_config must be provided.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Check if there's already a pending request for this external catalog ID
-      if (externalCatalogId) {
-        const existingRequest =
-          await McpServerInstallationRequestModel.findPendingByExternalCatalogId(
-            externalCatalogId,
-          );
-        if (existingRequest) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `A pending installation request already exists for this MCP server (Request ID: ${existingRequest.id}). Please wait for it to be reviewed.`,
-              },
-            ],
-            isError: false,
-          };
-        }
-      }
-
-      // Create the installation request
-      const installationRequest =
-        await McpServerInstallationRequestModel.create({
-          externalCatalogId: externalCatalogId || null,
-          requestedBy: userId, // This would need to be changed as per TODO above
-          requestReason: requestReason || null,
-          customServerConfig: customServerConfig || null,
-          status: "pending",
-        });
-
       return {
         content: [
           {
             type: "text",
-            text: `Successfully created MCP server installation request.\n\nRequest ID: ${installationRequest.id}\nStatus: ${installationRequest.status}\n\nYour request will be reviewed by an administrator.`,
+            // Return a user-friendly message explaining what will happen
+            text: "An installation request dialog for an MCP server should now be visible in the chat. Please review and submit the request to proceed with the installation.",
           },
         ],
         isError: false,
@@ -337,20 +287,21 @@ export async function executeArchestraTool(
     } catch (error) {
       logger.error(
         { err: error },
-        "Error creating MCP server installation request",
+        "Error handling MCP server installation request",
       );
       return {
         content: [
           {
             type: "text",
-            text: `Error creating installation request: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error handling installation request: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
       };
     }
   }
-  */
 
   if (toolName === TOOL_CREATE_LIMIT_FULL_NAME) {
     logger.info(
@@ -443,7 +394,15 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Successfully created limit.\n\nLimit ID: ${limit.id}\nEntity Type: ${limit.entityType}\nEntity ID: ${limit.entityId}\nLimit Type: ${limit.limitType}\nLimit Value: ${limit.limitValue}${limit.model ? `\nModel: ${limit.model}` : ""}${limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""}${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
+            text: `Successfully created limit.\n\nLimit ID: ${
+              limit.id
+            }\nEntity Type: ${limit.entityType}\nEntity ID: ${
+              limit.entityId
+            }\nLimit Type: ${limit.limitType}\nLimit Value: ${
+              limit.limitValue
+            }${limit.model ? `\nModel: ${limit.model}` : ""}${
+              limit.mcpServerName ? `\nMCP Server: ${limit.mcpServerName}` : ""
+            }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
           },
         ],
         isError: false,
@@ -454,7 +413,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error creating limit: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -488,7 +449,9 @@ export async function executeArchestraTool(
               type: "text",
               text:
                 entityType || entityId
-                  ? `No limits found${entityType ? ` for entity type: ${entityType}` : ""}${entityId ? ` and entity ID: ${entityId}` : ""}.`
+                  ? `No limits found${
+                      entityType ? ` for entity type: ${entityType}` : ""
+                    }${entityId ? ` and entity ID: ${entityId}` : ""}.`
                   : "No limits found.",
             },
           ],
@@ -528,7 +491,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting limits: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting limits: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -604,7 +569,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error updating limit: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -662,7 +629,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting limit: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error deleting limit: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -695,7 +664,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting profile token usage: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting profile token usage: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -737,7 +708,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting autonomy policy operators: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting autonomy policy operators: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -768,7 +741,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting tool invocation policies: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting tool invocation policies: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -801,7 +776,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error creating tool invocation policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -857,7 +834,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting tool invocation policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -915,7 +894,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error updating tool invocation policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -971,7 +952,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting tool invocation policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error deleting tool invocation policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1002,7 +985,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting trusted data policies: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting trusted data policies: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1035,7 +1020,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error creating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error creating trusted data policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1091,7 +1078,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting trusted data policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1149,7 +1138,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error updating trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error updating trusted data policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1205,7 +1196,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error deleting trusted data policy: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error deleting trusted data policy: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1293,7 +1286,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error bulk assigning tools to profiles: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error bulk assigning tools to profiles: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1336,7 +1331,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting MCP servers: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting MCP servers: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1401,7 +1398,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting MCP server tools: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting MCP server tools: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -1458,7 +1457,9 @@ export async function executeArchestraTool(
         content: [
           {
             type: "text",
-            text: `Error getting profile: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting profile: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
           },
         ],
         isError: true,
@@ -2069,55 +2070,18 @@ export function getArchestraMcpTools(): Tool[] {
       annotations: {},
       _meta: {},
     },
-    // TODO: MCP server installation request tool is temporarily disabled until user context is available
-    // {
-    //   name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-    //   title: "Create MCP Server Installation Request",
-    //   description:
-    //     "Create a request to install an MCP server. Provide either an external_catalog_id for a server from the public catalog, or custom_server_config for a custom server configuration.",
-    //   inputSchema: {
-    //     type: "object",
-    //     properties: {
-    //       external_catalog_id: {
-    //         type: "string",
-    //         description:
-    //           "The ID of the MCP server from the external catalog (optional if custom_server_config is provided)",
-    //       },
-    //       request_reason: {
-    //         type: "string",
-    //         description:
-    //           "Reason for requesting the installation (optional but recommended)",
-    //       },
-    //       custom_server_config: {
-    //         type: "object",
-    //         description:
-    //           "Custom server configuration (optional if external_catalog_id is provided)",
-    //         properties: {
-    //           type: {
-    //             type: "string",
-    //             enum: ["remote", "local"],
-    //             description: "The type of the custom server",
-    //           },
-    //           label: {
-    //             type: "string",
-    //             description: "A label for the custom server",
-    //           },
-    //           name: {
-    //             type: "string",
-    //             description: "The name of the custom server",
-    //           },
-    //           version: {
-    //             type: "string",
-    //             description: "The version of the custom server (optional)",
-    //           },
-    //         },
-    //         required: ["type", "label", "name"],
-    //       },
-    //     },
-    //     required: [],
-    //   },
-    //   annotations: {},
-    //   _meta: {},
-    // },
+    {
+      name: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+      title: "Create MCP Server Installation Request",
+      description:
+        "Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+      annotations: {},
+      _meta: {},
+    },
   ];
 }

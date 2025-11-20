@@ -7,13 +7,15 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   executeArchestraTool,
   getArchestraMcpTools,
-  MCP_SERVER_NAME,
 } from "@/archestra-mcp-server";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";
@@ -145,7 +147,7 @@ async function createAgentServer(
     async ({ params: { name, arguments: args } }) => {
       try {
         // Check if this is an Archestra tool
-        const archestraToolPrefix = `${MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+        const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
         if (name.startsWith(archestraToolPrefix)) {
           logger.info(
             {

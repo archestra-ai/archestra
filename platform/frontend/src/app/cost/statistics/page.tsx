@@ -712,7 +712,6 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
@@ -724,7 +723,6 @@ export default function StatisticsPage() {
               </div>
             </div>
 
-            {/* Table on the right */}
             <div className="order-1 lg:order-2">
               <Table>
                 <TableHeader>
@@ -780,7 +778,6 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
@@ -792,7 +789,6 @@ export default function StatisticsPage() {
               </div>
             </div>
 
-            {/* Table on the right */}
             <div className="order-1 lg:order-2">
               <Table>
                 <TableHeader>
@@ -846,7 +842,6 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Chart on the left */}
             <div className="order-2 lg:order-1">
               <div className="h-80">
                 <Line
@@ -858,7 +853,6 @@ export default function StatisticsPage() {
               </div>
             </div>
 
-            {/* Table on the right */}
             <div className="order-1 lg:order-2">
               <Table>
                 <TableHeader>

@@ -152,7 +152,6 @@ export function ChatSidebarSection() {
             </SidebarMenuItem>
           ) : (
             <>
-              {/* Conversation List */}
               {visibleChats.map((conv) => {
                 const isCurrentConversation = currentConversationId === conv.id;
                 const displayTitle = getConversationDisplayTitle(
@@ -232,7 +231,6 @@ export function ChatSidebarSection() {
                 );
               })}
 
-              {/* Show More/Less Toggle */}
               {hiddenChatsCount > 0 && (
                 <SidebarMenuItem>
                   <SidebarMenuButton

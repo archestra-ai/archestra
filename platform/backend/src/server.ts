@@ -34,7 +34,9 @@ import {
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
+  WebSocketMessageSchema,
 } from "@/types";
+import websocketService from "@/websocket";
 import * as routes from "./routes";
 
 const {
@@ -73,6 +75,9 @@ z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
 });
 z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
   id: "AnthropicMessagesResponse",
+});
+z.globalRegistry.add(WebSocketMessageSchema, {
+  id: "WebSocketMessage",
 });
 
 /**
@@ -364,6 +369,10 @@ const start = async () => {
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+
+    // Start WebSocket server using the same HTTP server
+    websocketService.start(fastify.server);
+    fastify.log.info("WebSocket service started");
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

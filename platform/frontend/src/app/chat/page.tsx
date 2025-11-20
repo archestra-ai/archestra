@@ -1,13 +1,24 @@
 "use client";
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import {
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
+} from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
   PromptInput,
   PromptInputBody,
@@ -57,19 +68,18 @@ export default function ChatPage() {
     }
     return false;
   });
-  const [hasInitialized, setHasInitialized] = useState(false);
   const loadedConversationRef = useRef<string | undefined>(undefined);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
+  // State for MCP installation request dialogs
+  const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
+    useState(false);
+  const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
+    useState<{ toolCallId: string; toolName: string } | null>(null);
+
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
-
-  // Initialize
-  useEffect(() => {
-    if (hasInitialized) return;
-    setHasInitialized(true);
-  }, [hasInitialized]);
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -80,14 +90,17 @@ export default function ChatPage() {
   }, [searchParams, conversationId]);
 
   // Update URL when conversation changes
-  const selectConversation = (id: string | undefined) => {
-    setConversationId(id);
-    if (id) {
-      router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
-    } else {
-      router.push(pathname);
-    }
-  };
+  const selectConversation = useCallback(
+    (id: string | undefined) => {
+      setConversationId(id);
+      if (id) {
+        router.push(`${pathname}?${CONVERSATION_QUERY_PARAM}=${id}`);
+      } else {
+        router.push(pathname);
+      }
+    },
+    [pathname, router],
+  );
 
   // Fetch conversation with messages
   const { data: conversation } = useConversation(conversationId);
@@ -130,56 +143,68 @@ export default function ChatPage() {
   const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
 
   // Group tools by MCP server name (everything before the last __)
-  const groupedTools = mcpTools.reduce(
-    (acc, tool) => {
-      const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-      // Last part is tool name, everything else is server name
-      const serverName =
-        parts.length > 1
-          ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-          : "default";
-      if (!acc[serverName]) {
-        acc[serverName] = [];
-      }
-      acc[serverName].push(tool);
-      return acc;
-    },
-    {} as Record<string, typeof mcpTools>,
+  const groupedTools = useMemo(
+    () =>
+      mcpTools.reduce(
+        (acc, tool) => {
+          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+          // Last part is tool name, everything else is server name
+          const serverName =
+            parts.length > 1
+              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+              : "default";
+          if (!acc[serverName]) {
+            acc[serverName] = [];
+          }
+          acc[serverName].push(tool);
+          return acc;
+        },
+        {} as Record<string, typeof mcpTools>,
+      ),
+    [mcpTools],
   );
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
   // Handle prompt selection from all agents view
-  const handleSelectPromptFromAllAgents = async (
-    agentId: string,
-    prompt: string,
-  ) => {
-    // Store the pending prompt to send after conversation loads
-    // Empty string means "free chat" - don't send a message
-    pendingPromptRef.current = prompt || undefined;
-    // Create conversation for the selected agent
-    const newConversation =
-      await createConversationMutation.mutateAsync(agentId);
-    if (newConversation) {
-      // Mark this as a newly created conversation
-      newlyCreatedConversationRef.current = newConversation.id;
-      selectConversation(newConversation.id);
-    }
-  };
+  const handleSelectPromptFromAllAgents = useCallback(
+    async (agentId: string, prompt: string) => {
+      // Store the pending prompt to send after conversation loads
+      // Empty string means "free chat" - don't send a message
+      pendingPromptRef.current = prompt || undefined;
+      // Create conversation for the selected agent
+      const newConversation =
+        await createConversationMutation.mutateAsync(agentId);
+      if (newConversation) {
+        // Mark this as a newly created conversation
+        newlyCreatedConversationRef.current = newConversation.id;
+        selectConversation(newConversation.id);
+      }
+    },
+    [createConversationMutation, selectConversation],
+  );
 
   // Persist hide tool calls preference
-  const toggleHideToolCalls = () => {
+  const toggleHideToolCalls = useCallback(() => {
     const newValue = !hideToolCalls;
     setHideToolCalls(newValue);
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
-  };
+  }, [hideToolCalls]);
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, setMessages, stop, error } = useChat({
+  const {
+    messages,
+    sendMessage,
+    status,
+    setMessages,
+    stop,
+    error,
+    addToolResult,
+  } = useChat({
     transport: new DefaultChatTransport({
-      api: "/api/chat", // Must match backend route
-      credentials: "include", // Send cookies for authentication
+      api: "/api/chat",
+      credentials: "include",
     }),
     id: conversationId,
     onFinish: () => {
@@ -198,7 +223,43 @@ export default function ChatPage() {
         stack: error.stack,
       });
     },
-  });
+    onToolCall: ({ toolCall }) => {
+      if (
+        toolCall.toolName ===
+        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
+      ) {
+        setPendingCustomServerToolCall(toolCall);
+      }
+    },
+  } as Parameters<typeof useChat>[0]);
+
+  useEffect(() => {
+    if (!pendingCustomServerToolCall) {
+      return;
+    }
+
+    setIsCustomServerDialogOpen(true);
+
+    void (async () => {
+      try {
+        await addToolResult({
+          tool: pendingCustomServerToolCall.toolName as never,
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          output: {
+            type: "text",
+            text: "Opening the custom MCP server installation dialog.",
+          } as never,
+        });
+      } catch (toolError) {
+        console.error("[Chat] Failed to add custom server tool result", {
+          toolCallId: pendingCustomServerToolCall.toolCallId,
+          toolError,
+        });
+      }
+    })();
+
+    setPendingCustomServerToolCall(null);
+  }, [pendingCustomServerToolCall, addToolResult]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {
@@ -236,25 +297,28 @@ export default function ChatPage() {
     }
   }, [conversationId, conversation, setMessages, sendMessage, status]);
 
-  const handleSubmit = (
-    // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
-    message: { text?: string; files?: any[] },
-    e: FormEvent<HTMLFormElement>,
-  ) => {
-    e.preventDefault();
-    if (
-      !message.text?.trim() ||
-      status === "submitted" ||
-      status === "streaming"
-    ) {
-      return;
-    }
+  const handleSubmit = useCallback(
+    (
+      // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
+      message: { text?: string; files?: any[] },
+      e: FormEvent<HTMLFormElement>,
+    ) => {
+      e.preventDefault();
+      if (
+        !message.text?.trim() ||
+        status === "submitted" ||
+        status === "streaming"
+      ) {
+        return;
+      }
 
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: message.text }],
-    });
-  };
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: message.text }],
+      });
+    },
+    [sendMessage, status],
+  );
 
   // If API key is not configured, show setup message
   if (chatSettings && !chatSettings.anthropicApiKeySecretId) {
@@ -291,7 +355,6 @@ export default function ChatPage() {
             {error && <ChatError error={error} />}
             <StreamTimeoutWarning status={status} messages={messages} />
 
-            {/* Sticky top bar with agent name and toggle */}
             <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
               <div className="flex-1" />
               {conversation?.agent?.name && (
@@ -323,7 +386,6 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Scrollable messages area */}
             <div className="flex-1 overflow-y-auto">
               <ChatMessages
                 messages={messages}
@@ -332,7 +394,6 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* Sticky bottom input area */}
             <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
                 {currentAgentId && Object.keys(groupedTools).length > 0 && (
@@ -408,6 +469,11 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      <CustomServerRequestDialog
+        isOpen={isCustomServerDialogOpen}
+        onClose={() => setIsCustomServerDialogOpen(false)}
+      />
     </div>
   );
 }

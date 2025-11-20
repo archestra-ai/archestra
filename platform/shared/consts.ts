@@ -26,6 +26,12 @@ export const DEFAULT_PROFILE_NAME = "Default Profile with Archestra";
  * Format: {mcpServerName}__{toolName}
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
+export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
+
+/**
+ * Special tools which have handlers on the frontend...
+ */
+export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 
 export const MCP_CATALOG_API_BASE_URL =
   "https://www.archestra.ai/mcp-catalog/api";

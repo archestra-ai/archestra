@@ -283,7 +283,7 @@ function OptimizationRuleInlineForm({
 
   return (
     <TableRow className="bg-muted/30">
-      <TableCell className="w-16">
+      <TableCell>
         <Switch
           checked={formData.enabled}
           onCheckedChange={(checked) =>
@@ -416,7 +416,7 @@ function OptimizationRuleInlineForm({
           onChange={(value) => setFormData({ ...formData, targetModel: value })}
         />
       </TableCell>
-      <TableCell className="p-2 w-20">
+      <TableCell className="p-2">
         <Input
           id="priority"
           type="number"
@@ -525,7 +525,7 @@ function OptimizationRuleRow({
     <TableRow
       className={`hover:bg-muted/30 ${!hasModelPricing ? "text-muted-foreground" : ""}`}
     >
-      <TableCell className="w-16">
+      <TableCell>
         <div className={!hasModelPricing ? "opacity-50" : ""}>
           <WithPermissions permissions={{ limit: ["update"] }}>
             <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
@@ -787,12 +787,21 @@ export default function OptimizationRulesPage() {
           <LoadingSkeleton count={3} prefix="optimization-rules" />
         ) : (
           <Table>
+            <colgroup>
+              <col className="w-20" />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col className="w-20" />
+              <col className="w-28" />
+            </colgroup>
             <TableHeader>
               <TableRow className="whitespace-nowrap">
-                <TableHead className="w-16">Enabled</TableHead>
+                <TableHead>Enabled</TableHead>
                 <TableHead>Applied to</TableHead>
                 <TableHead>Rule</TableHead>
-                <TableHead className="w-32">Provider</TableHead>
+                <TableHead>Provider</TableHead>
                 <TableHead>
                   <div className="flex items-center gap-1">
                     Target Model
@@ -811,7 +820,7 @@ export default function OptimizationRulesPage() {
                     </TooltipProvider>
                   </div>
                 </TableHead>
-                <TableHead className="w-20">
+                <TableHead>
                   <div className="flex items-center gap-1">
                     Order
                     <TooltipProvider>
@@ -830,7 +839,7 @@ export default function OptimizationRulesPage() {
                     </TooltipProvider>
                   </div>
                 </TableHead>
-                <TableHead className="w-48">Actions</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

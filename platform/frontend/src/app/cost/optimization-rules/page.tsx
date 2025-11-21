@@ -3,6 +3,8 @@
 import { Edit, Info, Plus, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -464,7 +466,9 @@ function OptimizationRuleRow({
     >
       <TableCell className="w-16">
         <div className={!hasModelPricing ? "opacity-50" : ""}>
-          <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+          <WithPermissions permissions={{ limit: ["update"] }}>
+            <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+          </WithPermissions>
         </div>
       </TableCell>
       <TableCell className="whitespace-nowrap">
@@ -598,8 +602,9 @@ export default function OptimizationRulesPage() {
           enabled: data.enabled,
         });
         setIsAddingRule(false);
-      } catch (error) {
-        console.error("Failed to create optimization rule:", error);
+        toast.success("Optimization rule created");
+      } catch (_error) {
+        toast.error("Failed to create optimization rule");
       }
     },
     [createRule],
@@ -618,8 +623,9 @@ export default function OptimizationRulesPage() {
           enabled: data.enabled,
         });
         setEditingRuleId(null);
-      } catch (error) {
-        console.error("Failed to update optimization rule:", error);
+        toast.success("Optimization rule updated");
+      } catch (_error) {
+        toast.error("Failed to update optimization rule");
       }
     },
     [updateRule],
@@ -629,8 +635,9 @@ export default function OptimizationRulesPage() {
     async (id: string) => {
       try {
         await deleteRule.mutateAsync(id);
-      } catch (error) {
-        console.error("Failed to delete optimization rule:", error);
+        toast.success("Optimization rule deleted");
+      } catch (_error) {
+        toast.error("Failed to delete optimization rule");
       }
     },
     [deleteRule],
@@ -643,8 +650,9 @@ export default function OptimizationRulesPage() {
           id,
           enabled,
         });
-      } catch (error) {
-        console.error("Failed to toggle optimization rule:", error);
+        toast.success(`Optimization rule ${enabled ? "enabled" : "disabled"}`);
+      } catch (_error) {
+        toast.error("Failed to toggle optimization rule");
       }
     },
     [updateRule],

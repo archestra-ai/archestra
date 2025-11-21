@@ -13,10 +13,7 @@ test.describe("Tool Policies API", () => {
     });
     const toolsPayload = await toolsResponse.json();
 
-    expect(toolsPayload?.data?.length).toBeGreaterThan(
-      0,
-      "No tools returned from /api/tools; seed data may be missing",
-    );
+    expect(toolsPayload?.data?.length).toBeGreaterThan(0);
 
     const toolId: string = toolsPayload.data[0].id;
 

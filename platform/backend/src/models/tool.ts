@@ -414,7 +414,13 @@ class ToolModel {
       totalPromise,
     ]);
 
-    return createPaginatedResult(items, Number(total), pagination);
+    const normalizedItems = items.map((row) => ({
+      ...row,
+      assignedAgentsCount: Number(row.assignedAgentsCount ?? 0),
+      policyCount: Number(row.policyCount ?? 0),
+    }));
+
+    return createPaginatedResult(normalizedItems, Number(total), pagination);
   }
 
   static async findByName(

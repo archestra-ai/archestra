@@ -92,6 +92,7 @@ BEGIN
       np.response_modifier_template
     FROM numbered_policies np
     LEFT JOIN "tools" t ON t.id = np.tool_id
+    WHERE t.name NOT LIKE 'archestra__%'
     RETURNING id,
       tool_id,
       organization_id,

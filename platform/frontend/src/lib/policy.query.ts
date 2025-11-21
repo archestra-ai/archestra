@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  type QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   createToolInvocationPolicy,
@@ -54,7 +49,6 @@ export function useToolInvocationPoliciesForPolicy(
       if (!toolPolicyId) return [];
       const all = (await getToolInvocationPolicies()).data ?? [];
       return all.filter((policy) => {
-        // @ts-expect-error generated types still include agentToolId
         return policy.toolPolicyId === toolPolicyId;
       });
     },
@@ -85,7 +79,6 @@ export function useToolInvocationPolicyCreateMutation() {
     mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createToolInvocationPolicy({
         body: {
-          // @ts-expect-error backend now expects toolPolicyId
           toolPolicyId,
           argumentName: "",
           operator: "equal",
@@ -153,7 +146,6 @@ export function useToolResultPoliciesForPolicy(toolPolicyId: string | null) {
       if (!toolPolicyId) return [];
       const all = (await getTrustedDataPolicies()).data ?? [];
       return all.filter((policy) => {
-        // @ts-expect-error generated types still include agentToolId
         return policy.toolPolicyId === toolPolicyId;
       });
     },
@@ -166,7 +158,6 @@ export function useToolResultPoliciesCreateMutation() {
     mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createTrustedDataPolicy({
         body: {
-          // @ts-expect-error backend now expects toolPolicyId
           toolPolicyId,
           description: "",
           attributePath: "",
@@ -207,66 +198,6 @@ export function useToolResultPoliciesDeleteMutation() {
       await deleteTrustedDataPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
-    },
-  });
-}
-
-// Prefetch functions
-export function prefetchOperators(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["operators"],
-    queryFn: async () => (await getOperators()).data ?? [],
-  });
-}
-
-export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["tool-invocation-policies"],
-    queryFn: async () => {
-      const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byAgentToolId,
-      };
-    },
-  });
-}
-
-export function prefetchToolResultPolicies(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["tool-result-policies"],
-    queryFn: async () => {
-      const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byAgentToolId,
-      };
     },
   });
 }

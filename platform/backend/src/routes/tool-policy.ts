@@ -8,9 +8,9 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertToolPolicySchema,
+  SelectToolPolicySchema,
   ToolInvocation,
   TrustedData,
-  SelectToolPolicySchema,
   UpdateToolPolicySchema,
   UuidIdSchema,
 } from "@/types";

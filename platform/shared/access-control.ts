@@ -192,6 +192,12 @@ export const RouteId = {
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   McpProxy: "mcpProxy",
 
+  // Tool Policy Routes
+  GetToolPoliciesForTool: "getToolPoliciesForTool",
+  CreateToolPolicy: "createToolPolicy",
+  UpdateToolPolicy: "updateToolPolicy",
+  DeleteToolPolicy: "deleteToolPolicy",
+
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
   CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
@@ -399,6 +405,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetTools]: {
     tool: ["read"],
+  },
+  [RouteId.GetToolPoliciesForTool]: {
+    policy: ["read"],
+  },
+  [RouteId.CreateToolPolicy]: {
+    policy: ["create"],
+  },
+  [RouteId.UpdateToolPolicy]: {
+    policy: ["update"],
+  },
+  [RouteId.DeleteToolPolicy]: {
+    policy: ["delete"],
   },
   [RouteId.GetInteractions]: {
     interaction: ["read"],

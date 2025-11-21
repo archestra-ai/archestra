@@ -28,11 +28,23 @@ class ToolPolicyModel {
     return policy;
   }
 
-  static async findAllByToolId(toolId: string): Promise<ToolPolicy[]> {
-    const rows = await db
+  static async findAllByToolId(
+    toolId: string,
+    organizationId?: string,
+  ): Promise<ToolPolicy[]> {
+    let query = db
       .select()
       .from(schema.toolPoliciesTable)
-      .where(eq(schema.toolPoliciesTable.toolId, toolId));
+      .where(eq(schema.toolPoliciesTable.toolId, toolId))
+      .$dynamic();
+
+    if (organizationId) {
+      query = query.where(
+        eq(schema.toolPoliciesTable.organizationId, organizationId),
+      );
+    }
+
+    const rows = await query;
     return rows;
   }
 
@@ -90,7 +102,7 @@ class ToolPolicyModel {
 
   static async update(
     id: string,
-    data: UpdateToolPolicy,
+    data: Partial<UpdateToolPolicy>,
   ): Promise<ToolPolicy | null> {
     const [policy] = await db
       .update(schema.toolPoliciesTable)

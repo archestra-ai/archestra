@@ -5,7 +5,6 @@ const {
   assignToolToAgent,
   bulkAssignTools,
   getAllAgentTools,
-  bulkUpdateAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
 } = archestraApiSdk;
@@ -19,6 +18,7 @@ export function useAllAgentTools({
   pagination,
   sorting,
   filters,
+  enabled = true,
 }: {
   initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
   pagination?: {
@@ -36,6 +36,7 @@ export function useAllAgentTools({
     credentialSourceMcpServerId?: string;
     mcpServerOwnerId?: string;
   };
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -81,6 +82,7 @@ export function useAllAgentTools({
       );
     },
     initialData,
+    enabled,
   });
 }
 
@@ -93,23 +95,30 @@ export function useAssignTool() {
       toolId,
       credentialSourceMcpServerId,
       executionSourceMcpServerId,
+      toolPolicyId,
     }: {
       agentId: string;
       toolId: string;
       credentialSourceMcpServerId?: string | null;
       executionSourceMcpServerId?: string | null;
+      toolPolicyId?: string | null;
     }) => {
+      const bodyPayload =
+        credentialSourceMcpServerId ||
+        executionSourceMcpServerId ||
+        toolPolicyId !== undefined
+          ? {
+              credentialSourceMcpServerId:
+                credentialSourceMcpServerId ?? undefined,
+              executionSourceMcpServerId:
+                executionSourceMcpServerId ?? undefined,
+              toolPolicyId: toolPolicyId ?? undefined,
+            }
+          : undefined;
+
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
-        body:
-          credentialSourceMcpServerId || executionSourceMcpServerId
-            ? {
-                credentialSourceMcpServerId:
-                  credentialSourceMcpServerId || undefined,
-                executionSourceMcpServerId:
-                  executionSourceMcpServerId || undefined,
-              }
-            : undefined,
+        body: bodyPayload,
       });
       return data?.success ?? false;
     },
@@ -142,6 +151,7 @@ export function useBulkAssignTools() {
         toolId: string;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        toolPolicyId?: string | null;
       }>;
       mcpServerId?: string | null;
     }) => {
@@ -232,24 +242,6 @@ export function useAgentToolPatchMutation() {
         path: { id: updatedAgentTool.id },
       });
       return result.data ?? null;
-    },
-    onSuccess: () => {
-      // Invalidate all agent-tools queries to refetch updated data
-      queryClient.invalidateQueries({
-        queryKey: ["agent-tools"],
-      });
-    },
-  });
-}
-
-export function useBulkUpdateAgentTools() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      bulkUpdate: archestraApiTypes.BulkUpdateAgentToolsData["body"],
-    ) => {
-      const result = await bulkUpdateAgentTools({ body: bulkUpdate });
-      return result.data;
     },
     onSuccess: () => {
       // Invalidate all agent-tools queries to refetch updated data

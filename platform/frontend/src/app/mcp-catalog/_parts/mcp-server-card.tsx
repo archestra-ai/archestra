@@ -12,7 +12,6 @@ import {
   Wrench,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,12 +40,10 @@ import {
   useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
-import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { ManageLocalInstallationsDialog } from "./manage-local-installations-dialog";
 import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
-import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
@@ -59,24 +56,6 @@ export type CatalogItemWithOptionalLabel = CatalogItem & {
 
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
-
-type ToolForAssignment = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-  mcpServerId: string | null;
-  mcpServerName: string | null;
-};
-
-type SimpleTool = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-};
 
 export type McpServerCardProps = {
   item: CatalogItemWithOptionalLabel;
@@ -130,9 +109,7 @@ export function McpServerCard({
   currentUserHasLocalTeamInstallation = false,
   currentUserLocalServerInstallation,
 }: McpServerCardBaseProps) {
-  const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
-    installedServer?.id ?? null,
-  );
+  const { data: tools } = useMcpServerTools(installedServer?.id ?? null);
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
@@ -146,7 +123,6 @@ export function McpServerCard({
   const { data: allMcpServers } = useMcpServers();
 
   // Dialog state
-  const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const [isManageUsersDialogOpen, setIsManageUsersDialogOpen] = useState(false);
   const [
     isManageLocalInstallationsDialogOpen,
@@ -154,10 +130,6 @@ export function McpServerCard({
   ] = useState(false);
   const [isManageTeamsDialogOpen, setIsManageTeamsDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
-  const [selectedToolForAssignment, setSelectedToolForAssignment] =
-    useState<ToolForAssignment | null>(null);
-  const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
-  const [toolsDialogKey, setToolsDialogKey] = useState(0);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
     name: string;
@@ -372,16 +344,6 @@ export function McpServerCard({
           </span>
         </span>
       </div>
-      {toolsDiscoveredCount > 0 && (
-        <Button
-          onClick={() => setIsToolsDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs"
-        >
-          Manage
-        </Button>
-      )}
     </>
   );
 
@@ -636,82 +598,11 @@ export function McpServerCard({
 
   const dialogs = (
     <>
-      <McpToolsDialog
-        key={toolsDialogKey}
-        open={isToolsDialogOpen}
-        onOpenChange={(open) => {
-          setIsToolsDialogOpen(open);
-          if (!open) {
-            setSelectedToolForAssignment(null);
-          }
-        }}
-        serverName={installedServer?.name ?? ""}
-        tools={tools ?? []}
-        isLoading={isLoadingTools}
-        onAssignTool={(tool) => {
-          setSelectedToolForAssignment({
-            ...tool,
-            mcpServerId: installedServer?.id ?? null,
-            mcpServerName: installedServer?.name ?? null,
-          });
-        }}
-        onBulkAssignTools={(tools) => {
-          setBulkAssignTools(tools);
-        }}
-      />
-
       <McpLogsDialog
         open={isLogsDialogOpen}
         onOpenChange={setIsLogsDialogOpen}
         serverName={installedServer?.name ?? item.name}
         installs={localInstalls}
-      />
-
-      <BulkAssignAgentDialog
-        tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
-        open={bulkAssignTools.length > 0}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBulkAssignTools([]);
-            // Reset the tools dialog to clear selections
-            setToolsDialogKey((prev) => prev + 1);
-          }
-        }}
-        catalogId={item.id}
-      />
-
-      <AssignAgentDialog
-        tool={
-          selectedToolForAssignment
-            ? {
-                id: selectedToolForAssignment.id,
-                allowUsageWhenUntrustedDataIsPresent: false,
-                toolResultTreatment: "untrusted" as const,
-                responseModifierTemplate: null,
-                credentialSourceMcpServerId: null,
-                executionSourceMcpServerId: null,
-                tool: {
-                  id: selectedToolForAssignment.id,
-                  name: selectedToolForAssignment.name,
-                  description: selectedToolForAssignment.description,
-                  parameters: selectedToolForAssignment.parameters,
-                  createdAt: selectedToolForAssignment.createdAt,
-                  updatedAt: selectedToolForAssignment.createdAt,
-                  mcpServerId: selectedToolForAssignment.mcpServerId,
-                  mcpServerName: selectedToolForAssignment.mcpServerName,
-                  catalogId: item.id,
-                  mcpServerCatalogId: null,
-                },
-                agent: { id: "", name: "" },
-                createdAt: selectedToolForAssignment.createdAt,
-                updatedAt: selectedToolForAssignment.createdAt,
-              }
-            : null
-        }
-        open={!!selectedToolForAssignment}
-        onOpenChange={(open) => {
-          if (!open) setSelectedToolForAssignment(null);
-        }}
       />
 
       <ManageUsersDialog

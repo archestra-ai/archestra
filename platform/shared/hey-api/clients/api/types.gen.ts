@@ -14560,10 +14560,367 @@ export type UpdateTokenPriceResponses = {
 
 export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
+export type GetToolPoliciesForToolData = {
+    body?: never;
+    path: {
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/tools/{toolId}/policies';
+};
+
+export type GetToolPoliciesForToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetToolPoliciesForToolError = GetToolPoliciesForToolErrors[keyof GetToolPoliciesForToolErrors];
+
+export type GetToolPoliciesForToolResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        name: string;
+        toolId: string;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate: string | null;
+    }>;
+};
+
+export type GetToolPoliciesForToolResponse = GetToolPoliciesForToolResponses[keyof GetToolPoliciesForToolResponses];
+
+export type CreateToolPolicyData = {
+    body: {
+        name: string;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
+    };
+    path: {
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/tools/{toolId}/policies';
+};
+
+export type CreateToolPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateToolPolicyError = CreateToolPolicyErrors[keyof CreateToolPolicyErrors];
+
+export type CreateToolPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        name: string;
+        toolId: string;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate: string | null;
+    };
+};
+
+export type CreateToolPolicyResponse = CreateToolPolicyResponses[keyof CreateToolPolicyResponses];
+
+export type DeleteToolPolicyData = {
+    body?: never;
+    path: {
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/tool-policies/{policyId}';
+};
+
+export type DeleteToolPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteToolPolicyError = DeleteToolPolicyErrors[keyof DeleteToolPolicyErrors];
+
+export type DeleteToolPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteToolPolicyResponse = DeleteToolPolicyResponses[keyof DeleteToolPolicyResponses];
+
+export type UpdateToolPolicyData = {
+    body?: {
+        name?: string;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
+    };
+    path: {
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/tool-policies/{policyId}';
+};
+
+export type UpdateToolPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateToolPolicyError = UpdateToolPolicyErrors[keyof UpdateToolPolicyErrors];
+
+export type UpdateToolPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        name: string;
+        toolId: string;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate: string | null;
+    };
+};
+
+export type UpdateToolPolicyResponse = UpdateToolPolicyResponses[keyof UpdateToolPolicyResponses];
+
 export type GetToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        agentId?: string;
+        origin?: 'llm-proxy' | 'mcp';
+        mcpServerOwnerId?: string;
+        excludeArchestraTools?: boolean;
+        sortBy?: 'name' | 'createdAt' | 'assignedProfiles' | 'policyCount';
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
     url: '/api/tools';
 };
 
@@ -14630,37 +14987,49 @@ export type GetToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        catalogId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
+    200: {
+        data: Array<{
+            id: string;
+            catalogId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+            agent: {
+                id: string;
+                name: string;
+            } | null;
+            mcpServer: {
+                id: string;
+                name: string;
+            } | null;
+            assignedAgentsCount: number;
+            policyCount: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-        description: string | null;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        mcpServer: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
+    };
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

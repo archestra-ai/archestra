@@ -209,7 +209,7 @@ function ModelSelector({
 
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="max-w-36">
         <SelectValue placeholder="Select target model" />
       </SelectTrigger>
       <SelectContent>
@@ -303,7 +303,7 @@ function OptimizationRuleInlineForm({
               });
             }}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -318,7 +318,7 @@ function OptimizationRuleInlineForm({
                 setFormData({ ...formData, entityId: value })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger>
                 <SelectValue placeholder="Select team" />
               </SelectTrigger>
               <SelectContent>
@@ -333,14 +333,14 @@ function OptimizationRuleInlineForm({
         </div>
       </TableCell>
       <TableCell className="p-2">
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
           <Select
             value={formData.ruleType}
             onValueChange={(value: "content_length" | "tool_presence") =>
               setFormData({ ...formData, ruleType: value })
             }
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -349,13 +349,13 @@ function OptimizationRuleInlineForm({
             </SelectContent>
           </Select>
           {formData.ruleType === "content_length" ? (
-            <>
-              Max:
+            <span>
+              Max: 
               <Input
                 id="maxLength"
                 type="number"
                 min="0"
-                className="w-[10em]"
+                className="w-24 flex-none"
                 value={formData.maxLength}
                 onChange={(e) =>
                   setFormData({ ...formData, maxLength: e.target.value })
@@ -369,7 +369,7 @@ function OptimizationRuleInlineForm({
                   }
                 }}
               />
-            </>
+            </span>
           ) : (
             <Select
               value={formData.hasTools ? "true" : "false"}
@@ -377,7 +377,7 @@ function OptimizationRuleInlineForm({
                 setFormData({ ...formData, hasTools: value === "true" })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -399,7 +399,7 @@ function OptimizationRuleInlineForm({
             })
           }
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -427,13 +427,13 @@ function OptimizationRuleInlineForm({
           }
           placeholder="1"
           required
-          className="w-full"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               if (isValid) handleSubmit();
             }
           }}
+          className="w-16"
         />
       </TableCell>
       <TableCell className="p-2">
@@ -643,10 +643,20 @@ export default function OptimizationRulesPage() {
       hasInitialized.current = true;
     } else if (hasInitialized.current) {
       setRuleOrder((ruleOrder) => {
-        const newRuleIds = allRules
-          .filter((rule) => !ruleOrder.includes(rule.id))
-          .map((rule) => rule.id);
-        return [...newRuleIds, ...ruleOrder];
+        const newRules = allRules.filter(
+          (rule) => !ruleOrder.includes(rule.id),
+        );
+        if (newRules.length === 0) return ruleOrder;
+
+        // Re-sort all rules to maintain proper order
+        const allRulesInOrder = [
+          ...ruleOrder
+            .map((id) => allRules.find((rule) => rule.id === id))
+            .filter((rule): rule is OptimizationRule => rule !== undefined),
+          ...newRules,
+        ];
+        const sorted = sortOptimizationRules(allRulesInOrder);
+        return sorted.map((rule) => rule.id);
       });
     }
   }, [allRules]);
@@ -655,6 +665,13 @@ export default function OptimizationRulesPage() {
   const orderedRules = ruleOrder
     .map((id) => allRules.find((rule) => rule.id === id))
     .filter((rule): rule is OptimizationRule => rule !== undefined);
+
+  // Calculate max priority for new rules
+  const maxPriority =
+    allRules.length > 0
+      ? Math.max(...allRules.map((rule) => rule.priority))
+      : 0;
+  const nextPriority = maxPriority + 1;
 
   // Helper function to get entity name for "Applied to" column
   const getEntityName = useCallback(
@@ -843,24 +860,6 @@ export default function OptimizationRulesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isAddingRule && (
-                <OptimizationRuleInlineForm
-                  initialData={{
-                    entityType: "organization",
-                    entityId: organizationDetails?.id || "",
-                    ruleType: "content_length",
-                    provider: "anthropic",
-                    targetModel: "",
-                    priority: "1",
-                    enabled: true,
-                  }}
-                  onSave={handleCreateRule}
-                  onCancel={handleCancelEdit}
-                  tokenPrices={tokenPrices}
-                  teams={teams}
-                  organizationId={organizationDetails?.id || ""}
-                />
-              )}
               {orderedRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
@@ -871,24 +870,66 @@ export default function OptimizationRulesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                orderedRules.map((rule) => (
-                  <OptimizationRuleRow
-                    key={rule.id}
-                    rule={rule}
-                    isEditing={editingRuleId === rule.id}
-                    onEdit={() => setEditingRuleId(rule.id)}
-                    onSave={(data) => handleUpdateRule(rule.id, data)}
-                    onCancel={handleCancelEdit}
-                    onDelete={() => handleDeleteRule(rule.id)}
-                    onToggleEnabled={(enabled) =>
-                      handleToggleEnabled(rule.id, enabled)
-                    }
-                    tokenPrices={tokenPrices}
-                    getEntityName={getEntityName}
-                    teams={teams}
-                    organizationId={organizationDetails?.id || ""}
-                  />
-                ))
+                <>
+                  {orderedRules
+                    .filter((rule) => rule.enabled)
+                    .map((rule) => (
+                      <OptimizationRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        isEditing={editingRuleId === rule.id}
+                        onEdit={() => setEditingRuleId(rule.id)}
+                        onSave={(data) => handleUpdateRule(rule.id, data)}
+                        onCancel={handleCancelEdit}
+                        onDelete={() => handleDeleteRule(rule.id)}
+                        onToggleEnabled={(enabled) =>
+                          handleToggleEnabled(rule.id, enabled)
+                        }
+                        tokenPrices={tokenPrices}
+                        getEntityName={getEntityName}
+                        teams={teams}
+                        organizationId={organizationDetails?.id || ""}
+                      />
+                    ))}
+                  {isAddingRule && (
+                    <OptimizationRuleInlineForm
+                      initialData={{
+                        entityType: "organization",
+                        entityId: organizationDetails?.id || "",
+                        ruleType: "content_length",
+                        provider: "anthropic",
+                        targetModel: "",
+                        priority: String(nextPriority),
+                        enabled: true,
+                      }}
+                      onSave={handleCreateRule}
+                      onCancel={handleCancelEdit}
+                      tokenPrices={tokenPrices}
+                      teams={teams}
+                      organizationId={organizationDetails?.id || ""}
+                    />
+                  )}
+                  {orderedRules
+                    .filter((rule) => !rule.enabled)
+                    .map((rule) => (
+                      <OptimizationRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        isEditing={editingRuleId === rule.id}
+                        onEdit={() => setEditingRuleId(rule.id)}
+                        onSave={(data) => handleUpdateRule(rule.id, data)}
+                        onCancel={handleCancelEdit}
+                        onDelete={() => handleDeleteRule(rule.id)}
+                        onToggleEnabled={(enabled) =>
+                          handleToggleEnabled(rule.id, enabled)
+                        }
+                        tokenPrices={tokenPrices}
+                        getEntityName={getEntityName}
+                        teams={teams}
+                        organizationId={organizationDetails?.id || ""}
+                      />
+                    ))}
+                </>
               )}
             </TableBody>
           </Table>

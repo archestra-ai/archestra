@@ -350,7 +350,7 @@ function OptimizationRuleInlineForm({
           </Select>
           {formData.ruleType === "content_length" ? (
             <span>
-              Max: 
+              Max tokens: 
               <Input
                 id="maxLength"
                 type="number"
@@ -537,7 +537,7 @@ function OptimizationRuleRow({
       </TableCell>
       <TableCell>
         {rule.ruleType === "content_length"
-          ? `Content length: Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
+          ? `Content length: Max ${(rule.conditions as { maxLength: number }).maxLength} tokens`
           : `Tool presence: ${(rule.conditions as { hasTools: boolean }).hasTools ? "With tools" : "Without tools"}`}
       </TableCell>
       <TableCell className="whitespace-nowrap">

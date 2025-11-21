@@ -6,6 +6,7 @@ import {
   OptimizationRuleModel,
   TokenPriceModel,
 } from "@/models";
+import { getTokenizerForProvider } from "@/tokenizers";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
 type ProviderMessages = {
@@ -90,22 +91,13 @@ export async function getOptimizedModel<
     return null;
   }
 
-  let contentLength = 0;
-  for (const message of messages) {
-    if (typeof message.content === "string") {
-      contentLength += message.content.length;
-    } else if (Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (block.type === "text" && typeof block.text === "string") {
-          contentLength += block.text.length;
-        }
-      }
-    }
-  }
+  // Use provider-specific tokenizer to count tokens
+  const tokenizer = getTokenizerForProvider(provider);
+  const tokenCount = tokenizer.countMessagesTokens(messages);
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
-    contentLength,
+  return OptimizationRuleModel.evaluateRules(rules, {
+    tokenCount,
     hasTools,
   });
 

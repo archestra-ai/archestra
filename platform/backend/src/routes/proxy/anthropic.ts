@@ -96,6 +96,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: Anthropic.Types.MessagesRequest,
     headers: Anthropic.Types.MessagesHeaders,
     reply: FastifyReply,
+    organizationId: string,
     agentId?: string,
   ) => {
     const { tools, stream } = body;
@@ -225,6 +226,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (resolvedAgent.optimizeCost) {
         const hasTools = mergedTools.length > 0;
         const optimizedModel = await utils.costOptimization.getOptimizedModel(
+          organizationId,
           resolvedAgent,
           body.messages,
           "anthropic",
@@ -885,8 +887,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
-    async ({ body, headers }, reply) => {
-      return handleMessages(body, headers, reply);
+    async (request, reply) => {
+      return handleMessages(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+      );
     },
   );
 
@@ -912,8 +919,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
       },
     },
-    async ({ body, headers, params }, reply) => {
-      return handleMessages(body, headers, reply, params.agentId);
+    async (request, reply) => {
+      return handleMessages(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+        request.params.agentId,
+      );
     },
   );
 };

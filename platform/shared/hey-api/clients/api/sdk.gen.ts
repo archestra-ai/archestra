@@ -1165,21 +1165,21 @@ export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
 };
 
 /**
- * Get all optimization rules for an agent
+ * Get all optimization rules for the organization
  */
-export const getOptimizationRules = <ThrowOnError extends boolean = false>(options: Options<GetOptimizationRulesData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetOptimizationRulesResponses, GetOptimizationRulesErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/optimization-rules',
+export const getOptimizationRules = <ThrowOnError extends boolean = false>(options?: Options<GetOptimizationRulesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetOptimizationRulesResponses, GetOptimizationRulesErrors, ThrowOnError>({
+        url: '/api/optimization-rules',
         ...options
     });
 };
 
 /**
- * Create a new optimization rule for an agent
+ * Create a new optimization rule for the organization
  */
 export const createOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<CreateOptimizationRuleData, ThrowOnError>) => {
     return (options.client ?? client).post<CreateOptimizationRuleResponses, CreateOptimizationRuleErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/optimization-rules',
+        url: '/api/optimization-rules',
         ...options,
         headers: {
             'Content-Type': 'application/json',

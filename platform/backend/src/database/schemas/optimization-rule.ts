@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { organizationsTable } from "@/database/schemas/index";
 import type {
   OptimizationRuleConditions,
   OptimizationRuleType,
@@ -16,9 +17,12 @@ import agentsTable from "./agent";
 
 const optimizationRulesTable = pgTable("optimization_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
-  agentId: uuid("agent_id")
+  organizationId: text("organization_id")
     .notNull()
-    .references(() => agentsTable.id, { onDelete: "cascade" }),
+    .references(() => organizationsTable.id, { onDelete: "cascade" }),
+  agentId: uuid("agent_id").references(() => agentsTable.id, {
+    onDelete: "cascade",
+  }),
   ruleType: text("rule_type").$type<OptimizationRuleType>().notNull(),
   conditions: jsonb("conditions").$type<OptimizationRuleConditions>().notNull(),
   provider: text("provider").$type<SupportedProvider>().notNull(),

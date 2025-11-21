@@ -19,17 +19,20 @@ class OptimizationRuleModel {
     return rule;
   }
 
-  static async findByAgentId(agentId: string): Promise<OptimizationRule[]> {
+  static async findByOrganizationId(
+    organizationId: string,
+  ): Promise<OptimizationRule[]> {
     const rules = await db
       .select()
       .from(schema.optimizationRulesTable)
-      .where(eq(schema.optimizationRulesTable.agentId, agentId))
+      .where(eq(schema.optimizationRulesTable.organizationId, organizationId))
       .orderBy(asc(schema.optimizationRulesTable.priority));
 
     return rules;
   }
 
-  static async findByAgentIdAndProvider(
+  static async findEnabledByOrganizationAndProvider(
+    organizationId: string,
     agentId: string,
     provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
@@ -38,32 +41,19 @@ class OptimizationRuleModel {
       .from(schema.optimizationRulesTable)
       .where(
         and(
-          eq(schema.optimizationRulesTable.agentId, agentId),
-          eq(schema.optimizationRulesTable.provider, provider),
-        ),
-      )
-      .orderBy(asc(schema.optimizationRulesTable.priority));
-
-    return rules;
-  }
-
-  static async findEnabledByAgentIdAndProvider(
-    agentId: string,
-    provider: SupportedProvider,
-  ): Promise<OptimizationRule[]> {
-    const rules = await db
-      .select()
-      .from(schema.optimizationRulesTable)
-      .where(
-        and(
-          eq(schema.optimizationRulesTable.agentId, agentId),
+          eq(schema.optimizationRulesTable.organizationId, organizationId),
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.priority));
 
-    return rules;
+    // Filter to include both agent-specific rules and org-wide rules
+    // Agent-specific rules should come first (higher priority)
+    const agentSpecificRules = rules.filter((rule) => rule.agentId === agentId);
+    const orgWideRules = rules.filter((rule) => rule.agentId === null);
+
+    return [...agentSpecificRules, ...orgWideRules];
   }
 
   static async update(

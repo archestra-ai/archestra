@@ -13,6 +13,7 @@ type ProviderMessages = {
 export async function getOptimizedModel<
   Provider extends keyof ProviderMessages,
 >(
+  organizationId: string,
   agent: Agent,
   messages: ProviderMessages[Provider],
   provider: Provider,
@@ -23,11 +24,13 @@ export async function getOptimizedModel<
     return null;
   }
 
-  // Fetch enabled optimization rules for this agent and provider
-  const rules = await OptimizationRuleModel.findEnabledByAgentIdAndProvider(
-    agent.id,
-    provider,
-  );
+  // Fetch enabled optimization rules for this organization, agent, and provider
+  const rules =
+    await OptimizationRuleModel.findEnabledByOrganizationAndProvider(
+      organizationId,
+      agent.id,
+      provider,
+    );
 
   // No rules configured, no optimization
   if (rules.length === 0) {

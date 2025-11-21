@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAgents, useDefaultAgent } from "@/lib/agent.query";
+import { useAgents } from "@/lib/agent.query";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
@@ -54,7 +54,7 @@ import {
 // Form data type for inline editing - uses strings for number inputs
 type RuleFormData = {
   id?: string;
-  agentId: string;
+  agentId: string | null;
   ruleType: OptimizationRule["ruleType"];
   maxLength?: string;
   hasTools?: boolean;
@@ -93,14 +93,16 @@ function OptimizationRuleInlineForm({
   initialData,
   onSave,
   onCancel,
+  agents,
 }: {
   initialData?: RuleFormData;
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
+  agents: Array<{ id: string; name: string }>;
 }) {
   const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
-    agentId: initialData?.agentId || "",
+    agentId: initialData?.agentId ?? null,
     ruleType: initialData?.ruleType || "content_length",
     maxLength: initialData?.maxLength || "",
     hasTools: initialData?.hasTools ?? false,
@@ -138,6 +140,29 @@ function OptimizationRuleInlineForm({
           <SelectContent>
             <SelectItem value="enabled">Enabled</SelectItem>
             <SelectItem value="disabled">Disabled</SelectItem>
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell className="p-2">
+        <Select
+          value={formData.agentId || "org-wide"}
+          onValueChange={(value) =>
+            setFormData({
+              ...formData,
+              agentId: value === "org-wide" ? null : value,
+            })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="org-wide">Organization-wide</SelectItem>
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </TableCell>
@@ -273,6 +298,7 @@ function OptimizationRuleRow({
   onSave,
   onCancel,
   onDelete,
+  agents,
 }: {
   rule: OptimizationRule;
   isEditing: boolean;
@@ -280,6 +306,7 @@ function OptimizationRuleRow({
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
   onDelete: () => void;
+  agents: Array<{ id: string; name: string }>;
 }) {
   if (isEditing) {
     const formData: RuleFormData = {
@@ -305,9 +332,14 @@ function OptimizationRuleRow({
         initialData={formData}
         onSave={onSave}
         onCancel={onCancel}
+        agents={agents}
       />
     );
   }
+
+  const agentName = rule.agentId
+    ? agents.find((a) => a.id === rule.agentId)?.name || "Unknown"
+    : "Organization-wide";
 
   return (
     <TableRow className="hover:bg-muted/30">
@@ -316,6 +348,7 @@ function OptimizationRuleRow({
           {rule.enabled ? "Enabled" : "Disabled"}
         </Badge>
       </TableCell>
+      <TableCell>{agentName}</TableCell>
       <TableCell className="capitalize">
         {rule.ruleType.replace("_", " ")}
       </TableCell>
@@ -376,31 +409,22 @@ function OptimizationRuleRow({
 }
 
 export default function OptimizationRulesPage() {
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [isAddingRule, setIsAddingRule] = useState(false);
 
   const { data: agents = [] } = useAgents();
-  const { data: defaultAgent } = useDefaultAgent();
   const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
-    useOptimizationRules(selectedAgentId);
+    useOptimizationRules();
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  // Set default agent as selected when it loads
-  useEffect(() => {
-    if (defaultAgent && !selectedAgentId) {
-      setSelectedAgentId(defaultAgent.id);
-    }
-  }, [defaultAgent, selectedAgentId]);
-
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
       try {
         await createRule.mutateAsync({
-          agentId: data.agentId,
+          agentId: data.agentId ?? undefined,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
@@ -464,22 +488,7 @@ export default function OptimizationRulesPage() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              value={selectedAgentId || ""}
-              onValueChange={setSelectedAgentId}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Select a profile" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedAgentId && !isAddingRule && (
+            {!isAddingRule && (
               <PermissionButton
                 permissions={{ limit: ["create"] }}
                 onClick={() => setIsAddingRule(true)}
@@ -501,6 +510,7 @@ export default function OptimizationRulesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Status</TableHead>
+                <TableHead>Profile</TableHead>
                 <TableHead>Rule Type</TableHead>
                 <TableHead>Conditions</TableHead>
                 <TableHead>Provider</TableHead>
@@ -510,10 +520,10 @@ export default function OptimizationRulesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isAddingRule && selectedAgentId && (
+              {isAddingRule && (
                 <OptimizationRuleInlineForm
                   initialData={{
-                    agentId: selectedAgentId,
+                    agentId: null,
                     ruleType: "content_length",
                     provider: "anthropic",
                     targetModel: "",
@@ -522,17 +532,16 @@ export default function OptimizationRulesPage() {
                   }}
                   onSave={handleCreateRule}
                   onCancel={handleCancelEdit}
+                  agents={agents}
                 />
               )}
               {optimizationRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-muted-foreground"
                   >
-                    {selectedAgentId
-                      ? "No optimization rules configured for this profile"
-                      : "Select a profile to view optimization rules"}
+                    No optimization rules configured for this organization
                   </TableCell>
                 </TableRow>
               ) : (
@@ -545,6 +554,7 @@ export default function OptimizationRulesPage() {
                     onSave={(data) => handleUpdateRule(rule.id, data)}
                     onCancel={handleCancelEdit}
                     onDelete={() => handleDeleteRule(rule.id)}
+                    agents={agents}
                   />
                 ))
               )}

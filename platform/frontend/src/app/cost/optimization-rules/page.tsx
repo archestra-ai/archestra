@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +13,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -39,7 +39,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAgents } from "@/lib/agent.query";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
@@ -50,11 +49,11 @@ import {
   useOptimizationRules,
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
+import { useTokenPrices } from "@/lib/token-price.query";
 
 // Form data type for inline editing - uses strings for number inputs
 type RuleFormData = {
   id?: string;
-  agentId: string | null;
   ruleType: OptimizationRule["ruleType"];
   maxLength?: string;
   hasTools?: boolean;
@@ -88,21 +87,83 @@ function formDataToConditions(
     : { hasTools: data.hasTools ?? false };
 }
 
+// Helper to infer provider from model name
+function getProviderFromModel(model: string): "anthropic" | "openai" | null {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (model.startsWith("gpt-") || model.startsWith("o1-")) return "openai";
+  return null;
+}
+
+// Model Selector Component
+function ModelSelector({
+  value,
+  provider,
+  tokenPrices,
+  onChange,
+}: {
+  value: string;
+  provider: OptimizationRule["provider"];
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
+  onChange: (model: string) => void;
+}) {
+  const models = tokenPrices
+    .filter((price) => getProviderFromModel(price.model) === provider)
+    .sort((a, b) => {
+      const costA =
+        parseFloat(a.pricePerMillionInput) +
+        parseFloat(a.pricePerMillionOutput);
+      const costB =
+        parseFloat(b.pricePerMillionInput) +
+        parseFloat(b.pricePerMillionOutput);
+      return costA - costB;
+    });
+
+  // Auto-select first (cheapest) model if no value provided or provider changed
+  useEffect(() => {
+    if (!value && models.length > 0) {
+      onChange(models[0].model);
+    }
+  }, [models, value, onChange]);
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select target model" />
+      </SelectTrigger>
+      <SelectContent>
+        {models.map((price) => (
+          <SelectItem key={price.model} value={price.model}>
+            {price.model} (${price.pricePerMillionInput} / $
+            {price.pricePerMillionOutput})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 // Inline Form Component for adding/editing optimization rules
 function OptimizationRuleInlineForm({
   initialData,
   onSave,
   onCancel,
-  agents,
+  tokenPrices,
 }: {
   initialData?: RuleFormData;
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
-  agents: Array<{ id: string; name: string }>;
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
 }) {
   const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
-    agentId: initialData?.agentId ?? null,
     ruleType: initialData?.ruleType || "content_length",
     maxLength: initialData?.maxLength || "",
     hasTools: initialData?.hasTools ?? false,
@@ -127,44 +188,13 @@ function OptimizationRuleInlineForm({
 
   return (
     <TableRow className="bg-muted/30">
-      <TableCell className="p-2">
-        <Select
-          value={formData.enabled ? "enabled" : "disabled"}
-          onValueChange={(value) =>
-            setFormData({ ...formData, enabled: value === "enabled" })
+      <TableCell className="w-16">
+        <Switch
+          checked={formData.enabled}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, enabled: checked })
           }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="enabled">Enabled</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell className="p-2">
-        <Select
-          value={formData.agentId || "org-wide"}
-          onValueChange={(value) =>
-            setFormData({
-              ...formData,
-              agentId: value === "org-wide" ? null : value,
-            })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="org-wide">Organization-wide</SelectItem>
-            {agents.map((agent) => (
-              <SelectItem key={agent.id} value={agent.id}>
-                {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </TableCell>
       <TableCell className="p-2">
         <Select
@@ -173,7 +203,7 @@ function OptimizationRuleInlineForm({
             setFormData({ ...formData, ruleType: value })
           }
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -208,7 +238,7 @@ function OptimizationRuleInlineForm({
               setFormData({ ...formData, hasTools: value === "true" })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -221,11 +251,15 @@ function OptimizationRuleInlineForm({
       <TableCell className="p-2">
         <Select
           value={formData.provider}
-          onValueChange={(value: "anthropic" | "openai") =>
-            setFormData({ ...formData, provider: value })
+          onValueChange={(value) =>
+            setFormData({
+              ...formData,
+              provider: value as OptimizationRule["provider"],
+              targetModel: "",
+            })
           }
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -235,23 +269,11 @@ function OptimizationRuleInlineForm({
         </Select>
       </TableCell>
       <TableCell className="p-2">
-        <Input
-          id="targetModel"
-          type="text"
+        <ModelSelector
           value={formData.targetModel}
-          onChange={(e) =>
-            setFormData({ ...formData, targetModel: e.target.value })
-          }
-          placeholder={
-            formData.provider === "openai" ? "gpt-4o-mini" : "claude-4-5-haiku"
-          }
-          required
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              if (isValid) handleSubmit();
-            }
-          }}
+          provider={formData.provider}
+          tokenPrices={tokenPrices}
+          onChange={(value) => setFormData({ ...formData, targetModel: value })}
         />
       </TableCell>
       <TableCell className="p-2 w-20">
@@ -274,15 +296,18 @@ function OptimizationRuleInlineForm({
           }}
         />
       </TableCell>
-      <TableCell className="p-2 w-48">
+      <TableCell className="p-2">
         <div className="flex gap-2">
-          <Button onClick={() => handleSubmit()} disabled={!isValid} size="sm">
-            <Save className="h-4 w-4 mr-1" />
-            Save
+          <Button
+            onClick={() => handleSubmit()}
+            disabled={!isValid}
+            size="sm"
+            variant="ghost"
+          >
+            <Save className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" onClick={onCancel} size="sm">
-            <X className="h-4 w-4 mr-1" />
-            Cancel
+          <Button type="button" variant="ghost" onClick={onCancel} size="sm">
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </TableCell>
@@ -298,7 +323,8 @@ function OptimizationRuleRow({
   onSave,
   onCancel,
   onDelete,
-  agents,
+  onToggleEnabled,
+  tokenPrices,
 }: {
   rule: OptimizationRule;
   isEditing: boolean;
@@ -306,12 +332,16 @@ function OptimizationRuleRow({
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
   onDelete: () => void;
-  agents: Array<{ id: string; name: string }>;
+  onToggleEnabled: (enabled: boolean) => void;
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
 }) {
   if (isEditing) {
     const formData: RuleFormData = {
       id: rule.id,
-      agentId: rule.agentId,
       ruleType: rule.ruleType,
       maxLength:
         rule.ruleType === "content_length"
@@ -332,23 +362,16 @@ function OptimizationRuleRow({
         initialData={formData}
         onSave={onSave}
         onCancel={onCancel}
-        agents={agents}
+        tokenPrices={tokenPrices}
       />
     );
   }
 
-  const agentName = rule.agentId
-    ? agents.find((a) => a.id === rule.agentId)?.name || "Unknown"
-    : "Organization-wide";
-
   return (
     <TableRow className="hover:bg-muted/30">
-      <TableCell>
-        <Badge variant={rule.enabled ? "default" : "secondary"}>
-          {rule.enabled ? "Enabled" : "Disabled"}
-        </Badge>
+      <TableCell className="w-16">
+        <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
       </TableCell>
-      <TableCell>{agentName}</TableCell>
       <TableCell className="capitalize">
         {rule.ruleType.replace("_", " ")}
       </TableCell>
@@ -412,9 +435,9 @@ export default function OptimizationRulesPage() {
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [isAddingRule, setIsAddingRule] = useState(false);
 
-  const { data: agents = [] } = useAgents();
   const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
     useOptimizationRules();
+  const { data: tokenPrices = [] } = useTokenPrices();
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
@@ -424,7 +447,6 @@ export default function OptimizationRulesPage() {
     async (data: RuleFormData) => {
       try {
         await createRule.mutateAsync({
-          agentId: data.agentId ?? undefined,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
@@ -471,6 +493,20 @@ export default function OptimizationRulesPage() {
     [deleteRule],
   );
 
+  const handleToggleEnabled = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        await updateRule.mutateAsync({
+          id,
+          enabled,
+        });
+      } catch (error) {
+        console.error("Failed to toggle optimization rule:", error);
+      }
+    },
+    [updateRule],
+  );
+
   const handleCancelEdit = useCallback(() => {
     setEditingRuleId(null);
     setIsAddingRule(false);
@@ -508,9 +544,8 @@ export default function OptimizationRulesPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Profile</TableHead>
+              <TableRow className="whitespace-nowrap">
+                <TableHead className="w-16">Enabled</TableHead>
                 <TableHead>Rule Type</TableHead>
                 <TableHead>Conditions</TableHead>
                 <TableHead>Provider</TableHead>
@@ -523,7 +558,6 @@ export default function OptimizationRulesPage() {
               {isAddingRule && (
                 <OptimizationRuleInlineForm
                   initialData={{
-                    agentId: null,
                     ruleType: "content_length",
                     provider: "anthropic",
                     targetModel: "",
@@ -532,13 +566,13 @@ export default function OptimizationRulesPage() {
                   }}
                   onSave={handleCreateRule}
                   onCancel={handleCancelEdit}
-                  agents={agents}
+                  tokenPrices={tokenPrices}
                 />
               )}
               {optimizationRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={7}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No optimization rules configured for this organization
@@ -554,7 +588,10 @@ export default function OptimizationRulesPage() {
                     onSave={(data) => handleUpdateRule(rule.id, data)}
                     onCancel={handleCancelEdit}
                     onDelete={() => handleDeleteRule(rule.id)}
-                    agents={agents}
+                    onToggleEnabled={(enabled) =>
+                      handleToggleEnabled(rule.id, enabled)
+                    }
+                    tokenPrices={tokenPrices}
                   />
                 ))
               )}

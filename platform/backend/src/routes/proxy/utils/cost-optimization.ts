@@ -1,3 +1,4 @@
+import logger from "@/logging";
 import { OptimizationRuleModel, TokenPriceModel } from "@/models";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
@@ -19,10 +20,13 @@ export async function getOptimizedModel<
   provider: Provider,
   hasTools: boolean,
 ): Promise<string | null> {
-  // Return null if cost optimization is disabled
+  const agentId = agent.id;
   if (!agent.optimizeCost) {
+    logger.info({ agentId }, "Cost optimization disabled for profile");
     return null;
   }
+
+  logger.info({ agentId }, "Cost optimization enabled for profile");
 
   // Fetch enabled optimization rules for this organization, agent, and provider
   const rules =
@@ -32,8 +36,11 @@ export async function getOptimizedModel<
       provider,
     );
 
-  // No rules configured, no optimization
   if (rules.length === 0) {
+    logger.info(
+      { agentId, organizationId },
+      "No optimization rules configured",
+    );
     return null;
   }
 
@@ -51,10 +58,24 @@ export async function getOptimizedModel<
   }
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  return OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
     contentLength,
     hasTools,
   });
+
+  if (optimizedModel) {
+    logger.info(
+      { agentId, optimizedModel },
+      "Optimization rule matched - using optimized model",
+    );
+  } else {
+    logger.info(
+      { agentId },
+      "No optimization rule matched - using baseline model",
+    );
+  }
+
+  return optimizedModel;
 }
 
 /**

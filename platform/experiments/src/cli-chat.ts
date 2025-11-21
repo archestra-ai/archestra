@@ -25,8 +25,7 @@ import type {
 
 /**
  * Exemplary commands:
- * pnpm cli-chat-with-guardrails --provider bedrock --model us.anthropic.claude-3-5-sonnet-20241022-v2:0 --include-external-email --guardrail-id arn:aws:bedrock:us-west-2:380012739084:guardrail/xqwqwmwdur9p --guardrail-version 1
- *
+ * pnpm cli-chat-with-guardrails --provider bedrock --model us.anthropic.claude-3-5-sonnet-20241022-v2:0 --include-external-email --guardrail-id arn:aws:bedrock:us-west-2:<your-account-id>:guardrail/<your-guardrail-id> --guardrail-version 1
  */
 
 /**
@@ -1090,7 +1089,6 @@ const cliChatWithBedrockDirectly = async (options: {
   debug: boolean;
   stream: boolean;
   model: string;
-  agentId: string | null;
   guardrailId: string | null;
   guardrailVersion: string;
 }) => {

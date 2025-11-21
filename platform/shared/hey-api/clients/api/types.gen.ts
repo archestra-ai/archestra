@@ -4403,7 +4403,7 @@ export type GetToolInvocationPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4418,7 +4418,7 @@ export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesRespons
 
 export type CreateToolInvocationPolicyData = {
     body: {
-        agentToolId: string;
+        toolPolicyId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4495,7 +4495,7 @@ export type CreateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4661,7 +4661,7 @@ export type GetToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4676,7 +4676,7 @@ export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[k
 
 export type UpdateToolInvocationPolicyData = {
     body?: {
-        agentToolId?: string;
+        toolPolicyId?: string;
         argumentName?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
@@ -4755,7 +4755,7 @@ export type UpdateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4840,7 +4840,7 @@ export type GetTrustedDataPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -4855,7 +4855,7 @@ export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[key
 
 export type CreateTrustedDataPolicyData = {
     body: {
-        agentToolId: string;
+        toolPolicyId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -4932,7 +4932,7 @@ export type CreateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5098,7 +5098,7 @@ export type GetTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5113,7 +5113,7 @@ export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof G
 
 export type UpdateTrustedDataPolicyData = {
     body?: {
-        agentToolId?: string;
+        toolPolicyId?: string;
         description?: string;
         attributePath?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5192,7 +5192,7 @@ export type UpdateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        agentToolId: string;
+        toolPolicyId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -14641,6 +14641,28 @@ export type GetToolPoliciesForToolResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        toolInvocationPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            argumentName: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'allow_when_context_is_untrusted' | 'block_always';
+            reason: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        trustedDataPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            description: string;
+            attributePath: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+            createdAt: string;
+            updatedAt: string;
+        }>;
     }>;
 };
 
@@ -14732,6 +14754,28 @@ export type CreateToolPolicyResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        toolInvocationPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            argumentName: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'allow_when_context_is_untrusted' | 'block_always';
+            reason: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        trustedDataPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            description: string;
+            attributePath: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+            createdAt: string;
+            updatedAt: string;
+        }>;
     };
 };
 
@@ -14902,6 +14946,28 @@ export type UpdateToolPolicyResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        toolInvocationPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            argumentName: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'allow_when_context_is_untrusted' | 'block_always';
+            reason: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        trustedDataPolicies: Array<{
+            id: string;
+            toolPolicyId: string;
+            description: string;
+            attributePath: string;
+            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+            value: string;
+            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+            createdAt: string;
+            updatedAt: string;
+        }>;
     };
 };
 

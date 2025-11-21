@@ -2,8 +2,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   type QueryClient,
   useMutation,
+  useQuery,
   useQueryClient,
-  useSuspenseQuery,
 } from "@tanstack/react-query";
 
 const {
@@ -19,16 +19,16 @@ const {
 } = archestraApiSdk;
 
 export function useToolInvocationPolicies() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byToolPolicyId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          // @ts-expect-error legacy agentToolId in generated types
+          const key = policy.toolPolicyId ?? policy.agentToolId;
+          if (!key) return acc;
+          acc[key] = [...(acc[key] || []), policy];
           return acc;
         },
         {} as Record<
@@ -38,14 +38,31 @@ export function useToolInvocationPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byToolPolicyId,
       };
     },
   });
 }
 
+export function useToolInvocationPoliciesForPolicy(
+  toolPolicyId: string | null,
+) {
+  return useQuery({
+    queryKey: ["tool-invocation-policies", toolPolicyId],
+    enabled: Boolean(toolPolicyId),
+    queryFn: async () => {
+      if (!toolPolicyId) return [];
+      const all = (await getToolInvocationPolicies()).data ?? [];
+      return all.filter((policy) => {
+        // @ts-expect-error generated types still include agentToolId
+        return policy.toolPolicyId === toolPolicyId;
+      });
+    },
+  });
+}
+
 export function useOperators() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["operators"],
     queryFn: async () => (await getOperators()).data ?? [],
   });
@@ -65,10 +82,11 @@ export function useToolInvocationPolicyDeleteMutation() {
 export function useToolInvocationPolicyCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createToolInvocationPolicy({
         body: {
-          agentToolId,
+          // @ts-expect-error backend now expects toolPolicyId
+          toolPolicyId,
           argumentName: "",
           operator: "equal",
           value: "",
@@ -102,16 +120,16 @@ export function useToolInvocationPolicyUpdateMutation() {
 }
 
 export function useToolResultPolicies() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byToolPolicyId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          // @ts-expect-error legacy agentToolId in generated types
+          const key = policy.toolPolicyId ?? policy.agentToolId;
+          if (!key) return acc;
+          acc[key] = [...(acc[key] || []), policy];
           return acc;
         },
         {} as Record<
@@ -121,8 +139,23 @@ export function useToolResultPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byToolPolicyId,
       };
+    },
+  });
+}
+
+export function useToolResultPoliciesForPolicy(toolPolicyId: string | null) {
+  return useQuery({
+    queryKey: ["tool-result-policies", toolPolicyId],
+    enabled: Boolean(toolPolicyId),
+    queryFn: async () => {
+      if (!toolPolicyId) return [];
+      const all = (await getTrustedDataPolicies()).data ?? [];
+      return all.filter((policy) => {
+        // @ts-expect-error generated types still include agentToolId
+        return policy.toolPolicyId === toolPolicyId;
+      });
     },
   });
 }
@@ -130,10 +163,11 @@ export function useToolResultPolicies() {
 export function useToolResultPoliciesCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createTrustedDataPolicy({
         body: {
-          agentToolId,
+          // @ts-expect-error backend now expects toolPolicyId
+          toolPolicyId,
           description: "",
           attributePath: "",
           operator: "equal",

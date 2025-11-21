@@ -7,7 +7,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Select,
@@ -141,13 +140,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           return (
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="text-left font-medium hover:underline"
-                  onClick={() => onToolClick(tool)}
-                >
-                  {tool.name}
-                </button>
+                <span className="text-left font-medium">{tool.name}</span>
                 {isMcpTool(tool) ? (
                   <Badge variant="outline" className="bg-indigo-500/10 text-xs">
                     MCP Server
@@ -158,11 +151,6 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                   </Badge>
                 )}
               </div>
-              {tool.description && (
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {tool.description}
-                </p>
-              )}
             </div>
           );
         },
@@ -255,20 +243,8 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           </span>
         ),
       },
-      {
-        id: "actions",
-        cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onToolClick(row.original)}
-          >
-            Manage
-          </Button>
-        ),
-      },
     ],
-    [onToolClick],
+    [],
   );
 
   if (isLoading && !tools.length) {

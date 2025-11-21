@@ -218,16 +218,16 @@ class TrustedDataPolicyModel {
         schema.agentToolsTable,
         eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
       )
+      .innerJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
+      )
       .leftJoin(
         schema.trustedDataPoliciesTable,
         eq(
-          schema.agentToolsTable.id,
-          schema.trustedDataPoliciesTable.agentToolId,
+          schema.toolPoliciesTable.id,
+          schema.trustedDataPoliciesTable.toolPolicyId,
         ),
-      )
-      .leftJoin(
-        schema.toolPoliciesTable,
-        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         and(

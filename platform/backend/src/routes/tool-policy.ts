@@ -8,10 +8,21 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertToolPolicySchema,
+  ToolInvocation,
+  TrustedData,
   SelectToolPolicySchema,
   UpdateToolPolicySchema,
   UuidIdSchema,
 } from "@/types";
+
+const ToolPolicyWithRulesSchema = SelectToolPolicySchema.omit({
+  organizationId: true,
+}).extend({
+  toolInvocationPolicies: z.array(
+    ToolInvocation.SelectToolInvocationPolicySchema,
+  ),
+  trustedDataPolicies: z.array(TrustedData.SelectTrustedDataPolicySchema),
+});
 
 const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -24,9 +35,7 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           toolId: UuidIdSchema,
         }),
-        response: constructResponseSchema(
-          z.array(SelectToolPolicySchema.omit({ organizationId: true })),
-        ),
+        response: constructResponseSchema(z.array(ToolPolicyWithRulesSchema)),
       },
     },
     async ({ params: { toolId }, headers, user, organizationId }, reply) => {
@@ -66,9 +75,7 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolResultTreatment: true,
           responseModifierTemplate: true,
         }),
-        response: constructResponseSchema(
-          SelectToolPolicySchema.omit({ organizationId: true }),
-        ),
+        response: constructResponseSchema(ToolPolicyWithRulesSchema),
       },
     },
     async (
@@ -96,7 +103,11 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const { organizationId: _org, ...rest } = policy;
-      return reply.send(rest);
+      return reply.send({
+        ...rest,
+        toolInvocationPolicies: [],
+        trustedDataPolicies: [],
+      });
     },
   );
 
@@ -116,9 +127,7 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           toolResultTreatment: true,
           responseModifierTemplate: true,
         }).partial(),
-        response: constructResponseSchema(
-          SelectToolPolicySchema.omit({ organizationId: true }),
-        ),
+        response: constructResponseSchema(ToolPolicyWithRulesSchema),
       },
     },
     async (
@@ -150,7 +159,18 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { organizationId: _org, ...rest } = updated;
-      return reply.send(rest);
+
+      const policiesWithRules = await ToolPolicyModel.findAllByToolId(
+        existing.toolId,
+        organizationId,
+      );
+      const withRules = policiesWithRules.find((p) => p.id === policyId);
+
+      return reply.send({
+        ...rest,
+        toolInvocationPolicies: withRules?.toolInvocationPolicies ?? [],
+        trustedDataPolicies: withRules?.trustedDataPolicies ?? [],
+      });
     },
   );
 

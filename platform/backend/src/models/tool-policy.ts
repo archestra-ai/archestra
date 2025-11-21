@@ -1,4 +1,4 @@
-import { and, count, eq, getTableColumns } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -10,6 +10,8 @@ import type {
   ToolPolicy,
   UpdateToolPolicy,
 } from "@/types";
+import type { ToolInvocationPolicy } from "@/types/autonomy-policies/tool-invocation";
+import type { TrustedDataPolicy } from "@/types/autonomy-policies/trusted-data";
 
 class ToolPolicyModel {
   static async create(policy: InsertToolPolicy): Promise<ToolPolicy> {
@@ -31,7 +33,14 @@ class ToolPolicyModel {
   static async findAllByToolId(
     toolId: string,
     organizationId?: string,
-  ): Promise<ToolPolicy[]> {
+  ): Promise<
+    Array<
+      ToolPolicy & {
+        toolInvocationPolicies: ToolInvocationPolicy[];
+        trustedDataPolicies: TrustedDataPolicy[];
+      }
+    >
+  > {
     let query = db
       .select()
       .from(schema.toolPoliciesTable)
@@ -44,8 +53,45 @@ class ToolPolicyModel {
       );
     }
 
-    const rows = await query;
-    return rows;
+    const policies = await query;
+    if (policies.length === 0) return [];
+
+    const policyIds = policies.map((p) => p.id);
+
+    const [invocationPolicies, trustedPolicies] = await Promise.all([
+      db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(
+          inArray(schema.toolInvocationPoliciesTable.toolPolicyId, policyIds),
+        ),
+      db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(
+          inArray(schema.trustedDataPoliciesTable.toolPolicyId, policyIds),
+        ),
+    ]);
+
+    const invocationByPolicy = new Map<string, ToolInvocationPolicy[]>();
+    for (const policy of invocationPolicies) {
+      const list = invocationByPolicy.get(policy.toolPolicyId) ?? [];
+      list.push(policy as ToolInvocationPolicy);
+      invocationByPolicy.set(policy.toolPolicyId, list);
+    }
+
+    const trustedByPolicy = new Map<string, TrustedDataPolicy[]>();
+    for (const policy of trustedPolicies) {
+      const list = trustedByPolicy.get(policy.toolPolicyId) ?? [];
+      list.push(policy as TrustedDataPolicy);
+      trustedByPolicy.set(policy.toolPolicyId, list);
+    }
+
+    return policies.map((policy) => ({
+      ...policy,
+      toolInvocationPolicies: invocationByPolicy.get(policy.id) ?? [],
+      trustedDataPolicies: trustedByPolicy.get(policy.id) ?? [],
+    }));
   }
 
   static async search(

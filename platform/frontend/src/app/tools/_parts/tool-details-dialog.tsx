@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@shared";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,15 @@ import {
   useAssignTool,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
+import {
+  useOperators,
+  useToolInvocationPolicyCreateMutation,
+  useToolInvocationPolicyDeleteMutation,
+  useToolInvocationPolicyUpdateMutation,
+  useToolResultPoliciesCreateMutation,
+  useToolResultPoliciesDeleteMutation,
+  useToolResultPoliciesUpdateMutation,
+} from "@/lib/policy.query";
 import {
   useCreateToolPolicy,
   useDeleteToolPolicy,
@@ -60,12 +70,28 @@ export function ToolDetailsDialog({
   onOpenChange,
 }: ToolDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState("overview");
-  const { data: policies = [], isLoading: isLoadingPolicies } = useToolPolicies(
-    tool?.id ?? null,
+  const queryClient = useQueryClient();
+  const { data: rawPolicies = [], isLoading: isLoadingPolicies } =
+    useToolPolicies(tool?.id ?? null);
+  const operatorsQuery = useOperators();
+  const policies = (rawPolicies ?? []).filter((policy) =>
+    tool ? policy.toolId === tool.id : true,
   );
+  const operators = operatorsQuery.data ?? [];
   const createPolicy = useCreateToolPolicy();
   const updatePolicy = useUpdateToolPolicy(tool?.id ?? null);
   const deletePolicy = useDeleteToolPolicy(tool?.id ?? null);
+  const createInvocationPolicy = useToolInvocationPolicyCreateMutation();
+  const updateInvocationPolicy = useToolInvocationPolicyUpdateMutation();
+  const deleteInvocationPolicy = useToolInvocationPolicyDeleteMutation();
+  const createTrustedPolicy = useToolResultPoliciesCreateMutation();
+  const updateTrustedPolicy = useToolResultPoliciesUpdateMutation();
+  const deleteTrustedPolicy = useToolResultPoliciesDeleteMutation();
+  const refreshPolicies = () => {
+    if (tool?.id) {
+      queryClient.invalidateQueries({ queryKey: ["tool-policies", tool.id] });
+    }
+  };
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
   const patchAgentTool = useAgentToolPatchMutation();
@@ -267,107 +293,408 @@ export function ToolDetailsDialog({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {policies.map((policy) => (
-                    <div
-                      key={policy.id}
-                      className="rounded-lg border p-4 space-y-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <Input
-                          defaultValue={policy.name}
-                          onBlur={(event) =>
-                            handlePolicyUpdate(policy.id, {
-                              name: event.currentTarget.value,
-                            })
-                          }
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handlePolicyDelete(policy.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <div className="flex items-center justify-between rounded-md border p-3">
-                          <div>
-                            <div className="text-sm font-medium">
-                              Allow untrusted data
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Permit usage even when context contains untrusted
-                              data.
-                            </p>
-                          </div>
-                          <Switch
-                            checked={
-                              policy.allowUsageWhenUntrustedDataIsPresent
-                            }
-                            onCheckedChange={(checked) =>
+                  {policies.map((policy) => {
+                    const invocationRules = policy.toolInvocationPolicies ?? [];
+                    const trustedRules = policy.trustedDataPolicies ?? [];
+                    return (
+                      <div
+                        key={policy.id}
+                        className="rounded-lg border p-4 space-y-4"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <Input
+                            defaultValue={policy.name}
+                            onBlur={(event) =>
                               handlePolicyUpdate(policy.id, {
-                                allowUsageWhenUntrustedDataIsPresent: checked,
+                                name: event.currentTarget.value,
+                              })
+                            }
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handlePolicyDelete(policy.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div className="flex items-center justify-between rounded-md border p-3">
+                            <div>
+                              <div className="text-sm font-medium">
+                                Allow untrusted data
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Permit usage when context has untrusted data.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={
+                                policy.allowUsageWhenUntrustedDataIsPresent
+                              }
+                              onCheckedChange={(checked) =>
+                                handlePolicyUpdate(policy.id, {
+                                  allowUsageWhenUntrustedDataIsPresent: checked,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="rounded-md border p-3">
+                            <div className="text-sm font-medium">
+                              Result treatment
+                            </div>
+                            <Select
+                              defaultValue={policy.toolResultTreatment}
+                              onValueChange={(
+                                value: ToolResultTreatmentOption,
+                              ) =>
+                                handlePolicyUpdate(policy.id, {
+                                  toolResultTreatment: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="mt-2">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TOOL_RESULT_OPTIONS.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="rounded-md border p-3">
+                            <div className="text-sm font-medium">
+                              Last updated
+                            </div>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                              {formatDate({ date: policy.updatedAt })}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">
+                              Response modifier template
+                            </div>
+                          </div>
+                          <Textarea
+                            className="mt-2"
+                            defaultValue={policy.responseModifierTemplate ?? ""}
+                            placeholder="Optional Handlebars template"
+                            rows={3}
+                            onBlur={(event) =>
+                              handlePolicyUpdate(policy.id, {
+                                responseModifierTemplate:
+                                  event.currentTarget.value || null,
                               })
                             }
                           />
                         </div>
-                        <div className="rounded-md border p-3">
-                          <div className="text-sm font-medium">
-                            Result treatment
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium">
+                                Tool invocation policies
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  createInvocationPolicy.mutate(
+                                    {
+                                      toolPolicyId: policy.id,
+                                    },
+                                    {
+                                      onSuccess: refreshPolicies,
+                                    },
+                                  )
+                                }
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add rule
+                              </Button>
+                            </div>
+                            {invocationRules.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No invocation rules.
+                              </p>
+                            ) : (
+                              <div className="space-y-3">
+                                {invocationRules.map((rule) => (
+                                  <div
+                                    key={rule.id}
+                                    className="rounded-md border p-3 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <Input
+                                        defaultValue={rule.argumentName}
+                                        placeholder="argument path"
+                                        onBlur={(event) =>
+                                          updateInvocationPolicy.mutate({
+                                            id: rule.id,
+                                            argumentName:
+                                              event.currentTarget.value,
+                                          })
+                                        }
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          deleteInvocationPolicy.mutate(
+                                            rule.id,
+                                            {
+                                              onSuccess: refreshPolicies,
+                                            },
+                                          )
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                      </Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <Select
+                                        defaultValue={rule.operator as string}
+                                        onValueChange={(value) =>
+                                          updateInvocationPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              operator:
+                                                value as archestraApiTypes.CreateToolInvocationPolicyData["body"]["operator"],
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Operator" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {(operators ?? []).map((op) => (
+                                            <SelectItem
+                                              key={op.value}
+                                              value={op.value}
+                                            >
+                                              {op.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Select
+                                        defaultValue={rule.action}
+                                        onValueChange={(value) =>
+                                          updateInvocationPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              action:
+                                                value as archestraApiTypes.CreateToolInvocationPolicyData["body"]["action"],
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Action" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="allow_when_context_is_untrusted">
+                                            Allow when context untrusted
+                                          </SelectItem>
+                                          <SelectItem value="block_always">
+                                            Block always
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <Input
+                                      defaultValue={rule.value}
+                                      placeholder="Value to match"
+                                      onBlur={(event) =>
+                                        updateInvocationPolicy.mutate({
+                                          id: rule.id,
+                                          value: event.currentTarget.value,
+                                        })
+                                      }
+                                    />
+                                    <Textarea
+                                      defaultValue={rule.reason ?? ""}
+                                      placeholder="Optional reason"
+                                      rows={2}
+                                      onBlur={(event) =>
+                                        updateInvocationPolicy.mutate(
+                                          {
+                                            id: rule.id,
+                                            reason:
+                                              event.currentTarget.value ||
+                                              undefined,
+                                          },
+                                          { onSuccess: refreshPolicies },
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <Select
-                            defaultValue={policy.toolResultTreatment}
-                            onValueChange={(value: ToolResultTreatmentOption) =>
-                              handlePolicyUpdate(policy.id, {
-                                toolResultTreatment: value,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="mt-2">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {TOOL_RESULT_OPTIONS.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="rounded-md border p-3">
-                          <div className="text-sm font-medium">
-                            Last updated
-                          </div>
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            {formatDate({ date: policy.updatedAt })}
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium">
+                                Trusted data policies
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  createTrustedPolicy.mutate(
+                                    {
+                                      toolPolicyId: policy.id,
+                                    },
+                                    {
+                                      onSuccess: refreshPolicies,
+                                    },
+                                  )
+                                }
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add policy
+                              </Button>
+                            </div>
+                            {trustedRules.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No trusted data policies.
+                              </p>
+                            ) : (
+                              <div className="space-y-3">
+                                {trustedRules.map((rule) => (
+                                  <div
+                                    key={rule.id}
+                                    className="rounded-md border p-3 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <Input
+                                        defaultValue={rule.description ?? ""}
+                                        placeholder="Description"
+                                        onBlur={(event) =>
+                                          updateTrustedPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              description:
+                                                event.currentTarget.value,
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
+                                        }
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          deleteTrustedPolicy.mutate(rule.id, {
+                                            onSuccess: refreshPolicies,
+                                          })
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                      </Button>
+                                    </div>
+                                    <Input
+                                      defaultValue={rule.attributePath}
+                                      placeholder="Attribute path"
+                                      onBlur={(event) =>
+                                        updateTrustedPolicy.mutate({
+                                          id: rule.id,
+                                          attributePath:
+                                            event.currentTarget.value,
+                                        })
+                                      }
+                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <Select
+                                        defaultValue={rule.operator as string}
+                                        onValueChange={(value) =>
+                                          updateTrustedPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              operator:
+                                                value as archestraApiTypes.CreateTrustedDataPolicyData["body"]["operator"],
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Operator" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {(operators ?? []).map((op) => (
+                                            <SelectItem
+                                              key={op.value}
+                                              value={op.value}
+                                            >
+                                              {op.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Select
+                                        defaultValue={rule.action}
+                                        onValueChange={(value) =>
+                                          updateTrustedPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              action:
+                                                value as archestraApiTypes.CreateTrustedDataPolicyData["body"]["action"],
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Action" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="mark_as_trusted">
+                                            Mark as trusted
+                                          </SelectItem>
+                                          <SelectItem value="block_always">
+                                            Block always
+                                          </SelectItem>
+                                          <SelectItem value="sanitize_with_dual_llm">
+                                            Sanitize with dual LLM
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <Input
+                                      defaultValue={rule.value}
+                                      placeholder="Value to match"
+                                      onBlur={(event) =>
+                                        updateTrustedPolicy.mutate({
+                                          id: rule.id,
+                                          value: event.currentTarget.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">
-                            Response modifier template
-                          </div>
-                        </div>
-                        <Textarea
-                          className="mt-2"
-                          defaultValue={policy.responseModifierTemplate ?? ""}
-                          placeholder="Optional Handlebars template"
-                          rows={4}
-                          onBlur={(event) =>
-                            handlePolicyUpdate(policy.id, {
-                              responseModifierTemplate:
-                                event.currentTarget.value || null,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>

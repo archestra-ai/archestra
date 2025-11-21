@@ -1,7 +1,7 @@
 "use client";
 
-import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Edit, Info, Plus, Save, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +39,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
@@ -94,6 +100,37 @@ function getProviderFromModel(model: string): "anthropic" | "openai" | null {
   return null;
 }
 
+// Sort optimization rules: enabled first, then by priority (highest first)
+function sortOptimizationRules(rules: OptimizationRule[]): OptimizationRule[] {
+  return [...rules].sort((a, b) => {
+    if (a.enabled !== b.enabled) {
+      return a.enabled ? -1 : 1;
+    }
+    return a.priority - b.priority;
+  });
+}
+
+// Sort models by total cost (input + output price) ascending
+function sortModelsByPrice(
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>,
+): Array<{
+  model: string;
+  pricePerMillionInput: string;
+  pricePerMillionOutput: string;
+}> {
+  return [...tokenPrices].sort((a, b) => {
+    const costA =
+      parseFloat(a.pricePerMillionInput) + parseFloat(a.pricePerMillionOutput);
+    const costB =
+      parseFloat(b.pricePerMillionInput) + parseFloat(b.pricePerMillionOutput);
+    return costA - costB;
+  });
+}
+
 // Model Selector Component
 function ModelSelector({
   value,
@@ -110,17 +147,11 @@ function ModelSelector({
   }>;
   onChange: (model: string) => void;
 }) {
-  const models = tokenPrices
-    .filter((price) => getProviderFromModel(price.model) === provider)
-    .sort((a, b) => {
-      const costA =
-        parseFloat(a.pricePerMillionInput) +
-        parseFloat(a.pricePerMillionOutput);
-      const costB =
-        parseFloat(b.pricePerMillionInput) +
-        parseFloat(b.pricePerMillionOutput);
-      return costA - costB;
-    });
+  const models = sortModelsByPrice(
+    tokenPrices.filter(
+      (price) => getProviderFromModel(price.model) === provider,
+    ),
+  );
 
   // Auto-select first (cheapest) model if no value provided or provider changed
   useEffect(() => {
@@ -434,14 +465,38 @@ function OptimizationRuleRow({
 export default function OptimizationRulesPage() {
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [isAddingRule, setIsAddingRule] = useState(false);
+  const [ruleOrder, setRuleOrder] = useState<string[]>([]);
+  const hasInitialized = useRef(false);
 
-  const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
+  const { data: allRules = [], isLoading: rulesLoading } =
     useOptimizationRules();
   const { data: tokenPrices = [] } = useTokenPrices();
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
+
+  // Sort rules once on initial load, then maintain order
+  useEffect(() => {
+    if (!hasInitialized.current && allRules.length > 0) {
+      // Initial sort: enabled first, then by priority (highest first)
+      const sorted = sortOptimizationRules(allRules);
+      setRuleOrder(sorted.map((rule) => rule.id));
+      hasInitialized.current = true;
+    } else if (hasInitialized.current) {
+      setRuleOrder((ruleOrder) => {
+        const newRuleIds = allRules
+          .filter((rule) => !ruleOrder.includes(rule.id))
+          .map((rule) => rule.id);
+        return [...newRuleIds, ...ruleOrder];
+      });
+    }
+  }, [allRules]);
+
+  // Derive ordered rules from rule order and actual data
+  const orderedRules = ruleOrder
+    .map((id) => allRules.find((rule) => rule.id === id))
+    .filter((rule): rule is OptimizationRule => rule !== undefined);
 
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
@@ -539,7 +594,7 @@ export default function OptimizationRulesPage() {
         </div>
       </CardHeader>
       <CardContent>
-        {optimizationRulesLoading ? (
+        {rulesLoading ? (
           <LoadingSkeleton count={3} prefix="optimization-rules" />
         ) : (
           <Table>
@@ -550,7 +605,25 @@ export default function OptimizationRulesPage() {
                 <TableHead>Conditions</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Target Model</TableHead>
-                <TableHead className="w-20">Priority</TableHead>
+                <TableHead className="w-20">
+                  <div className="flex items-center gap-1">
+                    Order
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-70 text-wrap">
+                          <p>
+                            Rules are evaluated in order (1, 2, 3...). The first
+                            matching rule is applied. If no rules match, the
+                            original model is used.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead className="w-48">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -569,7 +642,7 @@ export default function OptimizationRulesPage() {
                   tokenPrices={tokenPrices}
                 />
               )}
-              {optimizationRules.length === 0 && !isAddingRule ? (
+              {orderedRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -579,7 +652,7 @@ export default function OptimizationRulesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                optimizationRules.map((rule) => (
+                orderedRules.map((rule) => (
                   <OptimizationRuleRow
                     key={rule.id}
                     rule={rule}

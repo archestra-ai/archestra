@@ -1082,9 +1082,9 @@ const cliChatWithAnthropic = async (options: {
 };
 
 /**
- * Bedrock-specific chat handler
+ * Bedrock-specific chat handler (without Archestra LLM Proxy)
  */
-const cliChatWithBedrock = async (options: {
+const cliChatWithBedrockDirectly = async (options: {
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
@@ -1362,7 +1362,7 @@ const cliChatWithGuardrails = async () => {
   } else if (options.provider === "anthropic") {
     await cliChatWithAnthropic(options);
   } else if (options.provider === "bedrock") {
-    await cliChatWithBedrock(options);
+    await cliChatWithBedrockDirectly(options);
   } else {
     throw new Error(`Unsupported provider: ${options.provider}`);
   }

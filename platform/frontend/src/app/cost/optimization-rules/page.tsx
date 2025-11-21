@@ -1,6 +1,7 @@
 "use client";
 
 import { Edit, Info, Plus, Save, Trash2, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
@@ -100,6 +101,13 @@ function getProviderFromModel(model: string): "anthropic" | "openai" | null {
   return null;
 }
 
+// Helper to format provider name for display
+function formatProviderName(provider: string): string {
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  return provider;
+}
+
 // Sort optimization rules: enabled first, then by priority (highest first)
 function sortOptimizationRules(rules: OptimizationRule[]): OptimizationRule[] {
   return [...rules].sort((a, b) => {
@@ -153,6 +161,22 @@ function ModelSelector({
     ),
   );
 
+  // Check if current value has pricing
+  const currentModelHasPricing = models.some((m) => m.model === value);
+
+  // If current value doesn't have pricing but exists, add it to the list
+  const modelsWithCurrent =
+    value && !currentModelHasPricing
+      ? [
+          {
+            model: value,
+            pricePerMillionInput: "0",
+            pricePerMillionOutput: "0",
+          },
+          ...models,
+        ]
+      : models;
+
   // Auto-select first (cheapest) model if no value provided or provider changed
   useEffect(() => {
     if (!value && models.length > 0) {
@@ -160,18 +184,46 @@ function ModelSelector({
     }
   }, [models, value, onChange]);
 
+  // If no models available for this provider, show message
+  if (modelsWithCurrent.length === 0) {
+    return (
+      <div className="px-2 flex gap-2 text-sm whitespace-nowrap">
+        <span className="text-muted-foreground">
+          No pricing configured for {formatProviderName(provider)} models.
+        </span>
+        <Link
+          href="/cost/token-price"
+          className="hover:text-foreground hover:underline"
+        >
+          Add pricing
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger className="w-full">
         <SelectValue placeholder="Select target model" />
       </SelectTrigger>
       <SelectContent>
-        {models.map((price) => (
-          <SelectItem key={price.model} value={price.model}>
-            {price.model} (${price.pricePerMillionInput} / $
-            {price.pricePerMillionOutput})
-          </SelectItem>
-        ))}
+        {modelsWithCurrent.map((price) => {
+          const hasPricing =
+            price.pricePerMillionInput !== "0" ||
+            price.pricePerMillionOutput !== "0";
+          return (
+            <SelectItem
+              key={price.model}
+              value={price.model}
+              className={!hasPricing ? "text-muted-foreground" : ""}
+            >
+              {price.model}
+              {hasPricing
+                ? ` ($${price.pricePerMillionInput} / $${price.pricePerMillionOutput})`
+                : " (no pricing)"}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );
@@ -196,9 +248,9 @@ function OptimizationRuleInlineForm({
   const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
     ruleType: initialData?.ruleType || "content_length",
-    maxLength: initialData?.maxLength || "",
+    maxLength: initialData?.maxLength || "1000",
     hasTools: initialData?.hasTools ?? false,
-    provider: initialData?.provider || "anthropic",
+    provider: initialData?.provider || "openai",
     targetModel: initialData?.targetModel || "",
     priority: initialData?.priority || "1",
     enabled: initialData?.enabled ?? true,
@@ -228,56 +280,60 @@ function OptimizationRuleInlineForm({
         />
       </TableCell>
       <TableCell className="p-2">
-        <Select
-          value={formData.ruleType}
-          onValueChange={(value: "content_length" | "tool_presence") =>
-            setFormData({ ...formData, ruleType: value })
-          }
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="content_length">Content Length</SelectItem>
-            <SelectItem value="tool_presence">Tool Presence</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell className="p-2">
-        {formData.ruleType === "content_length" ? (
-          <Input
-            id="maxLength"
-            type="number"
-            min="0"
-            value={formData.maxLength}
-            onChange={(e) =>
-              setFormData({ ...formData, maxLength: e.target.value })
-            }
-            placeholder="1000"
-            required
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (isValid) handleSubmit();
-              }
-            }}
-          />
-        ) : (
+        <div className="flex gap-2 items-center">
           <Select
-            value={formData.hasTools ? "true" : "false"}
-            onValueChange={(value) =>
-              setFormData({ ...formData, hasTools: value === "true" })
+            value={formData.ruleType}
+            onValueChange={(value: "content_length" | "tool_presence") =>
+              setFormData({ ...formData, ruleType: value })
             }
           >
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="true">With tools</SelectItem>
-              <SelectItem value="false">Without tools</SelectItem>
+              <SelectItem value="content_length">Content Length</SelectItem>
+              <SelectItem value="tool_presence">Tool Presence</SelectItem>
             </SelectContent>
           </Select>
-        )}
+          {formData.ruleType === "content_length" ? (
+            <>
+              Max:
+              <Input
+                id="maxLength"
+                type="number"
+                min="0"
+                className="w-[10em]"
+                value={formData.maxLength}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxLength: e.target.value })
+                }
+                placeholder="1000"
+                required
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (isValid) handleSubmit();
+                  }
+                }}
+              />
+            </>
+          ) : (
+            <Select
+              value={formData.hasTools ? "true" : "false"}
+              onValueChange={(value) =>
+                setFormData({ ...formData, hasTools: value === "true" })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">With tools</SelectItem>
+                <SelectItem value="false">Without tools</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </TableCell>
       <TableCell className="p-2">
         <Select
@@ -370,6 +426,10 @@ function OptimizationRuleRow({
     pricePerMillionOutput: string;
   }>;
 }) {
+  const hasModelPricing = tokenPrices.some(
+    (price) => price.model === rule.targetModel,
+  );
+
   if (isEditing) {
     const formData: RuleFormData = {
       id: rule.id,
@@ -399,24 +459,52 @@ function OptimizationRuleRow({
   }
 
   return (
-    <TableRow className="hover:bg-muted/30">
+    <TableRow
+      className={`hover:bg-muted/30 ${!hasModelPricing ? "text-muted-foreground" : ""}`}
+    >
       <TableCell className="w-16">
-        <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+        <div className={!hasModelPricing ? "opacity-50" : ""}>
+          <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+        </div>
       </TableCell>
-      <TableCell className="capitalize">
-        {rule.ruleType.replace("_", " ")}
-      </TableCell>
-      <TableCell>
+      <TableCell className="whitespace-nowrap">
         {rule.ruleType === "content_length"
-          ? `Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
-          : (rule.conditions as { hasTools: boolean }).hasTools
-            ? "With tools"
-            : "Without tools"}
+          ? `Content length: Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
+          : `Tool presence: ${(rule.conditions as { hasTools: boolean }).hasTools ? "With tools" : "Without tools"}`}
       </TableCell>
-      <TableCell className="capitalize">{rule.provider}</TableCell>
-      <TableCell>{rule.targetModel}</TableCell>
+      <TableCell className="whitespace-nowrap">
+        {formatProviderName(rule.provider)}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <div className="flex gap-2 items-center">
+          {rule.targetModel}
+          {!hasModelPricing && (
+            <>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-70 text-wrap">
+                    <p>
+                      No pricing configured for this model. This rule will not
+                      be applied. Add pricing on the Token Price page.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Link
+                href="/cost/token-price"
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Add pricing
+              </Link>
+            </>
+          )}
+        </div>
+      </TableCell>
       <TableCell>{rule.priority}</TableCell>
-      <TableCell>
+      <TableCell className="pl-2 text-foreground">
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ limit: ["update"] }}
@@ -579,17 +667,20 @@ export default function OptimizationRulesPage() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {!isAddingRule && (
-              <PermissionButton
-                permissions={{ limit: ["create"] }}
-                onClick={() => setIsAddingRule(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Rule
-              </PermissionButton>
-            )}
+            <PermissionButton
+              permissions={{ limit: ["create"] }}
+              onClick={() => {
+                if (editingRuleId !== null) {
+                  setEditingRuleId(null);
+                }
+                setIsAddingRule(true);
+              }}
+              size="sm"
+              variant="default"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Rule
+            </PermissionButton>
           </div>
         </div>
       </CardHeader>
@@ -601,10 +692,26 @@ export default function OptimizationRulesPage() {
             <TableHeader>
               <TableRow className="whitespace-nowrap">
                 <TableHead className="w-16">Enabled</TableHead>
-                <TableHead>Rule Type</TableHead>
-                <TableHead>Conditions</TableHead>
-                <TableHead>Provider</TableHead>
-                <TableHead>Target Model</TableHead>
+                <TableHead>Rule</TableHead>
+                <TableHead className="w-32">Provider</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    Target Model
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-70 text-wrap">
+                          <p>
+                            Only models with configured pricing can be selected.
+                            Add pricing for more models on the Token Price page.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead className="w-20">
                   <div className="flex items-center gap-1">
                     Order
@@ -645,7 +752,7 @@ export default function OptimizationRulesPage() {
               {orderedRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No optimization rules configured for this organization

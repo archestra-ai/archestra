@@ -12,7 +12,7 @@ import { evaluateIfContextIsTrusted } from "./trusted-data";
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
   let toolId: string;
-  let agentToolId: string;
+  let toolPolicyId: string;
   let organizationId: string;
 
   beforeEach(async ({ makeAgent }) => {
@@ -47,7 +47,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     const agentTool = await AgentToolModel.create(agentId, toolId, {
       toolPolicyId: policy.id,
     });
-    agentToolId = agentTool.id;
+    toolPolicyId = agentTool.toolPolicyId as string;
   });
 
   async function createPolicyForTool(
@@ -89,7 +89,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted and blocks tool result when matching block policy", async () => {
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        agentToolId,
+        toolPolicyId,
         attributePath: "emails[*].from",
         operator: "contains",
         value: "hacker",
@@ -137,7 +137,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as trusted when tool result matches allow policy", async () => {
       // Create an allow policy
       await TrustedDataPolicyModel.create({
-        agentToolId,
+        toolPolicyId,
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
@@ -179,7 +179,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted when no policies match", async () => {
       // Create a policy that won't match
       await TrustedDataPolicyModel.create({
-        agentToolId,
+        toolPolicyId,
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
@@ -219,7 +219,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({
-        agentToolId,
+        toolPolicyId,
         attributePath: "source",
         operator: "equal",
         value: "trusted",
@@ -228,7 +228,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
 
       await TrustedDataPolicyModel.create({
-        agentToolId,
+        toolPolicyId,
         attributePath: "source",
         operator: "equal",
         value: "malicious",
@@ -410,17 +410,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const policy = await createPolicyForTool(trustedToolId, {
         toolResultTreatment: "trusted",
       });
-      const trustedAgentTool = await AgentToolModel.create(
-        agentId,
-        trustedToolId,
-        {
-          toolPolicyId: policy.id,
-        },
-      );
+      await AgentToolModel.create(agentId, trustedToolId, {
+        toolPolicyId: policy.id,
+      });
 
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        agentToolId: trustedAgentTool.id,
+        toolPolicyId: policy.id,
         attributePath: "dangerous",
         operator: "equal",
         value: "true",

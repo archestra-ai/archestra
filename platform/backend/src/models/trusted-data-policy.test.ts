@@ -34,7 +34,9 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Create a policy for tool-2
-      await makeTrustedDataPolicy(agentTool2.id, {
+      const policyId2 = agentTool2.toolPolicyId;
+      if (!policyId2) throw new Error("Expected toolPolicyId to be set");
+      await makeTrustedDataPolicy(policyId2, {
         attributePath: "status",
         operator: "equal",
         value: "safe",
@@ -99,7 +101,11 @@ describe("TrustedDataPolicyModel", () => {
       });
 
       // Create blocking policies
-      await makeTrustedDataPolicy(agentTool1.id, {
+      const policyId1 = agentTool1.toolPolicyId;
+      const policyId2 = agentTool2.toolPolicyId;
+      if (!policyId1 || !policyId2)
+        throw new Error("Expected toolPolicyIds to be set");
+      await makeTrustedDataPolicy(policyId1, {
         attributePath: "from",
         operator: "endsWith",
         value: "@spam.com",
@@ -107,7 +113,7 @@ describe("TrustedDataPolicyModel", () => {
         description: "Block spam emails",
       });
 
-      await makeTrustedDataPolicy(agentTool2.id, {
+      await makeTrustedDataPolicy(policyId2, {
         attributePath: "path",
         operator: "contains",
         value: "/etc/passwd",
@@ -192,7 +198,7 @@ describe("TrustedDataPolicyModel", () => {
 
   let agentId: string;
   let toolId: string;
-  let agentToolId: string;
+  let toolPolicyId: string;
 
   beforeEach(async ({ makeAgent, makeTool, makeAgentTool }) => {
     // Create test agent
@@ -208,7 +214,7 @@ describe("TrustedDataPolicyModel", () => {
       allowUsageWhenUntrustedDataIsPresent: false,
       toolResultTreatment: "untrusted",
     });
-    agentToolId = agentTool.id;
+    toolPolicyId = agentTool.toolPolicyId as string;
   });
 
   async function createPolicyForTool(
@@ -253,7 +259,7 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         // Create a trust policy
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "trusted-api",
@@ -277,7 +283,7 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         // Create a trust policy
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "trusted-api",
@@ -430,7 +436,7 @@ describe("TrustedDataPolicyModel", () => {
       test("equal operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "status",
           operator: "equal",
           value: "verified",
@@ -456,7 +462,7 @@ describe("TrustedDataPolicyModel", () => {
       test("notEqual operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "notEqual",
           value: "untrusted",
@@ -482,7 +488,7 @@ describe("TrustedDataPolicyModel", () => {
       test("contains operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "url",
           operator: "contains",
           value: "trusted-domain.com",
@@ -508,7 +514,7 @@ describe("TrustedDataPolicyModel", () => {
       test("notContains operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "content",
           operator: "notContains",
           value: "malicious",
@@ -534,7 +540,7 @@ describe("TrustedDataPolicyModel", () => {
       test("startsWith operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "path",
           operator: "startsWith",
           value: "/trusted/",
@@ -560,7 +566,7 @@ describe("TrustedDataPolicyModel", () => {
       test("endsWith operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "email",
           operator: "endsWith",
           value: "@company.com",
@@ -586,7 +592,7 @@ describe("TrustedDataPolicyModel", () => {
       test("regex operator works correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "id",
           operator: "regex",
           value: "^[A-Z]{3}-[0-9]{5}$",
@@ -614,7 +620,7 @@ describe("TrustedDataPolicyModel", () => {
       test("evaluates wildcard paths correctly", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "emails[*].from",
           operator: "endsWith",
           value: "@trusted.com",
@@ -656,7 +662,7 @@ describe("TrustedDataPolicyModel", () => {
       test("handles empty arrays in wildcard paths", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "items[*].verified",
           operator: "equal",
           value: "true",
@@ -678,7 +684,7 @@ describe("TrustedDataPolicyModel", () => {
       test("handles non-array values in wildcard paths", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "items[*].verified",
           operator: "equal",
           value: "true",
@@ -702,7 +708,7 @@ describe("TrustedDataPolicyModel", () => {
       test("evaluates deeply nested paths", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "response.data.user.verified",
           operator: "equal",
           value: "true",
@@ -750,7 +756,7 @@ describe("TrustedDataPolicyModel", () => {
       test("handles missing nested paths", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "response.data.user.verified",
           operator: "equal",
           value: "true",
@@ -780,7 +786,7 @@ describe("TrustedDataPolicyModel", () => {
       test("blocks data when a block_always policy matches", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "malicious",
@@ -805,7 +811,7 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         // Create an allow policy
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "type",
           operator: "equal",
           value: "email",
@@ -814,7 +820,7 @@ describe("TrustedDataPolicyModel", () => {
         });
 
         // Create a block policy for malicious content
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "from",
           operator: "contains",
           value: "hacker",
@@ -838,7 +844,7 @@ describe("TrustedDataPolicyModel", () => {
       test("blocked policies work with wildcard paths", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "emails[*].from",
           operator: "contains",
           value: "spam",
@@ -867,7 +873,7 @@ describe("TrustedDataPolicyModel", () => {
       test("data passes when no blocked policy matches", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "malicious",
@@ -875,7 +881,7 @@ describe("TrustedDataPolicyModel", () => {
           description: "Block malicious sources",
         });
 
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "trusted",
@@ -899,7 +905,7 @@ describe("TrustedDataPolicyModel", () => {
       test("blocked policies work with different operators", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "domain",
           operator: "endsWith",
           value: ".blocked.com",
@@ -972,7 +978,7 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         // Create multiple policies
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "api-v1",
@@ -980,7 +986,7 @@ describe("TrustedDataPolicyModel", () => {
           description: "API v1 source",
         });
 
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "api-v2",
@@ -1019,7 +1025,7 @@ describe("TrustedDataPolicyModel", () => {
         makeTrustedDataPolicy,
       }) => {
         // Create policies for different attributes
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "source",
           operator: "equal",
           value: "trusted",
@@ -1027,7 +1033,7 @@ describe("TrustedDataPolicyModel", () => {
           description: "Trusted source",
         });
 
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "verified",
           operator: "equal",
           value: "true",
@@ -1057,7 +1063,7 @@ describe("TrustedDataPolicyModel", () => {
       test("handles direct value in tool output", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "status",
           operator: "equal",
           value: "success",
@@ -1080,7 +1086,7 @@ describe("TrustedDataPolicyModel", () => {
       test("handles value wrapper in tool output", async ({
         makeTrustedDataPolicy,
       }) => {
-        await makeTrustedDataPolicy(agentToolId, {
+        await makeTrustedDataPolicy(toolPolicyId, {
           attributePath: "status",
           operator: "equal",
           value: "success",
@@ -1148,7 +1154,7 @@ describe("TrustedDataPolicyModel", () => {
       makeTrustedDataPolicy,
     }) => {
       // Create a blocking policy that would normally block this data
-      await makeTrustedDataPolicy(agentToolId, {
+      await makeTrustedDataPolicy(toolPolicyId, {
         attributePath: "source",
         operator: "equal",
         value: "malicious",
@@ -1174,7 +1180,7 @@ describe("TrustedDataPolicyModel", () => {
       makeTrustedDataPolicy,
     }) => {
       // Test that regular tools still follow normal evaluation
-      await makeTrustedDataPolicy(agentToolId, {
+      await makeTrustedDataPolicy(toolPolicyId, {
         attributePath: "source",
         operator: "equal",
         value: "trusted",

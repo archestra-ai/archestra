@@ -96,7 +96,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: Anthropic.Types.MessagesRequest,
     headers: Anthropic.Types.MessagesHeaders,
     reply: FastifyReply,
-    organizationId: string,
+    _organizationId: string,
     agentId?: string,
   ) => {
     const { tools, stream } = body;
@@ -226,7 +226,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (resolvedAgent.optimizeCost) {
         const hasTools = mergedTools.length > 0;
         const optimizedModel = await utils.costOptimization.getOptimizedModel(
-          organizationId,
           resolvedAgent,
           body.messages,
           "anthropic",

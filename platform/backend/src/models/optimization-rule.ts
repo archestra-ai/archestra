@@ -25,7 +25,12 @@ class OptimizationRuleModel {
     const rules = await db
       .select()
       .from(schema.optimizationRulesTable)
-      .where(eq(schema.optimizationRulesTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.optimizationRulesTable.entityType, "organization"),
+          eq(schema.optimizationRulesTable.entityId, organizationId),
+        ),
+      )
       .orderBy(asc(schema.optimizationRulesTable.priority));
 
     return rules;
@@ -33,7 +38,6 @@ class OptimizationRuleModel {
 
   static async findEnabledByOrganizationAndProvider(
     organizationId: string,
-    agentId: string,
     provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
     const rules = await db
@@ -41,19 +45,15 @@ class OptimizationRuleModel {
       .from(schema.optimizationRulesTable)
       .where(
         and(
-          eq(schema.optimizationRulesTable.organizationId, organizationId),
+          eq(schema.optimizationRulesTable.entityType, "organization"),
+          eq(schema.optimizationRulesTable.entityId, organizationId),
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.priority));
 
-    // Filter to include both agent-specific rules and org-wide rules
-    // Agent-specific rules should come first (higher priority)
-    const agentSpecificRules = rules.filter((rule) => rule.agentId === agentId);
-    const orgWideRules = rules.filter((rule) => rule.agentId === null);
-
-    return [...agentSpecificRules, ...orgWideRules];
+    return rules;
   }
 
   static async update(

@@ -1,5 +1,11 @@
+import { inArray, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
 import logger from "@/logging";
-import { OptimizationRuleModel, TokenPriceModel } from "@/models";
+import {
+  AgentTeamModel,
+  OptimizationRuleModel,
+  TokenPriceModel,
+} from "@/models";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
 type ProviderMessages = {
@@ -14,7 +20,6 @@ type ProviderMessages = {
 export async function getOptimizedModel<
   Provider extends keyof ProviderMessages,
 >(
-  organizationId: string,
   agent: Agent,
   messages: ProviderMessages[Provider],
   provider: Provider,
@@ -28,11 +33,52 @@ export async function getOptimizedModel<
 
   logger.info({ agentId }, "Cost optimization enabled for profile");
 
+  // Get organizationId the same way limits do: from agent's teams OR fallback
+  let organizationId: string | null = null;
+  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+
+  if (agentTeamIds.length > 0) {
+    // Get organizationId from agent's first team
+    const teams = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(inArray(schema.teamsTable.id, agentTeamIds));
+    if (teams.length > 0 && teams[0].organizationId) {
+      organizationId = teams[0].organizationId;
+      logger.info(
+        { agentId, organizationId },
+        "Resolved organizationId from agent's team",
+      );
+    }
+  } else {
+    // If agent has no teams, check if there are any organization optimization rules to apply (fallback)
+    const existingOrgRules = await db
+      .select({ entityId: schema.optimizationRulesTable.entityId })
+      .from(schema.optimizationRulesTable)
+      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
+      .limit(1);
+
+    if (existingOrgRules.length > 0) {
+      organizationId = existingOrgRules[0].entityId;
+      logger.info(
+        { agentId, organizationId },
+        "Agent has no teams - using fallback organizationId from optimization rules",
+      );
+    }
+  }
+
+  if (!organizationId) {
+    logger.warn(
+      { agentId },
+      "Could not resolve organizationId for optimization rules",
+    );
+    return null;
+  }
+
   // Fetch enabled optimization rules for this organization, agent, and provider
   const rules =
     await OptimizationRuleModel.findEnabledByOrganizationAndProvider(
       organizationId,
-      agent.id,
       provider,
     );
 

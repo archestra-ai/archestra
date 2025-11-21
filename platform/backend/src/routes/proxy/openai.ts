@@ -98,7 +98,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
-    organizationId: string,
+    _organizationId: string,
     agentId?: string,
   ) => {
     const { messages, tools, stream } = body;
@@ -207,7 +207,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (resolvedAgent.optimizeCost) {
         const hasTools = (tools?.length ?? 0) > 0;
         const optimizedModel = await utils.costOptimization.getOptimizedModel(
-          organizationId,
           resolvedAgent,
           messages,
           "openai",

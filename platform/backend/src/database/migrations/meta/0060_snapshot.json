@@ -1,5 +1,5 @@
 {
-  "id": "eb3e687c-1ed0-4653-88a3-3c51df49bba3",
+  "id": "5883379b-e45f-414a-a62b-02b5038d6c68",
   "prevId": "9578816d-a401-494d-b8de-b0bb710fb463",
   "version": "7",
   "dialect": "postgresql",
@@ -2278,17 +2278,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
+        "entity_type": {
+          "name": "entity_type",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "rule_type": {
           "name": "rule_type",
@@ -2343,35 +2343,30 @@
           "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {
-        "optimization_rules_organization_id_organization_id_fk": {
-          "name": "optimization_rules_organization_id_organization_id_fk",
-          "tableFrom": "optimization_rules",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
+      "indexes": {
+        "optimization_rules_entity_idx": {
+          "name": "optimization_rules_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "optimization_rules_agent_id_agents_id_fk": {
-          "name": "optimization_rules_agent_id_agents_id_fk",
-          "tableFrom": "optimization_rules",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

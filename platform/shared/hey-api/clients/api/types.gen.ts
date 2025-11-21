@@ -11608,8 +11608,8 @@ export type GetOptimizationRulesResponses = {
      */
     200: Array<{
         id: string;
-        organizationId: string;
-        agentId: string | null;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
         ruleType: 'content_length' | 'tool_presence';
         conditions: {
             maxLength: number;
@@ -11630,7 +11630,6 @@ export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof G
 export type CreateOptimizationRuleData = {
     body: {
         id?: string;
-        agentId?: string | null;
         ruleType: 'content_length' | 'tool_presence';
         conditions: {
             maxLength: number;
@@ -11714,8 +11713,8 @@ export type CreateOptimizationRuleResponses = {
      */
     200: {
         id: string;
-        organizationId: string;
-        agentId: string | null;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
         ruleType: 'content_length' | 'tool_presence';
         conditions: {
             maxLength: number;
@@ -11815,8 +11814,8 @@ export type DeleteOptimizationRuleResponse = DeleteOptimizationRuleResponses[key
 export type UpdateOptimizationRuleData = {
     body?: {
         id?: string;
-        organizationId?: string;
-        agentId?: string | null;
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
         ruleType?: 'content_length' | 'tool_presence';
         conditions?: {
             maxLength: number;
@@ -11902,8 +11901,8 @@ export type UpdateOptimizationRuleResponses = {
      */
     200: {
         id: string;
-        organizationId: string;
-        agentId: string | null;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
         ruleType: 'content_length' | 'tool_presence';
         conditions: {
             maxLength: number;

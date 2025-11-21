@@ -41,14 +41,18 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateOptimizationRule,
         description: "Create a new optimization rule for the organization",
         tags: ["Optimization Rules"],
-        body: InsertOptimizationRuleSchema.omit({ organizationId: true }),
+        body: InsertOptimizationRuleSchema.omit({
+          entityType: true,
+          entityId: true,
+        }),
         response: constructResponseSchema(SelectOptimizationRuleSchema),
       },
     },
     async (request, reply) => {
       const rule = await OptimizationRuleModel.create({
         ...request.body,
-        organizationId: request.organizationId,
+        entityType: "organization",
+        entityId: request.organizationId,
       });
 
       return reply.send(rule);

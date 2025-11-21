@@ -11630,6 +11630,8 @@ export type GetOptimizationRulesResponse = GetOptimizationRulesResponses[keyof G
 export type CreateOptimizationRuleData = {
     body: {
         id?: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
         ruleType: 'content_length' | 'tool_presence';
         conditions: {
             maxLength: number;

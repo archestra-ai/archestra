@@ -58,11 +58,15 @@ import {
   useOptimizationRules,
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/team.query";
 import { useTokenPrices } from "@/lib/token-price.query";
 
 // Form data type for inline editing - uses strings for number inputs
 type RuleFormData = {
   id?: string;
+  entityType: OptimizationRule["entityType"];
+  entityId: string;
   ruleType: OptimizationRule["ruleType"];
   maxLength?: string;
   hasTools?: boolean;
@@ -237,6 +241,8 @@ function OptimizationRuleInlineForm({
   onSave,
   onCancel,
   tokenPrices,
+  teams,
+  organizationId,
 }: {
   initialData?: RuleFormData;
   onSave: (data: RuleFormData) => void;
@@ -246,9 +252,13 @@ function OptimizationRuleInlineForm({
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
   }>;
+  teams: Array<{ id: string; name: string }>;
+  organizationId: string;
 }) {
   const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
+    entityType: initialData?.entityType || "organization",
+    entityId: initialData?.entityId || organizationId,
     ruleType: initialData?.ruleType || "content_length",
     maxLength: initialData?.maxLength || "1000",
     hasTools: initialData?.hasTools ?? false,
@@ -280,6 +290,47 @@ function OptimizationRuleInlineForm({
             setFormData({ ...formData, enabled: checked })
           }
         />
+      </TableCell>
+      <TableCell className="p-2">
+        <div className="flex flex-col gap-2">
+          <Select
+            value={formData.entityType}
+            onValueChange={(value: "organization" | "team") => {
+              setFormData({
+                ...formData,
+                entityType: value,
+                entityId: value === "organization" ? organizationId : "",
+              });
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="organization">Organization</SelectItem>
+              <SelectItem value="team">Team</SelectItem>
+            </SelectContent>
+          </Select>
+          {formData.entityType === "team" && (
+            <Select
+              value={formData.entityId}
+              onValueChange={(value) =>
+                setFormData({ ...formData, entityId: value })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </TableCell>
       <TableCell className="p-2">
         <div className="flex gap-2 items-center">
@@ -414,6 +465,9 @@ function OptimizationRuleRow({
   onDelete,
   onToggleEnabled,
   tokenPrices,
+  getEntityName,
+  teams,
+  organizationId,
 }: {
   rule: OptimizationRule;
   isEditing: boolean;
@@ -427,6 +481,9 @@ function OptimizationRuleRow({
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
   }>;
+  getEntityName: (rule: OptimizationRule) => string;
+  teams: Array<{ id: string; name: string }>;
+  organizationId: string;
 }) {
   const hasModelPricing = tokenPrices.some(
     (price) => price.model === rule.targetModel,
@@ -435,6 +492,8 @@ function OptimizationRuleRow({
   if (isEditing) {
     const formData: RuleFormData = {
       id: rule.id,
+      entityType: rule.entityType,
+      entityId: rule.entityId,
       ruleType: rule.ruleType,
       maxLength:
         rule.ruleType === "content_length"
@@ -456,6 +515,8 @@ function OptimizationRuleRow({
         onSave={onSave}
         onCancel={onCancel}
         tokenPrices={tokenPrices}
+        teams={teams}
+        organizationId={organizationId}
       />
     );
   }
@@ -471,7 +532,10 @@ function OptimizationRuleRow({
           </WithPermissions>
         </div>
       </TableCell>
-      <TableCell className="whitespace-nowrap">
+      <TableCell className="text-sm text-muted-foreground">
+        {getEntityName(rule)}
+      </TableCell>
+      <TableCell>
         {rule.ruleType === "content_length"
           ? `Content length: Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
           : `Tool presence: ${(rule.conditions as { hasTools: boolean }).hasTools ? "With tools" : "Without tools"}`}
@@ -479,7 +543,7 @@ function OptimizationRuleRow({
       <TableCell className="whitespace-nowrap">
         {formatProviderName(rule.provider)}
       </TableCell>
-      <TableCell className="whitespace-nowrap">
+      <TableCell>
         <div className="flex gap-2 items-center">
           {rule.targetModel}
           {!hasModelPricing && (
@@ -563,6 +627,8 @@ export default function OptimizationRulesPage() {
   const { data: allRules = [], isLoading: rulesLoading } =
     useOptimizationRules();
   const { data: tokenPrices = [] } = useTokenPrices();
+  const { data: teams = [] } = useTeams();
+  const { data: organizationDetails } = useOrganization();
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
@@ -590,17 +656,38 @@ export default function OptimizationRulesPage() {
     .map((id) => allRules.find((rule) => rule.id === id))
     .filter((rule): rule is OptimizationRule => rule !== undefined);
 
+  // Helper function to get entity name for "Applied to" column
+  const getEntityName = useCallback(
+    (rule: OptimizationRule) => {
+      if (rule.entityType === "team") {
+        const team = teams.find((t) => t.id === rule.entityId);
+        return team?.name || "Unknown Team";
+      }
+      if (rule.entityType === "organization") {
+        return "The whole organization";
+      }
+      if (rule.entityType === "agent") {
+        return "Specific Profile";
+      }
+      return "Unknown";
+    },
+    [teams],
+  );
+
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
       try {
         await createRule.mutateAsync({
+          entityType: data.entityType,
+          entityId: data.entityId,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
           priority: Number(data.priority),
           enabled: data.enabled,
-        });
+          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
+        } as any);
         setIsAddingRule(false);
         toast.success("Optimization rule created");
       } catch (_error) {
@@ -615,13 +702,16 @@ export default function OptimizationRulesPage() {
       try {
         await updateRule.mutateAsync({
           id,
+          entityType: data.entityType,
+          entityId: data.entityId,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
           priority: Number(data.priority),
           enabled: data.enabled,
-        });
+          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
+        } as any);
         setEditingRuleId(null);
         toast.success("Optimization rule updated");
       } catch (_error) {
@@ -700,6 +790,7 @@ export default function OptimizationRulesPage() {
             <TableHeader>
               <TableRow className="whitespace-nowrap">
                 <TableHead className="w-16">Enabled</TableHead>
+                <TableHead>Applied to</TableHead>
                 <TableHead>Rule</TableHead>
                 <TableHead className="w-32">Provider</TableHead>
                 <TableHead>
@@ -746,6 +837,8 @@ export default function OptimizationRulesPage() {
               {isAddingRule && (
                 <OptimizationRuleInlineForm
                   initialData={{
+                    entityType: "organization",
+                    entityId: organizationDetails?.id || "",
                     ruleType: "content_length",
                     provider: "anthropic",
                     targetModel: "",
@@ -755,12 +848,14 @@ export default function OptimizationRulesPage() {
                   onSave={handleCreateRule}
                   onCancel={handleCancelEdit}
                   tokenPrices={tokenPrices}
+                  teams={teams}
+                  organizationId={organizationDetails?.id || ""}
                 />
               )}
               {orderedRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No optimization rules configured for this organization
@@ -780,6 +875,9 @@ export default function OptimizationRulesPage() {
                       handleToggleEnabled(rule.id, enabled)
                     }
                     tokenPrices={tokenPrices}
+                    getEntityName={getEntityName}
+                    teams={teams}
+                    organizationId={organizationDetails?.id || ""}
                   />
                 ))
               )}

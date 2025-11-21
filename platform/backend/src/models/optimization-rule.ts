@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertOptimizationRule,
@@ -23,12 +23,27 @@ class OptimizationRuleModel {
     organizationId: string,
   ): Promise<OptimizationRule[]> {
     const rules = await db
-      .select()
+      .select(getTableColumns(schema.optimizationRulesTable))
       .from(schema.optimizationRulesTable)
-      .where(
+      .leftJoin(
+        schema.teamsTable,
         and(
-          eq(schema.optimizationRulesTable.entityType, "organization"),
-          eq(schema.optimizationRulesTable.entityId, organizationId),
+          eq(schema.optimizationRulesTable.entityType, "team"),
+          eq(schema.optimizationRulesTable.entityId, schema.teamsTable.id),
+        ),
+      )
+      .where(
+        or(
+          // Organization-level rules
+          and(
+            eq(schema.optimizationRulesTable.entityType, "organization"),
+            eq(schema.optimizationRulesTable.entityId, organizationId),
+          ),
+          // Team-level rules for teams in this organization
+          and(
+            eq(schema.optimizationRulesTable.entityType, "team"),
+            eq(schema.teamsTable.organizationId, organizationId),
+          ),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.priority));

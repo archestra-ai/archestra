@@ -41,19 +41,23 @@ const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateOptimizationRule,
         description: "Create a new optimization rule for the organization",
         tags: ["Optimization Rules"],
-        body: InsertOptimizationRuleSchema.omit({
-          entityType: true,
-          entityId: true,
-        }),
+        body: InsertOptimizationRuleSchema,
         response: constructResponseSchema(SelectOptimizationRuleSchema),
       },
     },
     async (request, reply) => {
-      const rule = await OptimizationRuleModel.create({
-        ...request.body,
-        entityType: "organization",
-        entityId: request.organizationId,
-      });
+      // Validate that entityId matches organization context
+      if (request.body.entityType === "organization") {
+        // Ensure entityId is the current organization
+        if (request.body.entityId !== request.organizationId) {
+          throw new ApiError(
+            403,
+            "Cannot create rule for different organization",
+          );
+        }
+      }
+
+      const rule = await OptimizationRuleModel.create(request.body);
 
       return reply.send(rule);
     },

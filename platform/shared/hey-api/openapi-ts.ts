@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { createClient, defineConfig } from "@hey-api/openapi-ts";
+import { MCP_CATALOG_API_BASE_URL } from "../consts";
 
 const archestraApiConfig = await defineConfig({
   input: "http://localhost:9000/openapi.json",
@@ -23,7 +24,7 @@ const archestraApiConfig = await defineConfig({
 });
 
 const archestraCatalogConfig = await defineConfig({
-  input: "https://archestra.ai/mcp-catalog/api/docs",
+  input: `${MCP_CATALOG_API_BASE_URL}/docs`,
   output: {
     path: "./hey-api/clients/archestra-catalog",
     clean: false,

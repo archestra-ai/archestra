@@ -88,7 +88,7 @@ class ToolInvocationPolicyModel {
         schema.toolPoliciesTable,
         eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
-      .innerJoin(
+      .leftJoin(
         schema.toolInvocationPoliciesTable,
         eq(
           schema.toolPoliciesTable.id,
@@ -127,6 +127,9 @@ class ToolInvocationPolicyModel {
       action,
       reason,
     } of applicablePoliciesForAgent) {
+      if (!operator || !action || !argumentName || !policyValue) {
+        continue;
+      }
       // Extract the argument value using lodash
       const argumentValue = get(toolInput, argumentName);
 

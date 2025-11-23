@@ -81,10 +81,12 @@ test.describe("LLM Proxy - OpenAI", () => {
     );
     expect(readFileAgentTool).toBeDefined();
     toolId = readFileAgentTool.id;
+    const toolPolicyId = readFileAgentTool.toolPolicy?.id;
+    expect(toolPolicyId).toBeDefined();
 
     // 3. Create a trusted data policy that marks messages with "untrusted" in content as untrusted
     const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-      agentToolId: toolId,
+      toolPolicyId,
       description: "Mark messages containing UNTRUSTED_DATA as untrusted",
       attributePath: "$.content",
       operator: "contains",
@@ -98,7 +100,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     const toolInvocationPolicyResponse = await createToolInvocationPolicy(
       request,
       {
-        agentToolId: toolId,
+        toolPolicyId,
         argumentPath: "file_path",
         operator: "contains",
         value: "/etc/",
@@ -472,10 +474,12 @@ test.describe("LLM Proxy - Anthropic", () => {
     );
     expect(readFileAgentTool).toBeDefined();
     toolId = readFileAgentTool.id;
+    const toolPolicyId = readFileAgentTool.toolPolicy?.id;
+    expect(toolPolicyId).toBeDefined();
 
     // 3. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted
     const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-      agentToolId: toolId,
+      toolPolicyId,
       description: "Mark messages containing UNTRUSTED_DATA as untrusted",
       attributePath: "$.content",
       operator: "contains",
@@ -489,7 +493,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     const toolInvocationPolicyResponse = await createToolInvocationPolicy(
       request,
       {
-        agentToolId: toolId,
+        toolPolicyId,
         argumentPath: "file_path",
         operator: "contains",
         value: "/etc/",

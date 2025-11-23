@@ -126,7 +126,7 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createToolInvocationPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
+    toolPolicyId: string;
     argumentPath: string;
     operator: string;
     value: string;
@@ -139,7 +139,7 @@ const createToolInvocationPolicy = async (
     method: "post",
     urlSuffix: "/api/autonomy-policies/tool-invocation",
     data: {
-      agentToolId: policy.agentToolId,
+      toolPolicyId: policy.toolPolicyId,
       argumentName: policy.argumentPath, // argumentPath maps to argumentName in the schema
       operator: policy.operator,
       value: policy.value,
@@ -169,7 +169,7 @@ const deleteToolInvocationPolicy = async (
 const createTrustedDataPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
+    toolPolicyId: string;
     description: string;
     attributePath: string;
     operator: string;

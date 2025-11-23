@@ -50,7 +50,7 @@ export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
 export const ToolFilterSchema = z.object({
   search: z.string().optional(),
   agentId: UuidIdSchema.optional(),
-  origin: z.enum(["llm-proxy", "mcp"]).optional(),
+  origin: z.union([z.string(), z.enum(["llm-proxy", "mcp"])]).optional(),
   mcpServerOwnerId: z.string().optional(),
   excludeArchestraTools: z.coerce.boolean().optional(),
 });

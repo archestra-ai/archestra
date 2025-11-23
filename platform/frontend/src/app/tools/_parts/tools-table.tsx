@@ -11,9 +11,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents } from "@/lib/agent.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
 import { isMcpTool } from "@/lib/tool.utils";
-import { formatDate } from "@/lib/utils";
 import type { Tool } from "./types";
 
 interface ToolsTableProps {
@@ -59,6 +59,7 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
     },
   ]);
 
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
   const { data: agents } = useAgents();
 
   const { data: toolsData, isLoading } = useTools({
@@ -88,6 +89,15 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
 
   const tools = toolsData?.data ?? [];
   const pagination = toolsData?.pagination;
+
+  // Get unique origins from internal MCP catalog
+  const uniqueOrigins = useMemo(() => {
+    const origins = new Set<{ id: string; name: string }>();
+    internalMcpCatalogItems?.forEach((item) => {
+      origins.add({ id: item.id, name: item.name });
+    });
+    return Array.from(origins);
+  }, [internalMcpCatalogItems]);
 
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -208,16 +218,18 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
       },
       {
         accessorKey: "assignedAgentsCount",
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="flex items-center gap-1 font-semibold"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Profiles
-            <SortIcon isSorted={column.getIsSorted()} />
-          </button>
-        ),
+        // TODO: the sorting here doesn't fully work
+        // header: ({ column }) => (
+        //   <button
+        //     type="button"
+        //     className="flex items-center gap-1 font-semibold"
+        //     onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        //   >
+        //     Profiles
+        //     <SortIcon isSorted={column.getIsSorted()} />
+        //   </button>
+        // ),
+        header: "Profiles",
         cell: ({ row }) => (
           <div className="text-center font-medium">
             {row.original.assignedAgentsCount}
@@ -226,38 +238,22 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
       },
       {
         accessorKey: "policyCount",
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="flex items-center gap-1 font-semibold"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Policies
-            <SortIcon isSorted={column.getIsSorted()} />
-          </button>
-        ),
+        // TODO: the sorting here doesn't fully work
+        // header: ({ column }) => (
+        //   <button
+        //     type="button"
+        //     className="flex items-center gap-1 font-semibold"
+        //     onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        //   >
+        //     Policies
+        //     <SortIcon isSorted={column.getIsSorted()} />
+        //   </button>
+        // ),
+        header: "Policies",
         cell: ({ row }) => (
           <div className="text-center font-medium">
             {row.original.policyCount}
           </div>
-        ),
-      },
-      {
-        accessorKey: "updatedAt",
-        header: ({ column }) => (
-          <button
-            type="button"
-            className="flex items-center gap-1 font-semibold"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Updated
-            <SortIcon isSorted={column.getIsSorted()} />
-          </button>
-        ),
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {formatDate({ date: row.original.updatedAt })}
-          </span>
         ),
       },
     ],
@@ -296,15 +292,17 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
               })) || []),
             ]}
           />
-          {/* TODO: update this to have all origins (not just these static options) */}
           <SearchableSelect
             value={originFilter}
             onValueChange={handleOriginFilterChange}
             placeholder="Filter by Origin"
             items={[
               { value: "all", label: "All Origins" },
-              { value: "mcp", label: "MCP Servers" },
               { value: "llm-proxy", label: "LLM Proxy" },
+              ...uniqueOrigins.map((origin) => ({
+                value: origin.id,
+                label: origin.name,
+              })),
             ]}
           />
         </div>

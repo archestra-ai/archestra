@@ -51,14 +51,6 @@ class ToolModel {
       : slugifiedName;
   }
 
-  static async create(tool: InsertTool): Promise<Tool> {
-    const [createdTool] = await db
-      .insert(schema.toolsTable)
-      .values(tool)
-      .returning();
-    return createdTool;
-  }
-
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
     // For Archestra built-in tools (both agentId and catalogId are null), check if tool already exists
     // This prevents duplicate Archestra tools since NULL != NULL in unique constraints

@@ -2,7 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { ToolModel, ToolPolicyModel } from "@/models";
+import { AgentToolModel, ToolModel, ToolPolicyModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -101,6 +101,18 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolId,
         organizationId,
       });
+
+      // Ensure the newly created policy is associated with the tool's agent-tool record
+      // so tool invocation policies take effect immediately.
+      if (tool.agentId) {
+        await AgentToolModel.createOrUpdateCredentials(
+          tool.agentId,
+          toolId,
+          undefined,
+          undefined,
+          policy.id,
+        );
+      }
 
       const { organizationId: _org, ...rest } = policy;
       return reply.send({

@@ -72,7 +72,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agent-tools",
+      urlSuffix: `/api/agent-tools?agentId=${agentId}`,
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
@@ -389,20 +389,16 @@ test.describe("LLM Proxy - OpenAI", () => {
     }) => {
       // Clean up: delete the created resources
       if (toolInvocationPolicyId) {
-        await deleteToolInvocationPolicy(request, toolInvocationPolicyId).catch(
-          () => {},
-        );
+        await deleteToolInvocationPolicy(request, toolInvocationPolicyId);
       }
       if (trustedDataPolicyId) {
-        await deleteTrustedDataPolicy(request, trustedDataPolicyId).catch(
-          () => {},
-        );
-      }
-      if (agentId) {
-        await deleteAgent(request, agentId).catch(() => {});
+        await deleteTrustedDataPolicy(request, trustedDataPolicyId);
       }
       if (toolPolicyId) {
-        await deleteToolPolicy(request, toolPolicyId).catch(() => {});
+        await deleteToolPolicy(request, toolPolicyId);
+      }
+      if (agentId) {
+        await deleteAgent(request, agentId);
       }
     },
   );
@@ -478,7 +474,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: "/api/agent-tools",
+      urlSuffix: `/api/agent-tools?agentId=${agentId}`,
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
@@ -620,11 +616,11 @@ test.describe("LLM Proxy - Anthropic", () => {
       if (trustedDataPolicyId) {
         await deleteTrustedDataPolicy(request, trustedDataPolicyId);
       }
-      if (agentId) {
-        await deleteAgent(request, agentId);
-      }
       if (toolPolicyId) {
         await deleteToolPolicy(request, toolPolicyId);
+      }
+      if (agentId) {
+        await deleteAgent(request, agentId);
       }
     },
   );

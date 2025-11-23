@@ -98,6 +98,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
+    _organizationId: string,
     agentId?: string,
   ) => {
     const { messages, tools, stream } = body;
@@ -751,8 +752,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, headers }, reply) => {
-      return handleChatCompletion(body, headers, reply);
+    async (request, reply) => {
+      return handleChatCompletion(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+      );
     },
   );
 
@@ -777,8 +783,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, headers, params }, reply) => {
-      return handleChatCompletion(body, headers, reply, params.agentId);
+    async (request, reply) => {
+      return handleChatCompletion(
+        request.body,
+        request.headers,
+        reply,
+        request.organizationId,
+        request.params.agentId,
+      );
     },
   );
 };

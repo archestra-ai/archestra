@@ -5,6 +5,15 @@ import { homedir } from "node:os";
 import path, { resolve } from "node:path";
 import * as readline from "node:readline/promises";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  BedrockRuntimeClient,
+  ConverseCommand,
+  type ConverseCommandInput,
+  ConverseStreamCommand,
+  type ConverseStreamCommandInput,
+  type Message,
+  type Tool,
+} from "@aws-sdk/client-bedrock-runtime";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -15,13 +24,19 @@ import type {
 } from "openai/resources/chat/completions";
 
 /**
+ * Exemplary commands:
+ * pnpm cli-chat-with-guardrails --provider bedrock --model us.anthropic.claude-3-5-sonnet-20241022-v2:0 --include-external-email --guardrail-id arn:aws:bedrock:us-west-2:<your-account-id>:guardrail/<your-guardrail-id> --guardrail-version 1
+ */
+
+/**
  * Load .env from platform root
  *
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-const ARCHESTRA_API_BASE_PROXY_URL = "http://localhost:9000/v1";
+// const ARCHESTRA_API_BASE_PROXY_URL = "http://localhost:9000/v1";
+const ARCHESTRA_API_BASE_PROXY_URL = "https://backend.archestra.dev/v1";
 const USER_AGENT = "Archestra CLI Chat";
 const SYSTEM_PROMPT = `If the user asks you to read a directory, or file, it should be relative to ~.
 
@@ -37,7 +52,7 @@ const terminal = readline.createInterface({
   output: process.stdout,
 });
 
-type Provider = "openai" | "gemini" | "anthropic";
+type Provider = "openai" | "gemini" | "anthropic" | "bedrock";
 
 const parseArgs = (): {
   includeExternalEmail: boolean;
@@ -47,6 +62,8 @@ const parseArgs = (): {
   model: string;
   provider: Provider;
   agentId: string | null;
+  guardrailId: string | null;
+  guardrailVersion: string;
 } => {
   if (process.argv.includes("--help")) {
     console.log(`
@@ -55,8 +72,10 @@ Options:
 --include-malicious-email Include malicious email in mock Gmail data
 --stream                  Stream the response
 --model <model>           The model to use for the chat (default: gpt-4o for openai, gemini-2.5-flash for gemini)
---provider <provider>     The provider to use (openai, gemini, or anthropic, default: openai)
+--provider <provider>     The provider to use (openai, gemini, anthropic, or bedrock, default: openai)
 --agent-id <uuid>         The agent ID to use (optional, creates agent-specific proxy URL)
+--guardrail-id <id>       Bedrock guardrail ID or ARN (optional, bedrock only)
+--guardrail-version <ver> Bedrock guardrail version (default: DRAFT, bedrock only)
 --debug                   Print debug messages
 --help                    Print this help message
     `);
@@ -66,6 +85,8 @@ Options:
   const modelIndex = process.argv.indexOf("--model");
   const providerIndex = process.argv.indexOf("--provider");
   const agentIdIndex = process.argv.indexOf("--agent-id");
+  const guardrailIdIndex = process.argv.indexOf("--guardrail-id");
+  const guardrailVersionIndex = process.argv.indexOf("--guardrail-version");
 
   const provider = (
     providerIndex !== -1 ? process.argv[providerIndex + 1] : "openai"
@@ -79,6 +100,8 @@ Options:
     model = "gemini-2.5-flash";
   } else if (provider === "anthropic") {
     model = "claude-sonnet-4-5-20250929";
+  } else if (provider === "bedrock") {
+    model = "us.anthropic.claude-3-5-sonnet-20241022-v2:0";
   } else {
     model = "gpt-4o";
   }
@@ -91,6 +114,12 @@ Options:
     model,
     provider,
     agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
+    guardrailId:
+      guardrailIdIndex !== -1 ? process.argv[guardrailIdIndex + 1] : null,
+    guardrailVersion:
+      guardrailVersionIndex !== -1
+        ? process.argv[guardrailVersionIndex + 1]
+        : "DRAFT",
   };
 };
 
@@ -562,11 +591,16 @@ const cliChatWithGemini = async (options: {
 
       // Convert tools to Gemini format
       const tools = getToolDefinitions();
-      const functionDeclarations = tools.map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        parameters: tool.function.parameters,
-      }));
+      const functionDeclarations = tools.map((tool) => {
+        if (tool.type !== "function") {
+          throw new Error("Only function tools are supported");
+        }
+        return {
+          name: tool.function.name,
+          description: tool.function.description,
+          parameters: tool.function.parameters,
+        };
+      });
 
       const requestBody = {
         contents,
@@ -593,9 +627,9 @@ const cliChatWithGemini = async (options: {
         }
 
         for await (const chunk of response) {
-          if (chunk.candidates?.[0]?.content) {
+          if (chunk.candidates?.[0]?.content?.parts) {
             for (const part of chunk.candidates[0].content.parts) {
-              if ("text" in part) {
+              if ("text" in part && part.text) {
                 accumulatedText += part.text;
                 process.stdout.write(part.text);
               } else if ("functionCall" in part) {
@@ -768,13 +802,21 @@ const cliChatWithAnthropic = async (options: {
       stepCount++;
 
       // Convert OpenAI tool definitions to Anthropic format
-      const tools = getToolDefinitions().map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        input_schema: tool.function.parameters,
-      }));
+      const tools = getToolDefinitions().map((tool) => {
+        if (tool.type !== "function") {
+          throw new Error("Only function tools are supported");
+        }
+        return {
+          name: tool.function.name,
+          description: tool.function.description,
+          input_schema: (tool.function.parameters || {
+            type: "object",
+            properties: {},
+          }) as Anthropic.Tool.InputSchema,
+        };
+      });
 
-      let assistantMessage: Anthropic.Message;
+      let assistantMessage: Anthropic.Message | undefined;
 
       if (stream) {
         if (debug && stepCount > 1) {
@@ -844,7 +886,7 @@ const cliChatWithAnthropic = async (options: {
                 accumulatedContent.push({
                   type: "text",
                   text: chunk.delta.text,
-                });
+                } as Anthropic.ContentBlock);
               }
             } else if (chunk.delta.type === "thinking_delta") {
               // Thinking content
@@ -907,7 +949,12 @@ const cliChatWithAnthropic = async (options: {
               model,
               stop_reason: null,
               stop_sequence: null,
-              usage: { input_tokens: 0, output_tokens: 0 },
+              usage: {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+              },
             };
           }
         }
@@ -949,6 +996,10 @@ const cliChatWithAnthropic = async (options: {
       }
 
       // Add assistant message to history
+      if (!assistantMessage) {
+        throw new Error("Assistant message was not initialized");
+      }
+
       messages.push({
         role: "assistant",
         content: assistantMessage.content,
@@ -1029,6 +1080,276 @@ const cliChatWithAnthropic = async (options: {
   }
 };
 
+/**
+ * Bedrock-specific chat handler (without Archestra LLM Proxy)
+ */
+const cliChatWithBedrockDirectly = async (options: {
+  includeExternalEmail: boolean;
+  includeMaliciousEmail: boolean;
+  debug: boolean;
+  stream: boolean;
+  model: string;
+  guardrailId: string | null;
+  guardrailVersion: string;
+}) => {
+  const region =
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-west-2";
+
+  const bedrock = new BedrockRuntimeClient({
+    region,
+  });
+
+  const {
+    includeExternalEmail,
+    includeMaliciousEmail,
+    debug,
+    stream,
+    model,
+    guardrailId,
+    guardrailVersion,
+  } = options;
+
+  const messages: Message[] = [];
+
+  printStartMessage(model, "bedrock");
+
+  if (guardrailId) {
+    console.log(
+      `Using guardrail: ${guardrailId} (version: ${guardrailVersion})`,
+    );
+    console.log("\n");
+  }
+
+  while (true) {
+    const userInput = await terminal.question("You: ");
+
+    if (userInput === HELP_COMMAND) {
+      handleHelpCommand();
+      continue;
+    } else if (userInput === EXIT_COMMAND) {
+      handleExitCommand();
+    }
+
+    messages.push({
+      role: "user",
+      content: [{ text: userInput }],
+    });
+
+    // Loop to handle function calls
+    let continueLoop = true;
+    let stepCount = 0;
+    const maxSteps = 5;
+
+    while (continueLoop && stepCount < maxSteps) {
+      stepCount++;
+
+      // Convert OpenAI tool definitions to Bedrock format
+      const tools = getToolDefinitions().map((tool) => {
+        if (tool.type !== "function") {
+          throw new Error("Only function tools are supported");
+        }
+        return {
+          toolSpec: {
+            name: tool.function.name,
+            description: tool.function.description,
+            inputSchema: {
+              json: tool.function.parameters,
+            },
+          },
+        } as Tool;
+      });
+
+      const requestParams: ConverseCommandInput = {
+        modelId: model,
+        messages,
+        system: [{ text: SYSTEM_PROMPT }],
+        toolConfig: {
+          tools,
+        },
+        inferenceConfig: {
+          maxTokens: 4096,
+        },
+      };
+
+      // Add guardrail configuration if provided
+      if (guardrailId) {
+        requestParams.guardrailConfig = {
+          guardrailIdentifier: guardrailId,
+          guardrailVersion: guardrailVersion,
+          trace: debug ? "enabled" : "disabled",
+        };
+      }
+
+      let assistantMessage: Message;
+
+      if (stream) {
+        const streamParams: ConverseStreamCommandInput = {
+          ...requestParams,
+        };
+
+        const command = new ConverseStreamCommand(streamParams);
+        const response = await bedrock.send(command);
+
+        // Accumulate streaming response
+        const accumulatedContent: any[] = [];
+        let currentToolUse: any = null;
+
+        if (stepCount === 1) {
+          process.stdout.write("\nAssistant: ");
+        }
+
+        if (response.stream) {
+          for await (const chunk of response.stream) {
+            if (debug) {
+              console.log(
+                `[DEBUG] Received chunk type: ${JSON.stringify(Object.keys(chunk))}`,
+              );
+            }
+
+            if (chunk.contentBlockStart) {
+              if (chunk.contentBlockStart.start?.toolUse) {
+                currentToolUse = {
+                  toolUseId: chunk.contentBlockStart.start.toolUse.toolUseId,
+                  name: chunk.contentBlockStart.start.toolUse.name,
+                  input: "",
+                };
+              }
+            } else if (chunk.contentBlockDelta) {
+              if (chunk.contentBlockDelta.delta?.text) {
+                const text = chunk.contentBlockDelta.delta.text;
+                process.stdout.write(text);
+
+                const lastBlock =
+                  accumulatedContent[accumulatedContent.length - 1];
+                if (lastBlock && lastBlock.text !== undefined) {
+                  lastBlock.text += text;
+                } else {
+                  accumulatedContent.push({ text });
+                }
+              } else if (chunk.contentBlockDelta.delta?.toolUse) {
+                if (currentToolUse) {
+                  currentToolUse.input +=
+                    chunk.contentBlockDelta.delta.toolUse.input || "";
+                }
+              }
+            } else if (chunk.contentBlockStop) {
+              if (currentToolUse) {
+                try {
+                  currentToolUse.input = JSON.parse(currentToolUse.input);
+                } catch {
+                  currentToolUse.input = {};
+                }
+                accumulatedContent.push({ toolUse: currentToolUse });
+                currentToolUse = null;
+              }
+            }
+          }
+        }
+
+        assistantMessage = {
+          role: "assistant",
+          content: accumulatedContent,
+        };
+      } else {
+        const command = new ConverseCommand(requestParams);
+        const response = await bedrock.send(command);
+
+        assistantMessage = response.output?.message || {
+          role: "assistant",
+          content: [],
+        };
+
+        // Print text content if present
+        const textBlocks = assistantMessage.content?.filter(
+          (block) => block.text !== undefined,
+        );
+        if (textBlocks && textBlocks.length > 0) {
+          const text = textBlocks.map((b) => b.text).join("");
+          process.stdout.write(`\nAssistant: ${text}`);
+        }
+      }
+
+      // Add assistant message to history
+      messages.push(assistantMessage);
+
+      // Check for tool use blocks
+      const toolUseBlocks = assistantMessage.content?.filter(
+        (block) => block.toolUse !== undefined,
+      );
+
+      if (toolUseBlocks && toolUseBlocks.length > 0) {
+        // Execute each tool call
+        const toolResults: any[] = [];
+
+        for (const block of toolUseBlocks) {
+          const toolUse = block.toolUse;
+          if (!toolUse) continue;
+
+          const toolName = toolUse.name;
+          const toolArgs = toolUse.input;
+
+          if (debug) {
+            console.log(
+              `\n[DEBUG] Calling tool: ${toolName} with args:`,
+              toolArgs,
+            );
+          }
+
+          try {
+            const toolResult = await executeToolCall(
+              toolName || "",
+              toolArgs,
+              includeExternalEmail,
+              includeMaliciousEmail,
+            );
+
+            toolResults.push({
+              toolResult: {
+                toolUseId: toolUse.toolUseId,
+                content: [{ json: toolResult }],
+              },
+            });
+
+            if (debug) {
+              console.log(`[DEBUG] Tool result:`, toolResult);
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+
+            toolResults.push({
+              toolResult: {
+                toolUseId: toolUse.toolUseId,
+                content: [{ json: { error: errorMessage } }],
+                status: "error",
+              },
+            });
+
+            if (debug) {
+              console.error(`[DEBUG] Tool error:`, errorMessage);
+            }
+          }
+        }
+
+        // Add tool results to messages
+        messages.push({
+          role: "user",
+          content: toolResults,
+        });
+      } else {
+        // No tool calls, stop the loop
+        continueLoop = false;
+      }
+    }
+
+    if (stepCount >= maxSteps) {
+      console.log("\n[Max steps reached]");
+    }
+
+    process.stdout.write("\n\n");
+  }
+};
+
 const cliChatWithGuardrails = async () => {
   const options = parseArgs();
 
@@ -1038,6 +1359,8 @@ const cliChatWithGuardrails = async () => {
     await cliChatWithGemini(options);
   } else if (options.provider === "anthropic") {
     await cliChatWithAnthropic(options);
+  } else if (options.provider === "bedrock") {
+    await cliChatWithBedrockDirectly(options);
   } else {
     throw new Error(`Unsupported provider: ${options.provider}`);
   }

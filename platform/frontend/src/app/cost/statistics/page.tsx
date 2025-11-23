@@ -572,7 +572,7 @@ export default function StatisticsPage() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <a
-            href="https://www.archestra.ai/docs/platform-observability"
+            href="https://archestra.ai/docs/platform-observability"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"

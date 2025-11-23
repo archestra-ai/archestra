@@ -170,7 +170,7 @@ export function RolesList() {
                 <br />
                 See documentation{" "}
                 <a
-                  href="https://www.archestra.ai/docs/platform-access-control"
+                  href="https://archestra.ai/docs/platform-access-control"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-500 hover:underline inline-flex items-center gap-1 block"

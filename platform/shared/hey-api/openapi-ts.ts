@@ -23,7 +23,7 @@ const archestraApiConfig = await defineConfig({
 });
 
 const archestraCatalogConfig = await defineConfig({
-  input: "https://www.archestra.ai/mcp-catalog/api/docs",
+  input: "https://archestra.ai/mcp-catalog/api/docs",
   output: {
     path: "./hey-api/clients/archestra-catalog",
     clean: false,

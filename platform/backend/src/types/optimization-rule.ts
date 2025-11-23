@@ -25,7 +25,14 @@ export const OptimizationRuleTypeSchema = z.enum([
   "tool_presence",
 ]);
 
+export const OptimizationRuleEntityTypeSchema = z.enum([
+  "organization",
+  "team",
+  "agent",
+]);
+
 const extendedFields = {
+  entityType: OptimizationRuleEntityTypeSchema,
   ruleType: OptimizationRuleTypeSchema,
   conditions: OptimizationRuleConditionsSchema,
   provider: SupportedProvidersSchema,
@@ -55,6 +62,9 @@ export type OptimizationRuleConditions = z.infer<
   typeof OptimizationRuleConditionsSchema
 >;
 export type OptimizationRuleType = z.infer<typeof OptimizationRuleTypeSchema>;
+export type OptimizationRuleEntityType = z.infer<
+  typeof OptimizationRuleEntityTypeSchema
+>;
 
 export type OptimizationRule = z.infer<typeof SelectOptimizationRuleSchema>;
 export type InsertOptimizationRule = z.infer<

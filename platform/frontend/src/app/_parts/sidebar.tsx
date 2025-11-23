@@ -131,7 +131,7 @@ const CommunitySideBarSection = ({ starCount }: { starCount: number }) => (
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
             <a
-              href="https://www.archestra.ai/docs/"
+              href="https://archestra.ai/docs/"
               target="_blank"
               rel="noopener noreferrer"
             >

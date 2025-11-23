@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.6](https://github.com/archestra-ai/archestra/compare/platform-v0.6.5...platform-v0.6.6) (2025-11-20)
+
+
+### Features
+
+* helm chart - allow configuring deployment strategy + `imagePullPolicy` ([#1203](https://github.com/archestra-ai/archestra/issues/1203)) ([01f320b](https://github.com/archestra-ai/archestra/commit/01f320b1cbdb1c3083c1ba81641ae62c4c0b69b0))
+
+
+### Bug Fixes
+
+* address `INSERT` unique constraint issue + cache `getChatMcpTools` ([#1206](https://github.com/archestra-ai/archestra/issues/1206)) ([100edd2](https://github.com/archestra-ai/archestra/commit/100edd2327212d56d108da9265016ea508cca16d))
+* chat settings & prompts in permission dialog ([#1205](https://github.com/archestra-ai/archestra/issues/1205)) ([dc47cc8](https://github.com/archestra-ai/archestra/commit/dc47cc8802371762e252e2a3823dec2ee8c85d44))
+* docker pull always first in docs ([#1198](https://github.com/archestra-ai/archestra/issues/1198)) ([32c21d0](https://github.com/archestra-ai/archestra/commit/32c21d0e1762742991560782e13c75d2c07add90))
+* getters for runtime config variables ([#1204](https://github.com/archestra-ai/archestra/issues/1204)) ([31c0b3d](https://github.com/archestra-ai/archestra/commit/31c0b3d85e08c65d5b188f34d3759f060a3de69a))
+* minor texts ([#1200](https://github.com/archestra-ai/archestra/issues/1200)) ([fcbcda3](https://github.com/archestra-ai/archestra/commit/fcbcda3a06b02480444ded52f395abc34069910f))
+* ui route & action permissions ([#1188](https://github.com/archestra-ai/archestra/issues/1188)) ([685d0d5](https://github.com/archestra-ai/archestra/commit/685d0d532229b695ae9c54f1d2231d662e087377))
+
 ## [0.6.5](https://github.com/archestra-ai/archestra/compare/platform-v0.6.4...platform-v0.6.5) (2025-11-19)
 
 

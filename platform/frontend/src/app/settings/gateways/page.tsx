@@ -21,7 +21,7 @@ export default function GatewaysSettingsPage() {
             <h3 className="font-medium mb-4">Integration Guides</h3>
             <div className="grid grid-cols-2 gap-3">
               <a
-                href="https://www.archestra.ai/docs/platform-n8n-example"
+                href="https://archestra.ai/docs/platform-n8n-example"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -50,7 +50,7 @@ export default function GatewaysSettingsPage() {
               </a>
 
               <a
-                href="https://www.archestra.ai/docs/platform-vercel-ai-example"
+                href="https://archestra.ai/docs/platform-vercel-ai-example"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -79,7 +79,7 @@ export default function GatewaysSettingsPage() {
               </a>
 
               <a
-                href="https://www.archestra.ai/docs/platform-langchain-example"
+                href="https://archestra.ai/docs/platform-langchain-example"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -108,7 +108,7 @@ export default function GatewaysSettingsPage() {
               </a>
 
               <a
-                href="https://www.archestra.ai/docs/platform-openwebui-example"
+                href="https://archestra.ai/docs/platform-openwebui-example"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -137,7 +137,7 @@ export default function GatewaysSettingsPage() {
               </a>
 
               <a
-                href="https://www.archestra.ai/docs/platform-pydantic-example"
+                href="https://archestra.ai/docs/platform-pydantic-example"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
@@ -166,7 +166,7 @@ export default function GatewaysSettingsPage() {
               </a>
 
               <a
-                href="https://www.archestra.ai/docs"
+                href="https://archestra.ai/docs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"

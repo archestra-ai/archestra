@@ -1,6 +1,6 @@
 # Mastra GitHub Agent
 
-A basic [Mastra](https://mastra.ai) project featuring a vulnerable GitHub agent. This project containerized by platform/docker-compose-mastra.yml and used for a Mastra + Archestra demo at https://www.archestra.ai/docs/platform-mastra-example.
+A basic [Mastra](https://mastra.ai) project featuring a vulnerable GitHub agent. This project containerized by platform/docker-compose-mastra.yml and used for a Mastra + Archestra demo at https://archestra.ai/docs/platform-mastra-example.
 
 1. Install dependencies
 ```bash

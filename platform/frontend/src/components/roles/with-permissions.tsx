@@ -6,15 +6,14 @@
  *
  * @example
  * <WithPermissions permissions={{ profile: ["update"] }}>
- *   <Button onClick={handleEdit}>
- *     <Pencil className="h-4 w-4" />
- *   </Button>
+ *   <Switch />
  * </WithPermissions>
  */
 
+import type { SwitchProps } from "@radix-ui/react-switch";
 import type { Permissions } from "@shared";
 import React from "react";
-import type { Button } from "@/components/ui/button";
+import type { ButtonProps } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -24,13 +23,14 @@ import type { TooltipButton } from "@/components/ui/tooltip-button";
 import { useHasPermissions } from "@/lib/auth.query";
 import { cn } from "@/lib/utils";
 
-type ButtonInstance = React.ReactElement<React.ComponentProps<typeof Button>>;
-type TooltipButtonInstance = React.ReactElement<
-  React.ComponentProps<typeof TooltipButton>
->;
+type TooltipButtonProps = React.ComponentProps<typeof TooltipButton>;
+
+type ButtonInstance = React.ReactElement<ButtonProps>;
+type TooltipButtonInstance = React.ReactElement<TooltipButtonProps>;
+type SwitchInstance = React.ReactElement<SwitchProps>;
 
 type WithPermissionsProps = {
-  children: ButtonInstance | TooltipButtonInstance;
+  children: ButtonInstance | TooltipButtonInstance | SwitchInstance;
   permissions: Permissions;
 };
 
@@ -38,10 +38,8 @@ type WithPermissionsProps = {
  * Type guard to check if element has an 'tooltip' prop (TooltipButton)
  */
 function isTooltipButton(
-  props:
-    | React.ComponentProps<typeof Button>
-    | React.ComponentProps<typeof TooltipButton>,
-): props is React.ComponentProps<typeof TooltipButton> {
+  props: ButtonProps | TooltipButtonProps | SwitchProps,
+): props is TooltipButtonProps {
   return "tooltip" in props;
 }
 

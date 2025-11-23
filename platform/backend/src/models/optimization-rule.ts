@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertOptimizationRule,
@@ -19,27 +19,31 @@ class OptimizationRuleModel {
     return rule;
   }
 
-  static async findByAgentId(agentId: string): Promise<OptimizationRule[]> {
-    const rules = await db
-      .select()
-      .from(schema.optimizationRulesTable)
-      .where(eq(schema.optimizationRulesTable.agentId, agentId))
-      .orderBy(asc(schema.optimizationRulesTable.priority));
-
-    return rules;
-  }
-
-  static async findByAgentIdAndProvider(
-    agentId: string,
-    provider: SupportedProvider,
+  static async findByOrganizationId(
+    organizationId: string,
   ): Promise<OptimizationRule[]> {
     const rules = await db
-      .select()
+      .select(getTableColumns(schema.optimizationRulesTable))
       .from(schema.optimizationRulesTable)
-      .where(
+      .leftJoin(
+        schema.teamsTable,
         and(
-          eq(schema.optimizationRulesTable.agentId, agentId),
-          eq(schema.optimizationRulesTable.provider, provider),
+          eq(schema.optimizationRulesTable.entityType, "team"),
+          eq(schema.optimizationRulesTable.entityId, schema.teamsTable.id),
+        ),
+      )
+      .where(
+        or(
+          // Organization-level rules
+          and(
+            eq(schema.optimizationRulesTable.entityType, "organization"),
+            eq(schema.optimizationRulesTable.entityId, organizationId),
+          ),
+          // Team-level rules for teams in this organization
+          and(
+            eq(schema.optimizationRulesTable.entityType, "team"),
+            eq(schema.teamsTable.organizationId, organizationId),
+          ),
         ),
       )
       .orderBy(asc(schema.optimizationRulesTable.priority));
@@ -47,8 +51,8 @@ class OptimizationRuleModel {
     return rules;
   }
 
-  static async findEnabledByAgentIdAndProvider(
-    agentId: string,
+  static async findEnabledByOrganizationAndProvider(
+    organizationId: string,
     provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
     const rules = await db
@@ -56,7 +60,8 @@ class OptimizationRuleModel {
       .from(schema.optimizationRulesTable)
       .where(
         and(
-          eq(schema.optimizationRulesTable.agentId, agentId),
+          eq(schema.optimizationRulesTable.entityType, "organization"),
+          eq(schema.optimizationRulesTable.entityId, organizationId),
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),

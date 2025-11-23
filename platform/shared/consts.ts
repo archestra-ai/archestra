@@ -33,5 +33,4 @@ export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
  */
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 
-export const MCP_CATALOG_API_BASE_URL =
-  "https://www.archestra.ai/mcp-catalog/api";
+export const MCP_CATALOG_API_BASE_URL = "https://archestra.ai/mcp-catalog/api";

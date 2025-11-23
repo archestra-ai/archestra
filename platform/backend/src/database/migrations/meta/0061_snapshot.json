@@ -1,6 +1,6 @@
 {
-  "id": "8272283c-821c-4154-8d2e-a9ff617c09f8",
-  "prevId": "78250012-b621-418d-9d00-d74cfdd70718",
+  "id": "496d2579-20a7-461b-9888-68d30093b470",
+  "prevId": "5883379b-e45f-414a-a62b-02b5038d6c68",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2277,9 +2277,15 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
+        "entity_type": {
+          "name": "entity_type",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -2336,22 +2342,30 @@
           "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {
-        "optimization_rules_agent_id_agents_id_fk": {
-          "name": "optimization_rules_agent_id_agents_id_fk",
-          "tableFrom": "optimization_rules",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
+      "indexes": {
+        "optimization_rules_entity_idx": {
+          "name": "optimization_rules_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2978,8 +2992,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agent_tool_id": {
-          "name": "agent_tool_id",
+        "tool_policy_id": {
+          "name": "tool_policy_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3031,12 +3045,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tool_invocation_policies_agent_tool_id_agent_tools_id_fk": {
-          "name": "tool_invocation_policies_agent_tool_id_agent_tools_id_fk",
+        "tool_invocation_policies_tool_policy_id_tool_policies_id_fk": {
+          "name": "tool_invocation_policies_tool_policy_id_tool_policies_id_fk",
           "tableFrom": "tool_invocation_policies",
-          "tableTo": "agent_tools",
+          "tableTo": "tool_policies",
           "columnsFrom": [
-            "agent_tool_id"
+            "tool_policy_id"
           ],
           "columnsTo": [
             "id"
@@ -3290,8 +3304,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "agent_tool_id": {
-          "name": "agent_tool_id",
+        "tool_policy_id": {
+          "name": "tool_policy_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3344,12 +3358,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "trusted_data_policies_agent_tool_id_agent_tools_id_fk": {
-          "name": "trusted_data_policies_agent_tool_id_agent_tools_id_fk",
+        "trusted_data_policies_tool_policy_id_tool_policies_id_fk": {
+          "name": "trusted_data_policies_tool_policy_id_tool_policies_id_fk",
           "tableFrom": "trusted_data_policies",
-          "tableTo": "agent_tools",
+          "tableTo": "tool_policies",
           "columnsFrom": [
-            "agent_tool_id"
+            "tool_policy_id"
           ],
           "columnsTo": [
             "id"

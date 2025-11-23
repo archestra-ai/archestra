@@ -17,6 +17,7 @@ import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -191,6 +192,8 @@ function Agents() {
     },
   });
 
+  const updateAgent = useUpdateAgent();
+
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
     { id: sortBy, desc: sortDirection === "desc" },
@@ -274,6 +277,7 @@ function Agents() {
     {
       id: "name",
       accessorKey: "name",
+      size: 300,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -381,6 +385,35 @@ function Agents() {
       ),
     },
     {
+      id: "optimizeCost",
+      header: "Optimize Cost",
+      size: 130,
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <WithPermissions permissions={{ profile: ["update"] }}>
+            <Switch
+              checked={agent.optimizeCost ?? false}
+              onCheckedChange={async (checked) => {
+                try {
+                  await updateAgent.mutateAsync({
+                    id: agent.id,
+                    data: { optimizeCost: checked },
+                  });
+                  toast.success(
+                    `Cost optimization ${checked ? "enabled" : "disabled"}`,
+                  );
+                } catch (_error) {
+                  toast.error("Failed to update cost optimization");
+                }
+              }}
+              disabled={updateAgent.isPending}
+            />
+          </WithPermissions>
+        );
+      },
+    },
+    {
       id: "actions",
       header: "Actions",
       size: 176,
@@ -415,7 +448,7 @@ function Agents() {
                 <br />A profile can be: an N8N workflow, a custom application,
                 or a team sharing an MCP gateway.{" "}
                 <a
-                  href="https://www.archestra.ai/docs/platform-agents"
+                  href="https://archestra.ai/docs/platform-agents"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-foreground"

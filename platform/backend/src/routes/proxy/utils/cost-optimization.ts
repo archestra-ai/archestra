@@ -1,4 +1,11 @@
-import { OptimizationRuleModel, TokenPriceModel } from "@/models";
+import { inArray, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
+import logger from "@/logging";
+import {
+  AgentTeamModel,
+  OptimizationRuleModel,
+  TokenPriceModel,
+} from "@/models";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
 type ProviderMessages = {
@@ -18,19 +25,68 @@ export async function getOptimizedModel<
   provider: Provider,
   hasTools: boolean,
 ): Promise<string | null> {
-  // Return null if cost optimization is disabled
+  const agentId = agent.id;
   if (!agent.optimizeCost) {
+    logger.info({ agentId }, "Cost optimization disabled for profile");
     return null;
   }
 
-  // Fetch enabled optimization rules for this agent and provider
-  const rules = await OptimizationRuleModel.findEnabledByAgentIdAndProvider(
-    agent.id,
-    provider,
-  );
+  logger.info({ agentId }, "Cost optimization enabled for profile");
 
-  // No rules configured, no optimization
+  // Get organizationId the same way limits do: from agent's teams OR fallback
+  let organizationId: string | null = null;
+  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
+
+  if (agentTeamIds.length > 0) {
+    // Get organizationId from agent's first team
+    const teams = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(inArray(schema.teamsTable.id, agentTeamIds));
+    if (teams.length > 0 && teams[0].organizationId) {
+      organizationId = teams[0].organizationId;
+      logger.info(
+        { agentId, organizationId },
+        "Resolved organizationId from agent's team",
+      );
+    }
+  } else {
+    // If agent has no teams, check if there are any organization optimization rules to apply (fallback)
+    const existingOrgRules = await db
+      .select({ entityId: schema.optimizationRulesTable.entityId })
+      .from(schema.optimizationRulesTable)
+      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
+      .limit(1);
+
+    if (existingOrgRules.length > 0) {
+      organizationId = existingOrgRules[0].entityId;
+      logger.info(
+        { agentId, organizationId },
+        "Agent has no teams - using fallback organizationId from optimization rules",
+      );
+    }
+  }
+
+  if (!organizationId) {
+    logger.warn(
+      { agentId },
+      "Could not resolve organizationId for optimization rules",
+    );
+    return null;
+  }
+
+  // Fetch enabled optimization rules for this organization, agent, and provider
+  const rules =
+    await OptimizationRuleModel.findEnabledByOrganizationAndProvider(
+      organizationId,
+      provider,
+    );
+
   if (rules.length === 0) {
+    logger.info(
+      { agentId, organizationId },
+      "No optimization rules configured",
+    );
     return null;
   }
 
@@ -48,10 +104,24 @@ export async function getOptimizedModel<
   }
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  return OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
     contentLength,
     hasTools,
   });
+
+  if (optimizedModel) {
+    logger.info(
+      { agentId, optimizedModel },
+      "Optimization rule matched - using optimized model",
+    );
+  } else {
+    logger.info(
+      { agentId },
+      "No optimization rule matched - using baseline model",
+    );
+  }
+
+  return optimizedModel;
 }
 
 /**

@@ -14,37 +14,20 @@ export type OptimizationRule =
   archestraApiTypes.CreateOptimizationRuleResponses["200"];
 
 export type CreateOptimizationRuleInput =
-  archestraApiTypes.CreateOptimizationRuleData["body"] &
-    archestraApiTypes.CreateOptimizationRuleData["path"];
+  archestraApiTypes.CreateOptimizationRuleData["body"];
 
 export type UpdateOptimizationRuleInput = Partial<
   archestraApiTypes.UpdateOptimizationRuleData["body"]
 > &
   archestraApiTypes.UpdateOptimizationRuleData["path"];
 
-// Get all optimization rules for an agent
-export function useOptimizationRules(agentId: string | null) {
+// Get all optimization rules for the organization
+export function useOptimizationRules() {
   return useQuery<OptimizationRule[]>({
-    queryKey: ["optimization-rules", agentId],
+    queryKey: ["optimization-rules"],
     queryFn: async () => {
-      if (!agentId) return [];
-      const response = await getOptimizationRules({
-        path: { agentId },
-      });
+      const response = await getOptimizationRules();
       return response.data ?? [];
-    },
-    enabled: !!agentId,
-  });
-}
-
-// Get all optimization rules across all agents
-export function useAllOptimizationRules() {
-  return useQuery<OptimizationRule[]>({
-    queryKey: ["optimization-rules", "all"],
-    queryFn: async () => {
-      // This would need a backend endpoint to list all rules
-      // For now, return empty array
-      return [];
     },
   });
 }
@@ -55,19 +38,14 @@ export function useCreateOptimizationRule() {
 
   return useMutation({
     mutationFn: async (data: CreateOptimizationRuleInput) => {
-      const { agentId, ...body } = data;
       const response = await createOptimizationRule({
-        path: { agentId },
-        body,
+        body: data,
       });
       return response.data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["optimization-rules", variables.agentId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["optimization-rules", "all"],
+        queryKey: ["optimization-rules"],
       });
     },
   });

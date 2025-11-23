@@ -3335,6 +3335,7 @@ export type GetAllAgentToolsData = {
     query?: {
         search?: string;
         agentId?: string;
+        toolId?: string;
         /**
          * Can be 'llm-proxy' or a catalogId
          */

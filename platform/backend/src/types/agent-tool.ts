@@ -41,6 +41,7 @@ export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 export const AgentToolFilterSchema = z.object({
   search: z.string().optional(),
   agentId: UuidIdSchema.optional(),
+  toolId: UuidIdSchema.optional(),
   origin: z.string().optional().describe("Can be 'llm-proxy' or a catalogId"),
   mcpServerOwnerId: z
     .string()

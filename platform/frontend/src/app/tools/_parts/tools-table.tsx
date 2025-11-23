@@ -8,13 +8,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents } from "@/lib/agent.query";
 import { useTools } from "@/lib/tool.query";
@@ -108,6 +102,30 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      updateUrlParams({ search: value || null, page: "1" });
+    },
+    [updateUrlParams],
+  );
+
+  const handleAgentFilterChange = useCallback(
+    (value: string) => {
+      setAgentFilter(value);
+      updateUrlParams({ agentId: value === "all" ? null : value, page: "1" });
+    },
+    [updateUrlParams],
+  );
+
+  const handleOriginFilterChange = useCallback(
+    (value: string) => {
+      setOriginFilter(value);
+      updateUrlParams({ origin: value === "all" ? null : value, page: "1" });
+    },
+    [updateUrlParams],
   );
 
   const handlePaginationChange = useCallback(
@@ -261,56 +279,34 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
         <div className="flex w-full flex-col gap-4 md:flex-row">
           <div className="md:w-80">
             <DebouncedInput
-              key={`tools-search-${searchQuery}`}
               placeholder="Search tools"
               initialValue={searchQuery}
-              onChange={(value) => {
-                setSearchQuery(value);
-                updateUrlParams({ search: value || null, page: "1" });
-              }}
+              onChange={handleSearchChange}
             />
           </div>
-          <Select
+          <SearchableSelect
             value={agentFilter}
-            onValueChange={(value) => {
-              setAgentFilter(value);
-              updateUrlParams({
-                agentId: value === "all" ? null : value,
-                page: "1",
-              });
-            }}
-          >
-            <SelectTrigger className="md:w-60">
-              <SelectValue placeholder="Filter by profile" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Profiles</SelectItem>
-              {agents?.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
+            onValueChange={handleAgentFilterChange}
+            placeholder="Filter by Profile"
+            items={[
+              { value: "all", label: "All Profiles" },
+              ...(agents.map((agent) => ({
+                value: agent.id,
+                label: agent.name,
+              })) || []),
+            ]}
+          />
+          {/* TODO: update this to have all origins (not just these static options) */}
+          <SearchableSelect
             value={originFilter}
-            onValueChange={(value) => {
-              setOriginFilter(value);
-              updateUrlParams({
-                origin: value === "all" ? null : value,
-                page: "1",
-              });
-            }}
-          >
-            <SelectTrigger className="md:w-48">
-              <SelectValue placeholder="Origin" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Origins</SelectItem>
-              <SelectItem value="mcp">MCP Servers</SelectItem>
-              <SelectItem value="llm-proxy">LLM Proxy</SelectItem>
-            </SelectContent>
-          </Select>
+            onValueChange={handleOriginFilterChange}
+            placeholder="Filter by Origin"
+            items={[
+              { value: "all", label: "All Origins" },
+              { value: "mcp", label: "MCP Servers" },
+              { value: "llm-proxy", label: "LLM Proxy" },
+            ]}
+          />
         </div>
       </div>
 

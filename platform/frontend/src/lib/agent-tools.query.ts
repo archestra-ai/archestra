@@ -32,6 +32,7 @@ export function useAllAgentTools({
   filters?: {
     search?: string;
     agentId?: string;
+    toolId?: string;
     origin?: string;
     credentialSourceMcpServerId?: string;
     mcpServerOwnerId?: string;
@@ -48,6 +49,7 @@ export function useAllAgentTools({
         sortDirection: sorting?.sortDirection,
         search: filters?.search,
         agentId: filters?.agentId,
+        toolId: filters?.toolId,
         origin: filters?.origin,
         credentialSourceMcpServerId: filters?.credentialSourceMcpServerId,
         mcpServerOwnerId: filters?.mcpServerOwnerId,
@@ -62,6 +64,7 @@ export function useAllAgentTools({
           sortDirection: sorting?.sortDirection,
           search: filters?.search,
           agentId: filters?.agentId,
+          toolId: filters?.toolId,
           origin: filters?.origin,
           mcpServerOwnerId: filters?.mcpServerOwnerId,
           excludeArchestraTools: true,

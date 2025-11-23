@@ -1,3 +1,5 @@
+"use client";
+
 import type { archestraApiTypes } from "@shared";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback } from "react";

@@ -17,6 +17,8 @@ export interface TestFixtures {
   deleteApiKey: typeof deleteApiKey;
   createToolInvocationPolicy: typeof createToolInvocationPolicy;
   deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
+  createToolPolicy: typeof createToolPolicy;
+  deleteToolPolicy: typeof deleteToolPolicy;
   createTrustedDataPolicy: typeof createTrustedDataPolicy;
   deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
   createMcpCatalogItem: typeof createMcpCatalogItem;
@@ -146,6 +148,43 @@ const createToolInvocationPolicy = async (
       action: policy.action,
       reason: policy.reason,
     },
+  });
+
+/**
+ * Create a tool policy for a tool
+ */
+const createToolPolicy = async (
+  request: APIRequestContext,
+  params: {
+    toolId: string;
+    name?: string;
+    allowUsageWhenUntrustedDataIsPresent?: boolean;
+    toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+    responseModifierTemplate?: string | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/tools/${params.toolId}/policies`,
+    data: {
+      name: params.name ?? `e2e-policy-${Date.now()}`,
+      allowUsageWhenUntrustedDataIsPresent:
+        params.allowUsageWhenUntrustedDataIsPresent ?? false,
+      toolResultTreatment: params.toolResultTreatment ?? "untrusted",
+      responseModifierTemplate: params.responseModifierTemplate ?? null,
+    },
+  });
+
+/**
+ * Delete a tool policy
+ * (authnz is handled by the authenticated session)
+ */
+const deleteToolPolicy = async (request: APIRequestContext, policyId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/tool-policies/${policyId}`,
   });
 
 /**
@@ -321,6 +360,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteToolInvocationPolicy: async ({}, use) => {
     await use(deleteToolInvocationPolicy);
+  },
+  createToolPolicy: async ({}, use) => {
+    await use(createToolPolicy);
+  },
+  deleteToolPolicy: async ({}, use) => {
+    await use(deleteToolPolicy);
   },
   createTrustedDataPolicy: async ({}, use) => {
     await use(createTrustedDataPolicy);

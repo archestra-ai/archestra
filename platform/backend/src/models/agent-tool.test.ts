@@ -377,6 +377,28 @@ describe("AgentToolModel.findAllPaginated", () => {
       expect(result.data[0].agent.id).toBe(agent1.id);
     });
 
+    test("filters by toolId", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool1 = await makeTool({ name: "Tool One" });
+      const tool2 = await makeTool({ name: "Tool Two" });
+
+      await makeAgentTool(agent.id, tool1.id);
+      await makeAgentTool(agent.id, tool2.id);
+
+      const result = await AgentToolModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        undefined,
+        { toolId: tool1.id },
+      );
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].tool.id).toBe(tool1.id);
+    });
+
     test("filters by origin (llm-proxy)", async ({
       makeAgent,
       makeTool,

@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +35,7 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
   const { data: assignmentsData, isLoading: isLoadingAssignments } =
     useAllAgentTools({
       pagination: { limit: 1000, offset: 0 },
-      filters: { search: tool?.name },
+      filters: { toolId: tool?.id },
       enabled: Boolean(tool),
     });
 
@@ -46,7 +48,7 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
     );
   }, [assignmentsData, tool]);
 
-  const handleAssign = () => {
+  const handleAssign = useCallback(() => {
     if (selectedAgent === "all") {
       toast.error("Select a profile to assign");
       return;
@@ -66,30 +68,33 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
         onError: () => toast.error("Failed to assign tool"),
       },
     );
-  };
+  }, [assignTool, selectedAgent, selectedPolicy, tool.id]);
 
-  const handlePolicyChangeForAssignment = (
-    assignmentId: string,
-    newPolicyId: string,
-  ) => {
-    patchAgentTool.mutate({
-      id: assignmentId,
-      toolPolicyId: newPolicyId === "default" ? null : newPolicyId,
-    });
-  };
+  const handlePolicyChangeForAssignment = useCallback(
+    (assignmentId: string, newPolicyId: string) => {
+      patchAgentTool.mutate({
+        id: assignmentId,
+        toolPolicyId: newPolicyId === "default" ? null : newPolicyId,
+      });
+    },
+    [patchAgentTool],
+  );
 
-  const handleUnassign = (agentId: string) => {
-    unassignTool.mutate(
-      {
-        agentId,
-        toolId: tool.id,
-      },
-      {
-        onSuccess: () => toast.success("Tool removed from profile"),
-        onError: () => toast.error("Failed to unassign tool"),
-      },
-    );
-  };
+  const handleUnassign = useCallback(
+    (agentId: string) => {
+      unassignTool.mutate(
+        {
+          agentId,
+          toolId: tool.id,
+        },
+        {
+          onSuccess: () => toast.success("Tool removed from profile"),
+          onError: () => toast.error("Failed to unassign tool"),
+        },
+      );
+    },
+    [unassignTool, tool.id],
+  );
 
   return (
     <div className="space-y-4">

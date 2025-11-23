@@ -1,8 +1,17 @@
 import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Editor } from "@/components/editor";
+import { TruncatedText } from "@/components/truncated-text";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgents } from "@/lib/agent.query";
 import {
@@ -43,17 +51,13 @@ import {
   useToolPolicies,
   useUpdateToolPolicy,
 } from "@/lib/tool-policy.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 type ToolRow = archestraApiTypes.GetToolsResponses["200"]["data"][number];
 type ToolResultTreatmentOption =
   archestraApiTypes.CreateToolPolicyData["body"]["toolResultTreatment"];
 
-interface ToolDetailsDialogProps {
-  tool: ToolRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+type TabId = "policies" | "assignments";
 
 const TOOL_RESULT_OPTIONS: Array<{
   label: string;
@@ -68,41 +72,43 @@ export function ToolDetailsDialog({
   tool,
   open,
   onOpenChange,
-}: ToolDetailsDialogProps) {
-  const [activeTab, setActiveTab] = useState("overview");
+}: {
+  tool: ToolRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<TabId>("policies");
+  const [selectedAgent, setSelectedAgent] = useState("all");
+  const [selectedPolicy, setSelectedPolicy] = useState("default");
   const queryClient = useQueryClient();
+  const operatorsQuery = useOperators();
+  const { data: agents } = useAgents();
+
   const { data: rawPolicies = [], isLoading: isLoadingPolicies } =
     useToolPolicies(tool?.id ?? null);
-  const operatorsQuery = useOperators();
   const policies = (rawPolicies ?? []).filter((policy) =>
     tool ? policy.toolId === tool.id : true,
   );
-  const operators = operatorsQuery.data ?? [];
+
   const createPolicy = useCreateToolPolicy();
   const updatePolicy = useUpdateToolPolicy(tool?.id ?? null);
   const deletePolicy = useDeleteToolPolicy(tool?.id ?? null);
+
   const createInvocationPolicy = useToolInvocationPolicyCreateMutation();
   const updateInvocationPolicy = useToolInvocationPolicyUpdateMutation();
   const deleteInvocationPolicy = useToolInvocationPolicyDeleteMutation();
   const createTrustedPolicy = useToolResultPoliciesCreateMutation();
   const updateTrustedPolicy = useToolResultPoliciesUpdateMutation();
   const deleteTrustedPolicy = useToolResultPoliciesDeleteMutation();
-  const refreshPolicies = () => {
-    if (tool?.id) {
-      queryClient.invalidateQueries({ queryKey: ["tool-policies", tool.id] });
-    }
-  };
+
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
   const patchAgentTool = useAgentToolPatchMutation();
-  const { data: agents } = useAgents();
 
   const { data: assignmentsData, isLoading: isLoadingAssignments } =
     useAllAgentTools({
       pagination: { limit: 1000, offset: 0 },
-      filters: {
-        search: tool?.name,
-      },
+      filters: { search: tool?.name },
       enabled: Boolean(tool),
     });
 
@@ -115,10 +121,13 @@ export function ToolDetailsDialog({
     );
   }, [assignmentsData, tool]);
 
-  const [selectedAgent, setSelectedAgent] = useState("all");
-  const [selectedPolicy, setSelectedPolicy] = useState("default");
-
   if (!tool) return null;
+
+  const refreshPolicies = () => {
+    if (tool?.id) {
+      queryClient.invalidateQueries({ queryKey: ["tool-policies", tool.id] });
+    }
+  };
 
   const handleCreatePolicy = () => {
     createPolicy.mutate(
@@ -203,72 +212,83 @@ export function ToolDetailsDialog({
     );
   };
 
+  const operators = operatorsQuery.data ?? [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[1200px] max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{tool.name}</DialogTitle>
+      <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1200px] flex-col">
+        <DialogHeader className="flex-shrink-0 space-y-2">
+          <DialogTitle className="text-2xl font-semibold">
+            {tool.name}
+          </DialogTitle>
           {tool.description && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {tool.description}
-            </p>
+            <TruncatedText
+              message={tool.description}
+              maxLength={500}
+              className="text-sm text-muted-foreground"
+            />
           )}
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Origin</div>
+              <div className="mt-1 text-sm font-medium">
+                {tool.mcpServer ? "MCP Catalog" : "LLM Proxy"}
+              </div>
+              {tool.mcpServer?.name && (
+                <div className="text-xs text-muted-foreground">
+                  {tool.mcpServer.name}
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Profiles</div>
+              <div className="mt-1 text-xl font-semibold">
+                {tool.assignedAgentsCount}
+              </div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Policies</div>
+              <div className="mt-1 text-xl font-semibold">
+                {tool.policyCount}
+              </div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Updated</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {formatDate({ date: tool.updatedAt })}
+              </div>
+            </div>
+          </div>
         </DialogHeader>
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex flex-1 flex-col overflow-hidden"
-        >
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="policies">Policies</TabsTrigger>
-            <TabsTrigger value="assignments">Assignments</TabsTrigger>
-          </TabsList>
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto pr-2">
+          <div className="flex gap-4 border-b pb-2 text-sm font-medium">
+            {[
+              { id: "policies", label: "Policies" },
+              { id: "assignments", label: "Assignments" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as TabId)}
+                className={cn(
+                  "relative pb-2 transition-colors",
+                  activeTab === tab.id
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 pt-4">
-            <TabsContent value="overview" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border p-4">
-                  <div className="text-sm text-muted-foreground">Origin</div>
-                  <div className="mt-1 text-base font-medium">
-                    {tool.mcpServer ? "MCP Catalog" : "LLM Proxy"}
-                  </div>
-                  {tool.mcpServer?.name && (
-                    <div className="text-sm text-muted-foreground">
-                      {tool.mcpServer.name}
-                    </div>
-                  )}
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Assigned Profiles
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {tool.assignedAgentsCount}
-                  </div>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Policy Count
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {tool.policyCount}
-                  </div>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="text-sm text-muted-foreground">
-                    Last Updated
-                  </div>
-                  <div className="mt-1 text-base font-medium">
-                    {formatDate({ date: tool.updatedAt })}
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="policies" className="space-y-4">
-              <div className="flex justify-between items-center">
+          {activeTab === "policies" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">Tool Policies</h3>
                   <p className="text-sm text-muted-foreground">
@@ -277,7 +297,7 @@ export function ToolDetailsDialog({
                   </p>
                 </div>
                 <Button onClick={handleCreatePolicy}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   New Policy
                 </Button>
               </div>
@@ -379,26 +399,6 @@ export function ToolDetailsDialog({
                           </div>
                         </div>
 
-                        <div>
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium">
-                              Response modifier template
-                            </div>
-                          </div>
-                          <Textarea
-                            className="mt-2"
-                            defaultValue={policy.responseModifierTemplate ?? ""}
-                            placeholder="Optional Handlebars template"
-                            rows={3}
-                            onBlur={(event) =>
-                              handlePolicyUpdate(policy.id, {
-                                responseModifierTemplate:
-                                  event.currentTarget.value || null,
-                              })
-                            }
-                          />
-                        </div>
-
                         <div className="grid gap-4 md:grid-cols-2">
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
@@ -410,12 +410,8 @@ export function ToolDetailsDialog({
                                 size="sm"
                                 onClick={() =>
                                   createInvocationPolicy.mutate(
-                                    {
-                                      toolPolicyId: policy.id,
-                                    },
-                                    {
-                                      onSuccess: refreshPolicies,
-                                    },
+                                    { toolPolicyId: policy.id },
+                                    { onSuccess: refreshPolicies },
                                   )
                                 }
                               >
@@ -439,11 +435,14 @@ export function ToolDetailsDialog({
                                         defaultValue={rule.argumentName}
                                         placeholder="argument path"
                                         onBlur={(event) =>
-                                          updateInvocationPolicy.mutate({
-                                            id: rule.id,
-                                            argumentName:
-                                              event.currentTarget.value,
-                                          })
+                                          updateInvocationPolicy.mutate(
+                                            {
+                                              id: rule.id,
+                                              argumentName:
+                                                event.currentTarget.value,
+                                            },
+                                            { onSuccess: refreshPolicies },
+                                          )
                                         }
                                       />
                                       <Button
@@ -519,10 +518,13 @@ export function ToolDetailsDialog({
                                       defaultValue={rule.value}
                                       placeholder="Value to match"
                                       onBlur={(event) =>
-                                        updateInvocationPolicy.mutate({
-                                          id: rule.id,
-                                          value: event.currentTarget.value,
-                                        })
+                                        updateInvocationPolicy.mutate(
+                                          {
+                                            id: rule.id,
+                                            value: event.currentTarget.value,
+                                          },
+                                          { onSuccess: refreshPolicies },
+                                        )
                                       }
                                     />
                                     <Textarea
@@ -557,12 +559,8 @@ export function ToolDetailsDialog({
                                 size="sm"
                                 onClick={() =>
                                   createTrustedPolicy.mutate(
-                                    {
-                                      toolPolicyId: policy.id,
-                                    },
-                                    {
-                                      onSuccess: refreshPolicies,
-                                    },
+                                    { toolPolicyId: policy.id },
+                                    { onSuccess: refreshPolicies },
                                   )
                                 }
                               >
@@ -612,11 +610,14 @@ export function ToolDetailsDialog({
                                       defaultValue={rule.attributePath}
                                       placeholder="Attribute path"
                                       onBlur={(event) =>
-                                        updateTrustedPolicy.mutate({
-                                          id: rule.id,
-                                          attributePath:
-                                            event.currentTarget.value,
-                                        })
+                                        updateTrustedPolicy.mutate(
+                                          {
+                                            id: rule.id,
+                                            attributePath:
+                                              event.currentTarget.value,
+                                          },
+                                          { onSuccess: refreshPolicies },
+                                        )
                                       }
                                     />
                                     <div className="grid grid-cols-2 gap-2">
@@ -680,10 +681,13 @@ export function ToolDetailsDialog({
                                       defaultValue={rule.value}
                                       placeholder="Value to match"
                                       onBlur={(event) =>
-                                        updateTrustedPolicy.mutate({
-                                          id: rule.id,
-                                          value: event.currentTarget.value,
-                                        })
+                                        updateTrustedPolicy.mutate(
+                                          {
+                                            id: rule.id,
+                                            value: event.currentTarget.value,
+                                          },
+                                          { onSuccess: refreshPolicies },
+                                        )
                                       }
                                     />
                                   </div>
@@ -692,14 +696,208 @@ export function ToolDetailsDialog({
                             )}
                           </div>
                         </div>
+
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">
+                            Response modifier
+                          </div>
+                          <Editor
+                            height="180px"
+                            defaultLanguage="handlebars"
+                            defaultValue={policy.responseModifierTemplate ?? ""}
+                            onChange={(value) =>
+                              handlePolicyUpdate(policy.id, {
+                                responseModifierTemplate: value || null,
+                              })
+                            }
+                            options={{
+                              minimap: { enabled: false },
+                              wordWrap: "on",
+                            }}
+                          />
+                          <Accordion type="single" collapsible className="mt-6">
+                            <AccordionItem
+                              value="cheat-sheet"
+                              className="border border-border rounded-lg bg-card"
+                            >
+                              <AccordionTrigger className="px-4 hover:no-underline">
+                                <span className="text-sm font-medium">
+                                  📖 MCP Response Templating Cheat Sheet
+                                </span>
+                              </AccordionTrigger>
+                              <AccordionContent className="px-4 pb-4">
+                                <div className="space-y-4 text-sm">
+                                  <p className="text-muted-foreground">
+                                    MCP tool responses follow the{" "}
+                                    <Link
+                                      href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline hover:text-foreground"
+                                    >
+                                      MCP specification
+                                    </Link>
+                                    . Use{" "}
+                                    <Link
+                                      href="https://handlebarsjs.com/"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="underline hover:text-foreground"
+                                    >
+                                      Handlebars
+                                    </Link>{" "}
+                                    templates to transform responses. Access the
+                                    response with{" "}
+                                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                                      {"{{response}}"}
+                                    </code>
+                                    .
+                                  </p>
+
+                                  <div className="space-y-6">
+                                    <div className="space-y-2">
+                                      <h4 className="font-medium">
+                                        Example 1: Extract text from first
+                                        element
+                                      </h4>
+                                      <p className="text-muted-foreground">
+                                        MCP tools often return stringified JSON
+                                        in a text block:
+                                      </p>
+                                      <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                                        {`[
+  {
+    "type": "text",
+    "text": "{\\"issues\\":[{\\"id\\":816,\\"title\\":\\"Add authentication\\"}]}"
+  }
+]`}
+                                      </pre>
+                                      <p className="text-muted-foreground mt-2">
+                                        Template to extract text (use triple
+                                        braces to prevent HTML escaping):
+                                      </p>
+                                      <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                                        {
+                                          '{{{lookup (lookup response 0) "text"}}}'
+                                        }
+                                      </pre>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      <h4 className="font-medium">
+                                        Example 2: Parse and transform JSON
+                                      </h4>
+                                      <p className="text-muted-foreground">
+                                        Use nested{" "}
+                                        <code className="bg-muted px-1 rounded">
+                                          with
+                                        </code>{" "}
+                                        blocks with{" "}
+                                        <code className="bg-muted px-1 rounded">
+                                          json
+                                        </code>{" "}
+                                        and{" "}
+                                        <code className="bg-muted px-1 rounded">
+                                          escapeJson
+                                        </code>{" "}
+                                        helpers:
+                                      </p>
+                                      <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                                        {`{{#with (lookup response 0)}}{{#with (json this.text)}}
+{
+  {{#each this.issues}}
+    "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
+  {{/each}}
+}
+{{/with}}{{/with}}`}
+                                      </pre>
+                                      <p className="text-muted-foreground mt-2">
+                                        Transforms GitHub issues to{" "}
+                                        <code className="bg-muted px-1 rounded">
+                                          {"{ id: title }"}
+                                        </code>{" "}
+                                        format
+                                      </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      <h4 className="font-medium">
+                                        Example 3: Return full response as-is
+                                      </h4>
+                                      <p className="text-muted-foreground">
+                                        Use the{" "}
+                                        <code className="bg-muted px-1 rounded">
+                                          json
+                                        </code>{" "}
+                                        helper to return the entire response
+                                        array:
+                                      </p>
+                                      <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                                        {"{{{json response}}}"}
+                                      </pre>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      <h4 className="font-medium">
+                                        Available Helpers
+                                      </h4>
+                                      <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{lookup array index}}"}
+                                          </code>{" "}
+                                          - Access array element by index
+                                        </li>
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{#with expression}}"}
+                                          </code>{" "}
+                                          - Change context scope
+                                        </li>
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{json value}}"}
+                                          </code>{" "}
+                                          - Parse JSON string or stringify
+                                          object
+                                        </li>
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{{escapeJson string}}}"}
+                                          </code>{" "}
+                                          - Escape quotes/special chars for JSON
+                                        </li>
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{#each array}}"}
+                                          </code>{" "}
+                                          - Iterate over arrays
+                                        </li>
+                                        <li>
+                                          <code className="bg-muted px-1 rounded">
+                                            {"{{{...}}}"}
+                                          </code>{" "}
+                                          - Triple braces prevent HTML escaping
+                                          (required for JSON)
+                                        </li>
+                                      </ul>
+                                    </div>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="assignments" className="space-y-6">
+          {activeTab === "assignments" && (
+            <div className="space-y-6">
               <div className="rounded-lg border p-4 space-y-4">
                 <div>
                   <h3 className="text-lg font-semibold">Assign to Profile</h3>
@@ -745,7 +943,7 @@ export function ToolDetailsDialog({
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold mb-2">
+                <h3 className="mb-2 text-lg font-semibold">
                   Assigned Profiles
                 </h3>
                 {isLoadingAssignments ? (
@@ -808,9 +1006,9 @@ export function ToolDetailsDialog({
                   </div>
                 )}
               </div>
-            </TabsContent>
-          </div>
-        </Tabs>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

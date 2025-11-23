@@ -34,18 +34,14 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
 
   const { data: assignmentsData, isLoading: isLoadingAssignments } =
     useAllAgentTools({
-      pagination: { limit: 1000, offset: 0 },
+      pagination: { limit: 100, offset: 0 },
       filters: { toolId: tool?.id },
       enabled: Boolean(tool),
     });
 
   const assignments = useMemo(() => {
     if (!tool) return [];
-    return (
-      assignmentsData?.data.filter(
-        (assignment) => assignment.tool.id === tool.id,
-      ) ?? []
-    );
+    return assignmentsData?.data ?? [];
   }, [assignmentsData, tool]);
 
   const handleAssign = useCallback(() => {
@@ -95,7 +91,6 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
     },
     [unassignTool, tool.id],
   );
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -166,14 +161,26 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
                 key={assignment.id}
                 className="grid gap-3 px-4 py-3 sm:grid-cols-[1fr,1fr,auto] sm:items-center"
               >
-                <div>
-                  <div className="text-sm font-medium">
-                    {assignment.agent.name}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {assignment.agent.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {assignment.tool.name}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {assignment.tool.name}
+                  <div className="flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUnassign(assignment.agent.id)}
+                    >
+                      Unassign
+                    </Button>
                   </div>
                 </div>
+
                 <div className="space-y-1">
                   <div className="text-xs text-muted-foreground">Policy</div>
                   <Select
@@ -194,15 +201,6 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleUnassign(assignment.agent.id)}
-                  >
-                    Unassign
-                  </Button>
                 </div>
               </div>
             ))}

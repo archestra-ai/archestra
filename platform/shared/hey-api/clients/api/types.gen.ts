@@ -14982,7 +14982,7 @@ export type GetToolsData = {
     query?: {
         search?: string;
         agentId?: string;
-        origin?: 'llm-proxy' | 'mcp';
+        origin?: string | 'llm-proxy' | 'mcp';
         mcpServerOwnerId?: string;
         excludeArchestraTools?: boolean;
         sortBy?: 'name' | 'createdAt' | 'assignedProfiles' | 'policyCount';

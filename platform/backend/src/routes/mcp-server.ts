@@ -185,6 +185,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
+        // Validate required environment variables for local servers
+        if (
+          catalogItem.serverType === "local" &&
+          catalogItem.localConfig?.environment
+        ) {
+          const requiredEnvVars = catalogItem.localConfig.environment.filter(
+            (env) => env.promptOnInstallation && env.required,
+          );
+
+          const missingEnvVars = requiredEnvVars.filter((env) => {
+            const value = environmentValues?.[env.key];
+            // For boolean type, check if value exists
+            if (env.type === "boolean") {
+              return !value;
+            }
+            // For other types, check if trimmed value is non-empty
+            return !value?.trim();
+          });
+
+          if (missingEnvVars.length > 0) {
+            throw new ApiError(
+              400,
+              `Missing required environment variables: ${missingEnvVars
+                .map((env) => env.key)
+                .join(", ")}`,
+            );
+          }
+        }
+
         // For local servers, filter out secret-type env vars and store in database
         if (
           catalogItem.serverType === "local" &&

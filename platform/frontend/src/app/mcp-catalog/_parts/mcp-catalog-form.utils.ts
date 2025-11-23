@@ -138,6 +138,8 @@ export function transformCatalogItemToFormValues(
           type: "plain_text" | "secret" | "boolean" | "number";
           value?: string;
           promptOnInstallation: boolean;
+          required?: boolean;
+          description?: string;
         }>;
         dockerImage?: string;
         transportType?: "stdio" | "streamable-http";
@@ -159,6 +161,9 @@ export function transformCatalogItemToFormValues(
           ...env,
           // Add promptOnInstallation with default value if missing
           promptOnInstallation: env.promptOnInstallation ?? false,
+          // Preserve required and description fields
+          required: env.required ?? false,
+          description: env.description ?? "",
         })) || [],
       dockerImage: item.localConfig.dockerImage || "",
       transportType: config.transportType || undefined,

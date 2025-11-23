@@ -43,6 +43,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       type: "plain_text" | "secret" | "boolean" | "number";
       value?: string; // Boolean type uses "true"/"false" strings, number type uses numeric strings
       promptOnInstallation: boolean;
+      required?: boolean; // Whether this env var is required during installation (defaults to false)
+      description?: string; // Description to show in installation dialog
     }>;
     dockerImage?: string;
     transportType?: "stdio" | "streamable-http";

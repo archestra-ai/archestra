@@ -309,7 +309,18 @@ export default class K8sPod {
                   command: [localConfig.command],
                 }
               : {}),
-            args: localConfig.arguments || [],
+            args: (localConfig.arguments || []).map((arg) => {
+              // Interpolate ${user_config.xxx} placeholders with actual values
+              if (this.userConfigValues) {
+                return arg.replace(
+                  /\$\{user_config\.([^}]+)\}/g,
+                  (match, configKey) => {
+                    return this.userConfigValues?.[configKey] || match;
+                  },
+                );
+              }
+              return arg;
+            }),
             // For stdio-based MCP servers, we use stdin/stdout
             stdin: true,
             tty: false,
@@ -365,6 +376,16 @@ export default class K8sPod {
         } else {
           // Static value from catalog - get from envDef.value
           value = envDef.value;
+
+          // Interpolate ${user_config.xxx} placeholders with actual values
+          if (value && this.userConfigValues) {
+            value = value.replace(
+              /\$\{user_config\.([^}]+)\}/g,
+              (match, configKey) => {
+                return this.userConfigValues?.[configKey] || match;
+              },
+            );
+          }
         }
         // Add to envMap if value exists
         // (Only non-secret plain_text vars will be used directly in pod env)
@@ -534,11 +555,21 @@ export default class K8sPod {
       const needsHttp = await this.needsHttpPort();
       const httpPort = catalogItem.localConfig.httpPort || 8080;
 
+      // Normalize localConfig to ensure required and description have defaults
+      const normalizedLocalConfig = {
+        ...catalogItem.localConfig,
+        environment: catalogItem.localConfig.environment?.map((env) => ({
+          ...env,
+          required: env.required ?? false,
+          description: env.description ?? "",
+        })),
+      };
+
       const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
         body: this.generatePodSpec(
           dockerImage,
-          catalogItem.localConfig,
+          normalizedLocalConfig,
           needsHttp,
           httpPort,
         ),

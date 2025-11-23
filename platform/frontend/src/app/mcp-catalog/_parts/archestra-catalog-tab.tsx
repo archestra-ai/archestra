@@ -28,6 +28,7 @@ import {
 } from "@/lib/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
+import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
@@ -96,41 +97,83 @@ export function ArchestraCatalogTab({
       }
       return undefined;
     };
-    const getValueType = (
-      config: NonNullable<
-        archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
-      >[string],
-    ): "boolean" | "number" | "secret" | "plain_text" => {
-      if (config.type === "boolean") {
-        return "boolean";
-      }
-      if (config.type === "number") {
-        return "number";
-      }
-      return config.sensitive ? "secret" : "plain_text";
-    };
 
     // For local servers, construct environment from server.env and user_config
     if (server.server.type === "local") {
-      const environment = [
-        // Transform server.env entries
-        ...(server.server.env
-          ? Object.entries(server.server.env).map(([key, value]) => ({
-              key,
+      // Track which user_config keys are referenced in server.env
+      const referencedUserConfigKeys = new Set<string>();
+
+      // First pass: Parse server.env entries
+      const envFromServerEnv = server.server.env
+        ? Object.entries(server.server.env).map(([envKey, envValue]) => {
+            // Check if value is ${user_config.xxx} placeholder
+            const match = envValue.match(/^\$\{user_config\.(.+)\}$/);
+
+            if (match && server.user_config) {
+              const userConfigKey = match[1];
+              const userConfigEntry = server.user_config[userConfigKey];
+              referencedUserConfigKeys.add(userConfigKey);
+
+              if (userConfigEntry) {
+                return {
+                  key: envKey, // Use env var name (e.g., CONFLUENCE_URL)
+                  type: userConfigEntry.sensitive
+                    ? ("secret" as const)
+                    : userConfigEntry.type === "boolean"
+                      ? ("boolean" as const)
+                      : userConfigEntry.type === "number"
+                        ? ("number" as const)
+                        : ("plain_text" as const),
+                  value: "", // Empty - will be prompted
+                  promptOnInstallation: true,
+                  required: userConfigEntry.required ?? false,
+                  description: [
+                    userConfigEntry.title,
+                    userConfigEntry.description,
+                  ]
+                    .filter(Boolean)
+                    .join(": "),
+                };
+              }
+            }
+
+            // Static env var (no user_config reference)
+            return {
+              key: envKey,
               type: "plain_text" as const,
-              value,
+              value: envValue,
               promptOnInstallation: false,
-            }))
-          : []),
-        // Transform user_config entries
-        ...(server.user_config
-          ? Object.entries(server.user_config).map(([key, config]) => ({
+              required: false,
+              description: "",
+            };
+          })
+        : [];
+
+      // Second pass: Add user_config entries NOT referenced in server.env
+      const envFromUnreferencedUserConfig = server.user_config
+        ? Object.entries(server.user_config)
+            .filter(([key]) => !referencedUserConfigKeys.has(key))
+            .map(([key, config]) => ({
               key,
-              type: getValueType(config),
+              type: config.sensitive
+                ? ("secret" as const)
+                : config.type === "boolean"
+                  ? ("boolean" as const)
+                  : config.type === "number"
+                    ? ("number" as const)
+                    : ("plain_text" as const),
               value: getValue(config),
               promptOnInstallation: true,
+              required: config.required ?? false,
+              description: [config.title, config.description]
+                .filter(Boolean)
+                .join(": "),
             }))
-          : []),
+        : [];
+
+      const environment = [
+        ...envFromServerEnv,
+        ...envFromUnreferencedUserConfig,
       ];
       await addServerToCatalog(server, environment);
       return;
@@ -162,24 +205,48 @@ export function ArchestraCatalogTab({
           }
         : undefined;
 
-    // For local servers, extract local_config from manifest
-    const localConfig =
-      server.server.type === "local"
-        ? {
-            command: server.server.command,
-            arguments: server.server.args,
-            environment:
-              environment ||
-              (server.server.env
-                ? Object.entries(server.server.env).map(([key, value]) => ({
-                    key,
-                    type: "plain_text" as const,
-                    value,
-                    promptOnInstallation: false,
-                  }))
-                : undefined),
-          }
-        : undefined;
+    let localConfig:
+      | archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["localConfig"]
+      | undefined;
+    if (server.server.type === "local") {
+      const dockerConfig = parseDockerArgsToLocalConfig(
+        server.server.command,
+        server.server.args,
+        server.server.docker_image,
+      );
+      if (dockerConfig) {
+        localConfig = {
+          command: dockerConfig.command,
+          arguments: dockerConfig.arguments,
+          dockerImage: dockerConfig.dockerImage,
+          environment:
+            environment ||
+            (server.server.env
+              ? Object.entries(server.server.env).map(([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                  promptOnInstallation: false,
+                }))
+              : undefined),
+        };
+      } else {
+        localConfig = {
+          command: server.server.command,
+          arguments: server.server.args,
+          environment:
+            environment ||
+            (server.server.env
+              ? Object.entries(server.server.env).map(([key, value]) => ({
+                  key,
+                  type: "plain_text" as const,
+                  value,
+                  promptOnInstallation: false,
+                }))
+              : undefined),
+        };
+      }
+    }
 
     await createMutation.mutateAsync({
       name: server.name,

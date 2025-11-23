@@ -30,6 +30,8 @@ export const EnvironmentVariableSchema = z.object({
   type: z.enum(["plain_text", "secret", "boolean", "number"]),
   value: z.string().optional(), // Optional static value (when not prompted). Boolean type uses "true"/"false" strings, number type uses numeric strings
   promptOnInstallation: z.boolean(), // Whether to prompt user during installation
+  required: z.boolean().optional(), // Whether this env var is required during installation (only applies when promptOnInstallation is true, defaults to false)
+  description: z.string().optional(), // Optional description to show in installation dialog
 });
 
 export const LocalConfigSchema = z

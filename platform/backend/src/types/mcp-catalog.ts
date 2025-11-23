@@ -32,6 +32,30 @@ const UserConfigFieldSchema = z.object({
   max: z.number().optional(),
 });
 
+// Define a version of LocalConfigSchema for SELECT operations
+// where required and description fields are optional (database may not have them)
+// Note: We can't use .extend() on LocalConfigSchema because it has .refine()
+const LocalConfigSelectSchema = z.object({
+  command: z.string().optional(),
+  arguments: z.array(z.string()).optional(),
+  environment: z
+    .array(
+      z.object({
+        key: z.string(),
+        type: z.enum(["plain_text", "secret", "boolean", "number"]),
+        value: z.string().optional(),
+        promptOnInstallation: z.boolean(),
+        required: z.boolean().optional(), // Optional in database
+        description: z.string().optional(), // Optional in database
+      }),
+    )
+    .optional(),
+  dockerImage: z.string().optional(),
+  transportType: z.enum(["stdio", "streamable-http"]).optional(),
+  httpPort: z.number().optional(),
+  httpPath: z.string().optional(),
+});
+
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
 ).extend({
@@ -39,7 +63,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
-  localConfig: LocalConfigSchema.nullable(),
+  localConfig: LocalConfigSelectSchema.nullable(),
 });
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(

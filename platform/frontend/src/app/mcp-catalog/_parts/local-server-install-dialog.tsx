@@ -67,9 +67,6 @@ export function LocalServerInstallDialog({
 
   const { data: allTeams } = useTeams();
 
-  // Create a map of user_config for looking up descriptions
-  const userConfigMap = catalogItem?.userConfig || {};
-
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
   };
@@ -92,8 +89,11 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
-    // Validate required fields
+    // Validate required fields only
     const missingEnvVars = promptedEnvVars.filter((env) => {
+      // Skip validation for optional fields
+      if (!env.required) return false;
+
       const value = environmentValues[env.key];
       // Boolean fields are always valid if they have a value (should be "true" or "false")
       if (env.type === "boolean") {
@@ -140,6 +140,9 @@ export function LocalServerInstallDialog({
 
   const isValid =
     promptedEnvVars.every((env) => {
+      // Optional fields don't affect validation
+      if (!env.required) return true;
+
       const value = environmentValues[env.key];
       // Boolean fields are always valid if they have a value (should be "true" or "false")
       if (env.type === "boolean") {
@@ -231,19 +234,17 @@ export function LocalServerInstallDialog({
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Environment Variables</h3>
               {promptedEnvVars.map((env) => {
-                // Look up description from user_config if it exists
-                const userConfigEntry = userConfigMap[env.key];
-                const description = userConfigEntry?.description;
-
                 return (
                   <div key={env.key} className="space-y-2">
                     <Label htmlFor={`env-${env.key}`}>
                       {env.key}
-                      <span className="text-destructive ml-1">*</span>
+                      {env.required && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
                     </Label>
-                    {description && (
+                    {env.description && (
                       <p className="text-xs text-muted-foreground">
-                        {description}
+                        {env.description}
                       </p>
                     )}
 

@@ -20,10 +20,10 @@ import { useAgents } from "@/lib/agent.query";
 import { useTools } from "@/lib/tool.query";
 import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
-import type { ToolRow } from "./tool-types";
+import type { Tool } from "./types";
 
 interface ToolsTableProps {
-  onToolClick: (tool: ToolRow) => void;
+  onToolClick: (tool: Tool) => void;
 }
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -120,7 +120,7 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
     [updateUrlParams],
   );
 
-  const columns = useMemo<ColumnDef<ToolRow>[]>(
+  const columns = useMemo<ColumnDef<Tool>[]>(
     () => [
       {
         accessorKey: "name",

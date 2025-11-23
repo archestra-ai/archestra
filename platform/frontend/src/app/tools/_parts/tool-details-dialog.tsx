@@ -9,7 +9,7 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { ToolAssignmentsPanel } from "./tool-assignments-panel";
 import { ToolPoliciesPanel } from "./tool-policies-panel";
-import type { ToolRow } from "./tool-types";
+import type { ToolRow } from "./types";
 
 type TabId = "policies" | "assignments";
 

@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, test } from "@/test";
-import AgentToolModel from "./agent-tool";
-import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
-import ToolPolicyModel from "./tool-policy";
 
 describe("ToolInvocationPolicyModel", () => {
   const toolName = "test-tool";
@@ -29,27 +26,6 @@ describe("ToolInvocationPolicyModel", () => {
     });
     toolPolicyId = agentTool.toolPolicyId as string;
   });
-
-  async function createPolicyForTool(
-    toolId: string,
-    overrides?: Partial<{
-      allowUsageWhenUntrustedDataIsPresent: boolean;
-      toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-      responseModifierTemplate: string | null;
-    }>,
-  ) {
-    const organization =
-      await OrganizationModel.getOrCreateDefaultOrganization();
-    return ToolPolicyModel.create({
-      name: `Policy ${Math.random()}`,
-      toolId,
-      organizationId: organization.id,
-      allowUsageWhenUntrustedDataIsPresent:
-        overrides?.allowUsageWhenUntrustedDataIsPresent ?? false,
-      toolResultTreatment: overrides?.toolResultTreatment ?? "untrusted",
-      responseModifierTemplate: overrides?.responseModifierTemplate ?? null,
-    });
-  }
 
   describe("evaluate", () => {
     describe("basic policy evaluation", () => {
@@ -205,6 +181,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async ({
         makeTool,
+        makeAgentTool,
       }) => {
         // Create a tool that allows usage when untrusted data is present
         await makeTool({
@@ -219,11 +196,8 @@ describe("ToolInvocationPolicyModel", () => {
           permissiveTool as NonNullable<typeof permissiveTool>
         ).id;
 
-        const policy = await createPolicyForTool(permissiveToolId, {
-          allowUsageWhenUntrustedDataIsPresent: true,
-        });
-        await AgentToolModel.create(agentId, permissiveToolId, {
-          toolPolicyId: policy.id,
+        await makeAgentTool(agentId, permissiveToolId, {
+          toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -237,7 +211,9 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("respects tool's allowUsageWhenUntrustedDataIsPresent flag when policies exist", async () => {
+      test("respects tool's allowUsageWhenUntrustedDataIsPresent flag when policies exist", async ({
+        makeAgentTool,
+      }) => {
         // Create a tool that allows usage when untrusted data is present
         await ToolModel.createToolIfNotExists({
           agentId,
@@ -251,16 +227,14 @@ describe("ToolInvocationPolicyModel", () => {
         );
         const permissiveToolId = (tool as NonNullable<typeof tool>).id;
 
-        const policy = await createPolicyForTool(permissiveToolId, {
-          allowUsageWhenUntrustedDataIsPresent: true,
+        const agentTool = await makeAgentTool(agentId, permissiveToolId, {
+          toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
         });
-        await AgentToolModel.create(agentId, permissiveToolId, {
-          toolPolicyId: policy.id,
-        });
+        const policyId = agentTool.toolPolicyId as string;
 
         // Create a policy that doesn't match
         await ToolInvocationPolicyModel.create({
-          toolPolicyId: policy.id,
+          toolPolicyId: policyId,
           argumentName: "special",
           operator: "equal",
           value: "magic",
@@ -281,7 +255,9 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("block_always policies take precedence over allowUsageWhenUntrustedDataIsPresent", async () => {
+      test("block_always policies take precedence over allowUsageWhenUntrustedDataIsPresent", async ({
+        makeAgentTool,
+      }) => {
         // Create a tool that allows usage when untrusted data is present
         await ToolModel.createToolIfNotExists({
           agentId,
@@ -293,17 +269,17 @@ describe("ToolInvocationPolicyModel", () => {
         const tool = await ToolModel.findByName("gmail-sendEmail");
         const toolId = (tool as NonNullable<typeof tool>).id;
 
-        const policy = await createPolicyForTool(toolId, {
-          allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: "untrusted",
+        const agentTool = await makeAgentTool(agentId, toolId, {
+          toolPolicy: {
+            allowUsageWhenUntrustedDataIsPresent: true,
+            toolResultTreatment: "untrusted",
+          },
         });
-        await AgentToolModel.create(agentId, toolId, {
-          toolPolicyId: policy.id,
-        });
+        const policyId = agentTool.toolPolicyId as string;
 
         // Create a block_always policy that checks for suspicious content in email body
         await ToolInvocationPolicyModel.create({
-          toolPolicyId: policy.id,
+          toolPolicyId: policyId,
           argumentName: "body",
           operator: "contains",
           value: "sistant",

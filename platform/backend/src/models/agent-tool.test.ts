@@ -218,13 +218,19 @@ describe("AgentToolModel.findAllPaginated", () => {
       const tool3 = await makeTool({ name: "tool-3" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+        toolPolicy: {
+          allowUsageWhenUntrustedDataIsPresent: true,
+        },
       });
       await makeAgentTool(agent.id, tool2.id, {
-        allowUsageWhenUntrustedDataIsPresent: false,
+        toolPolicy: {
+          allowUsageWhenUntrustedDataIsPresent: false,
+        },
       });
       await makeAgentTool(agent.id, tool3.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+        toolPolicy: {
+          allowUsageWhenUntrustedDataIsPresent: true,
+        },
       });
 
       const resultAsc = await AgentToolModel.findAllPaginated(

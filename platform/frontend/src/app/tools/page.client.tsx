@@ -4,8 +4,8 @@ import type { archestraApiTypes } from "@shared";
 import { Suspense, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import { ErrorBoundary } from "../_parts/error-boundary";
-import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
+import { ToolsTable } from "./_parts/tools-table";
 
 type ToolRow = archestraApiTypes.GetToolsResponses["200"]["data"][number];
 
@@ -27,7 +27,7 @@ function ToolsList() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-      <AssignedToolsTable onToolClick={setSelectedToolForDialog} />
+      <ToolsTable onToolClick={setSelectedToolForDialog} />
 
       <ToolDetailsDialog
         tool={selectedToolForDialog}

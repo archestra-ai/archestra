@@ -1,9 +1,4 @@
-import {
-  AgentToolModel,
-  OrganizationModel,
-  ToolModel,
-  ToolPolicyModel,
-} from "@/models";
+import { ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -24,13 +19,19 @@ describe("TrustedDataPolicyModel", () => {
 
       // Assign tools to agent with different treatments
       await makeAgentTool(agent.id, tool1.id, {
-        toolResultTreatment: "trusted",
+        toolPolicy: {
+          toolResultTreatment: "trusted",
+        },
       });
       const agentTool2 = await makeAgentTool(agent.id, tool2.id, {
-        toolResultTreatment: "untrusted",
+        toolPolicy: {
+          toolResultTreatment: "untrusted",
+        },
       });
       await makeAgentTool(agent.id, tool3.id, {
-        toolResultTreatment: "sanitize_with_dual_llm",
+        toolPolicy: {
+          toolResultTreatment: "sanitize_with_dual_llm",
+        },
       });
 
       // Create a policy for tool-2
@@ -94,10 +95,14 @@ describe("TrustedDataPolicyModel", () => {
       const tool2 = await makeTool({ name: "file-tool" });
 
       const agentTool1 = await makeAgentTool(agent.id, tool1.id, {
-        toolResultTreatment: "untrusted",
+        toolPolicy: {
+          toolResultTreatment: "untrusted",
+        },
       });
       const agentTool2 = await makeAgentTool(agent.id, tool2.id, {
-        toolResultTreatment: "untrusted",
+        toolPolicy: {
+          toolResultTreatment: "untrusted",
+        },
       });
 
       // Create blocking policies
@@ -179,7 +184,9 @@ describe("TrustedDataPolicyModel", () => {
       const agent = await makeAgent();
       const tool = await makeTool({ name: "test-tool" });
       await makeAgentTool(agent.id, tool.id, {
-        toolResultTreatment: "trusted",
+        toolPolicy: {
+          toolResultTreatment: "trusted",
+        },
       });
 
       // Single evaluation should still work
@@ -211,32 +218,13 @@ describe("TrustedDataPolicyModel", () => {
 
     // Create agent-tool relationship with default untrusted configuration
     const agentTool = await makeAgentTool(agentId, toolId, {
-      allowUsageWhenUntrustedDataIsPresent: false,
-      toolResultTreatment: "untrusted",
+      toolPolicy: {
+        allowUsageWhenUntrustedDataIsPresent: false,
+        toolResultTreatment: "untrusted",
+      },
     });
     toolPolicyId = agentTool.toolPolicyId as string;
   });
-
-  async function createPolicyForTool(
-    toolId: string,
-    overrides?: Partial<{
-      allowUsageWhenUntrustedDataIsPresent: boolean;
-      toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-      responseModifierTemplate: string | null;
-    }>,
-  ) {
-    const organization =
-      await OrganizationModel.getOrCreateDefaultOrganization();
-    return ToolPolicyModel.create({
-      name: `Trusted Policy ${Math.random()}`,
-      toolId,
-      organizationId: organization.id,
-      allowUsageWhenUntrustedDataIsPresent:
-        overrides?.allowUsageWhenUntrustedDataIsPresent ?? false,
-      toolResultTreatment: overrides?.toolResultTreatment ?? "untrusted",
-      responseModifierTemplate: overrides?.responseModifierTemplate ?? null,
-    });
-  }
 
   describe("evaluate", () => {
     describe("basic trust evaluation", () => {
@@ -307,6 +295,7 @@ describe("TrustedDataPolicyModel", () => {
     describe("toolResultTreatment handling", () => {
       test("marks data as trusted when tool has trusted treatment and no policies exist", async ({
         makeTool,
+        makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
         await makeTool({
@@ -320,11 +309,8 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-by-default-tool",
         );
         if (!trustedTool) throw new Error("Tool not found");
-        const policy = await createPolicyForTool(trustedTool.id, {
-          toolResultTreatment: "trusted",
-        });
-        await AgentToolModel.create(agentId, trustedTool.id, {
-          toolPolicyId: policy.id,
+        await makeAgentTool(agentId, trustedTool.id, {
+          toolPolicy: { toolResultTreatment: "trusted" },
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
@@ -341,6 +327,7 @@ describe("TrustedDataPolicyModel", () => {
 
       test("marks data as trusted when no policies match but tool has trusted treatment", async ({
         makeTrustedDataPolicy,
+        makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
         await ToolModel.createToolIfNotExists({
@@ -354,19 +341,13 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-by-default-with-policies",
         );
         if (!trustedTool) throw new Error("Tool not found");
-        const policy = await createPolicyForTool(trustedTool.id, {
-          toolResultTreatment: "trusted",
+        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+          toolPolicy: { toolResultTreatment: "trusted" },
         });
-        const trustedAgentTool = await AgentToolModel.create(
-          agentId,
-          trustedTool.id,
-          {
-            toolPolicyId: policy.id,
-          },
-        );
+        const policyId = trustedAgentTool.toolPolicyId as string;
 
         // Create a policy that doesn't match
-        await makeTrustedDataPolicy(trustedAgentTool.id, {
+        await makeTrustedDataPolicy(policyId, {
           attributePath: "special",
           operator: "equal",
           value: "magic",
@@ -389,6 +370,7 @@ describe("TrustedDataPolicyModel", () => {
       test("respects policy match over trusted treatment", async ({
         makeTool,
         makeTrustedDataPolicy,
+        makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
         await makeTool({
@@ -401,19 +383,13 @@ describe("TrustedDataPolicyModel", () => {
           "trusted-default-with-matching-policy",
         );
         if (!trustedTool) throw new Error("Tool not found");
-        const policy = await createPolicyForTool(trustedTool.id, {
-          toolResultTreatment: "trusted",
+        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+          toolPolicy: { toolResultTreatment: "trusted" },
         });
-        const trustedAgentTool = await AgentToolModel.create(
-          agentId,
-          trustedTool.id,
-          {
-            toolPolicyId: policy.id,
-          },
-        );
+        const policyId = trustedAgentTool.toolPolicyId as string;
 
         // Create a policy that matches
-        await makeTrustedDataPolicy(trustedAgentTool.id, {
+        await makeTrustedDataPolicy(policyId, {
           attributePath: "verified",
           operator: "equal",
           value: "true",
@@ -931,6 +907,7 @@ describe("TrustedDataPolicyModel", () => {
       test("blocked policies override trusted treatment", async ({
         makeTool,
         makeTrustedDataPolicy,
+        makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
         await makeTool({
@@ -941,19 +918,13 @@ describe("TrustedDataPolicyModel", () => {
 
         const trustedTool = await ToolModel.findByName("default-trusted-tool");
         if (!trustedTool) throw new Error("Tool not found");
-        const policy = await createPolicyForTool(trustedTool.id, {
-          toolResultTreatment: "trusted",
+        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+          toolPolicy: { toolResultTreatment: "trusted" },
         });
-        const trustedAgentTool = await AgentToolModel.create(
-          agentId,
-          trustedTool.id,
-          {
-            toolPolicyId: policy.id,
-          },
-        );
+        const policyId = trustedAgentTool.toolPolicyId as string;
 
         // Create a block policy
-        await makeTrustedDataPolicy(trustedAgentTool.id, {
+        await makeTrustedDataPolicy(policyId, {
           attributePath: "dangerous",
           operator: "equal",
           value: "true",

@@ -2,13 +2,10 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import {
   AgentModel,
-  AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  OrganizationModel,
   SecretModel,
   ToolModel,
-  ToolPolicyModel,
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
@@ -51,14 +48,16 @@ describe("McpClient", () => {
   let agentId: string;
   let mcpServerId: string;
   let catalogId: string;
-  let organizationId: string;
+  let assignToolWithPolicy: (
+    toolId: string,
+    responseModifierTemplate?: string | null,
+  ) => Promise<void>;
+  let assignToolDirect: (toolId: string) => Promise<void>;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeAgentTool }) => {
     // Create test agent
     const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
     agentId = agent.id;
-    organizationId = (await OrganizationModel.getOrCreateDefaultOrganization())
-      .id;
     // Create secret with access token
     const secret = await SecretModel.create({
       secret: {
@@ -91,25 +90,24 @@ describe("McpClient", () => {
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
     mockGetPod.mockReset();
+
+    assignToolWithPolicy = async (
+      toolId: string,
+      responseModifierTemplate: string | null = null,
+    ) => {
+      await makeAgentTool(agentId, toolId, {
+        toolPolicy: {
+          allowUsageWhenUntrustedDataIsPresent: false,
+          toolResultTreatment: "untrusted",
+          responseModifierTemplate,
+        },
+      });
+    };
+
+    assignToolDirect = async (toolId: string) => {
+      await makeAgentTool(agentId, toolId);
+    };
   });
-
-  async function assignToolWithPolicy(
-    toolId: string,
-    responseModifierTemplate: string | null = null,
-  ) {
-    const policy = await ToolPolicyModel.create({
-      name: `Test Policy ${Math.random()}`,
-      toolId,
-      organizationId,
-      allowUsageWhenUntrustedDataIsPresent: false,
-      toolResultTreatment: "untrusted",
-      responseModifierTemplate,
-    });
-
-    await AgentToolModel.create(agentId, toolId, {
-      toolPolicyId: policy.id,
-    });
-  }
 
   describe("executeToolCall", () => {
     test("returns error when tool not found for agent", async () => {
@@ -522,7 +520,7 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await assignToolDirect(tool.id);
 
         // Mock runtime manager responses
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -572,7 +570,7 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await assignToolDirect(tool.id);
 
         // Mock runtime manager responses - no endpoint URL
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -650,7 +648,7 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await assignToolDirect(tool.id);
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
         mockUsesStreamableHttp.mockResolvedValue(false);

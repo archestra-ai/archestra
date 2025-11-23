@@ -756,7 +756,9 @@ describe("ToolModel", () => {
       });
 
       await makeAgentTool(agent.id, tool.id, {
-        allowUsageWhenUntrustedDataIsPresent: true,
+        toolPolicy: {
+          allowUsageWhenUntrustedDataIsPresent: true,
+        },
       });
 
       const result = await ToolModel.findAllPaginated(

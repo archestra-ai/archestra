@@ -207,9 +207,6 @@ type AgentToolOverrides = {
     responseModifierTemplate: string | null;
     organizationId: string;
   }>;
-  allowUsageWhenUntrustedDataIsPresent?: boolean;
-  toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
-  responseModifierTemplate?: string | null;
 };
 
 async function makeAgentTool(
@@ -228,17 +225,9 @@ async function makeAgentTool(
     toolId,
     organizationId: organization,
     allowUsageWhenUntrustedDataIsPresent:
-      policyOverrides.allowUsageWhenUntrustedDataIsPresent ??
-      overrides.allowUsageWhenUntrustedDataIsPresent ??
-      false,
-    toolResultTreatment:
-      policyOverrides.toolResultTreatment ??
-      overrides.toolResultTreatment ??
-      "untrusted",
-    responseModifierTemplate:
-      policyOverrides.responseModifierTemplate ??
-      overrides.responseModifierTemplate ??
-      null,
+      policyOverrides.allowUsageWhenUntrustedDataIsPresent ?? false,
+    toolResultTreatment: policyOverrides.toolResultTreatment ?? "untrusted",
+    responseModifierTemplate: policyOverrides.responseModifierTemplate ?? null,
   });
 
   return await AgentToolModel.create(agentId, toolId, {

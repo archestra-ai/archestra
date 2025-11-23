@@ -20,10 +20,9 @@ import { useAgents } from "@/lib/agent.query";
 import { useTools } from "@/lib/tool.query";
 import { isMcpTool } from "@/lib/tool.utils";
 import { formatDate } from "@/lib/utils";
+import type { ToolRow } from "./tool-types";
 
-type ToolRow = archestraApiTypes.GetToolsResponses["200"]["data"][number];
-
-interface AssignedToolsTableProps {
+interface ToolsTableProps {
   onToolClick: (tool: ToolRow) => void;
 }
 
@@ -40,7 +39,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
+export function ToolsTable({ onToolClick }: ToolsTableProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

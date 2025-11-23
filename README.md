@@ -18,9 +18,9 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 
 *For Platform teams:*
 - Mitigate MCP chaos, move MCP servers from individual machines to a centralized orchestrator
-- Manage MCP-data access
+- Manage MCP-data access and credentials
 - Mitigate data exfiltration risks
-- Manage token usage
+- Manage AI costs
 - Collect logs and metrics 
 
 *For Developers:*

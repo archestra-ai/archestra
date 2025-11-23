@@ -1,7 +1,10 @@
 "use client";
 
-import { Edit, Plus, Save, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Edit, Info, Plus, Save, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +16,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -39,7 +42,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAgents, useDefaultAgent } from "@/lib/agent.query";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type {
   CreateOptimizationRuleInput,
   OptimizationRule,
@@ -50,11 +58,15 @@ import {
   useOptimizationRules,
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useTeams } from "@/lib/team.query";
+import { useTokenPrices } from "@/lib/token-price.query";
 
 // Form data type for inline editing - uses strings for number inputs
 type RuleFormData = {
   id?: string;
-  agentId: string;
+  entityType: OptimizationRule["entityType"];
+  entityId: string;
   ruleType: OptimizationRule["ruleType"];
   maxLength?: string;
   hasTools?: boolean;
@@ -88,23 +100,169 @@ function formDataToConditions(
     : { hasTools: data.hasTools ?? false };
 }
 
+// Helper to infer provider from model name
+function getProviderFromModel(model: string): "anthropic" | "openai" | null {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (model.startsWith("gpt-") || model.startsWith("o1-")) return "openai";
+  return null;
+}
+
+// Helper to format provider name for display
+function formatProviderName(provider: string): string {
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  return provider;
+}
+
+// Sort optimization rules: enabled first, then by priority (highest first)
+function sortOptimizationRules(rules: OptimizationRule[]): OptimizationRule[] {
+  return [...rules].sort((a, b) => {
+    if (a.enabled !== b.enabled) {
+      return a.enabled ? -1 : 1;
+    }
+    return a.priority - b.priority;
+  });
+}
+
+// Sort models by total cost (input + output price) ascending
+function sortModelsByPrice(
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>,
+): Array<{
+  model: string;
+  pricePerMillionInput: string;
+  pricePerMillionOutput: string;
+}> {
+  return [...tokenPrices].sort((a, b) => {
+    const costA =
+      parseFloat(a.pricePerMillionInput) + parseFloat(a.pricePerMillionOutput);
+    const costB =
+      parseFloat(b.pricePerMillionInput) + parseFloat(b.pricePerMillionOutput);
+    return costA - costB;
+  });
+}
+
+// Model Selector Component
+function ModelSelector({
+  value,
+  provider,
+  tokenPrices,
+  onChange,
+}: {
+  value: string;
+  provider: OptimizationRule["provider"];
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
+  onChange: (model: string) => void;
+}) {
+  const models = sortModelsByPrice(
+    tokenPrices.filter(
+      (price) => getProviderFromModel(price.model) === provider,
+    ),
+  );
+
+  // Check if current value has pricing
+  const currentModelHasPricing = models.some((m) => m.model === value);
+
+  // If current value doesn't have pricing but exists, add it to the list
+  const modelsWithCurrent =
+    value && !currentModelHasPricing
+      ? [
+          {
+            model: value,
+            pricePerMillionInput: "0",
+            pricePerMillionOutput: "0",
+          },
+          ...models,
+        ]
+      : models;
+
+  // Auto-select first (cheapest) model if no value provided or provider changed
+  useEffect(() => {
+    if (!value && models.length > 0) {
+      onChange(models[0].model);
+    }
+  }, [models, value, onChange]);
+
+  // If no models available for this provider, show message
+  if (modelsWithCurrent.length === 0) {
+    return (
+      <div className="px-2 flex gap-2 text-sm whitespace-nowrap">
+        <span className="text-muted-foreground">
+          No pricing configured for {formatProviderName(provider)} models.
+        </span>
+        <Link
+          href="/cost/token-price"
+          className="hover:text-foreground hover:underline"
+        >
+          Add pricing
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="max-w-36">
+        <SelectValue placeholder="Select target model" />
+      </SelectTrigger>
+      <SelectContent>
+        {modelsWithCurrent.map((price) => {
+          const hasPricing =
+            price.pricePerMillionInput !== "0" ||
+            price.pricePerMillionOutput !== "0";
+          return (
+            <SelectItem
+              key={price.model}
+              value={price.model}
+              className={!hasPricing ? "text-muted-foreground" : ""}
+            >
+              {price.model}
+              {hasPricing
+                ? ` ($${price.pricePerMillionInput} / $${price.pricePerMillionOutput})`
+                : " (no pricing)"}
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
+
 // Inline Form Component for adding/editing optimization rules
 function OptimizationRuleInlineForm({
   initialData,
   onSave,
   onCancel,
+  tokenPrices,
+  teams,
+  organizationId,
 }: {
   initialData?: RuleFormData;
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
+  teams: Array<{ id: string; name: string }>;
+  organizationId: string;
 }) {
   const [formData, setFormData] = useState<RuleFormData>({
     id: initialData?.id,
-    agentId: initialData?.agentId || "",
+    entityType: initialData?.entityType || "organization",
+    entityId: initialData?.entityId || organizationId,
     ruleType: initialData?.ruleType || "content_length",
-    maxLength: initialData?.maxLength || "",
+    maxLength: initialData?.maxLength || "1000",
     hasTools: initialData?.hasTools ?? false,
-    provider: initialData?.provider || "anthropic",
+    provider: initialData?.provider || "openai",
     targetModel: initialData?.targetModel || "",
     priority: initialData?.priority || "1",
     enabled: initialData?.enabled ?? true,
@@ -125,79 +283,120 @@ function OptimizationRuleInlineForm({
 
   return (
     <TableRow className="bg-muted/30">
-      <TableCell className="p-2">
-        <Select
-          value={formData.enabled ? "enabled" : "disabled"}
-          onValueChange={(value) =>
-            setFormData({ ...formData, enabled: value === "enabled" })
+      <TableCell>
+        <Switch
+          checked={formData.enabled}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, enabled: checked })
           }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="enabled">Enabled</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-          </SelectContent>
-        </Select>
+        />
       </TableCell>
       <TableCell className="p-2">
-        <Select
-          value={formData.ruleType}
-          onValueChange={(value: "content_length" | "tool_presence") =>
-            setFormData({ ...formData, ruleType: value })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="content_length">Content Length</SelectItem>
-            <SelectItem value="tool_presence">Tool Presence</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell className="p-2">
-        {formData.ruleType === "content_length" ? (
-          <Input
-            id="maxLength"
-            type="number"
-            min="0"
-            value={formData.maxLength}
-            onChange={(e) =>
-              setFormData({ ...formData, maxLength: e.target.value })
-            }
-            placeholder="1000"
-            required
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (isValid) handleSubmit();
-              }
-            }}
-          />
-        ) : (
+        <div className="flex flex-col gap-2">
           <Select
-            value={formData.hasTools ? "true" : "false"}
-            onValueChange={(value) =>
-              setFormData({ ...formData, hasTools: value === "true" })
+            value={formData.entityType}
+            onValueChange={(value: "organization" | "team") => {
+              setFormData({
+                ...formData,
+                entityType: value,
+                entityId: value === "organization" ? organizationId : "",
+              });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="organization">Organization</SelectItem>
+              <SelectItem value="team">Team</SelectItem>
+            </SelectContent>
+          </Select>
+          {formData.entityType === "team" && (
+            <Select
+              value={formData.entityId}
+              onValueChange={(value) =>
+                setFormData({ ...formData, entityId: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="p-2">
+        <div className="flex gap-2 items-center flex-wrap">
+          <Select
+            value={formData.ruleType}
+            onValueChange={(value: "content_length" | "tool_presence") =>
+              setFormData({ ...formData, ruleType: value })
             }
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="true">With tools</SelectItem>
-              <SelectItem value="false">Without tools</SelectItem>
+              <SelectItem value="content_length">Content Length</SelectItem>
+              <SelectItem value="tool_presence">Tool Presence</SelectItem>
             </SelectContent>
           </Select>
-        )}
+          {formData.ruleType === "content_length" ? (
+            <span>
+              Max: 
+              <Input
+                id="maxLength"
+                type="number"
+                min="0"
+                className="w-24 flex-none"
+                value={formData.maxLength}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxLength: e.target.value })
+                }
+                placeholder="1000"
+                required
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (isValid) handleSubmit();
+                  }
+                }}
+              />
+            </span>
+          ) : (
+            <Select
+              value={formData.hasTools ? "true" : "false"}
+              onValueChange={(value) =>
+                setFormData({ ...formData, hasTools: value === "true" })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">With tools</SelectItem>
+                <SelectItem value="false">Without tools</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </TableCell>
       <TableCell className="p-2">
         <Select
           value={formData.provider}
-          onValueChange={(value: "anthropic" | "openai") =>
-            setFormData({ ...formData, provider: value })
+          onValueChange={(value) =>
+            setFormData({
+              ...formData,
+              provider: value as OptimizationRule["provider"],
+              targetModel: "",
+            })
           }
         >
           <SelectTrigger>
@@ -210,26 +409,14 @@ function OptimizationRuleInlineForm({
         </Select>
       </TableCell>
       <TableCell className="p-2">
-        <Input
-          id="targetModel"
-          type="text"
+        <ModelSelector
           value={formData.targetModel}
-          onChange={(e) =>
-            setFormData({ ...formData, targetModel: e.target.value })
-          }
-          placeholder={
-            formData.provider === "openai" ? "gpt-4o-mini" : "claude-4-5-haiku"
-          }
-          required
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              if (isValid) handleSubmit();
-            }
-          }}
+          provider={formData.provider}
+          tokenPrices={tokenPrices}
+          onChange={(value) => setFormData({ ...formData, targetModel: value })}
         />
       </TableCell>
-      <TableCell className="p-2 w-20">
+      <TableCell className="p-2">
         <Input
           id="priority"
           type="number"
@@ -240,24 +427,27 @@ function OptimizationRuleInlineForm({
           }
           placeholder="1"
           required
-          className="w-full"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               if (isValid) handleSubmit();
             }
           }}
+          className="w-16"
         />
       </TableCell>
-      <TableCell className="p-2 w-48">
+      <TableCell className="p-2">
         <div className="flex gap-2">
-          <Button onClick={() => handleSubmit()} disabled={!isValid} size="sm">
-            <Save className="h-4 w-4 mr-1" />
-            Save
+          <Button
+            onClick={() => handleSubmit()}
+            disabled={!isValid}
+            size="sm"
+            variant="ghost"
+          >
+            <Save className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" onClick={onCancel} size="sm">
-            <X className="h-4 w-4 mr-1" />
-            Cancel
+          <Button type="button" variant="ghost" onClick={onCancel} size="sm">
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </TableCell>
@@ -273,6 +463,11 @@ function OptimizationRuleRow({
   onSave,
   onCancel,
   onDelete,
+  onToggleEnabled,
+  tokenPrices,
+  getEntityName,
+  teams,
+  organizationId,
 }: {
   rule: OptimizationRule;
   isEditing: boolean;
@@ -280,11 +475,25 @@ function OptimizationRuleRow({
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
   onDelete: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
+  tokenPrices: Array<{
+    model: string;
+    pricePerMillionInput: string;
+    pricePerMillionOutput: string;
+  }>;
+  getEntityName: (rule: OptimizationRule) => string;
+  teams: Array<{ id: string; name: string }>;
+  organizationId: string;
 }) {
+  const hasModelPricing = tokenPrices.some(
+    (price) => price.model === rule.targetModel,
+  );
+
   if (isEditing) {
     const formData: RuleFormData = {
       id: rule.id,
-      agentId: rule.agentId,
+      entityType: rule.entityType,
+      entityId: rule.entityId,
       ruleType: rule.ruleType,
       maxLength:
         rule.ruleType === "content_length"
@@ -305,31 +514,65 @@ function OptimizationRuleRow({
         initialData={formData}
         onSave={onSave}
         onCancel={onCancel}
+        tokenPrices={tokenPrices}
+        teams={teams}
+        organizationId={organizationId}
       />
     );
   }
 
   return (
-    <TableRow className="hover:bg-muted/30">
+    <TableRow
+      className={`hover:bg-muted/30 ${!hasModelPricing ? "text-muted-foreground" : ""}`}
+    >
       <TableCell>
-        <Badge variant={rule.enabled ? "default" : "secondary"}>
-          {rule.enabled ? "Enabled" : "Disabled"}
-        </Badge>
+        <div className={!hasModelPricing ? "opacity-50" : ""}>
+          <WithPermissions permissions={{ limit: ["update"] }}>
+            <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+          </WithPermissions>
+        </div>
       </TableCell>
-      <TableCell className="capitalize">
-        {rule.ruleType.replace("_", " ")}
+      <TableCell className="text-sm text-muted-foreground">
+        {getEntityName(rule)}
       </TableCell>
       <TableCell>
         {rule.ruleType === "content_length"
-          ? `Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
-          : (rule.conditions as { hasTools: boolean }).hasTools
-            ? "With tools"
-            : "Without tools"}
+          ? `Content length: Max ${(rule.conditions as { maxLength: number }).maxLength} chars`
+          : `Tool presence: ${(rule.conditions as { hasTools: boolean }).hasTools ? "With tools" : "Without tools"}`}
       </TableCell>
-      <TableCell className="capitalize">{rule.provider}</TableCell>
-      <TableCell>{rule.targetModel}</TableCell>
-      <TableCell>{rule.priority}</TableCell>
+      <TableCell className="whitespace-nowrap">
+        {formatProviderName(rule.provider)}
+      </TableCell>
       <TableCell>
+        <div className="flex gap-2 items-center">
+          {rule.targetModel}
+          {!hasModelPricing && (
+            <>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-70 text-wrap">
+                    <p>
+                      No pricing configured for this model. This rule will not
+                      be applied. Add pricing on the Token Price page.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Link
+                href="/cost/token-price"
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Add pricing
+              </Link>
+            </>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>{rule.priority}</TableCell>
+      <TableCell className="pl-2 text-foreground">
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ limit: ["update"] }}
@@ -376,41 +619,96 @@ function OptimizationRuleRow({
 }
 
 export default function OptimizationRulesPage() {
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [isAddingRule, setIsAddingRule] = useState(false);
+  const [ruleOrder, setRuleOrder] = useState<string[]>([]);
+  const hasInitialized = useRef(false);
 
-  const { data: agents = [] } = useAgents();
-  const { data: defaultAgent } = useDefaultAgent();
-  const { data: optimizationRules = [], isLoading: optimizationRulesLoading } =
-    useOptimizationRules(selectedAgentId);
+  const { data: allRules = [], isLoading: rulesLoading } =
+    useOptimizationRules();
+  const { data: tokenPrices = [] } = useTokenPrices();
+  const { data: teams = [] } = useTeams();
+  const { data: organizationDetails } = useOrganization();
 
   const createRule = useCreateOptimizationRule();
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  // Set default agent as selected when it loads
+  // Sort rules once on initial load, then maintain order
   useEffect(() => {
-    if (defaultAgent && !selectedAgentId) {
-      setSelectedAgentId(defaultAgent.id);
+    if (!hasInitialized.current && allRules.length > 0) {
+      // Initial sort: enabled first, then by priority (highest first)
+      const sorted = sortOptimizationRules(allRules);
+      setRuleOrder(sorted.map((rule) => rule.id));
+      hasInitialized.current = true;
+    } else if (hasInitialized.current) {
+      setRuleOrder((ruleOrder) => {
+        const newRules = allRules.filter(
+          (rule) => !ruleOrder.includes(rule.id),
+        );
+        if (newRules.length === 0) return ruleOrder;
+
+        // Re-sort all rules to maintain proper order
+        const allRulesInOrder = [
+          ...ruleOrder
+            .map((id) => allRules.find((rule) => rule.id === id))
+            .filter((rule): rule is OptimizationRule => rule !== undefined),
+          ...newRules,
+        ];
+        const sorted = sortOptimizationRules(allRulesInOrder);
+        return sorted.map((rule) => rule.id);
+      });
     }
-  }, [defaultAgent, selectedAgentId]);
+  }, [allRules]);
+
+  // Derive ordered rules from rule order and actual data
+  const orderedRules = ruleOrder
+    .map((id) => allRules.find((rule) => rule.id === id))
+    .filter((rule): rule is OptimizationRule => rule !== undefined);
+
+  // Calculate max priority for new rules
+  const maxPriority =
+    allRules.length > 0
+      ? Math.max(...allRules.map((rule) => rule.priority))
+      : 0;
+  const nextPriority = maxPriority + 1;
+
+  // Helper function to get entity name for "Applied to" column
+  const getEntityName = useCallback(
+    (rule: OptimizationRule) => {
+      if (rule.entityType === "team") {
+        const team = teams.find((t) => t.id === rule.entityId);
+        return team?.name || "Unknown Team";
+      }
+      if (rule.entityType === "organization") {
+        return "The whole organization";
+      }
+      if (rule.entityType === "agent") {
+        return "Specific Profile";
+      }
+      return "Unknown";
+    },
+    [teams],
+  );
 
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
       try {
         await createRule.mutateAsync({
-          agentId: data.agentId,
+          entityType: data.entityType,
+          entityId: data.entityId,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
           priority: Number(data.priority),
           enabled: data.enabled,
-        });
+          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
+        } as any);
         setIsAddingRule(false);
-      } catch (error) {
-        console.error("Failed to create optimization rule:", error);
+        toast.success("Optimization rule created");
+      } catch (_error) {
+        toast.error("Failed to create optimization rule");
       }
     },
     [createRule],
@@ -421,16 +719,20 @@ export default function OptimizationRulesPage() {
       try {
         await updateRule.mutateAsync({
           id,
+          entityType: data.entityType,
+          entityId: data.entityId,
           ruleType: data.ruleType,
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
           priority: Number(data.priority),
           enabled: data.enabled,
-        });
+          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
+        } as any);
         setEditingRuleId(null);
-      } catch (error) {
-        console.error("Failed to update optimization rule:", error);
+        toast.success("Optimization rule updated");
+      } catch (_error) {
+        toast.error("Failed to update optimization rule");
       }
     },
     [updateRule],
@@ -440,11 +742,27 @@ export default function OptimizationRulesPage() {
     async (id: string) => {
       try {
         await deleteRule.mutateAsync(id);
-      } catch (error) {
-        console.error("Failed to delete optimization rule:", error);
+        toast.success("Optimization rule deleted");
+      } catch (_error) {
+        toast.error("Failed to delete optimization rule");
       }
     },
     [deleteRule],
+  );
+
+  const handleToggleEnabled = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        await updateRule.mutateAsync({
+          id,
+          enabled,
+        });
+        toast.success(`Optimization rule ${enabled ? "enabled" : "disabled"}`);
+      } catch (_error) {
+        toast.error("Failed to toggle optimization rule");
+      }
+    },
+    [updateRule],
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -464,89 +782,154 @@ export default function OptimizationRulesPage() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              value={selectedAgentId || ""}
-              onValueChange={setSelectedAgentId}
+            <PermissionButton
+              permissions={{ limit: ["create"] }}
+              onClick={() => {
+                if (editingRuleId !== null) {
+                  setEditingRuleId(null);
+                }
+                setIsAddingRule(true);
+              }}
+              size="sm"
+              variant="default"
             >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Select a profile" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedAgentId && !isAddingRule && (
-              <PermissionButton
-                permissions={{ limit: ["create"] }}
-                onClick={() => setIsAddingRule(true)}
-                size="sm"
-                variant="outline"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Rule
-              </PermissionButton>
-            )}
+              <Plus className="h-4 w-4 mr-1" />
+              Add Rule
+            </PermissionButton>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {optimizationRulesLoading ? (
+        {rulesLoading ? (
           <LoadingSkeleton count={3} prefix="optimization-rules" />
         ) : (
           <Table>
+            <colgroup>
+              <col className="w-20" />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col className="w-20" />
+              <col className="w-28" />
+            </colgroup>
             <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Rule Type</TableHead>
-                <TableHead>Conditions</TableHead>
+              <TableRow className="whitespace-nowrap">
+                <TableHead>Enabled</TableHead>
+                <TableHead>Applied to</TableHead>
+                <TableHead>Rule</TableHead>
                 <TableHead>Provider</TableHead>
-                <TableHead>Target Model</TableHead>
-                <TableHead className="w-20">Priority</TableHead>
-                <TableHead className="w-48">Actions</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    Target Model
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-70 text-wrap">
+                          <p>
+                            Only models with configured pricing can be selected.
+                            Add pricing for more models on the Token Price page.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    Order
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-70 text-wrap">
+                          <p>
+                            Rules are evaluated in order (1, 2, 3...). The first
+                            matching rule is applied. If no rules match, the
+                            original model is used.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isAddingRule && selectedAgentId && (
-                <OptimizationRuleInlineForm
-                  initialData={{
-                    agentId: selectedAgentId,
-                    ruleType: "content_length",
-                    provider: "anthropic",
-                    targetModel: "",
-                    priority: "1",
-                    enabled: true,
-                  }}
-                  onSave={handleCreateRule}
-                  onCancel={handleCancelEdit}
-                />
-              )}
-              {optimizationRules.length === 0 && !isAddingRule ? (
+              {orderedRules.length === 0 && !isAddingRule ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
                     className="text-center py-8 text-muted-foreground"
                   >
-                    {selectedAgentId
-                      ? "No optimization rules configured for this profile"
-                      : "Select a profile to view optimization rules"}
+                    No optimization rules configured for this organization
                   </TableCell>
                 </TableRow>
               ) : (
-                optimizationRules.map((rule) => (
-                  <OptimizationRuleRow
-                    key={rule.id}
-                    rule={rule}
-                    isEditing={editingRuleId === rule.id}
-                    onEdit={() => setEditingRuleId(rule.id)}
-                    onSave={(data) => handleUpdateRule(rule.id, data)}
-                    onCancel={handleCancelEdit}
-                    onDelete={() => handleDeleteRule(rule.id)}
-                  />
-                ))
+                <>
+                  {orderedRules
+                    .filter((rule) => rule.enabled)
+                    .map((rule) => (
+                      <OptimizationRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        isEditing={editingRuleId === rule.id}
+                        onEdit={() => setEditingRuleId(rule.id)}
+                        onSave={(data) => handleUpdateRule(rule.id, data)}
+                        onCancel={handleCancelEdit}
+                        onDelete={() => handleDeleteRule(rule.id)}
+                        onToggleEnabled={(enabled) =>
+                          handleToggleEnabled(rule.id, enabled)
+                        }
+                        tokenPrices={tokenPrices}
+                        getEntityName={getEntityName}
+                        teams={teams}
+                        organizationId={organizationDetails?.id || ""}
+                      />
+                    ))}
+                  {isAddingRule && (
+                    <OptimizationRuleInlineForm
+                      initialData={{
+                        entityType: "organization",
+                        entityId: organizationDetails?.id || "",
+                        ruleType: "content_length",
+                        provider: "anthropic",
+                        targetModel: "",
+                        priority: String(nextPriority),
+                        enabled: true,
+                      }}
+                      onSave={handleCreateRule}
+                      onCancel={handleCancelEdit}
+                      tokenPrices={tokenPrices}
+                      teams={teams}
+                      organizationId={organizationDetails?.id || ""}
+                    />
+                  )}
+                  {orderedRules
+                    .filter((rule) => !rule.enabled)
+                    .map((rule) => (
+                      <OptimizationRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        isEditing={editingRuleId === rule.id}
+                        onEdit={() => setEditingRuleId(rule.id)}
+                        onSave={(data) => handleUpdateRule(rule.id, data)}
+                        onCancel={handleCancelEdit}
+                        onDelete={() => handleDeleteRule(rule.id)}
+                        onToggleEnabled={(enabled) =>
+                          handleToggleEnabled(rule.id, enabled)
+                        }
+                        tokenPrices={tokenPrices}
+                        getEntityName={getEntityName}
+                        teams={teams}
+                        organizationId={organizationDetails?.id || ""}
+                      />
+                    ))}
+                </>
               )}
             </TableBody>
           </Table>

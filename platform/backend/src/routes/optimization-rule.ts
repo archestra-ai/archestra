@@ -14,48 +14,50 @@ import {
 
 const optimizationRuleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/agents/:agentId/optimization-rules",
+    "/api/optimization-rules",
     {
       schema: {
         operationId: RouteId.GetOptimizationRules,
-        description: "Get all optimization rules for an agent",
+        description: "Get all optimization rules for the organization",
         tags: ["Optimization Rules"],
-        params: z.object({
-          agentId: UuidIdSchema,
-        }),
         response: constructResponseSchema(
           z.array(SelectOptimizationRuleSchema),
         ),
       },
     },
     async (request, reply) => {
-      const { agentId } = request.params;
-
-      const rules = await OptimizationRuleModel.findByAgentId(agentId);
+      const rules = await OptimizationRuleModel.findByOrganizationId(
+        request.organizationId,
+      );
 
       return reply.status(200).send(rules);
     },
   );
 
   fastify.post(
-    "/api/agents/:agentId/optimization-rules",
+    "/api/optimization-rules",
     {
       schema: {
         operationId: RouteId.CreateOptimizationRule,
-        description: "Create a new optimization rule for an agent",
+        description: "Create a new optimization rule for the organization",
         tags: ["Optimization Rules"],
-        params: z.object({
-          agentId: UuidIdSchema,
-        }),
-        body: InsertOptimizationRuleSchema.omit({ agentId: true }),
+        body: InsertOptimizationRuleSchema,
         response: constructResponseSchema(SelectOptimizationRuleSchema),
       },
     },
-    async ({ params: { agentId }, body }, reply) => {
-      const rule = await OptimizationRuleModel.create({
-        ...body,
-        agentId,
-      });
+    async (request, reply) => {
+      // Validate that entityId matches organization context
+      if (request.body.entityType === "organization") {
+        // Ensure entityId is the current organization
+        if (request.body.entityId !== request.organizationId) {
+          throw new ApiError(
+            403,
+            "Cannot create rule for different organization",
+          );
+        }
+      }
+
+      const rule = await OptimizationRuleModel.create(request.body);
 
       return reply.send(rule);
     },

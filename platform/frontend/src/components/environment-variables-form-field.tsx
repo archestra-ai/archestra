@@ -288,7 +288,7 @@ export function EnvironmentVariablesFormField<
                     <FormItem>
                       <FormControl>
                         <Textarea
-                          placeholder="Optional descritption"
+                          placeholder="Optional description"
                           className="text-xs resize-y min-h-10"
                           {...field}
                         />

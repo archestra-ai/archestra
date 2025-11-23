@@ -103,6 +103,17 @@ export function ArchestraCatalogTab({
       // Track which user_config keys are referenced in server.env
       const referencedUserConfigKeys = new Set<string>();
 
+      const getEnvVarType = (
+        userConfigEntry: NonNullable<
+          archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+        >[string],
+      ) => {
+        if (userConfigEntry.sensitive) return "secret" as const;
+        if (userConfigEntry.type === "boolean") return "boolean" as const;
+        if (userConfigEntry.type === "number") return "number" as const;
+        return "plain_text" as const;
+      };
+
       // First pass: Parse server.env entries
       const envFromServerEnv = server.server.env
         ? Object.entries(server.server.env).map(([envKey, envValue]) => {
@@ -117,13 +128,7 @@ export function ArchestraCatalogTab({
               if (userConfigEntry) {
                 return {
                   key: envKey, // Use env var name (e.g., CONFLUENCE_URL)
-                  type: userConfigEntry.sensitive
-                    ? ("secret" as const)
-                    : userConfigEntry.type === "boolean"
-                      ? ("boolean" as const)
-                      : userConfigEntry.type === "number"
-                        ? ("number" as const)
-                        : ("plain_text" as const),
+                  type: getEnvVarType(userConfigEntry),
                   value: "", // Empty - will be prompted
                   promptOnInstallation: true,
                   required: userConfigEntry.required ?? false,
@@ -155,13 +160,7 @@ export function ArchestraCatalogTab({
             .filter(([key]) => !referencedUserConfigKeys.has(key))
             .map(([key, config]) => ({
               key,
-              type: config.sensitive
-                ? ("secret" as const)
-                : config.type === "boolean"
-                  ? ("boolean" as const)
-                  : config.type === "number"
-                    ? ("number" as const)
-                    : ("plain_text" as const),
+              type: getEnvVarType(config),
               value: getValue(config),
               promptOnInstallation: true,
               required: config.required ?? false,

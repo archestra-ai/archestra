@@ -17,9 +17,9 @@ import {
 } from "@/lib/agent-tools.query";
 import { useToolPolicies } from "@/lib/tool-policy.query";
 import { cn } from "@/lib/utils";
-import type { ToolRow } from "./types";
+import type { Tool } from "./types";
 
-export function ToolAssignmentsPanel({ tool }: { tool: ToolRow }) {
+export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedPolicy, setSelectedPolicy] = useState("default");
 

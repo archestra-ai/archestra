@@ -22,18 +22,21 @@ import { formatDate } from "@/lib/utils";
 import { ResponseModifierEditor } from "./response-modifier-editor";
 import { ToolInvocationPolicies } from "./tool-invocation-policies";
 import { ToolResultPolicies } from "./tool-result-policies";
-import type { ToolPolicyResultTreatmentOption, ToolRow } from "./types";
+import type { Tool, ToolPolicyResultTreatmentOption } from "./types";
 
-const TOOL_RESULT_OPTIONS: Array<{
-  label: string;
-  value: ToolPolicyResultTreatmentOption;
-}> = [
-  { label: "Trusted", value: "trusted" },
-  { label: "Sanitize with Dual LLM", value: "sanitize_with_dual_llm" },
-  { label: "Untrusted", value: "untrusted" },
-];
+const TOOL_RESULT_OPTIONS: Record<
+  ToolPolicyResultTreatmentOption,
+  { label: string; value: ToolPolicyResultTreatmentOption }
+> = {
+  trusted: { label: "Trusted", value: "trusted" },
+  sanitize_with_dual_llm: {
+    label: "Sanitize with Dual LLM",
+    value: "sanitize_with_dual_llm",
+  },
+  untrusted: { label: "Untrusted", value: "untrusted" },
+};
 
-export function ToolPoliciesPanel({ tool }: { tool: ToolRow }) {
+export function ToolPoliciesPanel({ tool }: { tool: Tool }) {
   const { data: rawPolicies = [], isLoading: isLoadingPolicies } =
     useToolPolicies(tool?.id ?? null);
   const policies = useMemo(
@@ -168,7 +171,7 @@ export function ToolPoliciesPanel({ tool }: { tool: ToolRow }) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {TOOL_RESULT_OPTIONS.map((option) => (
+                        {Object.values(TOOL_RESULT_OPTIONS).map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
                           </SelectItem>

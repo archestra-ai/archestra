@@ -1,13 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import { Suspense, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 import { ToolsTable } from "./_parts/tools-table";
-
-type ToolRow = archestraApiTypes.GetToolsResponses["200"]["data"][number];
+import type { Tool } from "./_parts/types";
 
 export function ToolsClient() {
   return (
@@ -23,7 +21,7 @@ export function ToolsClient() {
 
 function ToolsList() {
   const [selectedToolForDialog, setSelectedToolForDialog] =
-    useState<ToolRow | null>(null);
+    useState<Tool | null>(null);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">

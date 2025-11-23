@@ -9,7 +9,7 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { ToolAssignmentsPanel } from "./tool-assignments-panel";
 import { ToolPoliciesPanel } from "./tool-policies-panel";
-import type { ToolRow } from "./types";
+import type { Tool } from "./types";
 
 type TabId = "policies" | "assignments";
 
@@ -18,7 +18,7 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: {
-  tool: ToolRow | null;
+  tool: Tool | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {

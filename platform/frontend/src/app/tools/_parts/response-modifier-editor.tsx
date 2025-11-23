@@ -21,10 +21,10 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useUpdateToolPolicy } from "@/lib/tool-policy.query";
-import type { ToolPolicyRow } from "./types";
+import type { ToolPolicy } from "./types";
 
 interface ResponseModifierEditorProps {
-  toolPolicy: ToolPolicyRow;
+  toolPolicy: ToolPolicy;
 }
 
 export function ResponseModifierEditor({

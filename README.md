@@ -1,6 +1,6 @@
 # MCP-native Centralized AI Platform
 
-Simplify AI usage in the enterprise, providing observability and control built on a strong security foundation.
+Simplify AI usage in your company, providing user-friendly MCP toolbox, observability and control built on a strong security foundation.
 
 <div align="center">
 
@@ -35,7 +35,7 @@ Simplify AI usage in the enterprise, providing observability and control built o
 ## 🔥 ChatGPT-like chat with MCPs
 
 <div align="center">
-<img src="docs/assets/chat.png" alt="ChatGpt-like chat" />
+<img src="docs/assets/chat.png" alt="ChatGPT-like chat" />
 </div>
 
 ## 🔥 Private MCP Registry with Governance
@@ -61,7 +61,7 @@ Running MCP servers in K8S, managing their state, API keys, OAuth.
 Isolating dangerous tool responses from the main agent to prevent prompt injections.
 
 <div align="center">
-<img src="docs/assets/dual-llm.png" alt="MCP Registry" />
+<img src="docs/assets/dual-llm.png" alt="Dual-LLM sub-agent" />
 </div>
 
 
@@ -86,12 +86,12 @@ Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimize
 <img src="docs/assets/cost.png" alt="Cost & Limits" />
 </div>
 
-## 🔥 Observibility
+## 🔥 Observability
 
 Archestra exposes metrics, traces and logs allowing to come to a conclusion about per-org, per-agent and per-team token and tool usage.
 
 <div align="center">
-<img src="docs/assets/observibility.png" alt="Cost & Limits" />
+<img src="docs/assets/observability.png" alt="Observability" />
 </div>
 
 ## 🔥 Ready for production

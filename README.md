@@ -21,7 +21,7 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 - Manage MCP-data access and credentials
 - Mitigate data exfiltration risks
 - Manage AI costs
-- Collect logs and metrics 
+- AI Observability
 
 *For Developers:*
 - Deploy your MCP servers org-wide

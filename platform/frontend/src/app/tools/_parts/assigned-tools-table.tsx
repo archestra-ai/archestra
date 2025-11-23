@@ -402,7 +402,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Agent
+            Profile
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),

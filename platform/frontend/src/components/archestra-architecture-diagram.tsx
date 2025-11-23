@@ -13,8 +13,7 @@ export function ArchestraArchitectureDiagram() {
 
     subgraph Archestra
         GW[MCP Gateway]
-        LLM[LLM Gateway]
-        Orch[MCP Orchestrator]
+        Orch["<b>MCP Orchestrator</b>"]
         GW --> Orch
     end
 
@@ -37,12 +36,6 @@ export function ArchestraArchitectureDiagram() {
                 R1[GitHub MCP]
             end
 
-            subgraph LLMs [LLM Providers]
-                direction TB
-                O[OpenAI]
-                G[Gemini]
-                C[Claude]
-            end
         end
 
         TopRow ~~~ BottomRow
@@ -50,8 +43,7 @@ export function ArchestraArchitectureDiagram() {
 
     A1 --> GW
     A2 --> GW
-    A2 --> LLM
-    A3 --> LLM
+    A3 --> GW
 
     GW --> R1
 
@@ -59,9 +51,6 @@ export function ArchestraArchitectureDiagram() {
     Orch --> S2
     Orch --> S3
 
-    LLM --> O
-    LLM --> G
-    LLM --> C
 
     style RightSide fill:transparent,stroke:none
     style TopRow fill:transparent,stroke:none

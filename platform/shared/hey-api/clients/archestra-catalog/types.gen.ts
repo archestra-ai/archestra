@@ -30,6 +30,7 @@ export type ArchestraMcpServerManifest = {
             type: 'log-monitor';
             provider: 'whatsapp';
         }>;
+        docker_image?: string;
     } | {
         type: 'remote';
         url: string;
@@ -81,6 +82,7 @@ export type ArchestraMcpServerManifest = {
                 env?: {
                     [key: string]: string;
                 };
+                docker_image?: string;
             };
         } | null;
         oauth: {

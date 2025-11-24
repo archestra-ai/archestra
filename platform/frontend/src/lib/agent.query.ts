@@ -19,13 +19,16 @@ const {
 } = archestraApiSdk;
 
 // For backward compatibility - returns all agents as an array
-export function useAgents(params?: {
-  initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
-}) {
+export function useAgents(
+  params: {
+    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
+    filters?: archestraApiTypes.GetAllAgentsData["query"];
+  } = {},
+) {
   return useSuspenseQuery({
-    queryKey: ["agents", "all"],
+    queryKey: ["agents", "all", params?.filters],
     queryFn: async () => {
-      const response = await getAllAgents();
+      const response = await getAllAgents({ query: params?.filters });
       return response.data ?? [];
     },
     initialData: params?.initialData,

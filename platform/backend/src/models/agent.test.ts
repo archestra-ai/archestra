@@ -958,5 +958,230 @@ describe("AgentModel", () => {
       expect(agents[0].id).toBe(chatAgent.id);
       expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(false);
     });
+
+    test("findAll with useInChat: true only returns chat-enabled agents", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create agents with use_in_chat=true
+      const chatAgent1 = await AgentModel.create({
+        name: "Chat Agent 1",
+        teams: [],
+        useInChat: true,
+      });
+      const chatAgent2 = await AgentModel.create({
+        name: "Chat Agent 2",
+        teams: [],
+        useInChat: true,
+      });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      const agents = await AgentModel.findAll(admin.id, true, {
+        useInChat: true,
+      });
+
+      // Should only return agents with use_in_chat=true
+      expect(agents).toHaveLength(2);
+      expect(agents.some((a) => a.id === chatAgent1.id)).toBe(true);
+      expect(agents.some((a) => a.id === chatAgent2.id)).toBe(true);
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(false);
+    });
+
+    test("findAll with useInChat: false only returns non-chat agents", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create agents with use_in_chat=true
+      await AgentModel.create({
+        name: "Chat Agent 1",
+        teams: [],
+        useInChat: true,
+      });
+      await AgentModel.create({
+        name: "Chat Agent 2",
+        teams: [],
+        useInChat: true,
+      });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      const agents = await AgentModel.findAll(admin.id, true, {
+        useInChat: false,
+      });
+
+      // Should only return agents with use_in_chat=false
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(nonChatAgent.id);
+      expect(agents[0].name).toBe("Non-Chat Agent");
+    });
+
+    test("findAll without useInChat option returns all agents", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create agents with use_in_chat=true
+      const chatAgent1 = await AgentModel.create({
+        name: "Chat Agent 1",
+        teams: [],
+        useInChat: true,
+      });
+      const chatAgent2 = await AgentModel.create({
+        name: "Chat Agent 2",
+        teams: [],
+        useInChat: true,
+      });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      // Call without the third parameter (should return all)
+      const agents = await AgentModel.findAll(admin.id, true);
+
+      // Should return all agents regardless of use_in_chat value
+      expect(agents.some((a) => a.id === chatAgent1.id)).toBe(true);
+      expect(agents.some((a) => a.id === chatAgent2.id)).toBe(true);
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(true);
+    });
+
+    test("findAll with useInChat: true and team filtering works correctly", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, admin.id);
+
+      await TeamModel.addMember(team.id, user.id);
+
+      // Create chat-enabled agent in user's team
+      const chatAgent = await AgentModel.create({
+        name: "Chat Agent",
+        teams: [team.id],
+        useInChat: true,
+      });
+
+      // Create non-chat agent in user's team
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [team.id],
+        useInChat: false,
+      });
+
+      // Create chat-enabled agent NOT in user's team
+      await AgentModel.create({
+        name: "Other Chat Agent",
+        teams: [],
+        useInChat: true,
+      });
+
+      const agents = await AgentModel.findAll(user.id, false, {
+        useInChat: true,
+      });
+
+      // User should only see the chat-enabled agent in their team
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(chatAgent.id);
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(false);
+    });
+
+    test("findAll with useInChat: false and team filtering works correctly", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, admin.id);
+
+      await TeamModel.addMember(team.id, user.id);
+
+      // Create chat-enabled agent in user's team
+      await AgentModel.create({
+        name: "Chat Agent",
+        teams: [team.id],
+        useInChat: true,
+      });
+
+      // Create non-chat agent in user's team
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [team.id],
+        useInChat: false,
+      });
+
+      // Create non-chat agent NOT in user's team
+      await AgentModel.create({
+        name: "Other Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      const agents = await AgentModel.findAll(user.id, false, {
+        useInChat: false,
+      });
+
+      // User should only see the non-chat agent in their team
+      expect(agents).toHaveLength(1);
+      expect(agents[0].id).toBe(nonChatAgent.id);
+      expect(agents[0].name).toBe("Non-Chat Agent");
+    });
+
+    test("findAll with useInChat: undefined returns all agents", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      // Create agents with use_in_chat=true
+      const chatAgent1 = await AgentModel.create({
+        name: "Chat Agent 1",
+        teams: [],
+        useInChat: true,
+      });
+      const chatAgent2 = await AgentModel.create({
+        name: "Chat Agent 2",
+        teams: [],
+        useInChat: true,
+      });
+
+      // Create agent with use_in_chat=false
+      const nonChatAgent = await AgentModel.create({
+        name: "Non-Chat Agent",
+        teams: [],
+        useInChat: false,
+      });
+
+      // Call with useInChat: undefined (should return all)
+      const agents = await AgentModel.findAll(admin.id, true, {
+        useInChat: undefined,
+      });
+
+      // Should return all agents regardless of use_in_chat value
+      expect(agents.some((a) => a.id === chatAgent1.id)).toBe(true);
+      expect(agents.some((a) => a.id === chatAgent2.id)).toBe(true);
+      expect(agents.some((a) => a.id === nonChatAgent.id)).toBe(true);
+    });
   });
 });

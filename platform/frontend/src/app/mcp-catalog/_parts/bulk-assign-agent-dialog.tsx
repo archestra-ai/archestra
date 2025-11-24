@@ -40,7 +40,7 @@ export function BulkAssignAgentDialog({
   onOpenChange,
   catalogId,
 }: BulkAssignAgentDialogProps) {
-  const { data: agents } = useAgents({});
+  const { data: agents } = useAgents();
   const bulkAssignMutation = useBulkAssignTools();
   const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");

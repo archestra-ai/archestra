@@ -63,6 +63,11 @@ class AgentModel {
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
+    {
+      useInChat,
+    }: {
+      useInChat?: boolean;
+    } = {},
   ): Promise<Agent[]> {
     let query = db
       .select()
@@ -80,8 +85,10 @@ class AgentModel {
     // Build where conditions
     const whereConditions: SQL[] = [];
 
-    // Filter by use_in_chat = true
-    whereConditions.push(eq(schema.agentsTable.useInChat, true));
+    if (useInChat !== undefined) {
+      // Filter by use_in_chat = true
+      whereConditions.push(eq(schema.agentsTable.useInChat, useInChat));
+    }
 
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {

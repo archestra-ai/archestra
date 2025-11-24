@@ -1,6 +1,8 @@
 import { PermissionsSchema, PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { betterAuth } from "@/auth";
+import logger from "@/logging";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
   ApiError,
@@ -64,46 +66,41 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async ({ body: { title, permission }, user, organizationId }, reply) => {
+    async ({ body: { title, permission }, request, organizationId }, reply) => {
       // Generate immutable name from title
       const name = generateRoleName(title);
 
-      // Check role name uniqueness
-      const isUnique = await OrganizationRoleModel.isNameUnique(
+      logger.info({
+        title,
         name,
-        organizationId,
-      );
-
-      if (!isUnique) {
-        throw new ApiError(400, "Role name already exists or is reserved");
-      }
-
-      // Get user's permissions to validate they can grant these permissions
-      const userPermissions = await UserModel.getUserPermissions(
-        user.id,
-        organizationId,
-      );
-
-      const validation = OrganizationRoleModel.validateRolePermissions(
-        userPermissions,
         permission,
-      );
+        organizationId,
+      }, "🔍 Creating role with better-auth API");
 
-      if (!validation.valid) {
+      // Use better-auth's createRole API
+      try {
+        const result = await betterAuth.api.organization.createRole({
+          headers: request.headers as HeadersInit,
+          body: {
+            role: name,
+            permission,
+            data: {
+              title, // Store title in additionalFields
+            },
+          },
+        });
+
+        logger.info({ result }, "✅ Better-auth createRole result");
+
+        return reply.send(result);
+      } catch (error: any) {
+        logger.error({ error }, "❌ Better-auth createRole failed");
+        // Better-auth returns detailed error messages
         throw new ApiError(
-          403,
-          `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
+          error.status || 400,
+          error.message || "Failed to create role",
         );
       }
-
-      return reply.send(
-        await OrganizationRoleModel.create({
-          name,
-          title,
-          permission,
-          organizationId,
-        }),
-      );
     },
   );
 

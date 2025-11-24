@@ -9,6 +9,7 @@ import {
 } from "@shared";
 import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type {
   InsertOrganizationRole,
   OrganizationRole,

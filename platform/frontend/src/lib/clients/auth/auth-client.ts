@@ -15,7 +15,7 @@ export const authClient = createAuthClient({
     organizationClient({
       ac,
       dynamicAccessControl: {
-        enabled: true,
+        enabled: true, // Enable dynamic access control on client
       },
       roles: {
         admin: adminRole,

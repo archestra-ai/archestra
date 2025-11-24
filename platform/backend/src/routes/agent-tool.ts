@@ -55,6 +55,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
           search,
           agentId,
+          toolId,
           origin,
           mcpServerOwnerId,
           excludeArchestraTools,
@@ -75,6 +76,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           search,
           agentId,
+          toolId,
           origin,
           mcpServerOwnerId,
           excludeArchestraTools,

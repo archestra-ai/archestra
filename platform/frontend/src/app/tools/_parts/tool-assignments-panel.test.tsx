@@ -20,6 +20,15 @@ vi.mock("@/lib/agent.query", () => ({
   useAgents: () => ({ data: [{ id: "agent-1", name: "Agent One" }] }),
 }));
 
+vi.mock("@/lib/internal-mcp-catalog.query", () => ({
+  useInternalMcpCatalog: () => ({
+    data: [
+      { id: "catalog-remote", serverType: "remote" },
+      { id: "catalog-local", serverType: "local" },
+    ],
+  }),
+}));
+
 vi.mock("@/lib/tool-policy.query", () => ({
   useToolPolicies: () => ({ data: [] }),
 }));
@@ -33,14 +42,14 @@ vi.mock("sonner", () => ({
 
 const baseTool: Tool = {
   id: "tool-1",
-  catalogId: null,
+  catalogId: "catalog-remote",
   name: "Test Tool",
   description: null,
   parameters: {},
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
   agent: { id: "owner", name: "Owner" },
-  mcpServer: null,
+  mcpServer: { id: "server-1", name: "Server 1" },
   assignedAgentsCount: 2,
   policyCount: 1,
 };
@@ -111,4 +120,28 @@ describe("ToolAssignmentsPanel", () => {
       expect.any(Object),
     );
   });
+
+  it("shows only assignments for the selected tool", () => {
+    mockUseAllAgentTools.mockReturnValue({
+      data: {
+        data: [
+          assignment,
+          {
+            ...assignment,
+            id: "assignment-2",
+            agent: { id: "agent-2", name: "Agent Two" },
+            tool: { ...assignment.tool, id: "other-tool", name: "Other" },
+          },
+        ],
+        pagination,
+      },
+      isLoading: false,
+    });
+
+    render(<ToolAssignmentsPanel tool={baseTool} />);
+
+    expect(screen.getByText("Agent One")).toBeInTheDocument();
+    expect(screen.queryByText("Agent Two")).not.toBeInTheDocument();
+  });
+
 });

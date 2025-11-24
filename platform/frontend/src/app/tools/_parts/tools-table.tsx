@@ -7,13 +7,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents } from "@/lib/agent.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
-import { isMcpTool } from "@/lib/tool.utils";
 import type { Tool } from "./types";
 
 interface ToolsTableProps {
@@ -151,6 +151,29 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
   const columns = useMemo<ColumnDef<Tool>[]>(
     () => [
       {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label={`Select ${row.original.name}`}
+          />
+        ),
+        size: 30,
+      },
+      {
         accessorKey: "name",
         header: ({ column }) => (
           <button
@@ -168,7 +191,7 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <span className="text-left font-medium">{tool.name}</span>
-                {isMcpTool(tool) ? (
+                {tool.mcpServer ? (
                   <Badge variant="outline" className="bg-indigo-500/10 text-xs">
                     MCP Server
                   </Badge>
@@ -188,17 +211,15 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
         header: "Origin",
         cell: ({ row }) => {
           const tool = row.original;
-          if (isMcpTool(tool)) {
+          if (tool.mcpServer) {
             return (
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-foreground">
                   MCP Catalog
                 </span>
-                {tool.mcpServer?.name && (
-                  <span className="text-xs text-muted-foreground">
-                    {tool.mcpServer.name}
-                  </span>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  {tool.mcpServer.name}
+                </span>
               </div>
             );
           }
@@ -207,11 +228,6 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
               <span className="text-sm font-medium text-foreground">
                 LLM Proxy
               </span>
-              {tool.agent?.name && (
-                <span className="text-xs text-muted-foreground">
-                  {tool.agent.name}
-                </span>
-              )}
             </div>
           );
         },

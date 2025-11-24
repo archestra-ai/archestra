@@ -131,6 +131,7 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.refetchQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       // Invalidate chat MCP tools for this agent
@@ -222,6 +223,7 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.refetchQueries({ queryKey: ["agent-tools"] });
       // Invalidate all MCP server tools queries to update assigned agent counts
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       // Invalidate chat MCP tools for this agent
@@ -251,6 +253,7 @@ export function useAgentToolPatchMutation() {
       queryClient.invalidateQueries({
         queryKey: ["agent-tools"],
       });
+      queryClient.refetchQueries({ queryKey: ["agent-tools"] });
     },
   });
 }

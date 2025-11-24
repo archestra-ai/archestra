@@ -11,7 +11,8 @@ const member = pgTable("member", {
   userId: text("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  role: text("role").default(MEMBER_ROLE_NAME).notNull(),
+  // Custom role id or a built-in role name
+  role: text("role").default(MEMBER_ROLE_NAME),
   createdAt: timestamp("created_at").notNull(),
 });
 

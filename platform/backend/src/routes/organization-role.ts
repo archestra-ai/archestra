@@ -10,15 +10,26 @@ import {
   UuidIdSchema,
 } from "@/types";
 
-const CreateUpdateRoleNameSchema = z
+const CreateUpdateRoleTitleSchema = z
   .string()
-  .min(1, "Role name is required")
-  .max(50, "Role name must be less than 50 characters");
+  .min(1, "Role title is required")
+  .max(50, "Role title must be less than 50 characters");
 
 const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
 const PredefinedRoleNameOrCustomRoleIdSchema = z
   .union([PredefinedRoleNameSchema, CustomRoleIdSchema])
   .describe("Predefined role name or custom role ID");
+
+/**
+ * Generate an immutable role name from a title
+ * Converts to lowercase and replaces spaces/special chars with underscores
+ */
+const generateRoleName = (title: string): string => {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
+};
 
 const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -47,13 +58,16 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new custom role",
         tags: ["Roles"],
         body: z.object({
-          name: CreateUpdateRoleNameSchema,
+          title: CreateUpdateRoleTitleSchema,
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async ({ body: { name, permission }, user, organizationId }, reply) => {
+    async ({ body: { title, permission }, user, organizationId }, reply) => {
+      // Generate immutable name from title
+      const name = generateRoleName(title);
+
       // Check role name uniqueness
       const isUnique = await OrganizationRoleModel.isNameUnique(
         name,
@@ -85,6 +99,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await OrganizationRoleModel.create({
           name,
+          title,
           permission,
           organizationId,
         }),
@@ -124,20 +139,20 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateRole,
-        description: "Update a custom role",
+        description: "Update a custom role (title and/or permissions only, name is immutable)",
         tags: ["Roles"],
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
         body: z.object({
-          name: CreateUpdateRoleNameSchema.optional(),
+          title: CreateUpdateRoleTitleSchema.optional(),
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (
-      { params: { roleId }, body: { name, permission }, user, organizationId },
+      { params: { roleId }, body: { title, permission }, user, organizationId },
       reply,
     ) => {
       // Cannot update predefined roles
@@ -153,19 +168,6 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!existingRole) {
         throw new ApiError(404, "Role not found");
-      }
-
-      // Check name uniqueness if name is being changed
-      if (name) {
-        const isUnique = await OrganizationRoleModel.isNameUnique(
-          name,
-          organizationId,
-          roleId,
-        );
-
-        if (!isUnique) {
-          throw new ApiError(400, "Role name already exists or is reserved");
-        }
       }
 
       // Validate permissions if being changed
@@ -190,7 +192,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await OrganizationRoleModel.update(roleId, {
-          name,
+          title,
           permission: permission ?? existingRole.permission,
         }),
       );

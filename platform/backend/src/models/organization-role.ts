@@ -21,6 +21,7 @@ const generatePredefinedRole = (
 ): OrganizationRole => ({
   id: role,
   name: role,
+  title: role,
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
@@ -115,7 +116,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.membersTable.organizationId, organizationId),
-          eq(schema.membersTable.role, roleId),
+          eq(schema.membersTable.role, role.name),
         ),
       )
       .limit(1);
@@ -193,7 +194,7 @@ class OrganizationRoleModel {
       return generatePredefinedRole(roleId, organizationId);
     }
 
-    // Query custom role from database
+    // Query custom role from database by ID
     const [result] = await db
       .select({
         ...getTableColumns(schema.organizationRolesTable),
@@ -218,15 +219,52 @@ class OrganizationRoleModel {
     };
   }
 
-  static async getPermissions(
-    roleId: string,
+  /**
+   * Get a role by name and organization
+   */
+  static async getByName(
+    roleName: string,
     organizationId: string,
-  ): Promise<Permissions> {
-    if (OrganizationRoleModel.isPredefinedRole(roleId)) {
-      return OrganizationRoleModel.getPredefinedRolePermissions(roleId);
+  ): Promise<OrganizationRole | null> {
+    // Check if it's a predefined role first
+    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
+      return generatePredefinedRole(roleName, organizationId);
     }
 
-    const role = await OrganizationRoleModel.getById(roleId, organizationId);
+    // Query custom role from database by name
+    const [result] = await db
+      .select({
+        ...getTableColumns(schema.organizationRolesTable),
+        predefined: sql<boolean>`false`,
+      })
+      .from(schema.organizationRolesTable)
+      .where(
+        and(
+          eq(schema.organizationRolesTable.name, roleName),
+          eq(schema.organizationRolesTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      permission: JSON.parse(result.permission),
+    };
+  }
+
+  static async getPermissions(
+    roleName: string,
+    organizationId: string,
+  ): Promise<Permissions> {
+    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
+      return OrganizationRoleModel.getPredefinedRolePermissions(roleName);
+    }
+
+    const role = await OrganizationRoleModel.getByName(roleName, organizationId);
 
     if (!role) {
       return {};

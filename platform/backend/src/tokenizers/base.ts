@@ -1,8 +1,5 @@
 import type { Anthropic, OpenAi } from "@/types";
 
-/**
- * Message types from different providers
- */
 export type ProviderMessage =
   | OpenAi.Types.ChatCompletionsRequest["messages"][number]
   | Anthropic.Types.MessagesRequest["messages"][number];
@@ -13,48 +10,54 @@ export type ProviderMessage =
  */
 export interface Tokenizer {
   /**
-   * Count tokens in a single message
+   * Count tokens in messages (array or single message)
    */
-  countMessageTokens(message: ProviderMessage): number;
-
-  /**
-   * Count tokens in an array of messages
-   */
-  countMessagesTokens(messages: ProviderMessage[]): number;
+  countTokens(messages: ProviderMessage[] | ProviderMessage): number;
 }
 
 /**
- * Abstract base class for tokenizers
- * Provides default implementation for counting multiple messages
+ * Abstract base class for tokenizers.
+ * These tokenizers are approximate.
+ * E.g. they are used to estimate token count before sending an LLM request.
+ *
+ * To get exact token count for stats and costs, see token usage in LLM response.
  */
 export abstract class BaseTokenizer implements Tokenizer {
-  abstract countMessageTokens(message: ProviderMessage): number;
+  countMessageTokens(message: ProviderMessage): number {
+    const text = this.getMessageText(message);
+    return Math.ceil(text.length / 4);
+  }
 
-  countMessagesTokens(messages: ProviderMessage[]): number {
-    let totalTokens = 0;
-    for (const message of messages) {
-      totalTokens += this.countMessageTokens(message);
+  countTokens(messages: ProviderMessage[] | ProviderMessage): number {
+    if (Array.isArray(messages)) {
+      const total = messages.reduce((sum, message) => {
+        return sum + this.countMessageTokens(message);
+      }, 0);
+      return total;
+    } else {
+      return this.countMessageTokens(messages);
     }
-    return totalTokens;
   }
 
   /**
-   * Extract text content from a message
-   * Handles both string and array content formats
+   * Extract text content from a message, which can be a string or a collection of objects
    */
-  protected extractTextFromMessage(message: ProviderMessage): string {
-    let text = "";
-
+  protected getMessageText(message: ProviderMessage): string {
     if (typeof message.content === "string") {
-      text = message.content;
-    } else if (Array.isArray(message.content)) {
-      for (const block of message.content) {
+      return message.content;
+    }
+
+    if (Array.isArray(message.content)) {
+      const text = message.content.reduce((text, block) => {
         if (block.type === "text" && typeof block.text === "string") {
           text += block.text;
         }
-      }
+        return text;
+      }, "");
+
+      return text;
     }
 
-    return text;
+    return "";
   }
 }

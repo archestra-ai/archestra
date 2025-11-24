@@ -6,7 +6,7 @@ import {
   OptimizationRuleModel,
   TokenPriceModel,
 } from "@/models";
-import { getTokenizerForProvider } from "@/tokenizers";
+import { getTokenizer } from "@/tokenizers";
 import type { Agent, Anthropic, OpenAi } from "@/types";
 
 type ProviderMessages = {
@@ -28,11 +28,11 @@ export async function getOptimizedModel<
 ): Promise<string | null> {
   const agentId = agent.id;
   if (!agent.optimizeCost) {
-    logger.info({ agentId }, "Cost optimization disabled for profile");
+    logger.info({ agentId }, "Cost optimization: disabled for profile");
     return null;
   }
 
-  logger.info({ agentId }, "Cost optimization enabled for profile");
+  logger.info({ agentId }, "Cost optimization: enabled for profile");
 
   // Get organizationId the same way limits do: from agent's teams OR fallback
   let organizationId: string | null = null;
@@ -48,7 +48,7 @@ export async function getOptimizedModel<
       organizationId = teams[0].organizationId;
       logger.info(
         { agentId, organizationId },
-        "Resolved organizationId from agent's team",
+        "Cost optimization: resolved organizationId from team",
       );
     }
   } else {
@@ -63,7 +63,7 @@ export async function getOptimizedModel<
       organizationId = existingOrgRules[0].entityId;
       logger.info(
         { agentId, organizationId },
-        "Agent has no teams - using fallback organizationId from optimization rules",
+        "Cost optimization: agent has no teams - using fallback organization",
       );
     }
   }
@@ -71,7 +71,7 @@ export async function getOptimizedModel<
   if (!organizationId) {
     logger.warn(
       { agentId },
-      "Could not resolve organizationId for optimization rules",
+      "Cost optimization: could not resolve organizationId",
     );
     return null;
   }
@@ -85,18 +85,23 @@ export async function getOptimizedModel<
 
   if (rules.length === 0) {
     logger.info(
-      { agentId, organizationId },
-      "No optimization rules configured",
+      { agentId, organizationId, provider },
+      "Cost optimization: no optimization rules configured",
     );
     return null;
   }
 
   // Use provider-specific tokenizer to count tokens
-  const tokenizer = getTokenizerForProvider(provider);
-  const tokenCount = tokenizer.countMessagesTokens(messages);
+  const tokenizer = getTokenizer(provider);
+  const tokenCount = tokenizer.countTokens(messages);
+
+  logger.info(
+    { tokenCount, hasTools },
+    "Cost optimization: LLM request evaluated",
+  );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  return OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
     tokenCount,
     hasTools,
   });
@@ -104,13 +109,10 @@ export async function getOptimizedModel<
   if (optimizedModel) {
     logger.info(
       { agentId, optimizedModel },
-      "Optimization rule matched - using optimized model",
+      "Cost optimization: optimization rule matched",
     );
   } else {
-    logger.info(
-      { agentId },
-      "No optimization rule matched - using baseline model",
-    );
+    logger.info({ agentId }, "Cost optimization: no optimization rule matched");
   }
 
   return optimizedModel;

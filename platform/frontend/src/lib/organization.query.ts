@@ -13,6 +13,7 @@ import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useIsAuthenticated } from "./auth.hook";
 
 /**
  * Query key factory for organization-related queries
@@ -222,7 +223,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
  * Get organization
  */
 export function useOrganization(enabled = true) {
-  const session = authClient.useSession();
+  const userIsAuthenticated = useIsAuthenticated();
 
   return useQuery({
     queryKey: organizationKeys.details(),
@@ -231,7 +232,7 @@ export function useOrganization(enabled = true) {
       return data;
     },
     // Only fetch when user is authenticated to prevent 403 errors during initial auth check
-    enabled: enabled && !!session.data?.user,
+    enabled: enabled && userIsAuthenticated,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
   });

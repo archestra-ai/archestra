@@ -2,7 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
 import { Button } from "@/components/ui/button";
@@ -15,20 +15,21 @@ import {
 } from "@/components/ui/dialog";
 import { useDefaultAgent } from "@/lib/agent.query";
 import {
+  useOrganization,
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
-interface OnboardingDialogProps {
-  open: boolean;
-}
-
-export function OnboardingDialog({ open }: OnboardingDialogProps) {
+export function OnboardingDialog() {
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
+
+  const { data: organization, isLoading: isLoadingOrganization } =
+    useOrganization();
   const { data: defaultAgent } = useDefaultAgent();
   const { data: onboardingStatus } = useOrganizationOnboardingStatus(
-    open && step === 2,
+    dialogOpen && step === 2,
   );
   const { mutate: completeOnboarding, isPending: completeOnboardingPending } =
     useUpdateOrganization(
@@ -36,10 +37,17 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
       "Failed to complete onboarding",
     );
 
+  useEffect(() => {
+    if (!isLoadingOrganization && organization?.onboardingComplete === false) {
+      setDialogOpen(true);
+    }
+  }, [isLoadingOrganization, organization?.onboardingComplete]);
+
   const handleFinishOnboarding = useCallback(() => {
     completeOnboarding({
       onboardingComplete: true,
     });
+    setDialogOpen(false);
   }, [completeOnboarding]);
 
   const handleDialogOpenChange = useCallback(
@@ -65,7 +73,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
     onboardingStatus?.hasLlmProxyLogs || onboardingStatus?.hasMcpGatewayLogs;
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-7xl h-[80vh] flex flex-col p-0">
         <div className="flex-1 overflow-y-auto px-6 pt-6 pb-6">
           <DialogHeader className="mb-6">

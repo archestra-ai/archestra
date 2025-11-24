@@ -5,6 +5,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { useIsAuthenticated } from "./auth.hook";
 
 const {
   createAgent,
@@ -65,10 +66,12 @@ export function useAgentsPaginated(params?: {
 export function useDefaultAgent(params?: {
   initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
 }) {
+  const userIsAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["agents", "default"],
     queryFn: async () => (await getDefaultAgent()).data ?? null,
     initialData: params?.initialData,
+    enabled: userIsAuthenticated,
   });
 }
 

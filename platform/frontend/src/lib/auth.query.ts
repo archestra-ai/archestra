@@ -1,6 +1,7 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useIsAuthenticated } from "./auth.hook";
 
 /**
  * Fetch current session
@@ -30,12 +31,14 @@ export function useCurrentOrgMembers() {
  * Avoid using directly in components and use useHasPermissions instead.
  */
 function useAllPermissions() {
+  const userIsAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["auth", "userPermissions"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getUserPermissions();
       return data;
     },
+    enabled: userIsAuthenticated,
     retry: false,
     throwOnError: false,
   });

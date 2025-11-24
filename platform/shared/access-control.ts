@@ -231,7 +231,7 @@ export const RouteId = {
 
   // Tool Routes
   GetTools: "getTools",
-  GetUnassignedTools: "getUnassignedTools",
+  GetTool: "getTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",
@@ -381,9 +381,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentAvailableTokens]: {
     profile: ["admin"],
   },
-  [RouteId.GetUnassignedTools]: {
-    tool: ["read"],
-  },
   [RouteId.AssignToolToAgent]: {
     profile: ["update"],
   },
@@ -404,6 +401,9 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["read"],
   },
   [RouteId.GetTools]: {
+    tool: ["read"],
+  },
+  [RouteId.GetTool]: {
     tool: ["read"],
   },
   [RouteId.GetToolPoliciesForTool]: {
@@ -754,6 +754,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/tools": {
     tool: ["read"],
   },
+  // TODO: check if :toolId parameter works like this..
+  // "/tools/:toolId": {
+  //   tool: ["read"],
+  // },
 
   "/mcp-catalog": {
     internalMcpCatalog: ["read"],

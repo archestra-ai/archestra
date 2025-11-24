@@ -1,15 +1,18 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
   createPaginatedResponseSchema,
+  ExtendedToolSchema,
   PaginationQuerySchema,
   ToolFilterSchema,
-  ToolListItemSchema,
   ToolSortBySchema,
   ToolSortDirectionSchema,
+  UuidIdSchema,
 } from "@/types";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -25,7 +28,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection: ToolSortDirectionSchema.optional(),
         }).merge(PaginationQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(ToolListItemSchema),
+          createPaginatedResponseSchema(ExtendedToolSchema),
         ),
       },
     },
@@ -67,6 +70,33 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/tools/:toolId",
+    {
+      schema: {
+        operationId: RouteId.GetTool,
+        description: "Get a tool by ID",
+        tags: ["Tools"],
+        params: z.object({
+          toolId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(ExtendedToolSchema),
+      },
+    },
+    async ({ params: { toolId }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      const tool = await ToolModel.findById(toolId, user.id, isAgentAdmin);
+      if (!tool) {
+        throw new ApiError(404, "Tool not found");
+      }
+      return reply.send(tool);
     },
   );
 };

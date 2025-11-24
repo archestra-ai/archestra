@@ -2,8 +2,10 @@ import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import {
   and,
   count,
+  countDistinct,
   desc,
   eq,
+  getTableColumns,
   inArray,
   isNotNull,
   isNull,
@@ -24,7 +26,6 @@ import type {
   PaginationQuery,
   Tool,
   ToolFilters,
-  ToolListItem,
   ToolSortBy,
   ToolSortDirection,
 } from "@/types";
@@ -148,11 +149,44 @@ class ToolModel {
     id: string,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<Tool | null> {
+  ): Promise<ExtendedTool | null> {
     const [tool] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.toolsTable),
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        mcpServer: {
+          id: schema.mcpServersTable.id,
+          name: schema.mcpServersTable.name,
+        },
+        assignedAgentsCount: countDistinct(schema.agentToolsTable.agentId),
+        policyCount: countDistinct(schema.toolPoliciesTable.id),
+      })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, id));
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(eq(schema.toolsTable.id, id))
+      .groupBy(
+        schema.toolsTable.id,
+        schema.toolsTable.name,
+        schema.toolsTable.catalogId,
+        schema.toolsTable.parameters,
+        schema.toolsTable.description,
+        schema.toolsTable.createdAt,
+        schema.toolsTable.updatedAt,
+        schema.agentsTable.id,
+        schema.agentsTable.name,
+        schema.mcpServersTable.id,
+        schema.mcpServersTable.name,
+      );
 
     if (!tool) {
       return null;
@@ -173,70 +207,6 @@ class ToolModel {
     return tool;
   }
 
-  static async findAll(
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<ExtendedTool[]> {
-    // Get all tools
-    let query = db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        catalogId: schema.toolsTable.catalogId,
-        parameters: schema.toolsTable.parameters,
-        description: schema.toolsTable.description,
-        createdAt: schema.toolsTable.createdAt,
-        updatedAt: schema.toolsTable.updatedAt,
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-        mcpServer: {
-          id: schema.mcpServersTable.id,
-          name: schema.mcpServersTable.name,
-        },
-      })
-      .from(schema.toolsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.toolsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .orderBy(desc(schema.toolsTable.createdAt))
-      .$dynamic();
-
-    /**
-     * Apply access control filtering for users that are not agent admins
-     *
-     * If the user is not an admin, we basically allow them to see all tools that are assigned to agents
-     * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
-     */
-    if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
-
-      if (accessibleAgentIds.length === 0) {
-        query = query.where(mcpServerSourceClause);
-      } else {
-        query = query.where(
-          or(
-            inArray(schema.toolsTable.agentId, accessibleAgentIds),
-            mcpServerSourceClause,
-          ),
-        );
-      }
-    }
-
-    return query;
-  }
-
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: {
@@ -246,7 +216,7 @@ class ToolModel {
     filters?: ToolFilters,
     userId?: string,
     isAgentAdmin?: boolean,
-  ): Promise<PaginatedResult<ToolListItem>> {
+  ): Promise<PaginatedResult<ExtendedTool>> {
     const whereConditions: SQL[] = [];
 
     if (filters?.search) {
@@ -413,35 +383,6 @@ class ToolModel {
     }));
 
     return createPaginatedResult(normalizedItems, Number(total), pagination);
-  }
-
-  static async findByName(
-    name: string,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<Tool | null> {
-    const [tool] = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, name));
-
-    if (!tool) {
-      return null;
-    }
-
-    // Check access control for non-admins
-    if (tool.agentId && userId && !isAgentAdmin) {
-      const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        userId,
-        tool.agentId,
-        false,
-      );
-      if (!hasAccess) {
-        return null;
-      }
-    }
-
-    return tool;
   }
 
   /**
@@ -826,13 +767,6 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId));
 
     return result.rowCount || 0;
-  }
-
-  static async getByIds(ids: string[]): Promise<Tool[]> {
-    return db
-      .select()
-      .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, ids));
   }
 }
 

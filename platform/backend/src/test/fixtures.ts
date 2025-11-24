@@ -30,6 +30,7 @@ import type {
   InsertOrganizationRole,
   InsertSession,
   InsertTeam,
+  InsertTool,
   InsertUser,
   OrganizationRole,
   Tool,
@@ -167,7 +168,7 @@ async function makeAgent(
 async function makeTool(
   overrides: Partial<
     Pick<
-      Tool,
+      InsertTool,
       | "name"
       | "description"
       | "parameters"
@@ -184,8 +185,7 @@ async function makeTool(
     ...overrides,
   };
 
-  await ToolModel.createToolIfNotExists(toolData);
-  const tool = await ToolModel.findByName(toolData.name);
+  const tool = await ToolModel.createToolIfNotExists(toolData);
 
   if (!tool) {
     throw new Error(`Failed to create tool: ${toolData.name}`);

@@ -2434,9 +2434,7 @@ export type GetAgentsResponses = {
             updatedAt: string;
             tools: Array<{
                 id: string;
-                agentId: string | null;
                 catalogId: string | null;
-                mcpServerId: string | null;
                 name: string;
                 /**
                  *
@@ -2574,9 +2572,7 @@ export type CreateAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -2691,9 +2687,7 @@ export type GetAllAgentsResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -2808,9 +2802,7 @@ export type GetDefaultAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3006,9 +2998,7 @@ export type GetAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3139,9 +3129,7 @@ export type UpdateAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string | null;
             catalogId: string | null;
-            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3645,103 +3633,6 @@ export type AssignToolToAgentResponses = {
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
 
-export type BulkAssignToolsData = {
-    body: {
-        assignments: Array<{
-            agentId: string;
-            toolId: string;
-            credentialSourceMcpServerId?: string | null;
-            executionSourceMcpServerId?: string | null;
-            toolPolicyId?: string | null;
-        }>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agents/tools/bulk-assign';
-};
-
-export type BulkAssignToolsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type BulkAssignToolsError = BulkAssignToolsErrors[keyof BulkAssignToolsErrors];
-
-export type BulkAssignToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        succeeded: Array<{
-            agentId: string;
-            toolId: string;
-        }>;
-        failed: Array<{
-            agentId: string;
-            toolId: string;
-            error: string;
-        }>;
-        duplicates: Array<{
-            agentId: string;
-            toolId: string;
-        }>;
-    };
-};
-
-export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
-
 export type GetAgentToolsData = {
     body?: never;
     path: {
@@ -3816,9 +3707,7 @@ export type GetAgentToolsResponses = {
      */
     200: Array<{
         id: string;
-        agentId: string | null;
         catalogId: string | null;
-        mcpServerId: string | null;
         name: string;
         /**
          *
@@ -15102,6 +14991,115 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetToolData = {
+    body?: never;
+    path: {
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/tools/{toolId}';
+};
+
+export type GetToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetToolError = GetToolErrors[keyof GetToolErrors];
+
+export type GetToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
+        assignedAgentsCount: number;
+        policyCount: number;
+    };
+};
+
+export type GetToolResponse = GetToolResponses[keyof GetToolResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

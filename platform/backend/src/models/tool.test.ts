@@ -27,9 +27,15 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(admin.id, true);
+      const tools = await ToolModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
       // Expects more than 2 tools: many Archestra built-in tools + 2 proxy-discovered tools
-      expect(tools.length).toBeGreaterThan(2);
+      expect(tools.data.length).toBeGreaterThan(2);
     });
 
     test("member only sees tools for accessible agents", async ({
@@ -70,9 +76,15 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll(user1.id, false);
-      expect(tools).toHaveLength(1);
-      expect(tools[0].id).toBe(tool1.id);
+      const tools = await ToolModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        user1.id,
+        false,
+      );
+      expect(tools.data.length).toBe(1);
+      expect(tools.data[0].id).toBe(tool1.id);
     });
 
     test("member with no access sees no tools", async ({
@@ -89,8 +101,14 @@ describe("ToolModel", () => {
         description: "Tool 1",
       });
 
-      const tools = await ToolModel.findAll(user.id, false);
-      expect(tools).toHaveLength(0);
+      const tools = await ToolModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "createdAt", sortDirection: "desc" },
+        {},
+        user.id,
+        false,
+      );
+      expect(tools.data.length).toBe(0);
     });
 
     test("findById returns tool for admin", async ({
@@ -159,79 +177,6 @@ describe("ToolModel", () => {
       });
 
       const found = await ToolModel.findById(tool.id, user.id, false);
-      expect(found).toBeNull();
-    });
-
-    test("findByName returns tool for admin", async ({
-      makeAdmin,
-      makeAgent,
-      makeTool,
-    }) => {
-      const admin = await makeAdmin();
-      const agent = await makeAgent();
-
-      await makeTool({
-        agentId: agent.id,
-        name: "unique-tool",
-        description: "Unique Tool",
-        parameters: {},
-      });
-
-      const found = await ToolModel.findByName("unique-tool", admin.id, true);
-      expect(found).not.toBeNull();
-      expect(found?.name).toBe("unique-tool");
-    });
-
-    test("findByName returns tool for user with agent access", async ({
-      makeUser,
-      makeAdmin,
-      makeOrganization,
-      makeTeam,
-      makeAgent,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const admin = await makeAdmin();
-      const org = await makeOrganization();
-
-      // Create team and add user
-      const team = await makeTeam(org.id, admin.id);
-      await TeamModel.addMember(team.id, user.id);
-
-      const agent = await makeAgent({ teams: [team.id] });
-
-      await makeTool({
-        agentId: agent.id,
-        name: "user-tool",
-        description: "User Tool",
-        parameters: {},
-      });
-
-      const found = await ToolModel.findByName("user-tool", user.id, false);
-      expect(found).not.toBeNull();
-      expect(found?.name).toBe("user-tool");
-    });
-
-    test("findByName returns null for user without agent access", async ({
-      makeUser,
-      makeAgent,
-      makeTool,
-    }) => {
-      const user = await makeUser();
-      const agent = await makeAgent();
-
-      await makeTool({
-        agentId: agent.id,
-        name: "restricted-tool",
-        description: "Restricted Tool",
-        parameters: {},
-      });
-
-      const found = await ToolModel.findByName(
-        "restricted-tool",
-        user.id,
-        false,
-      );
       expect(found).toBeNull();
     });
   });

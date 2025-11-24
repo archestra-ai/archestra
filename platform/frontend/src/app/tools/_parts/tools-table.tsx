@@ -16,10 +16,6 @@ import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
 import type { Tool } from "./types";
 
-interface ToolsTableProps {
-  onToolClick: (tool: Tool) => void;
-}
-
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
   if (isSorted === "desc") return <ChevronDown className="h-3 w-3" />;
@@ -33,7 +29,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function ToolsTable({ onToolClick }: ToolsTableProps) {
+export function ToolsTable() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -150,29 +146,33 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
 
   const columns = useMemo<ColumnDef<Tool>[]>(
     () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.name}`}
-          />
-        ),
-        size: 30,
-      },
+      // NOTE: bulk assignment doesn't really work well from the table because if you are mixing/matching
+      // tools from different MCP servers, there's no elegant way to select their credential sources
+      // when assigning them to profile(s)
+      //
+      // {
+      //   id: "select",
+      //   header: ({ table }) => (
+      //     <Checkbox
+      //       checked={
+      //         table.getIsAllPageRowsSelected() ||
+      //         (table.getIsSomePageRowsSelected() && "indeterminate")
+      //       }
+      //       onCheckedChange={(value) =>
+      //         table.toggleAllPageRowsSelected(!!value)
+      //       }
+      //       aria-label="Select all"
+      //     />
+      //   ),
+      //   cell: ({ row }) => (
+      //     <Checkbox
+      //       checked={row.getIsSelected()}
+      //       onCheckedChange={(value) => row.toggleSelected(!!value)}
+      //       aria-label={`Select ${row.original.name}`}
+      //     />
+      //   ),
+      //   size: 30,
+      // },
       {
         accessorKey: "name",
         header: ({ column }) => (
@@ -344,7 +344,9 @@ export function ToolsTable({ onToolClick }: ToolsTableProps) {
           total: pagination?.total ?? 0,
         }}
         onPaginationChange={handlePaginationChange}
-        onRowClick={(tool) => onToolClick(tool)}
+        onRowClick={(tool) =>
+          router.push(`/tools/${tool.id}/policies`, { scroll: false })
+        }
       />
     </div>
   );

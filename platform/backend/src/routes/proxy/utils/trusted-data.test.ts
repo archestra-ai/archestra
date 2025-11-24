@@ -13,15 +13,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     agentId = agent.id;
 
     // Create test tool
-    await ToolModel.createToolIfNotExists({
+    const tool = await ToolModel.createToolIfNotExists({
       agentId,
       name: "get_emails",
       parameters: {},
       description: "Get emails",
     });
 
-    const tool = await ToolModel.findByName("get_emails");
-    toolId = (tool as Tool).id;
+    toolId = tool.id;
 
     const agentTool = await makeAgentTool(agentId, toolId, {
       toolPolicy: { toolResultTreatment: "untrusted" },
@@ -315,15 +314,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       makeAgentTool,
     }) => {
       // Create a tool with trusted treatment
-      await ToolModel.createToolIfNotExists({
+      const trustedTool = await ToolModel.createToolIfNotExists({
         agentId,
         name: "trusted_tool",
         parameters: {},
         description: "Tool that trusts data by default",
       });
-
-      const trustedTool = await ToolModel.findByName("trusted_tool");
-      const trustedToolId = (trustedTool as Tool).id;
+      const trustedToolId = trustedTool.id;
 
       await makeAgentTool(agentId, trustedToolId, {
         toolPolicy: { toolResultTreatment: "trusted" },
@@ -359,15 +356,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       makeAgentTool,
     }) => {
       // Create a tool with trusted treatment
-      await ToolModel.createToolIfNotExists({
+      const defaultTrustedTool = await ToolModel.createToolIfNotExists({
         agentId,
         name: "default_trusted_tool",
         parameters: {},
         description: "Tool that trusts data by default",
       });
-
-      const tool = await ToolModel.findByName("default_trusted_tool");
-      const trustedToolId = (tool as Tool).id;
+      const trustedToolId = defaultTrustedTool.id;
 
       const agentTool = await makeAgentTool(agentId, trustedToolId, {
         toolPolicy: { toolResultTreatment: "trusted" },

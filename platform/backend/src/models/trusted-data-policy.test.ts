@@ -298,18 +298,14 @@ describe("TrustedDataPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
-        await makeTool({
+        const uniqueTool = await makeTool({
           agentId,
           name: "trusted-by-default-tool",
           parameters: {},
           description: "Tool that trusts data by default",
         });
 
-        const trustedTool = await ToolModel.findByName(
-          "trusted-by-default-tool",
-        );
-        if (!trustedTool) throw new Error("Tool not found");
-        await makeAgentTool(agentId, trustedTool.id, {
+        await makeAgentTool(agentId, uniqueTool.id, {
           toolPolicy: { toolResultTreatment: "trusted" },
         });
 
@@ -330,18 +326,14 @@ describe("TrustedDataPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
-        await ToolModel.createToolIfNotExists({
+        const uniqueTool = await ToolModel.createToolIfNotExists({
           agentId,
           name: "trusted-by-default-with-policies",
           parameters: {},
           description: "Tool that trusts data by default",
         });
 
-        const trustedTool = await ToolModel.findByName(
-          "trusted-by-default-with-policies",
-        );
-        if (!trustedTool) throw new Error("Tool not found");
-        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+        const trustedAgentTool = await makeAgentTool(agentId, uniqueTool.id, {
           toolPolicy: { toolResultTreatment: "trusted" },
         });
         const policyId = trustedAgentTool.toolPolicyId as string;
@@ -373,17 +365,13 @@ describe("TrustedDataPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
-        await makeTool({
+        const uniqueTool = await makeTool({
           agentId,
           name: "trusted-default-with-matching-policy",
           parameters: { description: "Tool that trusts data by default" },
         });
 
-        const trustedTool = await ToolModel.findByName(
-          "trusted-default-with-matching-policy",
-        );
-        if (!trustedTool) throw new Error("Tool not found");
-        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+        const trustedAgentTool = await makeAgentTool(agentId, uniqueTool.id, {
           toolPolicy: { toolResultTreatment: "trusted" },
         });
         const policyId = trustedAgentTool.toolPolicyId as string;
@@ -910,15 +898,13 @@ describe("TrustedDataPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool with trusted treatment
-        await makeTool({
+        const uniqueTool = await makeTool({
           agentId,
           name: "default-trusted-tool",
           parameters: { description: "Tool that trusts data by default" },
         });
 
-        const trustedTool = await ToolModel.findByName("default-trusted-tool");
-        if (!trustedTool) throw new Error("Tool not found");
-        const trustedAgentTool = await makeAgentTool(agentId, trustedTool.id, {
+        const trustedAgentTool = await makeAgentTool(agentId, uniqueTool.id, {
           toolPolicy: { toolResultTreatment: "trusted" },
         });
         const policyId = trustedAgentTool.toolPolicyId as string;

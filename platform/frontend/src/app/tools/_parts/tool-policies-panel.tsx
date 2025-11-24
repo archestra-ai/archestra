@@ -4,7 +4,14 @@ import type { archestraApiTypes } from "@shared";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -113,96 +120,152 @@ export function ToolPoliciesPanel({ tool }: { tool: Tool }) {
         <p className="text-sm text-muted-foreground">Loading policies…</p>
       ) : policies.length === 0 ? (
         <div className="rounded border border-dashed p-6 text-center text-muted-foreground">
-          No policies yet. Create one to customize how this tool behaves.
+          No policies yet.
         </div>
       ) : (
         <div className="space-y-4">
           {policies.map((policy) => {
             const invocationRules = policy.toolInvocationPolicies ?? [];
             const trustedRules = policy.trustedDataPolicies ?? [];
-            return (
-              <div key={policy.id} className="rounded-lg border p-4 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <Input
-                    defaultValue={policy.name}
-                    onBlur={(event) =>
-                      handlePolicyUpdate(policy.id, {
-                        name: event.currentTarget.value,
-                      })
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handlePolicyDelete(policy.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                      <div className="text-sm font-medium">
-                        Allow untrusted data
+                        return (
+              <Accordion
+                key={policy.id}
+                type="single"
+                collapsible
+                defaultValue={policy.id}
+                className="border rounded-lg bg-card"
+              >
+                <AccordionItem value={policy.id} className="border-0">
+                  <AccordionTrigger className="px-4 text-left hover:no-underline">
+                    <span className="text-sm font-medium">{policy.name}</span>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <Input
+                        defaultValue={policy.name}
+                        onBlur={(event) =>
+                          handlePolicyUpdate(policy.id, {
+                            name: event.currentTarget.value,
+                          })
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePolicyDelete(policy.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="flex items-center justify-between rounded-md border p-3">
+                        <div>
+                          <div className="text-sm font-medium">
+                            Allow untrusted data
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Permit usage when context has untrusted data.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={policy.allowUsageWhenUntrustedDataIsPresent}
+                          onCheckedChange={(checked) =>
+                            handlePolicyUpdate(policy.id, {
+                              allowUsageWhenUntrustedDataIsPresent: checked,
+                            })
+                          }
+                        />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Permit usage when context has untrusted data.
-                      </p>
+                      <div className="rounded-md border p-3">
+                        <div className="text-sm font-medium">
+                          Result treatment
+                        </div>
+                        <Select
+                          defaultValue={policy.toolResultTreatment}
+                          onValueChange={(
+                            value: ToolPolicyResultTreatmentOption,
+                          ) =>
+                            handlePolicyUpdate(policy.id, {
+                              toolResultTreatment: value,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="mt-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(TOOL_RESULT_OPTIONS).map(
+                              (option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="rounded-md border p-3">
+                        <div className="text-sm font-medium">Last updated</div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {formatDate({ date: policy.updatedAt })}
+                        </div>
+                      </div>
                     </div>
-                    <Switch
-                      checked={policy.allowUsageWhenUntrustedDataIsPresent}
-                      onCheckedChange={(checked) =>
-                        handlePolicyUpdate(policy.id, {
-                          allowUsageWhenUntrustedDataIsPresent: checked,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-sm font-medium">Result treatment</div>
-                    <Select
-                      defaultValue={policy.toolResultTreatment}
-                      onValueChange={(value: ToolPolicyResultTreatmentOption) =>
-                        handlePolicyUpdate(policy.id, {
-                          toolResultTreatment: value,
-                        })
-                      }
+
+                    <Accordion
+                      type="multiple"
+                      className="space-y-3"
+                      defaultValue={["invocation", "result", "response"]}
                     >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(TOOL_RESULT_OPTIONS).map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-sm font-medium">Last updated</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {formatDate({ date: policy.updatedAt })}
-                    </div>
-                  </div>
-                </div>
+                      <AccordionItem value="invocation" className="border-0">
+                        <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-medium hover:no-underline">
+                          Tool Invocation Policies
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-3">
+                          <Card>
+                            <CardContent className="pt-4">
+                              <ToolInvocationPolicies
+                                policyId={policy.id}
+                                rules={invocationRules}
+                              />
+                            </CardContent>
+                          </Card>
+                        </AccordionContent>
+                      </AccordionItem>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <ToolInvocationPolicies
-                    policyId={policy.id}
-                    rules={invocationRules}
-                  />
+                      <AccordionItem value="result" className="border-0">
+                        <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-medium hover:no-underline">
+                          Tool Result Policies
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-3">
+                          <Card>
+                            <CardContent className="pt-4">
+                              <ToolResultPolicies
+                                policyId={policy.id}
+                                rules={trustedRules}
+                              />
+                            </CardContent>
+                          </Card>
+                        </AccordionContent>
+                      </AccordionItem>
 
-                  <ToolResultPolicies
-                    policyId={policy.id}
-                    rules={trustedRules}
-                  />
-                </div>
-
-                <ResponseModifierEditor toolPolicy={policy} />
-              </div>
+                      <AccordionItem value="response" className="border-0">
+                        <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-medium hover:no-underline">
+                          Response Modifier
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-3">
+                          <ResponseModifierEditor toolPolicy={policy} />
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             );
           })}
         </div>

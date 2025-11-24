@@ -18,12 +18,12 @@ export const ToolParametersContentSchema = z.union([
 
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
-});
-
-export const ExtendedSelectToolSchema = SelectToolSchema.omit({
+}).omit({
   agentId: true,
   mcpServerId: true,
-}).extend({
+});
+
+export const ExtendedToolSchema = SelectToolSchema.extend({
   // Nullable for MCP tools
   agent: z
     .object({
@@ -38,6 +38,8 @@ export const ExtendedSelectToolSchema = SelectToolSchema.omit({
       name: z.string(),
     })
     .nullable(),
+  assignedAgentsCount: z.number(),
+  policyCount: z.number(),
 });
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
@@ -63,13 +65,8 @@ export const ToolSortBySchema = z.enum([
 ]);
 export const ToolSortDirectionSchema = z.enum(["asc", "desc"]);
 
-export const ToolListItemSchema = ExtendedSelectToolSchema.extend({
-  assignedAgentsCount: z.number(),
-  policyCount: z.number(),
-});
-
 export type Tool = z.infer<typeof SelectToolSchema>;
-export type ExtendedTool = z.infer<typeof ExtendedSelectToolSchema>;
+export type ExtendedTool = z.infer<typeof ExtendedToolSchema>;
 export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 
@@ -77,4 +74,3 @@ export type ToolParametersContent = z.infer<typeof ToolParametersContentSchema>;
 export type ToolFilters = z.infer<typeof ToolFilterSchema>;
 export type ToolSortBy = z.infer<typeof ToolSortBySchema>;
 export type ToolSortDirection = z.infer<typeof ToolSortDirectionSchema>;
-export type ToolListItem = z.infer<typeof ToolListItemSchema>;

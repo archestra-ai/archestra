@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
 
 export default function ToolsLayout({
@@ -7,6 +8,14 @@ export default function ToolsLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const segments = pathname.split("/").filter(Boolean);
+  const isDetailPage = segments[0] === "tools" && segments.length >= 3;
+
+  if (isDetailPage) {
+    return <>{children}</>;
+  }
+
   return (
     <PageLayout
       title="Tools"

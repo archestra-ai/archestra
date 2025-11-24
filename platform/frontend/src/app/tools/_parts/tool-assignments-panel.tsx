@@ -6,13 +6,13 @@ import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAgents } from "@/lib/agent.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useAgentToolPatchMutation,
   useAllAgentTools,
   useAssignTool,
   useUnassignTool,
-} from "@/lib/agent-tools.query";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+} from "@/lib/tool.query";
 import { useToolPolicies } from "@/lib/tool-policy.query";
 import type { Tool } from "./types";
 

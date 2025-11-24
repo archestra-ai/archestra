@@ -184,17 +184,13 @@ describe("ToolInvocationPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool that allows usage when untrusted data is present
-        await makeTool({
+        const permissiveTool = await makeTool({
           agentId: agentId,
           name: "permissive-tool",
           parameters: {},
           description: "Tool that allows untrusted data",
         });
-
-        const permissiveTool = await ToolModel.findByName("permissive-tool");
-        const permissiveToolId = (
-          permissiveTool as NonNullable<typeof permissiveTool>
-        ).id;
+        const permissiveToolId = permissiveTool.id;
 
         await makeAgentTool(agentId, permissiveToolId, {
           toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
@@ -215,17 +211,13 @@ describe("ToolInvocationPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool that allows usage when untrusted data is present
-        await ToolModel.createToolIfNotExists({
+        const permissiveTool = await ToolModel.createToolIfNotExists({
           agentId,
           name: "permissive-tool-with-policies",
           parameters: {},
           description: "Tool that allows untrusted data",
         });
-
-        const tool = await ToolModel.findByName(
-          "permissive-tool-with-policies",
-        );
-        const permissiveToolId = (tool as NonNullable<typeof tool>).id;
+        const permissiveToolId = permissiveTool.id;
 
         const agentTool = await makeAgentTool(agentId, permissiveToolId, {
           toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
@@ -259,15 +251,13 @@ describe("ToolInvocationPolicyModel", () => {
         makeAgentTool,
       }) => {
         // Create a tool that allows usage when untrusted data is present
-        await ToolModel.createToolIfNotExists({
+        const tool = await ToolModel.createToolIfNotExists({
           agentId,
           name: "gmail-sendEmail",
           parameters: {},
           description: "Send emails via Gmail",
         });
-
-        const tool = await ToolModel.findByName("gmail-sendEmail");
-        const toolId = (tool as NonNullable<typeof tool>).id;
+        const toolId = tool.id;
 
         const agentTool = await makeAgentTool(agentId, toolId, {
           toolPolicy: {

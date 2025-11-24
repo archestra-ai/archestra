@@ -104,9 +104,9 @@ const toolPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Ensure the newly created policy is associated with the tool's agent-tool record
       // so tool invocation policies take effect immediately.
-      if (tool.agentId) {
+      if (tool.agent?.id) {
         await AgentToolModel.createOrUpdateCredentials(
-          tool.agentId,
+          tool.agent.id,
           toolId,
           undefined,
           undefined,

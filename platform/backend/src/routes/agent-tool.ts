@@ -135,96 +135,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/agents/tools/bulk-assign",
-    {
-      schema: {
-        operationId: RouteId.BulkAssignTools,
-        description: "Assign multiple tools to multiple agents in bulk",
-        tags: ["Agent Tools"],
-        body: z.object({
-          assignments: z.array(
-            z.object({
-              agentId: UuidIdSchema,
-              toolId: UuidIdSchema,
-              credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              toolPolicyId: UuidIdSchema.nullable().optional(),
-            }),
-          ),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            succeeded: z.array(
-              z.object({
-                agentId: z.string(),
-                toolId: z.string(),
-              }),
-            ),
-            failed: z.array(
-              z.object({
-                agentId: z.string(),
-                toolId: z.string(),
-                error: z.string(),
-              }),
-            ),
-            duplicates: z.array(
-              z.object({
-                agentId: z.string(),
-                toolId: z.string(),
-              }),
-            ),
-          }),
-        ),
-      },
-    },
-    async (request, reply) => {
-      const { assignments } = request.body;
-
-      const results = await Promise.allSettled(
-        assignments.map((assignment) =>
-          assignToolToAgent(
-            assignment.agentId,
-            assignment.toolId,
-            assignment.credentialSourceMcpServerId,
-            assignment.executionSourceMcpServerId,
-            assignment.toolPolicyId,
-          ),
-        ),
-      );
-
-      const succeeded: { agentId: string; toolId: string }[] = [];
-      const failed: { agentId: string; toolId: string; error: string }[] = [];
-      const duplicates: { agentId: string; toolId: string }[] = [];
-
-      results.forEach((result, index) => {
-        const { agentId, toolId } = assignments[index];
-        if (result.status === "fulfilled") {
-          if (result.value === null || result.value === "updated") {
-            // Success (created or updated credentials)
-            succeeded.push({ agentId, toolId });
-          } else if (result.value === "duplicate") {
-            // Already assigned with same credentials
-            duplicates.push({ agentId, toolId });
-          } else {
-            // Validation error
-            const error = result.value.error.message || "Unknown error";
-            failed.push({ agentId, toolId, error });
-          }
-        } else if (result.status === "rejected") {
-          // Runtime error
-          const error =
-            result.reason instanceof Error
-              ? result.reason.message
-              : "Unknown error";
-          failed.push({ agentId, toolId, error });
-        }
-      });
-
-      return reply.send({ succeeded, failed, duplicates });
-    },
-  );
-
+  // TODO: can probably remove this route..
   fastify.delete(
     "/api/agents/:agentId/tools/:toolId",
     {
@@ -277,6 +188,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // TODO: can probably remove this route..
   fastify.patch(
     "/api/agent-tools/:id",
     {

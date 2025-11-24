@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolAssignmentsPanel } from "./tool-assignments-panel";
@@ -6,6 +7,7 @@ import type { Tool } from "./types";
 const mockUseAllAgentTools = vi.fn();
 const mockUnassignMutate = vi.fn();
 const mockPatchMutate = vi.fn();
+let queryClient: QueryClient;
 
 vi.mock("@/lib/agent-tools.query", () => ({
   __esModule: true,
@@ -90,6 +92,7 @@ describe("ToolAssignmentsPanel", () => {
     mockUseAllAgentTools.mockReset();
     mockUnassignMutate.mockReset();
     mockPatchMutate.mockReset();
+    queryClient = new QueryClient();
 
     mockUseAllAgentTools.mockReturnValue({
       data: { data: [assignment], pagination },
@@ -98,7 +101,11 @@ describe("ToolAssignmentsPanel", () => {
   });
 
   it("fetches assignments for the tool id without excluding Archestra tools", () => {
-    render(<ToolAssignmentsPanel tool={baseTool} />);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToolAssignmentsPanel tool={baseTool} />
+      </QueryClientProvider>,
+    );
 
     expect(mockUseAllAgentTools).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -111,7 +118,11 @@ describe("ToolAssignmentsPanel", () => {
   });
 
   it("unassigns a profile when the button is clicked", () => {
-    render(<ToolAssignmentsPanel tool={baseTool} />);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToolAssignmentsPanel tool={baseTool} />
+      </QueryClientProvider>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /unassign/i }));
 
@@ -138,10 +149,13 @@ describe("ToolAssignmentsPanel", () => {
       isLoading: false,
     });
 
-    render(<ToolAssignmentsPanel tool={baseTool} />);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToolAssignmentsPanel tool={baseTool} />
+      </QueryClientProvider>,
+    );
 
     expect(screen.getByText("Agent One")).toBeInTheDocument();
     expect(screen.queryByText("Agent Two")).not.toBeInTheDocument();
   });
-
 });

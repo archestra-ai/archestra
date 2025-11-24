@@ -318,10 +318,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to Anthropic messages
-      const filteredMessages = utils.adapters.anthropic.applyUpdates(
+      let filteredMessages = utils.adapters.anthropic.applyUpdates(
         body.messages,
         toolResultUpdates,
       );
+
+      // Convert tool results to TOON format if enabled on agent
+      if (resolvedAgent.convertToolResultsToToon) {
+        filteredMessages =
+          utils.adapters.anthropic.convertToolResultsToToon(filteredMessages);
+      }
 
       fastify.log.info(
         {
@@ -329,6 +335,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalMessagesCount: body.messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
+          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -631,6 +638,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: {
             id: messageStartEvent?.message.id || "msg-unknown",
             type: "message",
@@ -750,6 +761,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
+              processedRequest: {
+                ...body,
+                messages: filteredMessages,
+              },
               response: response,
               model: model,
               inputTokens: tokenUsage.input,
@@ -791,6 +806,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: response,
           model: model,
           inputTokens: tokenUsage.input,

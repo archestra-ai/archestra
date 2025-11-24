@@ -288,10 +288,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to OpenAI messages
-      const filteredMessages = utils.adapters.openai.applyUpdates(
+      let filteredMessages = utils.adapters.openai.applyUpdates(
         messages,
         toolResultUpdates,
       );
+
+      // Convert tool results to TOON format if enabled on agent
+      if (resolvedAgent.convertToolResultsToToon) {
+        filteredMessages =
+          utils.adapters.openai.convertToolResultsToToon(filteredMessages);
+      }
 
       fastify.log.info(
         {
@@ -299,6 +305,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalMessagesCount: messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
+          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -587,6 +594,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: {
             id: chunks[0]?.id || "chatcmpl-unknown",
             object: "chat.completion",
@@ -705,6 +716,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response,
           model: model,
           inputTokens: tokenUsage.input,

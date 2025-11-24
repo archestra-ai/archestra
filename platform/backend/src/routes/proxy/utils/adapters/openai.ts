@@ -1,3 +1,5 @@
+import { encode as toonEncode } from "@toon-format/toon";
+import logger from "@/logging";
 import type {
   CommonMessage,
   CommonToolCall,
@@ -5,7 +7,6 @@ import type {
   OpenAi,
   ToolResultUpdates,
 } from "@/types";
-import { encode as toonEncode } from "@toon-format/toon";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -178,15 +179,106 @@ export function toolResultsToMessages(
   results: CommonToolResult[],
   convertToToon = false,
 ): Array<{ role: "tool"; tool_call_id: string; content: string }> {
-  return results.map((result) => ({
-    role: "tool" as const,
-    tool_call_id: result.id,
-    content: result.isError
-      ? `Error: ${result.error || "Tool execution failed"}`
-      : convertToToon
-        ? toonEncode(result.content)
-        : JSON.stringify(result.content),
-  }));
+  return results.map((result) => {
+    let content: string;
+    if (result.isError) {
+      content = `Error: ${result.error || "Tool execution failed"}`;
+    } else if (convertToToon) {
+      const beforeJson = JSON.stringify(result.content);
+      const afterToon = toonEncode(result.content);
+      logger.info(
+        {
+          toolName: result.name,
+          toolCallId: result.id,
+          beforeLength: beforeJson.length,
+          afterLength: afterToon.length,
+          compressionRatio: (
+            (1 - afterToon.length / beforeJson.length) *
+            100
+          ).toFixed(2),
+        },
+        "TOON conversion completed",
+      );
+      logger.debug(
+        {
+          toolName: result.name,
+          toolCallId: result.id,
+          before: beforeJson,
+          after: afterToon,
+        },
+        "TOON conversion before/after",
+      );
+      content = afterToon;
+    } else {
+      content = JSON.stringify(result.content);
+    }
+
+    return {
+      role: "tool" as const,
+      tool_call_id: result.id,
+      content,
+    };
+  });
+}
+
+/**
+ * Convert tool results in messages to TOON format
+ */
+export function convertToolResultsToToon(
+  messages: OpenAiMessages,
+): OpenAiMessages {
+  return messages.map((message) => {
+    // Only process tool messages (tool results)
+    if (message.role === "tool") {
+      // Only convert string content
+      if (typeof message.content === "string") {
+        try {
+          // Parse JSON to validate it's actually JSON
+          const parsed = JSON.parse(message.content);
+          const beforeJson = message.content;
+          const afterToon = toonEncode(parsed);
+
+          logger.info(
+            {
+              toolCallId: message.tool_call_id,
+              beforeLength: beforeJson.length,
+              afterLength: afterToon.length,
+              compressionRatio: (
+                (1 - afterToon.length / beforeJson.length) *
+                100
+              ).toFixed(2),
+            },
+            "TOON conversion completed",
+          );
+          logger.debug(
+            {
+              toolCallId: message.tool_call_id,
+              before: beforeJson,
+              after: afterToon,
+            },
+            "TOON conversion before/after",
+          );
+
+          return {
+            ...message,
+            content: afterToon,
+          };
+        } catch {
+          // If it's not valid JSON, skip conversion
+          logger.debug(
+            {
+              toolCallId: message.tool_call_id,
+              reason: "not_valid_json",
+            },
+            "Skipping TOON conversion",
+          );
+          return message;
+        }
+      }
+    }
+
+    return message;
+  });
 }
 
 /** Returns input and output usage tokens */

@@ -23,6 +23,7 @@ const interactionsTable = pgTable(
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
+    processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     model: varchar("model"),

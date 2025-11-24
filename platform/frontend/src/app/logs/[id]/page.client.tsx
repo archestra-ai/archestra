@@ -207,24 +207,54 @@ function LogDetail({
           <Accordion type="single" collapsible defaultValue="response">
             <AccordionItem value="request" className="border rounded-lg mb-2">
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                <span className="text-base font-semibold">Raw Request</span>
+                <span className="text-base font-semibold">
+                  Raw Request (Original)
+                </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
-                  <pre className="text-xs">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                  <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.request, null, 2)}
                   </pre>
                 </div>
               </AccordionContent>
             </AccordionItem>
 
+            {dynamicInteraction.processedRequest && (
+              <AccordionItem
+                value="processedRequest"
+                className="border rounded-lg mb-2"
+              >
+                <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                  <span className="text-base font-semibold">
+                    Processed Request (Sent to LLM)
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-4">
+                  <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                    <pre className="text-xs whitespace-pre-wrap break-words">
+                      {JSON.stringify(
+                        dynamicInteraction.processedRequest,
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This shows the request after processing (e.g., TOON
+                    conversion, trusted data filtering, etc.)
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+
             <AccordionItem value="response" className="border rounded-lg">
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
-                  <pre className="text-xs">
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[600px]">
+                  <pre className="text-xs whitespace-pre-wrap break-words">
                     {JSON.stringify(dynamicInteraction.response, null, 2)}
                   </pre>
                 </div>

@@ -64,14 +64,33 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      return reply.send(
-        await InteractionModel.findAllPaginated(
+      fastify.log.info(
+        {
+          userId: user.id,
+          email: user.email,
+          isAgentAdmin,
           pagination,
           sorting,
-          user.id,
-          isAgentAdmin,
-        ),
+        },
+        "GetInteractions request",
       );
+
+      const result = await InteractionModel.findAllPaginated(
+        pagination,
+        sorting,
+        user.id,
+        isAgentAdmin,
+      );
+
+      fastify.log.info(
+        {
+          resultCount: result.data.length,
+          total: result.pagination.total,
+        },
+        "GetInteractions result",
+      );
+
+      return reply.send(result);
     },
   );
 

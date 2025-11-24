@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 
 class AgentTeamModel {
   /**
@@ -25,7 +26,21 @@ class AgentTeamModel {
 
     const teamIds = userTeams.map((t) => t.teamId);
 
+    logger.info(
+      {
+        userId,
+        isAgentAdmin,
+        teamIds,
+        teamCount: teamIds.length,
+      },
+      "getUserAccessibleAgentIds - checking team membership",
+    );
+
     if (teamIds.length === 0) {
+      logger.warn(
+        { userId },
+        "User has no team memberships - returning empty agent list",
+      );
       return [];
     }
 
@@ -35,7 +50,19 @@ class AgentTeamModel {
       .from(schema.agentTeamsTable)
       .where(inArray(schema.agentTeamsTable.teamId, teamIds));
 
-    return agentTeams.map((at) => at.agentId);
+    const accessibleAgentIds = agentTeams.map((at) => at.agentId);
+
+    logger.info(
+      {
+        userId,
+        teamIds,
+        accessibleAgentIds,
+        agentCount: accessibleAgentIds.length,
+      },
+      "getUserAccessibleAgentIds - final result",
+    );
+
+    return accessibleAgentIds;
   }
 
   /**

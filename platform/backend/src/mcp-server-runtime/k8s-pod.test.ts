@@ -547,6 +547,25 @@ describe("K8sPod.sanitizeMetadataLabels", () => {
       input: {},
       expected: {},
     },
+    {
+      name: "truncates label values to 63 characters",
+      input: {
+        "long-value": "a".repeat(100),
+      },
+      expected: {
+        "long-value": "a".repeat(63),
+      },
+    },
+    {
+      name: "removes trailing non-alphanumeric after truncation",
+      input: {
+        // 62 'a's followed by a hyphen = 63 chars. Truncation keeps the hyphen, regex should remove it.
+        "trailing-hyphen": `${"a".repeat(62)}-`,
+      },
+      expected: {
+        "trailing-hyphen": "a".repeat(62),
+      },
+    },
   ])("$name", ({ input, expected }) => {
     const result = K8sPod.sanitizeMetadataLabels(
       input as Record<string, string>,
@@ -566,6 +585,7 @@ describe("K8sPod.generatePodSpec", () => {
   function createMockK8sPod(
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
+    environmentValues?: Record<string, string>,
   ): K8sPod {
     const mockK8sApi = {} as k8s.CoreV1Api;
     const mockK8sAttach = {} as k8s.Attach;
@@ -580,6 +600,7 @@ describe("K8sPod.generatePodSpec", () => {
       namespace,
       null, // catalogItem
       userConfigValues,
+      environmentValues,
     );
   }
 
@@ -953,6 +974,95 @@ describe("K8sPod.generatePodSpec", () => {
       // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing placeholder is preserved when no user config
       "${user_config.file_path}",
     ]);
+  });
+
+  test("generates podSpec with interpolated environment values in arguments (filesystem server case)", () => {
+    const mcpServer: McpServer = {
+      id: "env-interpolation-id",
+      name: "env-interpolation-server",
+      catalogId: "catalog-env-interpolation",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    // Use environmentValues instead of userConfigValues (internal catalog pattern)
+    const environmentValues = {
+      allowed_directories: "/home/user/documents",
+      read_only: "false",
+    };
+
+    const k8sPod = createMockK8sPod(mcpServer, undefined, environmentValues);
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "npx",
+      arguments: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.allowed_directories}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    expect(container?.args).toEqual([
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "/home/user/documents",
+    ]);
+  });
+
+  test("generates podSpec with environmentValues taking precedence over userConfigValues in arguments", () => {
+    const mcpServer: McpServer = {
+      id: "precedence-id",
+      name: "precedence-server",
+      catalogId: "catalog-precedence",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const userConfigValues = {
+      path: "/old/path",
+    };
+
+    const environmentValues = {
+      path: "/new/path",
+    };
+
+    const k8sPod = createMockK8sPod(
+      mcpServer,
+      userConfigValues,
+      environmentValues,
+    );
+
+    const dockerImage = "test:latest";
+    const localConfig: z.infer<typeof LocalConfigSchema> = {
+      command: "test",
+      arguments: [
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Testing interpolation of placeholders
+        "${user_config.path}",
+      ],
+    };
+    const needsHttp = false;
+    const httpPort = 8080;
+
+    const podSpec = k8sPod.generatePodSpec(
+      dockerImage,
+      localConfig,
+      needsHttp,
+      httpPort,
+    );
+
+    const container = podSpec.spec?.containers[0];
+    // environmentValues should take precedence
+    expect(container?.args).toEqual(["/new/path"]);
   });
 
   test("generates podSpec with custom HTTP port", () => {

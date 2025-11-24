@@ -208,53 +208,71 @@ export function EnvironmentVariablesFormField<
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={control}
-                  name={
-                    `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
-                  }
-                  render={({ field }) => {
-                    const envType = form.watch(
-                      `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
-                    );
+                {!promptOnInstallation ? (
+                  <FormField
+                    control={control}
+                    name={
+                      `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>
+                    }
+                    render={({ field }) => {
+                      const envType = form.watch(
+                        `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+                      );
 
-                    // Boolean type: render checkbox with label
-                    if (envType === "boolean") {
-                      // Normalize empty/undefined values to "false"
-                      const normalizedValue =
-                        field.value === "true" ? "true" : "false";
-                      if (field.value !== normalizedValue) {
-                        field.onChange(normalizedValue);
+                      // Boolean type: render checkbox with label
+                      if (envType === "boolean") {
+                        // Normalize empty/undefined values to "false"
+                        const normalizedValue =
+                          field.value === "true" ? "true" : "false";
+                        if (field.value !== normalizedValue) {
+                          field.onChange(normalizedValue);
+                        }
+
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <div className="flex items-center gap-2 h-10">
+                                <Checkbox
+                                  checked={normalizedValue === "true"}
+                                  onCheckedChange={(checked) =>
+                                    field.onChange(checked ? "true" : "false")
+                                  }
+                                />
+                                <span className="text-sm">
+                                  {normalizedValue === "true"
+                                    ? "True"
+                                    : "False"}
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
                       }
 
-                      return (
-                        <FormItem>
-                          <FormControl>
-                            <div className="flex items-center gap-2 h-10">
-                              <Checkbox
-                                checked={normalizedValue === "true"}
-                                onCheckedChange={(checked) =>
-                                  field.onChange(checked ? "true" : "false")
-                                }
+                      // Number type: render number input
+                      if (envType === "number") {
+                        return (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="font-mono"
+                                {...field}
                               />
-                              <span className="text-sm">
-                                {normalizedValue === "true" ? "True" : "False"}
-                              </span>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }
 
-                    // Number type: render number input
-                    if (envType === "number") {
+                      // String/Secret types: render input
                       return (
                         <FormItem>
                           <FormControl>
                             <Input
-                              type="number"
-                              placeholder="0"
+                              placeholder="your-value"
                               className="font-mono"
                               {...field}
                             />
@@ -262,23 +280,15 @@ export function EnvironmentVariablesFormField<
                           <FormMessage />
                         </FormItem>
                       );
-                    }
-
-                    // String/Secret types: render input
-                    return (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="your-value"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center h-10">
+                    <p className="text-xs text-muted-foreground">
+                      Prompted at installation
+                    </p>
+                  </div>
+                )}
                 <FormField
                   control={control}
                   name={

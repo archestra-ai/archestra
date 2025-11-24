@@ -1,12 +1,12 @@
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
-import agentToolsTable from "./agent-tool";
+import toolPoliciesTable from "./tool-policy";
 
 const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
   id: uuid("id").primaryKey().defaultRandom(),
-  agentToolId: uuid("agent_tool_id")
+  toolPolicyId: uuid("tool_policy_id")
     .notNull()
-    .references(() => agentToolsTable.id, { onDelete: "cascade" }),
+    .references(() => toolPoliciesTable.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   attributePath: text("attribute_path").notNull(),
   operator: text("operator")

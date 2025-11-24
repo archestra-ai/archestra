@@ -9,15 +9,16 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
+  OrganizationModel,
   OrganizationRoleModel,
   SessionModel,
   ToolInvocationPolicyModel,
   ToolModel,
+  ToolPolicyModel,
   TrustedDataPolicyModel,
 } from "@/models";
 import type {
   Agent,
-  AgentTool,
   InsertAccount,
   InsertConversation,
   InsertInteraction,
@@ -196,23 +197,43 @@ async function makeTool(
 /**
  * Creates a test agent-tool relationship using the AgentTool model
  */
+type AgentToolOverrides = {
+  credentialSourceMcpServerId?: string | null;
+  executionSourceMcpServerId?: string | null;
+  toolPolicy?: Partial<{
+    name: string;
+    allowUsageWhenUntrustedDataIsPresent: boolean;
+    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+    responseModifierTemplate: string | null;
+    organizationId: string;
+  }>;
+};
+
 async function makeAgentTool(
   agentId: string,
   toolId: string,
-  overrides: Partial<
-    Pick<
-      AgentTool,
-      | "allowUsageWhenUntrustedDataIsPresent"
-      | "toolResultTreatment"
-      | "credentialSourceMcpServerId"
-      | "executionSourceMcpServerId"
-    >
-  > = {},
+  overrides: AgentToolOverrides = {},
 ) {
+  const policyOverrides = overrides.toolPolicy ?? {};
+  const organization =
+    policyOverrides.organizationId ??
+    (await OrganizationModel.getOrCreateDefaultOrganization()).id;
+
+  const policy = await ToolPolicyModel.create({
+    name:
+      policyOverrides.name || `Policy ${crypto.randomUUID().substring(0, 8)}`,
+    toolId,
+    organizationId: organization,
+    allowUsageWhenUntrustedDataIsPresent:
+      policyOverrides.allowUsageWhenUntrustedDataIsPresent ?? false,
+    toolResultTreatment: policyOverrides.toolResultTreatment ?? "untrusted",
+    responseModifierTemplate: policyOverrides.responseModifierTemplate ?? null,
+  });
+
   return await AgentToolModel.create(agentId, toolId, {
-    allowUsageWhenUntrustedDataIsPresent: false,
-    toolResultTreatment: "untrusted" as const,
-    ...overrides,
+    credentialSourceMcpServerId: overrides.credentialSourceMcpServerId ?? null,
+    executionSourceMcpServerId: overrides.executionSourceMcpServerId ?? null,
+    toolPolicyId: policy.id,
   });
 }
 
@@ -220,7 +241,7 @@ async function makeAgentTool(
  * Creates a test tool invocation policy using the ToolInvocationPolicy model
  */
 async function makeToolPolicy(
-  agentToolId: string,
+  toolPolicyId: string,
   overrides: Partial<
     Pick<
       ToolInvocation.ToolInvocationPolicy,
@@ -229,7 +250,7 @@ async function makeToolPolicy(
   > = {},
 ): Promise<ToolInvocation.ToolInvocationPolicy> {
   return await ToolInvocationPolicyModel.create({
-    agentToolId,
+    toolPolicyId,
     argumentName: "test-arg",
     operator: "equal",
     value: "test-value",
@@ -244,7 +265,7 @@ async function makeToolPolicy(
  * Returns the created policy
  */
 async function makeTrustedDataPolicy(
-  agentToolId: string,
+  toolPolicyId: string,
   overrides: Partial<
     Pick<
       TrustedData.TrustedDataPolicy,
@@ -253,7 +274,7 @@ async function makeTrustedDataPolicy(
   > = {},
 ): Promise<TrustedData.TrustedDataPolicy> {
   return await TrustedDataPolicyModel.create({
-    agentToolId,
+    toolPolicyId,
     description: "Test trusted data policy",
     attributePath: "test.path",
     operator: "equal",

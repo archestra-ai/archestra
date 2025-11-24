@@ -3,7 +3,6 @@ import { get } from "lodash-es";
 import { isArchestraMcpServerTool } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
-import AgentToolModel from "./agent-tool";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -82,14 +81,18 @@ class ToolInvocationPolicyModel {
       .select({
         ...getTableColumns(schema.toolInvocationPoliciesTable),
         allowUsageWhenUntrustedDataIsPresent:
-          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+          schema.toolPoliciesTable.allowUsageWhenUntrustedDataIsPresent,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
+        schema.toolPoliciesTable,
+        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
+      )
+      .leftJoin(
         schema.toolInvocationPoliciesTable,
         eq(
-          schema.agentToolsTable.id,
-          schema.toolInvocationPoliciesTable.agentToolId,
+          schema.toolPoliciesTable.id,
+          schema.toolInvocationPoliciesTable.toolPolicyId,
         ),
       )
       .innerJoin(
@@ -97,7 +100,6 @@ class ToolInvocationPolicyModel {
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .where(
-        // Filter to policies that match the agent and tool
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
@@ -112,15 +114,7 @@ class ToolInvocationPolicyModel {
         : null;
 
     if (allowUsageWhenUntrustedDataIsPresent === null) {
-      // If we don't have the tool config from policies, fetch it from agent-tool relationship
-      const securityConfig = await AgentToolModel.getSecurityConfig(
-        agentId,
-        toolName,
-      );
-      if (securityConfig) {
-        allowUsageWhenUntrustedDataIsPresent =
-          securityConfig.allowUsageWhenUntrustedDataIsPresent;
-      }
+      allowUsageWhenUntrustedDataIsPresent = false;
     }
 
     // Evaluate each policy
@@ -133,6 +127,9 @@ class ToolInvocationPolicyModel {
       action,
       reason,
     } of applicablePoliciesForAgent) {
+      if (!operator || !action || !argumentName || !policyValue) {
+        continue;
+      }
       // Extract the argument value using lodash
       const argumentValue = get(toolInput, argumentName);
 

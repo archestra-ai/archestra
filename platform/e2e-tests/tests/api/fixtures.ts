@@ -17,6 +17,8 @@ export interface TestFixtures {
   deleteApiKey: typeof deleteApiKey;
   createToolInvocationPolicy: typeof createToolInvocationPolicy;
   deleteToolInvocationPolicy: typeof deleteToolInvocationPolicy;
+  createToolPolicy: typeof createToolPolicy;
+  deleteToolPolicy: typeof deleteToolPolicy;
   createTrustedDataPolicy: typeof createTrustedDataPolicy;
   deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
   createMcpCatalogItem: typeof createMcpCatalogItem;
@@ -126,7 +128,7 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 const createToolInvocationPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
+    toolPolicyId: string;
     argumentPath: string;
     operator: string;
     value: string;
@@ -139,13 +141,50 @@ const createToolInvocationPolicy = async (
     method: "post",
     urlSuffix: "/api/autonomy-policies/tool-invocation",
     data: {
-      agentToolId: policy.agentToolId,
+      toolPolicyId: policy.toolPolicyId,
       argumentName: policy.argumentPath, // argumentPath maps to argumentName in the schema
       operator: policy.operator,
       value: policy.value,
       action: policy.action,
       reason: policy.reason,
     },
+  });
+
+/**
+ * Create a tool policy for a tool
+ */
+const createToolPolicy = async (
+  request: APIRequestContext,
+  params: {
+    toolId: string;
+    name?: string;
+    allowUsageWhenUntrustedDataIsPresent?: boolean;
+    toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+    responseModifierTemplate?: string | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/tools/${params.toolId}/policies`,
+    data: {
+      name: params.name ?? `e2e-policy-${Date.now()}`,
+      allowUsageWhenUntrustedDataIsPresent:
+        params.allowUsageWhenUntrustedDataIsPresent ?? false,
+      toolResultTreatment: params.toolResultTreatment ?? "untrusted",
+      responseModifierTemplate: params.responseModifierTemplate ?? null,
+    },
+  });
+
+/**
+ * Delete a tool policy
+ * (authnz is handled by the authenticated session)
+ */
+const deleteToolPolicy = async (request: APIRequestContext, policyId: string) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/tool-policies/${policyId}`,
   });
 
 /**
@@ -169,7 +208,7 @@ const deleteToolInvocationPolicy = async (
 const createTrustedDataPolicy = async (
   request: APIRequestContext,
   policy: {
-    agentToolId: string;
+    toolPolicyId: string;
     description: string;
     attributePath: string;
     operator: string;
@@ -321,6 +360,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteToolInvocationPolicy: async ({}, use) => {
     await use(deleteToolInvocationPolicy);
+  },
+  createToolPolicy: async ({}, use) => {
+    await use(createToolPolicy);
+  },
+  deleteToolPolicy: async ({}, use) => {
+    await use(deleteToolPolicy);
   },
   createTrustedDataPolicy: async ({}, use) => {
     await use(createTrustedDataPolicy);

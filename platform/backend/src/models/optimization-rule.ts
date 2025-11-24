@@ -96,7 +96,7 @@ class OptimizationRuleModel {
   static evaluateRules(
     rules: OptimizationRule[],
     context: {
-      contentLength: number;
+      tokenCount: number;
       hasTools: boolean;
     },
   ): string | null {
@@ -109,7 +109,7 @@ class OptimizationRuleModel {
         case "content_length": {
           const conditions =
             rule.conditions as OptimizationRuleContentLengthConditions;
-          matches = context.contentLength <= conditions.maxLength;
+          matches = context.tokenCount <= conditions.maxLength;
           break;
         }
         case "tool_presence": {

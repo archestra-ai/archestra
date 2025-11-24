@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test } from "@/test";
-import AgentToolModel from "./agent-tool";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 
@@ -8,9 +7,9 @@ describe("ToolInvocationPolicyModel", () => {
 
   let agentId: string;
   let toolId: string;
-  let agentToolId: string;
+  let toolPolicyId: string;
 
-  beforeEach(async ({ makeAgent, makeTool }) => {
+  beforeEach(async ({ makeAgent, makeTool, makeAgentTool }) => {
     // Create test agent
     const agent = await makeAgent();
     agentId = agent.id;
@@ -19,12 +18,13 @@ describe("ToolInvocationPolicyModel", () => {
     const tool = await makeTool({ agentId: agent.id, name: toolName });
     toolId = tool.id;
 
-    // Create agent-tool relationship with security config
-    const agentTool = await AgentToolModel.create(agentId, toolId, {
-      allowUsageWhenUntrustedDataIsPresent: false,
-      toolResultTreatment: "untrusted",
+    const agentTool = await makeAgentTool(agent.id, toolId, {
+      toolPolicy: {
+        allowUsageWhenUntrustedDataIsPresent: false,
+        toolResultTreatment: "untrusted",
+      },
     });
-    agentToolId = agentTool.id;
+    toolPolicyId = agentTool.toolPolicyId as string;
   });
 
   describe("evaluate", () => {
@@ -58,9 +58,11 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         const agentTool = await makeAgentTool(agent.id, tool.id);
+        const policyId = agentTool.toolPolicyId;
+        if (!policyId) throw new Error("Expected toolPolicyId to be set");
 
         // Create a block policy
-        await makeToolPolicy(agentTool.id, {
+        await makeToolPolicy(policyId, {
           argumentName: "email",
           operator: "endsWith",
           value: "@evil.com",
@@ -88,9 +90,11 @@ describe("ToolInvocationPolicyModel", () => {
         const agent = await makeAgent();
         const tool = await makeTool({ agentId: agent.id, name: "test-tool" });
         const agentTool = await makeAgentTool(agent.id, tool.id);
+        const policyId = agentTool.toolPolicyId;
+        if (!policyId) throw new Error("Expected toolPolicyId to be set");
 
         // Create a block policy
-        await makeToolPolicy(agentTool.id, {
+        await makeToolPolicy(policyId, {
           argumentName: "email",
           operator: "endsWith",
           value: "@evil.com",
@@ -134,7 +138,7 @@ describe("ToolInvocationPolicyModel", () => {
       test("allows tool invocation when context is untrusted but explicit allow rule matches", async () => {
         // Create an allow policy
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "path",
           operator: "startsWith",
           value: "/safe/",
@@ -156,7 +160,7 @@ describe("ToolInvocationPolicyModel", () => {
       test("blocks tool invocation when context is untrusted and allow rule doesn't match", async () => {
         // Create an allow policy
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "path",
           operator: "startsWith",
           value: "/safe/",
@@ -177,6 +181,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async ({
         makeTool,
+        makeAgentTool,
       }) => {
         // Create a tool that allows usage when untrusted data is present
         await makeTool({
@@ -191,10 +196,8 @@ describe("ToolInvocationPolicyModel", () => {
           permissiveTool as NonNullable<typeof permissiveTool>
         ).id;
 
-        // Create agent-tool relationship with permissive security config
-        await AgentToolModel.create(agentId, permissiveToolId, {
-          allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: "untrusted",
+        await makeAgentTool(agentId, permissiveToolId, {
+          toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -208,7 +211,9 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("respects tool's allowUsageWhenUntrustedDataIsPresent flag when policies exist", async () => {
+      test("respects tool's allowUsageWhenUntrustedDataIsPresent flag when policies exist", async ({
+        makeAgentTool,
+      }) => {
         // Create a tool that allows usage when untrusted data is present
         await ToolModel.createToolIfNotExists({
           agentId,
@@ -222,19 +227,14 @@ describe("ToolInvocationPolicyModel", () => {
         );
         const permissiveToolId = (tool as NonNullable<typeof tool>).id;
 
-        // Create agent-tool relationship with permissive security config
-        const permissiveAgentTool = await AgentToolModel.create(
-          agentId,
-          permissiveToolId,
-          {
-            allowUsageWhenUntrustedDataIsPresent: true,
-            toolResultTreatment: "untrusted",
-          },
-        );
+        const agentTool = await makeAgentTool(agentId, permissiveToolId, {
+          toolPolicy: { allowUsageWhenUntrustedDataIsPresent: true },
+        });
+        const policyId = agentTool.toolPolicyId as string;
 
         // Create a policy that doesn't match
         await ToolInvocationPolicyModel.create({
-          agentToolId: permissiveAgentTool.id,
+          toolPolicyId: policyId,
           argumentName: "special",
           operator: "equal",
           value: "magic",
@@ -255,7 +255,9 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("block_always policies take precedence over allowUsageWhenUntrustedDataIsPresent", async () => {
+      test("block_always policies take precedence over allowUsageWhenUntrustedDataIsPresent", async ({
+        makeAgentTool,
+      }) => {
         // Create a tool that allows usage when untrusted data is present
         await ToolModel.createToolIfNotExists({
           agentId,
@@ -267,15 +269,17 @@ describe("ToolInvocationPolicyModel", () => {
         const tool = await ToolModel.findByName("gmail-sendEmail");
         const toolId = (tool as NonNullable<typeof tool>).id;
 
-        // Create agent-tool relationship with permissive security config
-        const agentTool = await AgentToolModel.create(agentId, toolId, {
-          allowUsageWhenUntrustedDataIsPresent: true,
-          toolResultTreatment: "untrusted",
+        const agentTool = await makeAgentTool(agentId, toolId, {
+          toolPolicy: {
+            allowUsageWhenUntrustedDataIsPresent: true,
+            toolResultTreatment: "untrusted",
+          },
         });
+        const policyId = agentTool.toolPolicyId as string;
 
         // Create a block_always policy that checks for suspicious content in email body
         await ToolInvocationPolicyModel.create({
-          agentToolId: agentTool.id,
+          toolPolicyId: policyId,
           argumentName: "body",
           operator: "contains",
           value: "sistant",
@@ -304,7 +308,7 @@ describe("ToolInvocationPolicyModel", () => {
     describe("operator evaluation", () => {
       test("equal operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "status",
           operator: "equal",
           value: "active",
@@ -331,7 +335,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("notEqual operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "env",
           operator: "notEqual",
           value: "production",
@@ -358,7 +362,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("contains operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "message",
           operator: "contains",
           value: "secret",
@@ -385,7 +389,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("notContains operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "message",
           operator: "notContains",
           value: "approved",
@@ -412,7 +416,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("startsWith operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "path",
           operator: "startsWith",
           value: "/tmp/",
@@ -439,7 +443,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("endsWith operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "file",
           operator: "endsWith",
           value: ".exe",
@@ -466,7 +470,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("regex operator works correctly", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "email",
           operator: "regex",
           value: "^[a-zA-Z0-9._%+-]+@example\\.com$",
@@ -495,7 +499,7 @@ describe("ToolInvocationPolicyModel", () => {
     describe("nested argument paths", () => {
       test("evaluates nested paths using lodash get", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "user.email",
           operator: "endsWith",
           value: "@blocked.com",
@@ -524,7 +528,7 @@ describe("ToolInvocationPolicyModel", () => {
     describe("missing arguments", () => {
       test("returns error for missing argument with allow policy", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "required",
           operator: "equal",
           value: "yes",
@@ -545,7 +549,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("continues evaluation for missing argument with block policy", async () => {
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "optional",
           operator: "equal",
           value: "bad",
@@ -569,7 +573,7 @@ describe("ToolInvocationPolicyModel", () => {
       test("evaluates multiple policies in order", async () => {
         // Create multiple policies
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "email",
           operator: "endsWith",
           value: "@blocked.com",
@@ -578,7 +582,7 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         await ToolInvocationPolicyModel.create({
-          agentToolId,
+          toolPolicyId,
           argumentName: "override",
           operator: "equal",
           value: "true",

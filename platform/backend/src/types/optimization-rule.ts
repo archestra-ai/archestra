@@ -7,6 +7,10 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SupportedProvidersSchema } from "./llm-providers";
 
+/**
+ * Content length optimization rule conditions
+ * maxLength is measured in tokens (not characters)
+ */
 export const OptimizationRuleContentLengthConditionsSchema = z.object({
   maxLength: z.number().int().positive(),
 });

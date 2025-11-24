@@ -1,12 +1,7 @@
 "use client";
 
-import { type UIMessage, useChat } from "@ai-sdk/react";
-import {
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-} from "@shared";
-import { useQueryClient } from "@tanstack/react-query";
-import { DefaultChatTransport } from "ai";
+import type { UIMessage } from "@ai-sdk/react";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -45,6 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useChatSession } from "@/contexts/global-chat-context";
 import {
   useChatAgentMcpTools,
   useConversation,
@@ -58,7 +54,6 @@ export default function ChatPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
 
   const [conversationId, setConversationId] = useState<string>();
   const [hideToolCalls, setHideToolCalls] = useState(() => {
@@ -75,8 +70,8 @@ export default function ChatPage() {
   // State for MCP installation request dialogs
   const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
     useState(false);
-  const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
-    useState<{ toolCallId: string; toolName: string } | null>(null);
+
+  const chatSession = useChatSession(conversationId);
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
@@ -192,49 +187,24 @@ export default function ChatPage() {
     localStorage.setItem("archestra-chat-hide-tool-calls", String(newValue));
   }, [hideToolCalls]);
 
-  // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const {
-    messages,
-    sendMessage,
-    status,
-    setMessages,
-    stop,
-    error,
-    addToolResult,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      credentials: "include",
-    }),
-    id: conversationId,
-    onFinish: () => {
-      // Invalidate the conversation query to refetch with new messages
-      if (conversationId) {
-        queryClient.invalidateQueries({
-          queryKey: ["conversation", conversationId],
-        });
-      }
-    },
-    onError: (error) => {
-      console.error("[Chat] Error occurred:", {
-        error,
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-      });
-    },
-    onToolCall: ({ toolCall }) => {
-      if (
-        toolCall.toolName ===
-        TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME
-      ) {
-        setPendingCustomServerToolCall(toolCall);
-      }
-    },
-  } as Parameters<typeof useChat>[0]);
+  // Extract chat session properties (or use defaults if session not ready)
+  const messages = chatSession?.messages ?? [];
+  const sendMessage = chatSession?.sendMessage;
+  const status = chatSession?.status ?? "ready";
+  const setMessages = chatSession?.setMessages;
+  const stop = chatSession?.stop;
+  const error = chatSession?.error;
+  const addToolResult = chatSession?.addToolResult;
+  const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
+  const setPendingCustomServerToolCall =
+    chatSession?.setPendingCustomServerToolCall;
 
   useEffect(() => {
-    if (!pendingCustomServerToolCall) {
+    if (
+      !pendingCustomServerToolCall ||
+      !addToolResult ||
+      !setPendingCustomServerToolCall
+    ) {
       return;
     }
 
@@ -259,20 +229,32 @@ export default function ChatPage() {
     })();
 
     setPendingCustomServerToolCall(null);
-  }, [pendingCustomServerToolCall, addToolResult]);
+  }, [
+    pendingCustomServerToolCall,
+    addToolResult,
+    setPendingCustomServerToolCall,
+  ]);
 
   // Sync messages when conversation loads or changes
   useEffect(() => {
+    if (!setMessages || !sendMessage) {
+      return;
+    }
+
     // When switching to a different conversation, reset the loaded ref
     if (loadedConversationRef.current !== conversationId) {
       loadedConversationRef.current = undefined;
     }
 
-    // If we have conversation data and haven't synced it yet, sync it
+    // Only sync messages from backend if:
+    // 1. We have conversation data
+    // 2. We haven't synced this conversation yet
+    // 3. The session doesn't already have messages (don't overwrite active session)
     if (
       conversation?.messages &&
       conversation.id === conversationId &&
-      loadedConversationRef.current !== conversationId
+      loadedConversationRef.current !== conversationId &&
+      messages.length === 0 // Only sync if session is empty
     ) {
       setMessages(conversation.messages as UIMessage[]);
       loadedConversationRef.current = conversationId;
@@ -291,11 +273,15 @@ export default function ChatPage() {
           parts: [{ type: "text", text: promptToSend }],
         });
       }
-    } else if (conversationId && !conversation) {
-      // Clear messages when switching to a conversation that's loading
-      setMessages([]);
     }
-  }, [conversationId, conversation, setMessages, sendMessage, status]);
+  }, [
+    conversationId,
+    conversation,
+    setMessages,
+    sendMessage,
+    status,
+    messages,
+  ]);
 
   const handleSubmit = useCallback(
     (
@@ -305,6 +291,7 @@ export default function ChatPage() {
     ) => {
       e.preventDefault();
       if (
+        !sendMessage ||
         !message.text?.trim() ||
         status === "submitted" ||
         status === "streaming"

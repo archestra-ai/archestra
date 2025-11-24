@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import {
-  type QueryClient,
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const {
   createToolInvocationPolicy,
@@ -19,16 +14,16 @@ const {
 } = archestraApiSdk;
 
 export function useToolInvocationPolicies() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byToolPolicyId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          // @ts-expect-error legacy agentToolId in generated types
+          const key = policy.toolPolicyId ?? policy.agentToolId;
+          if (!key) return acc;
+          acc[key] = [...(acc[key] || []), policy];
           return acc;
         },
         {} as Record<
@@ -38,14 +33,30 @@ export function useToolInvocationPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byToolPolicyId,
       };
     },
   });
 }
 
+export function useToolInvocationPoliciesForPolicy(
+  toolPolicyId: string | null,
+) {
+  return useQuery({
+    queryKey: ["tool-invocation-policies", toolPolicyId],
+    enabled: Boolean(toolPolicyId),
+    queryFn: async () => {
+      if (!toolPolicyId) return [];
+      const all = (await getToolInvocationPolicies()).data ?? [];
+      return all.filter((policy) => {
+        return policy.toolPolicyId === toolPolicyId;
+      });
+    },
+  });
+}
+
 export function useOperators() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["operators"],
     queryFn: async () => (await getOperators()).data ?? [],
   });
@@ -65,10 +76,10 @@ export function useToolInvocationPolicyDeleteMutation() {
 export function useToolInvocationPolicyCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createToolInvocationPolicy({
         body: {
-          agentToolId,
+          toolPolicyId,
           argumentName: "",
           operator: "equal",
           value: "",
@@ -102,16 +113,16 @@ export function useToolInvocationPolicyUpdateMutation() {
 }
 
 export function useToolResultPolicies() {
-  return useSuspenseQuery({
+  return useQuery({
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
+      const byToolPolicyId = all.reduce(
         (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
+          // @ts-expect-error legacy agentToolId in generated types
+          const key = policy.toolPolicyId ?? policy.agentToolId;
+          if (!key) return acc;
+          acc[key] = [...(acc[key] || []), policy];
           return acc;
         },
         {} as Record<
@@ -121,8 +132,22 @@ export function useToolResultPolicies() {
       );
       return {
         all,
-        byAgentToolId,
+        byToolPolicyId,
       };
+    },
+  });
+}
+
+export function useToolResultPoliciesForPolicy(toolPolicyId: string | null) {
+  return useQuery({
+    queryKey: ["tool-result-policies", toolPolicyId],
+    enabled: Boolean(toolPolicyId),
+    queryFn: async () => {
+      if (!toolPolicyId) return [];
+      const all = (await getTrustedDataPolicies()).data ?? [];
+      return all.filter((policy) => {
+        return policy.toolPolicyId === toolPolicyId;
+      });
     },
   });
 }
@@ -130,10 +155,10 @@ export function useToolResultPolicies() {
 export function useToolResultPoliciesCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
+    mutationFn: async ({ toolPolicyId }: { toolPolicyId: string }) =>
       await createTrustedDataPolicy({
         body: {
-          agentToolId,
+          toolPolicyId,
           description: "",
           attributePath: "",
           operator: "equal",
@@ -173,66 +198,6 @@ export function useToolResultPoliciesDeleteMutation() {
       await deleteTrustedDataPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
-    },
-  });
-}
-
-// Prefetch functions
-export function prefetchOperators(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["operators"],
-    queryFn: async () => (await getOperators()).data ?? [],
-  });
-}
-
-export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["tool-invocation-policies"],
-    queryFn: async () => {
-      const all = (await getToolInvocationPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetToolInvocationPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byAgentToolId,
-      };
-    },
-  });
-}
-
-export function prefetchToolResultPolicies(queryClient: QueryClient) {
-  return queryClient.prefetchQuery({
-    queryKey: ["tool-result-policies"],
-    queryFn: async () => {
-      const all = (await getTrustedDataPolicies()).data ?? [];
-      const byAgentToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.agentToolId] = [
-            ...(acc[policy.agentToolId] || []),
-            policy,
-          ];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byAgentToolId,
-      };
     },
   });
 }

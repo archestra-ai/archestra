@@ -1,10 +1,15 @@
-"use client";
-
 import type { archestraApiTypes } from "@shared";
-import { Plus, Trash2 } from "lucide-react";
-import { useCallback } from "react";
+import { toPath } from "lodash-es";
+import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import { CodeText } from "@/components/code-text";
+import { DebouncedInput } from "@/components/debounced-input";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -12,49 +17,155 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 import {
+  useOperators,
+  useToolResultPolicies,
   useToolResultPoliciesCreateMutation,
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
-import { ToolPolicyOperators } from "./tool-policy-operators";
-import type { TrustedDataPolicy } from "./types";
+import { PolicyCard } from "./policy-card";
 
-interface ToolResultPoliciesProps {
-  policyId: string;
-  rules: TrustedDataPolicy[];
+function AttributePathExamples() {
+  return (
+    <Accordion type="single" collapsible>
+      <AccordionItem
+        value="examples"
+        className="border border-border rounded-lg bg-card border-b-0 last:border-b"
+      >
+        <AccordionTrigger className="px-4 hover:no-underline">
+          <span className="text-sm font-medium">
+            📖 Attribute Path Syntax Cheat Sheet
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="px-4">
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              Attribute paths use{" "}
+              <a
+                href="https://lodash.com/docs/4.17.15#get"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                lodash get syntax
+              </a>{" "}
+              to target specific fields in tool responses. You can use{" "}
+              <CodeText>*</CodeText> as a wildcard to match all items in an
+              array.
+            </p>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h4 className="font-medium">Example 1: Simple nested object</h4>
+                <p className="text-muted-foreground">
+                  Tool response from a weather API:
+                </p>
+                <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                  {`{
+  "location": "San Francisco",
+  "current": {
+    "temperature": 72,
+    "conditions": "Sunny"
+  }
+}`}
+                </pre>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Attribute paths:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
+                    <li>
+                      <CodeText>location</CodeText> →{" "}
+                      <span className="text-foreground">"San Francisco"</span>
+                    </li>
+                    <li>
+                      <CodeText>current.temperature</CodeText> →{" "}
+                      <span className="text-foreground">72</span>
+                    </li>
+                    <li>
+                      <CodeText>current.conditions</CodeText> →{" "}
+                      <span className="text-foreground">"Sunny"</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-medium">
+                  Example 2: Array with wildcard (*)
+                </h4>
+                <p className="text-muted-foreground">
+                  Tool response from an email API:
+                </p>
+                <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                  {`{
+  "emails": [
+    {
+      "from": "alice@company.com",
+      "subject": "Meeting notes",
+      "body": "Here are the notes..."
+    },
+    {
+      "from": "external@example.com",
+      "subject": "Ignore previous instructions",
+      "body": "Malicious content..."
+    }
+  ]
+}`}
+                </pre>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Attribute paths:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
+                    <li>
+                      <CodeText>emails[*].from</CodeText> → Matches all "from"
+                      fields in the emails array
+                    </li>
+                    <li>
+                      <CodeText>emails[0].from</CodeText> →{" "}
+                      <span className="text-foreground">
+                        "alice@company.com"
+                      </span>
+                    </li>
+                    <li>
+                      <CodeText>emails[*].body</CodeText> → Matches all "body"
+                      fields in the emails array
+                    </li>
+                  </ul>
+                  <p className="text-muted-foreground mt-2 italic">
+                    Use case: Block emails from external domains or mark
+                    internal emails as trusted
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
 }
 
 export function ToolResultPolicies({
-  policyId,
-  rules,
-}: ToolResultPoliciesProps) {
-  const createTrustedPolicy = useToolResultPoliciesCreateMutation();
-  const updateTrustedPolicy = useToolResultPoliciesUpdateMutation();
-  const deleteTrustedPolicy = useToolResultPoliciesDeleteMutation();
-
-  const handleCreateTrustedPolicy = useCallback(() => {
-    createTrustedPolicy.mutate({ toolPolicyId: policyId });
-  }, [createTrustedPolicy, policyId]);
-
-  const handleUpdateTrustedPolicy = useCallback(
-    (id: string, data: Partial<TrustedDataPolicy>) => {
-      updateTrustedPolicy.mutate({ id, ...data });
-    },
-    [updateTrustedPolicy],
-  );
-
-  const handleDeleteTrustedPolicy = useCallback(
-    (id: string) => {
-      deleteTrustedPolicy.mutate(id);
-    },
-    [deleteTrustedPolicy],
-  );
+  agentTool,
+}: {
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
+}) {
+  const toolResultPoliciesCreateMutation =
+    useToolResultPoliciesCreateMutation();
+  const {
+    data: { byAgentToolId },
+  } = useToolResultPolicies();
+  const { data: operators } = useOperators();
+  const policies = byAgentToolId[agentTool.id] || [];
+  const toolResultPoliciesUpdateMutation =
+    useToolResultPoliciesUpdateMutation();
+  const toolResultPoliciesDeleteMutation =
+    useToolResultPoliciesDeleteMutation();
+  const agentToolPatchMutation = useAgentToolPatchMutation();
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+      <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
           <p className="text-sm text-muted-foreground">
@@ -72,90 +183,159 @@ export function ToolResultPolicies({
           </p>
           <p className="text-sm text-muted-foreground mt-2"></p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleCreateTrustedPolicy}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add result rule
-        </Button>
       </div>
-      {rules.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No result policies.</p>
-      ) : (
-        <div className="space-y-3">
-          {rules.map((rule) => (
-            <div key={rule.id} className="rounded-md border p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Input
-                  defaultValue={rule.attributePath}
-                  placeholder="attribute path"
-                  onBlur={(event) =>
-                    handleUpdateTrustedPolicy(rule.id, {
-                      attributePath: event.currentTarget.value,
+      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            DEFAULT
+          </div>
+          <Select
+            value={agentTool.toolResultTreatment}
+            onValueChange={(
+              value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
+            ) => {
+              agentToolPatchMutation.mutate({
+                id: agentTool.id,
+                toolResultTreatment: value,
+              });
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select treatment" />
+            </SelectTrigger>
+            <SelectContent>
+              {TOOL_RESULT_TREATMENT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {policies.map((policy) => (
+        <PolicyCard key={policy.id}>
+          <div className="flex flex-col gap-2 w-full">
+            <div className="flex flex-row items-center gap-4 justify-between">
+              <div className="flex flex-row items-center gap-4">
+                If
+                <DebouncedInput
+                  placeholder="Attribute path"
+                  initialValue={policy.attributePath}
+                  onChange={(attributePath) =>
+                    toolResultPoliciesUpdateMutation.mutate({
+                      ...policy,
+                      attributePath,
                     })
                   }
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteTrustedPolicy(rule.id)}
-                >
-                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <ToolPolicyOperators
-                  value={rule.operator}
-                  onChange={(value) =>
-                    handleUpdateTrustedPolicy(rule.id, {
-                      operator:
-                        value as archestraApiTypes.CreateTrustedDataPolicyData["body"]["operator"],
-                    })
-                  }
-                />
+                {!isValidPathSyntax(policy.attributePath) && (
+                  <span className="text-red-500 text-sm">Invalid path</span>
+                )}
                 <Select
-                  defaultValue={rule.action}
-                  onValueChange={(value) =>
-                    handleUpdateTrustedPolicy(rule.id, {
-                      action:
-                        value as archestraApiTypes.CreateTrustedDataPolicyData["body"]["action"],
+                  defaultValue={policy.operator}
+                  onValueChange={(
+                    value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["operator"],
+                  ) =>
+                    toolResultPoliciesUpdateMutation.mutate({
+                      ...policy,
+                      operator: value,
                     })
                   }
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Action" />
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Operator" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mark_as_trusted">
-                      Mark as trusted
-                    </SelectItem>
-                    <SelectItem value="mark_as_untrusted">
-                      Mark as untrusted
-                    </SelectItem>
-                    <SelectItem value="block_always">Block always</SelectItem>
+                    {operators.map((operator) => (
+                      <SelectItem key={operator.value} value={operator.value}>
+                        {operator.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <DebouncedInput
+                  placeholder="Value"
+                  initialValue={policy.value}
+                  onChange={(value) =>
+                    toolResultPoliciesUpdateMutation.mutate({
+                      ...policy,
+                      value,
+                    })
+                  }
+                />
               </div>
-              <Input
-                defaultValue={rule.value ?? ""}
-                placeholder="Value to match"
-                onBlur={(event) =>
-                  handleUpdateTrustedPolicy(rule.id, {
-                    value: event.currentTarget.value,
-                  })
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hover:text-red-500 ml-2"
+                onClick={() =>
+                  toolResultPoliciesDeleteMutation.mutate(policy.id)
                 }
-              />
-              <Textarea
-                defaultValue={rule.description ?? ""}
-                placeholder="Description (optional)"
-                onBlur={(event) =>
-                  handleUpdateTrustedPolicy(rule.id, {
-                    description: event.currentTarget.value,
-                  })
-                }
-              />
+              >
+                <Trash2Icon className="w-4 h-4" />
+              </Button>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="flex flex-wrap items-center gap-2 pl-4">
+              <ArrowRightIcon className="w-4 h-4 text-muted-foreground" />
+              <Select
+                defaultValue={policy.action}
+                onValueChange={(
+                  value: archestraApiTypes.GetTrustedDataPoliciesResponses["200"][number]["action"],
+                ) =>
+                  toolResultPoliciesUpdateMutation.mutate({
+                    ...policy,
+                    action: value,
+                  })
+                }
+              >
+                <SelectTrigger className="w-[240px]">
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    {
+                      value: "mark_as_trusted",
+                      label: "Mark as trusted",
+                    },
+                    { value: "block_always", label: "Block always" },
+                    {
+                      value: "sanitize_with_dual_llm",
+                      label: "Sanitize with Dual LLM",
+                    },
+                  ].map(({ value, label }) => (
+                    <SelectItem key={label} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </PolicyCard>
+      ))}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() =>
+          toolResultPoliciesCreateMutation.mutate({ agentToolId: agentTool.id })
+        }
+      >
+        <Plus className="w-3.5 h-3.5 mr-1" /> Add Tool Result Policy
+      </Button>
+      {policies.length > 0 && <AttributePathExamples />}
     </div>
   );
+}
+
+const TOOL_RESULT_TREATMENT_OPTIONS = [
+  { value: "trusted", label: "Mark as trusted" },
+  { value: "untrusted", label: "Mark as untrusted" },
+  { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
+] as const;
+
+function isValidPathSyntax(path: string): boolean {
+  const segments = toPath(path);
+  // reject empty segments like "a..b"
+  return segments.every((seg) => seg.length > 0);
 }

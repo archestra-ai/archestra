@@ -1218,7 +1218,6 @@ export async function executeArchestraTool(
         toolId: string;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
-        toolPolicyId?: string | null;
       }>;
 
       if (!assignments || !Array.isArray(assignments)) {
@@ -1240,7 +1239,6 @@ export async function executeArchestraTool(
             assignment.toolId,
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
-            assignment.toolPolicyId,
           ),
         ),
       );
@@ -2006,11 +2004,6 @@ export function getArchestraMcpTools(): Tool[] {
                   type: "string",
                   description:
                     "Optional ID of the MCP server to use as execution source",
-                },
-                toolPolicyId: {
-                  type: "string",
-                  description:
-                    "Optional ID of the tool policy to use for the tool",
                 },
               },
               required: ["profileId", "toolId"],

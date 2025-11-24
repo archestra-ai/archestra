@@ -33,7 +33,6 @@ export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
-export { default as toolPoliciesTable } from "./tool-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";

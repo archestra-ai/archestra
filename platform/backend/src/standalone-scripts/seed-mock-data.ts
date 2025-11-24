@@ -3,13 +3,7 @@ import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import db, { schema } from "@/database";
 import { seedDefaultUserAndOrg } from "@/database/seed";
 import logger from "@/logging";
-import {
-  AgentModel,
-  OrganizationModel,
-  TeamModel,
-  ToolModel,
-  ToolPolicyModel,
-} from "@/models";
+import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
 import {
   generateMockAgents,
   generateMockInteractions,
@@ -104,33 +98,16 @@ async function seedMockData() {
   await db.insert(schema.toolsTable).values(toolData);
   logger.info(`✅ Created ${toolData.length} tools`);
 
-  // Step 4: Create tool policies and agent-tool relationships
-  logger.info("\nCreating tool policies...");
-  const policyRecords = await Promise.all(
-    toolData.map(async (tool) => {
-      const policy = await ToolPolicyModel.create({
-        name: `Policy for ${tool.name}`,
-        toolId: tool.id,
-        organizationId: org.id,
-        allowUsageWhenUntrustedDataIsPresent:
-          tool.allowUsageWhenUntrustedDataIsPresent || false,
-        toolResultTreatment: tool.dataIsTrustedByDefault
-          ? "trusted"
-          : "untrusted",
-        responseModifierTemplate: null,
-      });
-      return { toolId: tool.id, policyId: policy.id };
-    }),
-  );
-  const policyByToolId = new Map(
-    policyRecords.map(({ toolId, policyId }) => [toolId, policyId]),
-  );
-
+  // Step 4: Create agent-tool relationships
   logger.info("\nCreating agent-tool relationships...");
   const agentToolData = toolData.map((tool) => ({
     agentId: tool.agentId,
     toolId: tool.id,
-    toolPolicyId: policyByToolId.get(tool.id),
+    allowUsageWhenUntrustedDataIsPresent:
+      tool.allowUsageWhenUntrustedDataIsPresent || false,
+    toolResultTreatment: (tool.dataIsTrustedByDefault
+      ? "trusted"
+      : "untrusted") as "trusted" | "untrusted" | "sanitize_with_dual_llm",
   }));
 
   await db.insert(schema.agentToolsTable).values(agentToolData);

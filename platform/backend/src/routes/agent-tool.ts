@@ -10,7 +10,6 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
-  ToolPolicyModel,
   UserModel,
 } from "@/models";
 import {
@@ -18,6 +17,8 @@ import {
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
+  BulkUpdateAgentToolsRequestSchema,
+  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -102,7 +103,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-            toolPolicyId: UuidIdSchema.nullable().optional(),
           })
           .nullish(),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -110,18 +110,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        toolPolicyId,
-      } = request.body || {};
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+        request.body || {};
 
       const result = await assignToolToAgent(
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
-        toolPolicyId,
       );
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -147,7 +143,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              toolPolicyId: UuidIdSchema.nullable().optional(),
             }),
           ),
         }),
@@ -186,7 +181,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.toolId,
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
-            assignment.toolPolicyId,
           ),
         ),
       );
@@ -220,6 +214,30 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send({ succeeded, failed, duplicates });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/bulk-update",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateAgentTools,
+        description: "Update multiple agent tools with the same value in bulk",
+        tags: ["Agent Tools"],
+        body: BulkUpdateAgentToolsRequestSchema,
+        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { ids, field, value } = request.body;
+
+      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
+        ids,
+        field,
+        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      );
+
+      return reply.send({ updatedCount });
     },
   );
 
@@ -286,30 +304,24 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
+          allowUsageWhenUntrustedDataIsPresent: true,
+          toolResultTreatment: true,
+          responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
-          toolPolicyId: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        toolPolicyId,
-      } = body;
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
         | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
         | undefined;
 
-      if (
-        credentialSourceMcpServerId ||
-        executionSourceMcpServerId ||
-        toolPolicyId !== undefined
-      ) {
+      if (credentialSourceMcpServerId || executionSourceMcpServerId) {
         const agentTools = await AgentToolModel.findAll();
         agentToolForValidation = agentTools.find((at) => at.id === id);
 
@@ -347,20 +359,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(
             validationError.status,
             validationError.error.message,
-          );
-        }
-      }
-
-      if (
-        toolPolicyId !== undefined &&
-        toolPolicyId !== null &&
-        agentToolForValidation
-      ) {
-        const policy = await ToolPolicyModel.findById(toolPolicyId);
-        if (!policy || policy.toolId !== agentToolForValidation.tool.id) {
-          throw new ApiError(
-            400,
-            "Selected tool policy is invalid for this tool",
           );
         }
       }
@@ -514,7 +512,6 @@ export async function assignToolToAgent(
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,
   executionSourceMcpServerId: string | null | undefined,
-  toolPolicyId: string | null | undefined,
 ): Promise<
   | {
       status: 400 | 404;
@@ -578,19 +575,6 @@ export async function assignToolToAgent(
     }
   }
 
-  if (toolPolicyId) {
-    const policy = await ToolPolicyModel.findById(toolPolicyId);
-    if (!policy || policy.toolId !== toolId) {
-      return {
-        status: 400,
-        error: {
-          message: "Selected tool policy is invalid for this tool",
-          type: "validation_error",
-        },
-      };
-    }
-  }
-
   // If a credential source is specified, validate it
   if (credentialSourceMcpServerId) {
     const validationError = await validateCredentialSource(
@@ -621,7 +605,6 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
-    toolPolicyId,
   );
 
   // Return appropriate status

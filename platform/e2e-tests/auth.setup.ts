@@ -1,6 +1,5 @@
 import path from "node:path";
 import { expect, test as setup } from "@playwright/test";
-import dotenv from "dotenv";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
@@ -9,21 +8,13 @@ import {
 
 const authFile = path.join(__dirname, "playwright/.auth/user.json");
 
-/**
- * Load .env from platform root
- */
-dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
-
-const ADMIN_EMAIL =
-  process.env.ARCHESTRA_AUTH_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
-const ADMIN_PASSWORD =
-  process.env.ARCHESTRA_AUTH_ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
-
 setup("authenticate", async ({ page }) => {
   // Perform authentication steps
   await page.goto(`${UI_BASE_URL}/auth/sign-in`);
-  await page.getByRole("textbox", { name: "Email" }).fill(ADMIN_EMAIL);
-  await page.getByRole("textbox", { name: "Password" }).fill(ADMIN_PASSWORD);
+  await page.getByRole("textbox", { name: "Email" }).fill(DEFAULT_ADMIN_EMAIL);
+  await page
+    .getByRole("textbox", { name: "Password" })
+    .fill(DEFAULT_ADMIN_PASSWORD);
   await page.getByRole("button", { name: "Login" }).click();
 
   // Wait until the page redirects to the authenticated area
@@ -41,7 +32,7 @@ setup("authenticate", async ({ page }) => {
   await page.waitForTimeout(1000);
 
   // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
+  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({
     timeout: 10000,
   });
 

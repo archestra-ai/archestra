@@ -6,12 +6,11 @@ test.describe("LLM Proxy - OpenAI", () => {
   let agentId: string;
   let trustedDataPolicyId: string;
   let toolInvocationPolicyId: string;
-  let toolPolicyId: string;
+  let toolId: string;
 
   test("blocks tool invocation when untrusted data is consumed", async ({
     request,
     createAgent,
-    createToolPolicy,
     createTrustedDataPolicy,
     createToolInvocationPolicy,
     makeApiRequest,
@@ -72,7 +71,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: `/api/agent-tools?agentId=${agentId}`,
+      urlSuffix: "/api/agent-tools",
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
@@ -81,17 +80,11 @@ test.describe("LLM Proxy - OpenAI", () => {
         at.agent.id === agentId && at.tool.name === "read_file",
     );
     expect(readFileAgentTool).toBeDefined();
+    toolId = readFileAgentTool.id;
 
-    // 3. Create a tool policy for the tool
-    const createdPolicy = await createToolPolicy(request, {
-      toolId: readFileAgentTool.tool.id,
-      name: "e2e-policy-openai",
-    }).then((r) => r.json());
-    toolPolicyId = createdPolicy.id;
-
-    // 4. Create a trusted data policy that marks messages with "untrusted" in content as untrusted
+    // 3. Create a trusted data policy that marks messages with "untrusted" in content as untrusted
     const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-      toolPolicyId,
+      agentToolId: toolId,
       description: "Mark messages containing UNTRUSTED_DATA as untrusted",
       attributePath: "$.content",
       operator: "contains",
@@ -101,11 +94,11 @@ test.describe("LLM Proxy - OpenAI", () => {
     const trustedDataPolicy = await trustedDataPolicyResponse.json();
     trustedDataPolicyId = trustedDataPolicy.id;
 
-    // 5. Create a tool invocation policy that blocks read_file when context is untrusted
+    // 4. Create a tool invocation policy that blocks read_file when context is untrusted
     const toolInvocationPolicyResponse = await createToolInvocationPolicy(
       request,
       {
-        toolPolicyId,
+        agentToolId: toolId,
         argumentPath: "file_path",
         operator: "contains",
         value: "/etc/",
@@ -116,7 +109,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
     toolInvocationPolicyId = toolInvocationPolicy.id;
 
-    // 6. Send a request with untrusted data
+    // 5. Send a request with untrusted data
     const response = await makeApiRequest({
       request,
       method: "post",
@@ -159,7 +152,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     expect(response.ok()).toBeTruthy();
     const responseData = await response.json();
 
-    // 7. Verify the tool call was blocked
+    // 6. Verify the tool call was blocked
     expect(responseData.choices).toBeDefined();
     expect(responseData.choices[0]).toBeDefined();
     expect(responseData.choices[0].message).toBeDefined();
@@ -179,7 +172,7 @@ test.describe("LLM Proxy - OpenAI", () => {
       );
     }
 
-    // 8. Verify the interaction was persisted
+    // 7. Verify the interaction was persisted
     const interactionsResponse = await makeApiRequest({
       request,
       method: "get",
@@ -385,7 +378,6 @@ test.describe("LLM Proxy - OpenAI", () => {
       deleteToolInvocationPolicy,
       deleteTrustedDataPolicy,
       deleteAgent,
-      deleteToolPolicy,
     }) => {
       // Clean up: delete the created resources
       if (toolInvocationPolicyId) {
@@ -393,9 +385,6 @@ test.describe("LLM Proxy - OpenAI", () => {
       }
       if (trustedDataPolicyId) {
         await deleteTrustedDataPolicy(request, trustedDataPolicyId);
-      }
-      if (toolPolicyId) {
-        await deleteToolPolicy(request, toolPolicyId);
       }
       if (agentId) {
         await deleteAgent(request, agentId);
@@ -410,12 +399,11 @@ test.describe("LLM Proxy - Anthropic", () => {
   let agentId: string;
   let trustedDataPolicyId: string;
   let toolInvocationPolicyId: string;
-  let toolPolicyId: string;
+  let toolId: string;
 
   test("blocks tool invocation when untrusted data is consumed", async ({
     request,
     createAgent,
-    createToolPolicy,
     createTrustedDataPolicy,
     createToolInvocationPolicy,
     makeApiRequest,
@@ -474,7 +462,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     const agentToolsResponse = await makeApiRequest({
       request,
       method: "get",
-      urlSuffix: `/api/agent-tools?agentId=${agentId}`,
+      urlSuffix: "/api/agent-tools",
     });
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
@@ -483,17 +471,11 @@ test.describe("LLM Proxy - Anthropic", () => {
       (at: any) => at.agent.id === agentId && at.tool.name === "read_file",
     );
     expect(readFileAgentTool).toBeDefined();
+    toolId = readFileAgentTool.id;
 
-    // 3. Create a tool policy for the tool
-    const createdPolicy = await createToolPolicy(request, {
-      toolId: readFileAgentTool.tool.id,
-      name: "e2e-policy-anthropic",
-    }).then((r) => r.json());
-    toolPolicyId = createdPolicy.id;
-
-    // 4. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted
+    // 3. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted
     const trustedDataPolicyResponse = await createTrustedDataPolicy(request, {
-      toolPolicyId,
+      agentToolId: toolId,
       description: "Mark messages containing UNTRUSTED_DATA as untrusted",
       attributePath: "$.content",
       operator: "contains",
@@ -503,11 +485,11 @@ test.describe("LLM Proxy - Anthropic", () => {
     const trustedDataPolicy = await trustedDataPolicyResponse.json();
     trustedDataPolicyId = trustedDataPolicy.id;
 
-    // 5. Create a tool invocation policy that blocks read_file when accessing /etc/
+    // 4. Create a tool invocation policy that blocks read_file when accessing /etc/
     const toolInvocationPolicyResponse = await createToolInvocationPolicy(
       request,
       {
-        toolPolicyId,
+        agentToolId: toolId,
         argumentPath: "file_path",
         operator: "contains",
         value: "/etc/",
@@ -518,7 +500,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     const toolInvocationPolicy = await toolInvocationPolicyResponse.json();
     toolInvocationPolicyId = toolInvocationPolicy.id;
 
-    // 6. Send a request with untrusted data
+    // 5. Send a request with untrusted data
     const response = await makeApiRequest({
       request,
       method: "post",
@@ -560,7 +542,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     expect(response.ok()).toBeTruthy();
     const responseData = await response.json();
 
-    // 7. Verify the tool call was blocked
+    // 6. Verify the tool call was blocked
     expect(responseData.content).toBeDefined();
     expect(responseData.content.length).toBeGreaterThan(0);
 
@@ -580,7 +562,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     );
     expect(toolUseContent.length).toBe(0);
 
-    // 8. Verify the interaction was persisted
+    // 7. Verify the interaction was persisted
     const interactionsResponse = await makeApiRequest({
       request,
       method: "get",
@@ -607,7 +589,6 @@ test.describe("LLM Proxy - Anthropic", () => {
       deleteToolInvocationPolicy,
       deleteTrustedDataPolicy,
       deleteAgent,
-      deleteToolPolicy,
     }) => {
       // Clean up: delete the created resources
       if (toolInvocationPolicyId) {
@@ -615,9 +596,6 @@ test.describe("LLM Proxy - Anthropic", () => {
       }
       if (trustedDataPolicyId) {
         await deleteTrustedDataPolicy(request, trustedDataPolicyId);
-      }
-      if (toolPolicyId) {
-        await deleteToolPolicy(request, toolPolicyId);
       }
       if (agentId) {
         await deleteAgent(request, agentId);

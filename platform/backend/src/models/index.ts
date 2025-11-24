@@ -30,6 +30,5 @@ export { default as TeamModel } from "./team";
 export { default as TokenPriceModel } from "./token-price";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
-export { default as ToolPolicyModel } from "./tool-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";

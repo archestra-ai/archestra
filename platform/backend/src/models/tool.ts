@@ -1,33 +1,9 @@
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import {
-  and,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  or,
-  type SQL,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import {
-  createPaginatedResult,
-  type PaginatedResult,
-} from "@/database/utils/pagination";
-import type {
-  ExtendedTool,
-  InsertTool,
-  PaginationQuery,
-  Tool,
-  ToolFilters,
-  ToolListItem,
-  ToolSortBy,
-  ToolSortDirection,
-} from "@/types";
+import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
@@ -49,6 +25,14 @@ class ToolModel {
     return parts.length > 1
       ? parts.slice(1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
       : slugifiedName;
+  }
+
+  static async create(tool: InsertTool): Promise<Tool> {
+    const [createdTool] = await db
+      .insert(schema.toolsTable)
+      .values(tool)
+      .returning();
+    return createdTool;
   }
 
   static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
@@ -235,184 +219,6 @@ class ToolModel {
     }
 
     return query;
-  }
-
-  static async findAllPaginated(
-    pagination: PaginationQuery,
-    sorting?: {
-      sortBy?: ToolSortBy;
-      sortDirection?: ToolSortDirection;
-    },
-    filters?: ToolFilters,
-    userId?: string,
-    isAgentAdmin?: boolean,
-  ): Promise<PaginatedResult<ToolListItem>> {
-    const whereConditions: SQL[] = [];
-
-    if (filters?.search) {
-      const searchValue = `%${filters.search.toLowerCase()}%`;
-      const searchCondition = or(
-        sql`LOWER(${schema.toolsTable.name}) LIKE ${searchValue}`,
-        sql`LOWER(${schema.toolsTable.description}) LIKE ${searchValue}`,
-      );
-      whereConditions.push(searchCondition as SQL);
-    }
-
-    if (filters?.origin) {
-      if (filters.origin === "llm-proxy") {
-        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NULL`);
-      } else if (filters.origin === "mcp") {
-        whereConditions.push(sql`${schema.toolsTable.catalogId} IS NOT NULL`);
-      }
-    }
-
-    if (filters?.agentId) {
-      const agentFilter = or(
-        eq(schema.toolsTable.agentId, filters.agentId),
-        sql`EXISTS (SELECT 1 FROM ${schema.agentToolsTable} at WHERE at.tool_id = ${schema.toolsTable.id} AND at.agent_id = ${filters.agentId})`,
-      );
-      whereConditions.push(agentFilter as SQL);
-    }
-
-    if (filters?.mcpServerOwnerId) {
-      whereConditions.push(
-        sql`EXISTS (
-          SELECT 1
-          FROM ${schema.agentToolsTable} owner_at
-          LEFT JOIN ${schema.mcpServersTable} owner_cs
-            ON owner_cs.id = owner_at.credential_source_mcp_server_id
-          LEFT JOIN ${schema.mcpServersTable} owner_es
-            ON owner_es.id = owner_at.execution_source_mcp_server_id
-          WHERE owner_at.tool_id = ${schema.toolsTable.id}
-            AND (
-              owner_cs.owner_id = ${filters.mcpServerOwnerId}
-              OR owner_es.owner_id = ${filters.mcpServerOwnerId}
-            )
-        )`,
-      );
-    }
-
-    if (filters?.excludeArchestraTools) {
-      whereConditions.push(
-        sql`${schema.toolsTable.name} NOT LIKE 'archestra__%'`,
-      );
-    }
-
-    if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-      );
-
-      if (accessibleAgentIds.length === 0) {
-        whereConditions.push(sql`${schema.toolsTable.agentId} IS NULL`);
-      } else {
-        const accessCondition = or(
-          inArray(schema.toolsTable.agentId, accessibleAgentIds),
-          isNotNull(schema.toolsTable.mcpServerId),
-        );
-        whereConditions.push(accessCondition as SQL);
-      }
-    }
-
-    const whereClause =
-      whereConditions.length > 0 ? and(...whereConditions) : undefined;
-
-    const assignedCountSql = sql<number>`COUNT(DISTINCT ${schema.agentToolsTable.agentId})`;
-    const policyCountSql = sql<number>`COUNT(DISTINCT ${schema.toolPoliciesTable.id})`;
-
-    const isAscending = sorting?.sortDirection === "asc";
-    const applyOrder = (value: SQL) =>
-      isAscending ? sql`${value} ASC` : sql`${value} DESC`;
-
-    let orderByClause: SQL;
-    switch (sorting?.sortBy) {
-      case "name":
-        orderByClause = applyOrder(sql`${schema.toolsTable.name}`);
-        break;
-      case "assignedProfiles":
-        orderByClause = applyOrder(assignedCountSql);
-        break;
-      case "policyCount":
-        orderByClause = applyOrder(policyCountSql);
-        break;
-      default:
-        orderByClause = applyOrder(sql`${schema.toolsTable.createdAt}`);
-        break;
-    }
-
-    const itemsPromise = db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        catalogId: schema.toolsTable.catalogId,
-        parameters: schema.toolsTable.parameters,
-        description: schema.toolsTable.description,
-        createdAt: schema.toolsTable.createdAt,
-        updatedAt: schema.toolsTable.updatedAt,
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
-        mcpServer: {
-          id: schema.mcpServersTable.id,
-          name: schema.mcpServersTable.name,
-        },
-        assignedAgentsCount: assignedCountSql,
-        policyCount: policyCountSql,
-      })
-      .from(schema.toolsTable)
-      .leftJoin(
-        schema.agentsTable,
-        eq(schema.toolsTable.agentId, schema.agentsTable.id),
-      )
-      .leftJoin(
-        schema.mcpServersTable,
-        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
-      )
-      .leftJoin(
-        schema.agentToolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .leftJoin(
-        schema.toolPoliciesTable,
-        eq(schema.toolPoliciesTable.toolId, schema.toolsTable.id),
-      )
-      .where(whereClause)
-      .groupBy(
-        schema.toolsTable.id,
-        schema.toolsTable.name,
-        schema.toolsTable.catalogId,
-        schema.toolsTable.parameters,
-        schema.toolsTable.description,
-        schema.toolsTable.createdAt,
-        schema.toolsTable.updatedAt,
-        schema.agentsTable.id,
-        schema.agentsTable.name,
-        schema.mcpServersTable.id,
-        schema.mcpServersTable.name,
-      )
-      .orderBy(orderByClause)
-      .limit(pagination.limit)
-      .offset(pagination.offset);
-
-    const totalPromise = db
-      .select({ total: count() })
-      .from(schema.toolsTable)
-      .where(whereClause);
-
-    const [items, [{ total }]] = await Promise.all([
-      itemsPromise,
-      totalPromise,
-    ]);
-
-    const normalizedItems = items.map((row) => ({
-      ...row,
-      assignedAgentsCount: Number(row.assignedAgentsCount ?? 0),
-      policyCount: Number(row.policyCount ?? 0),
-    }));
-
-    return createPaginatedResult(normalizedItems, Number(total), pagination);
   }
 
   static async findByName(
@@ -622,7 +428,7 @@ class ToolModel {
       .select({
         toolName: schema.toolsTable.name,
         responseModifierTemplate:
-          schema.toolPoliciesTable.responseModifierTemplate,
+          schema.agentToolsTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
         mcpServerCatalogId: schema.mcpServersTable.catalogId,
@@ -646,10 +452,6 @@ class ToolModel {
       .leftJoin(
         schema.internalMcpCatalogTable,
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
-      )
-      .leftJoin(
-        schema.toolPoliciesTable,
-        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
       )
       .where(
         and(

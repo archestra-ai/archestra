@@ -17,8 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@shared": "workspace:*",
-    "dotenv": "^17.2.2"
+    "@shared": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",

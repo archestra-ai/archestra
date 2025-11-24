@@ -211,22 +211,18 @@ class TrustedDataPolicyModel {
         operator: schema.trustedDataPoliciesTable.operator,
         policyValue: schema.trustedDataPoliciesTable.value,
         action: schema.trustedDataPoliciesTable.action,
-        toolResultTreatment: schema.toolPoliciesTable.toolResultTreatment,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.toolsTable)
       .innerJoin(
         schema.agentToolsTable,
         eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
       )
-      .innerJoin(
-        schema.toolPoliciesTable,
-        eq(schema.agentToolsTable.toolPolicyId, schema.toolPoliciesTable.id),
-      )
       .leftJoin(
         schema.trustedDataPoliciesTable,
         eq(
-          schema.toolPoliciesTable.id,
-          schema.trustedDataPoliciesTable.toolPolicyId,
+          schema.agentToolsTable.id,
+          schema.trustedDataPoliciesTable.agentToolId,
         ),
       )
       .where(

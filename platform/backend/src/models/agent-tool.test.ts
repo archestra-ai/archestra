@@ -218,19 +218,13 @@ describe("AgentToolModel.findAllPaginated", () => {
       const tool3 = await makeTool({ name: "tool-3" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: true,
-        },
+        allowUsageWhenUntrustedDataIsPresent: true,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: false,
-        },
+        allowUsageWhenUntrustedDataIsPresent: false,
       });
       await makeAgentTool(agent.id, tool3.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: true,
-        },
+        allowUsageWhenUntrustedDataIsPresent: true,
       });
 
       const resultAsc = await AgentToolModel.findAllPaginated(
@@ -243,15 +237,11 @@ describe("AgentToolModel.findAllPaginated", () => {
       );
 
       // false comes before true
-      expect(
-        resultAsc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(false);
-      expect(
-        resultAsc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultAsc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
+      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
+      expect(resultAsc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
+      expect(resultAsc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(true);
 
       const resultDesc = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -262,15 +252,15 @@ describe("AgentToolModel.findAllPaginated", () => {
         { excludeArchestraTools: true },
       );
 
-      expect(
-        resultDesc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultDesc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultDesc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(false);
+      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
     });
 
     test("sorts by createdAt by default", async ({
@@ -375,28 +365,6 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].agent.id).toBe(agent1.id);
-    });
-
-    test("filters by toolId", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const agent = await makeAgent();
-      const tool1 = await makeTool({ name: "Tool One" });
-      const tool2 = await makeTool({ name: "Tool Two" });
-
-      await makeAgentTool(agent.id, tool1.id);
-      await makeAgentTool(agent.id, tool2.id);
-
-      const result = await AgentToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        undefined,
-        { toolId: tool1.id },
-      );
-
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0].tool.id).toBe(tool1.id);
     });
 
     test("filters by origin (llm-proxy)", async ({

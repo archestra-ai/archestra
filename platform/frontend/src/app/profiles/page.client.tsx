@@ -3,7 +3,15 @@
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Search, Tag, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Search,
+  Tag,
+  Wrench,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -56,6 +64,7 @@ import {
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
+import { AssignToolsDialog } from "./assign-tools-dialog";
 import { ChatConfigDialog } from "./chat-config-dialog";
 
 export default function AgentsPage() {
@@ -209,6 +218,9 @@ function Agents() {
     id: string;
     name: string;
   } | null>(null);
+  const [assigningToolsAgent, setAssigningToolsAgent] = useState<
+    (typeof agents)[number] | null
+  >(null);
   const [chatConfigAgent, setChatConfigAgent] = useState<
     (typeof agents)[number] | null
   >(null);
@@ -364,9 +376,24 @@ function Agents() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => (
-        <div className="text-sm font-medium">{row.original.tools.length}</div>
-      ),
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.tools.length}
+            <PermissionButton
+              permissions={{ profile: ["update"] }}
+              tooltip="Assign Tools"
+              aria-label="Assign Tools"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setAssigningToolsAgent(agent)}
+            >
+              <Wrench className="h-4 w-4" />
+            </PermissionButton>
+          </div>
+        );
+      },
     },
     {
       id: "team",
@@ -517,6 +544,14 @@ function Agents() {
             agent={connectingAgent}
             open={!!connectingAgent}
             onOpenChange={(open) => !open && setConnectingAgent(null)}
+          />
+        )}
+
+        {assigningToolsAgent && (
+          <AssignToolsDialog
+            agent={assigningToolsAgent}
+            open={!!assigningToolsAgent}
+            onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
           />
         )}
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense } from "react";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
-import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolsTable } from "./_parts/tools-table";
 
 export function ToolsClient() {

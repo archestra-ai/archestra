@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useOperators } from "@/lib/policy.query";
+import { useOperators } from "@/lib/tool-policy.query";
 
 interface ToolPolicyOperatorsProps {
   value: string;

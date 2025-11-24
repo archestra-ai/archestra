@@ -88,7 +88,7 @@ export function useTool(toolId: string) {
     queryKey: ["tool", toolId],
     queryFn: async () => {
       const { data } = await getTool({
-        query: {
+        path: {
           toolId,
         },
       });

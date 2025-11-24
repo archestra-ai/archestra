@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { Tool } from "@/app/tools/types";
 import { TokenSelect } from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -14,9 +15,9 @@ import {
   useUnassignTool,
 } from "@/lib/tool.query";
 import { useToolPolicies } from "@/lib/tool-policy.query";
-import type { Tool } from "./types";
+import { ToolDetailShell } from "../_parts/tool-detail-shell";
 
-export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
+function ToolAssignments({ tool }: { tool: Tool }) {
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedPolicy, setSelectedPolicy] = useState("default");
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
@@ -233,5 +234,13 @@ export function ToolAssignmentsPanel({ tool }: { tool: Tool }) {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ToolAssignmentsClient({ toolId }: { toolId: string }) {
+  return (
+    <ToolDetailShell toolId={toolId}>
+      {(tool: Tool) => <ToolAssignments tool={tool} />}
+    </ToolDetailShell>
   );
 }

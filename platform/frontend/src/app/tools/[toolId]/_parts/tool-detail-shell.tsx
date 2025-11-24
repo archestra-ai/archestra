@@ -2,10 +2,10 @@
 
 import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
+import type { Tool } from "@/app/tools/types";
 import { PageLayout } from "@/components/page-layout";
 import { TruncatedText } from "@/components/truncated-text";
 import { useTool } from "@/lib/tool.query";
-import type { Tool } from "./types";
 
 export function ToolDetailShell({
   toolId,
@@ -55,7 +55,7 @@ export function ToolDetailShell({
         href: tab.href,
       }))}
     >
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
         {children(tool)}
       </div>
     </PageLayout>

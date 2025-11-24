@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import type { ToolPolicy } from "@/app/tools/types";
 import { Editor } from "@/components/editor";
 import {
   Accordion,
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useUpdateToolPolicy } from "@/lib/tool-policy.query";
-import type { ToolPolicy } from "./types";
 
 interface ResponseModifierEditorProps {
   toolPolicy: ToolPolicy;

@@ -1,8 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCallback } from "react";
+import type { ToolInvocationPolicy } from "@/app/tools/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,29 +15,18 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
-} from "@/lib/policy.query";
+} from "@/lib/tool-policy.query";
 import { ToolPolicyOperators } from "./tool-policy-operators";
-import type { ToolInvocationPolicy } from "./types";
 
 interface ToolInvocationPoliciesProps {
-  policyId: string;
   rules: ToolInvocationPolicy[];
 }
 
-export function ToolInvocationPolicies({
-  policyId,
-  rules,
-}: ToolInvocationPoliciesProps) {
-  const createInvocationPolicy = useToolInvocationPolicyCreateMutation();
+export function ToolInvocationPolicies({ rules }: ToolInvocationPoliciesProps) {
   const updateInvocationPolicy = useToolInvocationPolicyUpdateMutation();
   const deleteInvocationPolicy = useToolInvocationPolicyDeleteMutation();
-
-  const handleCreateInvocationPolicy = useCallback(() => {
-    createInvocationPolicy.mutate({ toolPolicyId: policyId });
-  }, [createInvocationPolicy, policyId]);
 
   const handleUpdateInvocationPolicy = useCallback(
     (id: string, data: Partial<ToolInvocationPolicy>) => {
@@ -54,17 +44,6 @@ export function ToolInvocationPolicies({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium">Tool invocation policies</div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCreateInvocationPolicy}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add rule
-        </Button>
-      </div>
       {rules.length === 0 ? (
         <p className="text-sm text-muted-foreground">No invocation rules.</p>
       ) : (

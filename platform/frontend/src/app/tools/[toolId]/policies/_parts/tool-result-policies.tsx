@@ -1,8 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCallback } from "react";
+import type { TrustedDataPolicy } from "@/app/tools/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,29 +15,18 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  useToolResultPoliciesCreateMutation,
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
-} from "@/lib/policy.query";
+} from "@/lib/tool-policy.query";
 import { ToolPolicyOperators } from "./tool-policy-operators";
-import type { TrustedDataPolicy } from "./types";
 
 interface ToolResultPoliciesProps {
-  policyId: string;
   rules: TrustedDataPolicy[];
 }
 
-export function ToolResultPolicies({
-  policyId,
-  rules,
-}: ToolResultPoliciesProps) {
-  const createTrustedPolicy = useToolResultPoliciesCreateMutation();
+export function ToolResultPolicies({ rules }: ToolResultPoliciesProps) {
   const updateTrustedPolicy = useToolResultPoliciesUpdateMutation();
   const deleteTrustedPolicy = useToolResultPoliciesDeleteMutation();
-
-  const handleCreateTrustedPolicy = useCallback(() => {
-    createTrustedPolicy.mutate({ toolPolicyId: policyId });
-  }, [createTrustedPolicy, policyId]);
 
   const handleUpdateTrustedPolicy = useCallback(
     (id: string, data: Partial<TrustedDataPolicy>) => {
@@ -54,29 +44,6 @@ export function ToolResultPolicies({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
-          <p className="text-sm text-muted-foreground">
-            Tool results impact agent decisions and actions. This policy allows
-            to mark tool results as &ldquo;trusted&rdquo; or
-            &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
-            <a
-              href="https://archestra.ai/docs/platform-dynamic-tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              Read more about Dynamic Tools.
-            </a>
-          </p>
-          <p className="text-sm text-muted-foreground mt-2"></p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleCreateTrustedPolicy}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add result rule
-        </Button>
-      </div>
       {rules.length === 0 ? (
         <p className="text-sm text-muted-foreground">No result policies.</p>
       ) : (

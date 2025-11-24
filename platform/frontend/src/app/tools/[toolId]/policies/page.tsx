@@ -1,19 +1,10 @@
-"use client";
+import ToolPoliciesClient from "./page.client";
 
-import { ToolDetailShell } from "../../_parts/tool-detail-shell";
-import { ToolPoliciesPanel } from "../../_parts/tool-policies-panel";
-import type { Tool } from "../../_parts/types";
-
-export default function ToolPoliciesPage({
+export default async function ToolPoliciesPage({
   params,
 }: {
-  params: { toolId: string };
+  params: Promise<{ toolId: string }>;
 }) {
-  const { toolId } = params;
-
-  return (
-    <ToolDetailShell toolId={toolId}>
-      {(tool: Tool) => <ToolPoliciesPanel tool={tool} />}
-    </ToolDetailShell>
-  );
+  const { toolId } = await params;
+  return <ToolPoliciesClient toolId={toolId} />;
 }

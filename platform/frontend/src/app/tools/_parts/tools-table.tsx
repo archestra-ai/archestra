@@ -5,16 +5,15 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import type { Tool } from "@/app/tools/types";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents } from "@/lib/agent.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useTools } from "@/lib/tool.query";
-import type { Tool } from "./types";
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;

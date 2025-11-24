@@ -173,9 +173,19 @@ class ToolModel {
         schema.mcpServersTable,
         eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
       )
+      .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.toolPoliciesTable,
+        eq(schema.toolPoliciesTable.toolId, schema.toolsTable.id),
+      )
       .where(eq(schema.toolsTable.id, id))
       .groupBy(
         schema.toolsTable.id,
+        schema.toolsTable.agentId,
+        schema.toolsTable.mcpServerId,
         schema.toolsTable.name,
         schema.toolsTable.catalogId,
         schema.toolsTable.parameters,

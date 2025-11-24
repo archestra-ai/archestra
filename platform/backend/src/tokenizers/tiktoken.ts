@@ -1,4 +1,4 @@
-import { encoding_for_model, get_encoding, type Tiktoken } from "tiktoken";
+import { get_encoding, type Tiktoken } from "tiktoken";
 import { BaseTokenizer, type ProviderMessage } from "./base";
 
 /**

@@ -16,7 +16,7 @@ Ensure you have the following tools installed:
 
 ### Core Requirements
 
-- **Node.js** (v18 or higher) - JavaScript runtime
+- **Node.js** (v18 – v24) - JavaScript runtime
 - **pnpm** (v8 or higher) - Package manager
 
   ```bash

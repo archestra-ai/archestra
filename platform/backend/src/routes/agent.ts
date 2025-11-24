@@ -71,7 +71,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all agents without pagination",
         tags: ["Agents"],
         querystring: z.object({
-          useInChat: z.boolean().optional(),
+          useInChat: z.coerce.boolean().optional(),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },

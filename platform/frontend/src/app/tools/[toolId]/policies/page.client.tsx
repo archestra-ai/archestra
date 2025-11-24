@@ -6,7 +6,13 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import type { Tool, ToolPolicyResultTreatmentOption } from "@/app/tools/types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -116,182 +122,212 @@ function ToolPolicies({ tool }: { tool: Tool }) {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Tool Policies</h3>
-          <p className="text-sm text-muted-foreground">
-            Create reusable policies and apply them to multiple profiles.
-          </p>
-        </div>
-        <Button onClick={handleCreatePolicy}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Policy
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>Tool Policies</CardTitle>
+            <CardDescription>
+              Create reusable policies and apply them to multiple profiles.
+            </CardDescription>
+          </div>
+          <Button
+            onClick={handleCreatePolicy}
+            className="sm:ml-auto w-full sm:w-auto"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Policy
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {isLoadingPolicies ? (
+            <p className="text-sm text-muted-foreground">Loading policies…</p>
+          ) : policies.length === 0 ? (
+            <div className="rounded border border-dashed p-6 text-center text-muted-foreground">
+              No policies yet.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {policies.map((policy) => {
+                const invocationRules = policy.toolInvocationPolicies ?? [];
+                const trustedRules = policy.trustedDataPolicies ?? [];
 
-      {isLoadingPolicies ? (
-        <p className="text-sm text-muted-foreground">Loading policies…</p>
-      ) : policies.length === 0 ? (
-        <div className="rounded border border-dashed p-6 text-center text-muted-foreground">
-          No policies yet.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {policies.map((policy) => {
-            const invocationRules = policy.toolInvocationPolicies ?? [];
-            const trustedRules = policy.trustedDataPolicies ?? [];
-
-            return (
-              <div key={policy.id}>
-                <div className="px-4 text-left hover:no-underline">
-                  <span className="text-sm font-medium">{policy.name}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Input
-                    defaultValue={policy.name}
-                    onBlur={(event) =>
-                      handlePolicyUpdate(policy.id, {
-                        name: event.currentTarget.value,
-                      })
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handlePolicyDelete(policy.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                      <div className="text-sm font-medium">
-                        Allow untrusted data
+                return (
+                  <Card key={policy.id} className="border-muted">
+                    <CardHeader className="space-y-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <CardTitle className="text-base font-semibold">
+                            {policy.name}
+                          </CardTitle>
+                          <CardDescription>
+                            Updated {formatDate({ date: policy.updatedAt })}
+                          </CardDescription>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Input
+                            defaultValue={policy.name}
+                            onBlur={(event) =>
+                              handlePolicyUpdate(policy.id, {
+                                name: event.currentTarget.value,
+                              })
+                            }
+                            className="sm:w-64"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handlePolicyDelete(policy.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Permit usage when context has untrusted data.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={policy.allowUsageWhenUntrustedDataIsPresent}
-                      onCheckedChange={(checked) =>
-                        handlePolicyUpdate(policy.id, {
-                          allowUsageWhenUntrustedDataIsPresent: checked,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-sm font-medium">Result treatment</div>
-                    <Select
-                      defaultValue={policy.toolResultTreatment}
-                      onValueChange={(value: ToolPolicyResultTreatmentOption) =>
-                        handlePolicyUpdate(policy.id, {
-                          toolResultTreatment: value,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(TOOL_RESULT_OPTIONS).map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-sm font-medium">Last updated</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {formatDate({ date: policy.updatedAt })}
-                    </div>
-                  </div>
-                </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <Card className="border-muted bg-muted/30">
+                          <CardContent className="flex items-center justify-between p-4">
+                            <div>
+                              <p className="text-sm font-medium">
+                                Allow untrusted data
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Permit usage when context has untrusted data.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={
+                                policy.allowUsageWhenUntrustedDataIsPresent
+                              }
+                              onCheckedChange={(checked) =>
+                                handlePolicyUpdate(policy.id, {
+                                  allowUsageWhenUntrustedDataIsPresent: checked,
+                                })
+                              }
+                            />
+                          </CardContent>
+                        </Card>
+                        <Card className="border-muted">
+                          <CardContent className="p-4">
+                            <p className="text-sm font-medium">
+                              Result treatment
+                            </p>
+                            <Select
+                              defaultValue={policy.toolResultTreatment}
+                              onValueChange={(
+                                value: ToolPolicyResultTreatmentOption,
+                              ) =>
+                                handlePolicyUpdate(policy.id, {
+                                  toolResultTreatment: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="mt-2">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.values(TOOL_RESULT_OPTIONS).map(
+                                  (option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ),
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-muted bg-muted/30">
+                          <CardContent className="p-4">
+                            <p className="text-sm font-medium">Last updated</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {formatDate({ date: policy.updatedAt })}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
 
-                <div className="rounded-md px-3 py-2 text-sm font-medium hover:no-underline">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold mb-1">
-                        Tool invocation policies
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        FOO BAR BAZ TODO: Add description.{" "}
-                        <a
-                          href="https://archestra.ai/docs/platform-dynamic-tools"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:text-foreground"
-                        >
-                          Read more about Dynamic Tools.
-                        </a>
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCreateInvocationPolicy(policy.id)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add rule
-                    </Button>
-                  </div>
-                  <Card>
-                    <CardContent>
-                      <ToolInvocationPolicies rules={invocationRules} />
+                      <Card className="border-muted">
+                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">
+                              Tool invocation policies
+                            </CardTitle>
+                            <CardDescription>
+                              TODO: Add description.{" "}
+                              <a
+                                href="https://archestra.ai/docs/platform-dynamic-tools"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-foreground"
+                              >
+                                Read more about Dynamic Tools.
+                              </a>
+                            </CardDescription>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              handleCreateInvocationPolicy(policy.id)
+                            }
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add rule
+                          </Button>
+                        </CardHeader>
+                        <CardContent>
+                          <ToolInvocationPolicies rules={invocationRules} />
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-muted">
+                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">
+                              Tool Result Policies
+                            </CardTitle>
+                            <CardDescription>
+                              Tool results impact agent decisions and actions.
+                              Mark results as trusted or untrusted to prevent
+                              acting on untrusted data.{" "}
+                              <a
+                                href="https://archestra.ai/docs/platform-dynamic-tools"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-foreground"
+                              >
+                                Read more about Dynamic Tools.
+                              </a>
+                            </CardDescription>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCreateTrustedPolicy(policy.id)}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add rule
+                          </Button>
+                        </CardHeader>
+                        <CardContent>
+                          <ToolResultPolicies rules={trustedRules} />
+                        </CardContent>
+                      </Card>
+
+                      <ResponseModifierEditor toolPolicy={policy} />
                     </CardContent>
                   </Card>
-                </div>
-
-                <div className="rounded-md px-3 py-2 text-sm font-medium hover:no-underline">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-semibold mb-1">
-                        Tool Result Policies
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Tool results impact agent decisions and actions. This
-                        policy allows to mark tool results as
-                        &ldquo;trusted&rdquo; or &ldquo;untrusted&rdquo; to
-                        prevent agent acting on untrusted data.{" "}
-                        <a
-                          href="https://archestra.ai/docs/platform-dynamic-tools"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:text-foreground"
-                        >
-                          Read more about Dynamic Tools.
-                        </a>
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCreateTrustedPolicy(policy.id)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add result rule
-                    </Button>
-                  </div>
-
-                  <Card>
-                    <CardContent>
-                      <ToolResultPolicies rules={trustedRules} />
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <ResponseModifierEditor toolPolicy={policy} />
-              </div>
-            );
-          })}
-        </div>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

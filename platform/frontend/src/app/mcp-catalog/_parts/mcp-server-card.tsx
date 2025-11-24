@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import {
   Building2,
   FileText,
+  Info,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -98,6 +99,7 @@ export type McpServerCardProps = {
   onInstallLocalServer: () => void;
   onInstallLocalServerTeam: () => void;
   onReinstall: () => void;
+  onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
@@ -123,6 +125,7 @@ export function McpServerCard({
   onInstallLocalServer,
   onInstallLocalServerTeam,
   onReinstall,
+  onDetails,
   onEdit,
   onDelete,
   onCancelInstallation,
@@ -266,6 +269,10 @@ export function McpServerCard({
               )}
             </Tooltip>
           </TooltipProvider>
+          <DropdownMenuItem onClick={onDetails}>
+            <Info className="mr-2 h-4 w-4" />
+            About
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onEdit}>
             <Pencil className="mr-2 h-4 w-4" />
             Edit

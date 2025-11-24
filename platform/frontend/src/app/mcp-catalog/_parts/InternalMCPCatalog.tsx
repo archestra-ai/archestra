@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
+import { useMcpRegistryServer } from "@/lib/external-mcp-catalog.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
@@ -19,6 +20,7 @@ import {
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
+import { DetailsDialog } from "./details-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { LocalServerInstallDialog } from "./local-server-install-dialog";
 import {
@@ -76,6 +78,10 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
+  const [detailsServerName, setDetailsServerName] = useState<string | null>(
+    null,
+  );
+  const { data: detailsServerData } = useMcpRegistryServer(detailsServerName);
 
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
@@ -600,6 +606,9 @@ export function InternalMCPCatalog({
                   }
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
+                  onDetails={() => {
+                    setDetailsServerName(item.name);
+                  }}
                   onDelete={() => setDeletingItem(item)}
                   onCancelInstallation={handleCancelInstallation}
                   currentUserInstalledLocalServer={
@@ -649,6 +658,13 @@ export function InternalMCPCatalog({
             }
           }
         }}
+      />
+
+      <DetailsDialog
+        onClose={() => {
+          setDetailsServerName(null);
+        }}
+        server={detailsServerData || null}
       />
 
       <DeleteCatalogDialog

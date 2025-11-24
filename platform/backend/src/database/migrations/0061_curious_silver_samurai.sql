@@ -85,8 +85,7 @@ BEGIN
       response_modifier_template
     )
     SELECT
-      -- Globally unique name to satisfy tool_policies_name_unique
-      gen_random_uuid(),
+      'Policy for ' || COALESCE(t.name, 'Tool') || ' - ' || policy_index || ' (' || LEFT(organization_id, 8) || ')',
       np.tool_id,
       np.organization_id,
       np.allow_usage_when_untrusted_data_is_present,

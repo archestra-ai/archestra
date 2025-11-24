@@ -1257,7 +1257,7 @@ export const getRole = <ThrowOnError extends boolean = false>(options: Options<G
 };
 
 /**
- * Update a custom role
+ * Update a custom role (title and/or permissions only, name is immutable)
  */
 export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => {
     return (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({

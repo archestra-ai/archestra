@@ -324,9 +324,31 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Convert tool results to TOON format if enabled on agent
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+
       if (resolvedAgent.convertToolResultsToToon) {
-        filteredMessages =
+        const { messages: convertedMessages, compressionStats } =
           utils.adapters.anthropic.convertToolResultsToToon(filteredMessages);
+        filteredMessages = convertedMessages;
+
+        // Calculate token counts if tool results were actually compressed
+        if (compressionStats.toolResults > 0) {
+          const tokenizer = utils.tokenizers.getTokenizer("anthropic");
+          // Estimate tokens from character count (character length serves as proxy)
+          toonTokensBefore = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalBeforeLength),
+            },
+          ]);
+          toonTokensAfter = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalAfterLength),
+            },
+          ]);
+        }
       }
 
       fastify.log.info(
@@ -657,6 +679,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage.output,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         // Send message_delta with stop_reason and usage
@@ -771,6 +795,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               outputTokens: tokenUsage.output,
               cost: cost?.toFixed(10) ?? null,
               baselineCost: baselineCost?.toFixed(10) ?? null,
+              toonTokensBefore,
+              toonTokensAfter,
             });
 
             return reply.send(response);
@@ -816,6 +842,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage.output,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         return reply.send(response);

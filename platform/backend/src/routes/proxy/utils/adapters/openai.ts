@@ -223,11 +223,21 @@ export function toolResultsToMessages(
 
 /**
  * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression statistics
  */
-export function convertToolResultsToToon(
-  messages: OpenAiMessages,
-): OpenAiMessages {
-  return messages.map((message) => {
+export function convertToolResultsToToon(messages: OpenAiMessages): {
+  messages: OpenAiMessages;
+  compressionStats: {
+    totalBeforeLength: number;
+    totalAfterLength: number;
+    toolResults: number;
+  };
+} {
+  let totalBeforeLength = 0;
+  let totalAfterLength = 0;
+  let toolResults = 0;
+
+  const result = messages.map((message) => {
     // Only process tool messages (tool results)
     if (message.role === "tool") {
       // Only convert string content
@@ -237,6 +247,11 @@ export function convertToolResultsToToon(
           const parsed = JSON.parse(message.content);
           const beforeJson = message.content;
           const afterToon = toonEncode(parsed);
+
+          // Track compression stats
+          totalBeforeLength += beforeJson.length;
+          totalAfterLength += afterToon.length;
+          toolResults++;
 
           logger.info(
             {
@@ -279,6 +294,15 @@ export function convertToolResultsToToon(
 
     return message;
   });
+
+  return {
+    messages: result,
+    compressionStats: {
+      totalBeforeLength,
+      totalAfterLength,
+      toolResults,
+    },
+  };
 }
 
 /** Returns input and output usage tokens */

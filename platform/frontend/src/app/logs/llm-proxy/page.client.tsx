@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronRightIcon, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronRightIcon, ChevronUp, Info } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Savings } from "@/components/savings";
@@ -240,7 +240,7 @@ function LogsTable({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="text-xs text-muted-foreground cursor-default">
-                    N/A
+                    –
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
@@ -261,6 +261,51 @@ function LogsTable({
               tooltip="hover"
             />
           </div>
+        );
+      },
+    },
+    {
+      id: "toonSavings",
+      header: "Tool Compression",
+      cell: ({ row }) => {
+        const interaction = new DynamicInteraction(row.original);
+        const toonSavings = interaction.getToonSavings();
+
+        if (!toonSavings) {
+          return <span className="text-xs text-muted-foreground">–</span>;
+        }
+
+        const percentage =
+          toonSavings.percentageSaved % 1 === 0
+            ? toonSavings.percentageSaved.toFixed(0)
+            : toonSavings.percentageSaved.toFixed(1);
+
+        return (
+          <TooltipProvider>
+            <div className="text-xs inline-flex items-center gap-1 group">
+              <span className="text-green-600 dark:text-green-400">
+                -{percentage}%
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-1">
+                    <div>
+                      Original: {toonSavings.originalSize.toLocaleString()}{" "}
+                      {toonSavings.originalSize === 1 ? "token" : "tokens"}
+                    </div>
+                    <div className="text-green-600 dark:text-green-400">
+                      Saved: {toonSavings.savedCharacters.toLocaleString()}{" "}
+                      {toonSavings.savedCharacters === 1 ? "token" : "tokens"}{" "}
+                      (-{percentage}%)
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         );
       },
     },

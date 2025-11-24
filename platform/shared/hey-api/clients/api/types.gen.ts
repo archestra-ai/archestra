@@ -7193,6 +7193,8 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -7206,6 +7208,8 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -7219,6 +7223,8 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -7318,6 +7324,8 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -7331,6 +7339,8 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -7344,6 +7354,8 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
         createdAt: string;
     };
 };

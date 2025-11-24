@@ -294,9 +294,31 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Convert tool results to TOON format if enabled on agent
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+
       if (resolvedAgent.convertToolResultsToToon) {
-        filteredMessages =
+        const { messages: convertedMessages, compressionStats } =
           utils.adapters.openai.convertToolResultsToToon(filteredMessages);
+        filteredMessages = convertedMessages;
+
+        // Calculate token counts if tool results were actually compressed
+        if (compressionStats.toolResults > 0) {
+          const tokenizer = utils.tokenizers.getTokenizer("openai");
+          // Estimate tokens from character count (character length serves as proxy)
+          toonTokensBefore = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalBeforeLength),
+            },
+          ]);
+          toonTokensAfter = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalAfterLength),
+            },
+          ]);
+        }
       }
 
       fastify.log.info(
@@ -617,6 +639,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage?.output || null,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -726,6 +750,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage.output,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         return reply.send(response);

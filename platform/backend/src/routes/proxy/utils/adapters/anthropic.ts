@@ -249,11 +249,20 @@ export function toolResultsToMessages(
 
 /**
  * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression statistics
  */
-export function convertToolResultsToToon(
-  messages: AnthropicMessages,
-): AnthropicMessages {
+export function convertToolResultsToToon(messages: AnthropicMessages): {
+  messages: AnthropicMessages;
+  compressionStats: {
+    totalBeforeLength: number;
+    totalAfterLength: number;
+    toolResults: number;
+  };
+} {
   let toolResultCount = 0;
+  let totalBeforeLength = 0;
+  let totalAfterLength = 0;
+
   const result = messages.map((message) => {
     // Only process user messages with content arrays that contain tool_result blocks
     if (message.role === "user" && Array.isArray(message.content)) {
@@ -275,6 +284,10 @@ export function convertToolResultsToToon(
               const parsed = JSON.parse(contentBlock.content);
               const beforeJson = contentBlock.content;
               const afterToon = toonEncode(parsed);
+
+              // Track compression stats
+              totalBeforeLength += beforeJson.length;
+              totalAfterLength += afterToon.length;
 
               logger.info(
                 {
@@ -326,6 +339,10 @@ export function convertToolResultsToToon(
                   const parsed = JSON.parse(block.text);
                   const beforeJson = block.text;
                   const afterToon = toonEncode(parsed);
+
+                  // Track compression stats
+                  totalBeforeLength += beforeJson.length;
+                  totalAfterLength += afterToon.length;
 
                   logger.info(
                     {
@@ -392,7 +409,14 @@ export function convertToolResultsToToon(
     "convertToolResultsToToon completed",
   );
 
-  return result;
+  return {
+    messages: result,
+    compressionStats: {
+      totalBeforeLength,
+      totalAfterLength,
+      toolResults: toolResultCount,
+    },
+  };
 }
 
 /** Returns input and output usage tokens */

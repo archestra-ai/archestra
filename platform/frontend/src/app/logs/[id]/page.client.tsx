@@ -167,6 +167,34 @@ function LogDetail({
                   </div>
                 </div>
               )}
+              {(() => {
+                const toonSavings = interaction.getToonSavings();
+                if (!toonSavings) return null;
+
+                const percentage =
+                  toonSavings.percentageSaved % 1 === 0
+                    ? toonSavings.percentageSaved.toFixed(0)
+                    : toonSavings.percentageSaved.toFixed(1);
+
+                return (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      TOON Compression Savings
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-green-600 dark:text-green-400 font-medium">
+                        -{percentage}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {toonSavings.savedCharacters.toLocaleString()}{" "}
+                        {toonSavings.savedCharacters === 1 ? "token" : "tokens"}{" "}
+                        saved ({toonSavings.compressedSize.toLocaleString()} /{" "}
+                        {toonSavings.originalSize.toLocaleString()})
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {isDualLlmRelevant && (
                 <div>
                   <div className="text-sm text-muted-foreground mb-2">

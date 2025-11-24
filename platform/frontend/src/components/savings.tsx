@@ -38,7 +38,7 @@ export function Savings({
 
   let content = null;
   if (format === "percent") {
-    content = savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`;
+    content = savings > 0 ? `-${savingsPercent}%` : `${savingsPercent}%`;
   } else if (format === "number") {
     content = savings === 0 ? "$0" : formatCost(Math.abs(savings));
   }
@@ -68,7 +68,7 @@ export function Savings({
                   <div>Baseline: {formatCost(baselineCostNum)}</div>
                   <div className={colorClass}>
                     Savings: {formatCost(Math.abs(savings))} (
-                    {savings > 0 ? `+${savingsPercent}%` : `${savingsPercent}%`}
+                    {savings > 0 ? `-${savingsPercent}%` : `${savingsPercent}%`}
                     )
                   </div>
                 </>

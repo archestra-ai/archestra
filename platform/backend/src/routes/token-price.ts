@@ -18,8 +18,8 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetTokenPrices,
-        description: "Get all token prices",
-        tags: ["Token Prices"],
+        description: "Get all model prices",
+        tags: ["Model Prices"],
         response: constructResponseSchema(z.array(SelectTokenPriceSchema)),
       },
     },
@@ -36,8 +36,8 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateTokenPrice,
-        description: "Create a new token price",
-        tags: ["Token Prices"],
+        description: "Create a new model price",
+        tags: ["Model Prices"],
         body: CreateTokenPriceSchema,
         response: constructResponseSchema(SelectTokenPriceSchema),
       },
@@ -60,8 +60,8 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetTokenPrice,
-        description: "Get a token price by ID",
-        tags: ["Token Prices"],
+        description: "Get a model price by ID",
+        tags: ["Model Prices"],
         params: z.object({
           id: UuidIdSchema,
         }),
@@ -84,8 +84,8 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateTokenPrice,
-        description: "Update a token price",
-        tags: ["Token Prices"],
+        description: "Update a model price",
+        tags: ["Model Prices"],
         params: z.object({
           id: UuidIdSchema,
         }),
@@ -109,8 +109,8 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteTokenPrice,
-        description: "Delete a token price",
-        tags: ["Token Prices"],
+        description: "Delete a model price",
+        tags: ["Model Prices"],
         params: z.object({
           id: UuidIdSchema,
         }),

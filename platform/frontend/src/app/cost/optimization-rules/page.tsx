@@ -556,7 +556,7 @@ function OptimizationRuleRow({
                   <TooltipContent className="max-w-70 text-wrap">
                     <p>
                       No pricing configured for this model. This rule will not
-                      be applied. Add pricing on the Token Price page.
+                      be applied. Add pricing on the Model Price page.
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -830,7 +830,7 @@ export default function OptimizationRulesPage() {
                         <TooltipContent className="max-w-70 text-wrap">
                           <p>
                             Only models with configured pricing can be selected.
-                            Add pricing for more models on the Token Price page.
+                            Add pricing for more models on the Model Price page.
                           </p>
                         </TooltipContent>
                       </Tooltip>

@@ -33,7 +33,7 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 - **Cost**: <http://localhost:3000/cost> (Redirects to /cost/statistics)
 - **Cost Statistics**: <http://localhost:3000/cost/statistics> (Usage analytics with time series charts and custom date ranges)
 - **Cost Limits**: <http://localhost:3000/cost/limits> (Token usage limits management with per-profile configuration)
-- **Token Price**: <http://localhost:3000/cost/token-price> (Model pricing configuration)
+- **Model Price**: <http://localhost:3000/cost/token-price> (Model pricing configuration)
 - **Optimization Rules**: <http://localhost:3000/cost/optimization-rules> (Cost optimization policies)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>

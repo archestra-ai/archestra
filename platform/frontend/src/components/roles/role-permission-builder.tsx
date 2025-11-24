@@ -68,7 +68,7 @@ const resourceLabels: Record<Resource, string> = {
   ac: "Access Control",
   conversation: "Conversations",
   limit: "Limits",
-  tokenPrice: "Token Prices",
+  tokenPrice: "Model Prices",
   chatSettings: "Chat Settings",
   prompt: "Prompts",
 };

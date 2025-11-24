@@ -235,7 +235,7 @@ function TokenPriceRow({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Token Price</AlertDialogTitle>
+                <AlertDialogTitle>Delete Model Price</AlertDialogTitle>
                 <AlertDialogDescription>
                   Are you sure you want to delete the pricing for{" "}
                   {tokenPrice.model}? This action cannot be undone.
@@ -308,9 +308,9 @@ export default function TokenPricePage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Token Pricing</CardTitle>
+              <CardTitle>Model Pricing</CardTitle>
               <CardDescription>
-                Configure token pricing for different models (per million
+                Configure model pricing for different models (per million
                 tokens)
               </CardDescription>
             </div>

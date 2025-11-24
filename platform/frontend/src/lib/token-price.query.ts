@@ -42,11 +42,11 @@ export function useCreateTokenPrice() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tokenPrices"] });
-      toast.success("Token price created successfully");
+      toast.success("Model price created successfully");
     },
     onError: (error) => {
       console.error("Create token price error:", error);
-      toast.error("Failed to create token price");
+      toast.error("Failed to create model price");
     },
   });
 }
@@ -71,11 +71,11 @@ export function useUpdateTokenPrice() {
       queryClient.invalidateQueries({
         queryKey: ["tokenPrices", variables.id],
       });
-      toast.success("Token price updated successfully");
+      toast.success("Model price updated successfully");
     },
     onError: (error) => {
       console.error("Update token price error:", error);
-      toast.error("Failed to update token price");
+      toast.error("Failed to update model price");
     },
   });
 }
@@ -90,11 +90,11 @@ export function useDeleteTokenPrice() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tokenPrices"] });
       queryClient.removeQueries({ queryKey: ["tokenPrices", variables.id] });
-      toast.success("Token price deleted successfully");
+      toast.success("Model price deleted successfully");
     },
     onError: (error) => {
       console.error("Delete token price error:", error);
-      toast.error("Failed to delete token price");
+      toast.error("Failed to delete model price");
     },
   });
 }

@@ -6,19 +6,20 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-
-import type { PromptType } from "@/types";
+import agentsTable from "./agent";
 
 const promptsTable = pgTable("prompts", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: text("organization_id").notNull(),
   name: text("name").notNull(),
-  type: text("type").$type<PromptType>().notNull(),
-  content: text("content").notNull(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agentsTable.id, { onDelete: "cascade" }),
+  userPrompt: text("user_prompt"),
+  systemPrompt: text("system_prompt"),
   version: integer("version").notNull().default(1),
   parentPromptId: uuid("parent_prompt_id"),
   isActive: boolean("is_active").notNull().default(true),
-  createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

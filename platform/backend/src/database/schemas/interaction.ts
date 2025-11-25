@@ -33,6 +33,7 @@ const interactionsTable = pgTable(
     cost: numeric("cost", { precision: 13, scale: 10 }),
     toonTokensBefore: integer("toon_tokens_before"),
     toonTokensAfter: integer("toon_tokens_after"),
+    toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

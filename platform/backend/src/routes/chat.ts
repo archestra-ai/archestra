@@ -8,10 +8,10 @@ import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
   AgentModel,
-  AgentPromptModel,
   ChatSettingsModel,
   ConversationModel,
   MessageModel,
+  PromptModel,
   SecretModel,
 } from "@/models";
 import {
@@ -58,38 +58,31 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools, agent prompts, and chat settings in parallel
-      const [mcpTools, agentPrompts, chatSettings] = await Promise.all([
+      const [mcpTools, prompts, chatSettings] = await Promise.all([
         getChatMcpTools(conversation.agentId),
-        AgentPromptModel.findByAgentIdWithPrompts(conversation.agentId),
+        PromptModel.findByAgentId(conversation.agentId),
         ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
 
-      // Separate system and regular prompts
-      const systemPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "system",
-      );
-      const regularPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "regular",
-      );
-
-      // Build system prompt from agent's assigned prompts
+      // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
+      const systemPromptParts: string[] = [];
+      const userPromptParts: string[] = [];
 
-      if (systemPrompts.length > 0) {
-        systemPrompt = systemPrompts[0].prompt.content;
+      // Collect system and user prompts from all assigned prompts
+      for (const prompt of prompts) {
+        if (prompt.systemPrompt) {
+          systemPromptParts.push(prompt.systemPrompt);
+        }
+        if (prompt.userPrompt) {
+          userPromptParts.push(prompt.userPrompt);
+        }
       }
 
-      // Append regular prompts to system prompt if any exist
-      if (regularPrompts.length > 0) {
-        const regularPromptsText = regularPrompts
-          .map((ap) => ap.prompt.content)
-          .join("\n\n");
-
-        if (systemPrompt) {
-          systemPrompt = `${systemPrompt}\n\n${regularPromptsText}`;
-        } else {
-          systemPrompt = regularPromptsText;
-        }
+      // Combine all prompts into system prompt (system prompts first, then user prompts)
+      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
+        const allParts = [...systemPromptParts, ...userPromptParts];
+        systemPrompt = allParts.join("\n\n");
       }
 
       fastify.log.info(
@@ -100,9 +93,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
-          promptsCount: agentPrompts.length,
-          hasSystemPrompt: systemPrompts.length > 0,
-          regularPromptsCount: regularPrompts.length,
+          promptsCount: prompts.length,
+          hasSystemPromptParts: systemPromptParts.length > 0,
+          hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
         },
         "Starting chat stream",

@@ -16,13 +16,11 @@ const {
 } = archestraApiSdk;
 
 export function usePrompts(params?: {
-  type?: "system" | "regular";
   initialData?: archestraApiTypes.GetPromptsResponses["200"];
 }) {
   return useSuspenseQuery({
-    queryKey: ["prompts", params?.type],
-    queryFn: async () =>
-      (await getPrompts({ query: { type: params?.type } })).data ?? [],
+    queryKey: ["prompts"],
+    queryFn: async () => (await getPrompts()).data ?? [],
     initialData: params?.initialData,
   });
 }
@@ -48,8 +46,9 @@ export function useCreatePrompt() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      type: "system" | "regular";
-      content: string;
+      agentId: string;
+      userPrompt?: string;
+      systemPrompt?: string;
     }) => {
       const response = await createPrompt({ body: data });
       return response.data;
@@ -68,7 +67,11 @@ export function useUpdatePrompt() {
       data,
     }: {
       id: string;
-      data: { name?: string; content?: string };
+      data: {
+        agentId?: string;
+        userPrompt?: string;
+        systemPrompt?: string;
+      };
     }) => {
       const response = await updatePrompt({ path: { id }, body: data });
       return response.data;
@@ -79,8 +82,35 @@ export function useUpdatePrompt() {
       queryClient.invalidateQueries({
         queryKey: ["prompts", variables.id, "versions"],
       });
-      // Invalidate agent prompts cache since prompt migration updates agent relationships
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useRollbackPrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      versionId,
+    }: {
+      id: string;
+      versionId: string;
+    }) => {
+      // Manual API call until SDK is regenerated after server restart
+      const response = await fetch(`/api/prompts/${id}/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      if (!response.ok) throw new Error("Rollback failed");
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["prompts", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["prompts", variables.id, "versions"],
+      });
     },
   });
 }
@@ -94,9 +124,6 @@ export function useDeletePrompt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
-      // Invalidate agent prompts cache since deleting a prompt removes
-      // it from all agents (cascade delete on agent-prompt relationships)
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

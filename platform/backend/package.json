@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && pnpm sentry:sourcemaps",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.js",
     "dev": "tsup --watch --onSuccess \"node --enable-source-maps dist/server.js\"",
     "dev:debug": "tsup --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.js\"",
@@ -22,7 +22,8 @@
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
-    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
+    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli sourcemaps upload --org archestra --project archestra-platform-backend ./dist"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.45",
@@ -48,6 +49,7 @@
     "@opentelemetry/sdk-node": "^0.208.0",
     "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.38.0",
+    "@sentry/cli": "^2.58.2",
     "@sentry/core": "^10.25.0",
     "@sentry/node": "^10.25.0",
     "@sentry/opentelemetry": "^10.25.0",

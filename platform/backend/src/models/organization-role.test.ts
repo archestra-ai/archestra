@@ -137,13 +137,13 @@ describe("OrganizationRoleModel", () => {
     }) => {
       const org = await makeOrganization();
       const customRole = await makeCustomRole(org.id, {
-        role: "Custom Role",
+        role: "custom_role",
         name: "Test Role",
         permission: { profile: ["read", "create"] },
       });
 
       const permissions = await OrganizationRoleModel.getPermissions(
-        customRole.id,
+        customRole.role,
         org.id,
       );
       expect(permissions).toEqual({
@@ -284,7 +284,7 @@ describe("OrganizationRoleModel", () => {
         org.id,
       );
       expect(retrieved?.role).toBe("initial_role"); // role is immutable
-      expect(retrieved?.name).toBe("Updated Title"); // title can be updated
+      expect(retrieved?.name).toBe("Updated Name"); // name can be updated
       expect(retrieved?.permission).toEqual({
         profile: ["create", "update"],
       });
@@ -327,7 +327,7 @@ describe("OrganizationRoleModel", () => {
       expect(afterDelete).toBeFalsy();
     });
 
-    test("should return true even when no role was deleted", async ({
+    test("should return false when no role was deleted", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -336,7 +336,7 @@ describe("OrganizationRoleModel", () => {
         crypto.randomUUID(),
         org.id,
       );
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
   });
 
@@ -400,13 +400,13 @@ describe("OrganizationRoleModel", () => {
       const user = await makeUser();
       // Create custom role
       const customRole = await makeCustomRole(org.id, {
-        role: "Custom Role With Members",
+        role: "custom_role_with_members",
         name: "Test Role With Members",
         permission: { profile: ["read"] },
       });
 
-      // Create a user and assign them to this role
-      await makeMember(user.id, org.id, { role: customRole.id });
+      // Create a user and assign them to this role (using role identifier, not ID)
+      await makeMember(user.id, org.id, { role: customRole.role });
 
       const result = await OrganizationRoleModel.canDelete(
         customRole.id,

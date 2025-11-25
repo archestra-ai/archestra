@@ -59,10 +59,6 @@ beforeEach(() => {
       user: { id: "test-user", email: "test@example.com" },
       session: { id: "test-session" },
     },
-    isPending: false,
-    isFetching: false,
-    isLoading: false,
-    error: null,
   } as ReturnType<typeof authClient.useSession>);
 });
 

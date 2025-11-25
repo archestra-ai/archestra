@@ -221,69 +221,6 @@ describe("OrganizationRoleModel", () => {
     });
   });
 
-  describe("isNameUnique", () => {
-    test("should return false for predefined role names", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const isUnique = await OrganizationRoleModel.isNameUnique(
-        ADMIN_ROLE_NAME,
-        org.id,
-      );
-      expect(isUnique).toBe(false);
-    });
-
-    test("should return true for unique custom role name", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const isUnique = await OrganizationRoleModel.isNameUnique(
-        "unique-name",
-        org.id,
-      );
-      expect(isUnique).toBe(true);
-    });
-
-    test("should return false for existing custom role name", async ({
-      makeCustomRole,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      await makeCustomRole(org.id, {
-        role: "Existing Role",
-        name: "Test Role",
-        permission: { profile: ["read"] },
-      });
-
-      const isUnique = await OrganizationRoleModel.isNameUnique(
-        "Existing Role",
-        org.id,
-      );
-      expect(isUnique).toBe(false);
-    });
-
-    test("should exclude current role when checking uniqueness", async ({
-      makeCustomRole,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      // Create a custom role
-      const currentRole = await makeCustomRole(org.id, {
-        role: "Current Role",
-        name: "Test Role",
-        permission: { profile: ["read"] },
-      });
-
-      // Should return true when excluding the current role
-      const isUnique = await OrganizationRoleModel.isNameUnique(
-        "Current Role",
-        org.id,
-        currentRole.id,
-      );
-      expect(isUnique).toBe(true);
-    });
-  });
-
   describe("create", () => {
     test("should create custom role successfully", async ({
       makeCustomRole,

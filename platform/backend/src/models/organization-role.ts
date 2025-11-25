@@ -152,37 +152,6 @@ class OrganizationRoleModel {
   }
 
   /**
-   * Validate role name uniqueness within organization
-   */
-  static async isNameUnique(
-    roleName: string,
-    organizationId: string,
-    excludeRoleId?: string,
-  ): Promise<boolean> {
-    // Check predefined role names first
-    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
-      return false;
-    }
-
-    // Check custom role names
-    const [result] = await db
-      .select()
-      .from(schema.organizationRolesTable)
-      .where(
-        and(
-          eq(schema.organizationRolesTable.role, roleName),
-          eq(schema.organizationRolesTable.organizationId, organizationId),
-          excludeRoleId
-            ? ne(schema.organizationRolesTable.id, excludeRoleId)
-            : undefined,
-        ),
-      )
-      .limit(1);
-
-    return !result;
-  }
-
-  /**
    * Get a role by ID and organization
    */
   static async getById(

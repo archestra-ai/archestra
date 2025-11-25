@@ -9,7 +9,6 @@ import type {
 } from "@/types";
 import MemberModel from "./member";
 import SessionModel from "./session";
-import UserModel from "./user";
 
 class InvitationModel {
   static async getById(invitationId: string) {

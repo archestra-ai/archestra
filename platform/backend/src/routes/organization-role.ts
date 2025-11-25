@@ -9,13 +9,12 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
-  UuidIdSchema,
 } from "@/types";
 
-const CreateUpdateRoleTitleSchema = z
+const CreateUpdateRoleNameSchema = z
   .string()
-  .min(1, "Role title is required")
-  .max(50, "Role title must be less than 50 characters");
+  .min(1, "Role name is required")
+  .max(50, "Role name must be less than 50 characters");
 
 const CustomRoleIdSchema = z
   .string()
@@ -26,10 +25,9 @@ const PredefinedRoleNameOrCustomRoleIdSchema = z
   .describe("Predefined role name or custom role ID");
 
 /**
- * Generate an immutable role name from a title
- * Converts to lowercase and replaces spaces/special chars with underscores
+ * Generates an immutable role identifier from a human-readable name
  */
-const generateRoleName = (title: string): string => {
+const generateRoleIdentifier = (title: string): string => {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
@@ -63,7 +61,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new custom role",
         tags: ["Roles"],
         body: z.object({
-          name: CreateUpdateRoleTitleSchema,
+          name: CreateUpdateRoleNameSchema,
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
@@ -71,10 +69,27 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { name, permission } = request.body;
-      const { organizationId } = request;
+      const { organizationId, user } = request;
 
-      // Generate immutable role identifier from name
-      const roleIdentifier = generateRoleName(name);
+      // Get user's permissions to validate they can grant these permissions
+      const userPermissions = await UserModel.getUserPermissions(
+        user.id,
+        organizationId,
+      );
+
+      const validation = OrganizationRoleModel.validateRolePermissions(
+        userPermissions,
+        permission,
+      );
+
+      if (!validation.valid) {
+        throw new ApiError(
+          403,
+          `You cannot grant permissions you don't have: ${validation.missingPermissions.join(", ")}`,
+        );
+      }
+
+      const roleIdentifier = generateRoleIdentifier(name);
 
       logger.info(
         {
@@ -83,7 +98,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           permission,
           organizationId,
         },
-        "🔍 Creating role with better-auth API",
+        "Creating role with better-auth API",
       );
 
       // Use better-auth's createOrgRole API
@@ -100,31 +115,22 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
 
-        logger.info({ result }, "✅ Better-auth createOrgRole result");
+        logger.info({ result }, "Better-auth createOrgRole result");
 
         // Extract the role data from better-auth response
         if (!result.roleData) {
           throw new ApiError(500, "Role created but data not returned");
         }
 
-        const roleData = result.roleData;
-
-        // Transform to our expected format
-        const responseData = {
-          id: roleData.id,
-          role: roleData.role,
-          name: roleData.name || name,
-          organizationId: roleData.organizationId,
-          permission: roleData.permission,
+        // Add predefined flag and ensure updatedAt is defined
+        return reply.send({
+          ...result.roleData,
+          updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
           predefined: false,
-          createdAt: roleData.createdAt,
-          updatedAt: roleData.updatedAt || roleData.createdAt,
-        };
-
-        return reply.send(responseData);
+        });
       } catch (error) {
         const err = error as { status?: number; message?: string };
-        logger.error({ error }, "❌ Better-auth createOrgRole failed");
+        logger.error({ error }, "Better-auth createOrgRole failed");
         // Better-auth returns detailed error messages
         throw new ApiError(
           err.status || 400,
@@ -166,14 +172,13 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateRole,
-        description:
-          "Update a custom role (name and/or permissions only, role identifier is immutable)",
+        description: "Update a custom role",
         tags: ["Roles"],
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
         body: z.object({
-          name: CreateUpdateRoleTitleSchema.optional(),
+          name: CreateUpdateRoleNameSchema.optional(),
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),

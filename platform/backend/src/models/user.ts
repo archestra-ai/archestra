@@ -2,7 +2,6 @@ import {
   ADMIN_ROLE_NAME,
   DEFAULT_ADMIN_EMAIL,
   type Permissions,
-  type PredefinedRoleName,
 } from "@shared";
 import { and, eq, getTableColumns } from "drizzle-orm";
 import { betterAuth } from "@/auth";
@@ -10,38 +9,46 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
+import MemberModel from "./member";
+import OrganizationModel from "./organization";
 import OrganizationRoleModel from "./organization-role";
 
 class UserModel {
+  /** Creates user and associates it with an admin member */
   static async createOrGetExistingDefaultAdminUser({
     email = config.auth.adminDefaultEmail,
     password = config.auth.adminDefaultPassword,
-    role = ADMIN_ROLE_NAME,
     name = "Admin",
+    role = ADMIN_ROLE_NAME,
   }: {
     email?: string;
     password?: string;
-    role?: PredefinedRoleName;
     name?: string;
+    role?: string;
   } = {}) {
     try {
+      // Check if user already exists
       const existing = await db
         .select()
         .from(schema.usersTable)
         .where(eq(schema.usersTable.email, email));
-      if (existing.length > 0) {
-        logger.info({ email }, "User already exists:");
-        return existing[0];
-      }
 
-      const result = await betterAuth.api.signUpEmail({
-        body: {
-          email,
-          password,
-          name,
-        },
-      });
-      if (result) {
+      let user = existing[0];
+
+      // Create user if doesn't exist
+      if (!user) {
+        const result = await betterAuth.api.signUpEmail({
+          body: {
+            email,
+            password,
+            name,
+          },
+        });
+
+        if (!result) {
+          throw new Error("Failed to sign up user");
+        }
+
         await db
           .update(schema.usersTable)
           .set({
@@ -49,11 +56,36 @@ class UserModel {
           })
           .where(eq(schema.usersTable.email, email));
 
-        logger.info({ email }, "User created successfully:");
+        // Re-fetch the complete user record from database
+        const [createdUser] = await db
+          .select()
+          .from(schema.usersTable)
+          .where(eq(schema.usersTable.email, email));
+
+        user = createdUser;
+        logger.info({ email }, "User created successfully");
+      } else {
+        logger.info({ email }, "User already exists");
       }
-      return result.user;
+
+      // Ensure default organization exists
+      const org = await OrganizationModel.getOrCreateDefaultOrganization();
+      if (!org) {
+        throw new Error("Failed to get or create default organization");
+      }
+
+      // Check if member relationship exists
+      const existingMember = await MemberModel.getByUserId(user.id);
+
+      // Create member relationship with specified role if doesn't exist
+      if (!existingMember) {
+        await MemberModel.create(user.id, org.id, role);
+        logger.info({ email, role }, "Member created with role");
+      }
+
+      return user;
     } catch (err) {
-      logger.error({ err }, "Failed to create user");
+      logger.error({ err }, "Failed to create default admin user");
     }
   }
 

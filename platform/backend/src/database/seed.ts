@@ -1,9 +1,7 @@
-import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
   DualLlmConfigModel,
-  MemberModel,
   OrganizationModel,
   PromptModel,
   ToolModel,
@@ -12,28 +10,22 @@ import {
 import type { InsertDualLlmConfig } from "@/types";
 
 /**
- * Seeds admin user
+ * Seeds admin user with organization and member relationship
  */
 export async function seedDefaultUserAndOrg(
   config: {
     email?: string;
     password?: string;
-    role?: PredefinedRoleName;
     name?: string;
+    role?: string;
   } = {},
 ) {
   const user = await UserModel.createOrGetExistingDefaultAdminUser(config);
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  if (!user || !org) {
+  if (!user) {
     throw new Error("Failed to seed admin user and default organization");
   }
 
-  const existingMember = await MemberModel.getByUserId(user.id);
-
-  if (!existingMember) {
-    await MemberModel.create(user.id, org.id, config.role || ADMIN_ROLE_NAME);
-  }
-  logger.info("✓ Seeded admin user and default organization");
+  logger.info("Seeded admin user and default organization");
   return user;
 }
 

@@ -139,6 +139,7 @@ export function PromptLibraryGrid({
           <Card
             key={prompt.id}
             className="justify-between px-0 py-2 hover:border-primary cursor-pointer transition-colors group relative"
+            onClick={() => handlePromptClick(prompt)}
           >
             <CardHeader className="pb-2 px-4 relative">
               <div className="flex items-start justify-between gap-2">
@@ -235,10 +236,7 @@ export function PromptLibraryGrid({
                 </DropdownMenuContent>
               </DropdownMenu>
             </CardHeader>
-            <CardContent
-              className="pt-0 pb-3 space-y-2"
-              onClick={() => handlePromptClick(prompt)}
-            >
+            <CardContent className="pt-0 pb-3 space-y-2">
               {prompt.userPrompt && (
                 <>
                   <span className="text-xs">User prompt:</span>

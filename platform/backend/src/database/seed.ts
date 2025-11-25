@@ -132,12 +132,17 @@ async function seedN8NSystemPrompt(): Promise<void> {
     return;
   }
 
-  // Check if N8N system prompt already exists
+  // Get or create default agent first
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+  // Check if N8N system prompt already exists for the default agent
   const existingPrompts = await PromptModel.findByOrganizationId(org.id);
-  const n8nPrompt = existingPrompts.find((p) => p.name === "n8n Expert");
+  const n8nPrompt = existingPrompts.find(
+    (p) => p.name === "n8n Expert" && p.agentId === defaultAgent.id,
+  );
 
   if (!n8nPrompt) {
-    const _n8nSystemPromptContent = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
+    const n8nSystemPromptContent = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
 
 ## Core Principles
 
@@ -315,11 +320,12 @@ return $input.all().map(item => ({
 
 **Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
-    // TODO: Update prompt seeding for new schema (requires agentId)
-    // For now, skip seeding prompts since they need to be associated with specific agents
-    logger.info(
-      "✓ Skipping n8n Expert system prompt seeding (needs agent association in new schema)",
-    );
+    await PromptModel.create(org.id, {
+      name: "n8n Expert",
+      agentId: defaultAgent.id,
+      systemPrompt: n8nSystemPromptContent,
+    });
+    logger.info("✓ Seeded n8n Expert system prompt");
   } else {
     logger.info("✓ n8n Expert system prompt already exists, skipping");
   }
@@ -338,29 +344,35 @@ async function seedDefaultRegularPrompts(): Promise<void> {
     return;
   }
 
+  // Get or create default agent first
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
   const defaultPrompts = [
     {
       name: "Check n8n Connectivity",
-      content: "Check n8n connectivity by running healthcheck tool",
+      userPrompt: "Check n8n connectivity by running healthcheck tool",
     },
     {
       name: "Create Demo AI Agent Workflow",
-      content:
+      userPrompt:
         "Create an n8n workflow that includes the default AI Agent node. It should be a simple default node. Use node names instead of IDs in the connections. Use n8n mcp to create flow",
     },
   ];
 
-  // Check existing regular prompts
+  // Check existing regular prompts for the default agent
   const existingPrompts = await PromptModel.findByOrganizationId(org.id);
 
   for (const promptData of defaultPrompts) {
-    const exists = existingPrompts.find((p) => p.name === promptData.name);
+    const exists = existingPrompts.find(
+      (p) => p.name === promptData.name && p.agentId === defaultAgent.id,
+    );
     if (!exists) {
-      // TODO: Update prompt seeding for new schema (requires agentId)
-      // For now, skip seeding prompts since they need to be associated with specific agents
-      logger.info(
-        `✓ Skipping regular prompt seeding: ${promptData.name} (needs agent association in new schema)`,
-      );
+      await PromptModel.create(org.id, {
+        name: promptData.name,
+        agentId: defaultAgent.id,
+        userPrompt: promptData.userPrompt,
+      });
+      logger.info(`✓ Seeded regular prompt: ${promptData.name}`);
     } else {
       logger.info(
         `✓ Regular prompt already exists: ${promptData.name}, skipping`,
@@ -387,8 +399,9 @@ async function seedArchestraTools(): Promise<void> {
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
+  // Create default agent before seeding prompts (prompts need agentId)
+  await AgentModel.getAgentOrCreateDefault();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
-  await AgentModel.getAgentOrCreateDefault();
   await seedArchestraTools();
 }

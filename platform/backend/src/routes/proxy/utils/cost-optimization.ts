@@ -95,7 +95,7 @@ export async function getOptimizedModel<
   );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.matchByRules(rules, {
     tokenCount,
     hasTools,
   });

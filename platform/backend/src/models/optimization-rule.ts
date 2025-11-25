@@ -3,7 +3,8 @@ import db, { schema } from "@/database";
 import type {
   InsertOptimizationRule,
   OptimizationRule,
-  OptimizationRuleConditions,
+  ContentLengthConditions,
+  ToolPresenceConditions,
   SupportedProvider,
   UpdateOptimizationRule,
 } from "@/types";
@@ -89,33 +90,48 @@ class OptimizationRuleModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  // Evaluate rules for a given agent and context
-  // Rules use AND logic: all specified conditions must match
-  static evaluateRules(
+  // Evaluate rules for a given context
+  // Rules are grouped by models. If all rules in such group match, returns the model.
+  static matchByRules(
     rules: OptimizationRule[],
     context: {
       tokenCount: number;
       hasTools: boolean;
     },
   ): string | null {
+    const rulesByModel: Record<string, OptimizationRule[]> = {};
+
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      const conditions = rule.conditions as OptimizationRuleConditions;
-      let matches = true;
+      const model = rule.targetModel;
+      if (!rulesByModel[model]) {
+        rulesByModel[model] = [];
+      }
+      rulesByModel[model].push(rule);
+    }
 
-      // Check maxLength condition if specified
-      if (conditions.maxLength !== undefined) {
-        matches = matches && context.tokenCount <= conditions.maxLength;
+    for (const [model, modelRules] of Object.entries(rulesByModel)) {
+      let match = true;
+
+      for (const rule of modelRules) {
+        if (rule.ruleType === 'content_length') {
+          const conditions = rule.conditions as ContentLengthConditions;
+          if (context.tokenCount > conditions.maxLength) {
+            match = false;
+            break;
+          }
+        } else if (rule.ruleType === 'tool_presence') {
+          const conditions = rule.conditions as ToolPresenceConditions;
+          if (context.hasTools !== conditions.hasTools) {
+            match = false;
+            break;
+          }
+        }
       }
 
-      // Check hasTools condition if specified (AND logic)
-      if (conditions.hasTools !== undefined) {
-        matches = matches && context.hasTools === conditions.hasTools;
-      }
-
-      if (matches) {
-        return rule.targetModel;
+      if (match) {
+        return model;
       }
     }
 

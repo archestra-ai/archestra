@@ -8,16 +8,26 @@ import { schema } from "@/database";
 import { SupportedProvidersSchema } from "./llm-providers";
 
 /**
- * Compound optimization rule conditions
- * Rules use AND logic: all specified conditions must match
+ * Content length optimization rule conditions
  * maxLength is measured in tokens (not characters)
  */
-export const OptimizationRuleConditionsSchema = z.object({
-  maxLength: z.number().int().positive().optional(),
-  hasTools: z.boolean().optional(),
+export const ContentLengthConditionsSchema = z.object({
+  maxLength: z.number().int().positive(),
 });
 
-export const OptimizationRuleTypeSchema = z.enum(["compound"]);
+export const ToolPresenceConditionsSchema = z.object({
+  hasTools: z.boolean(),
+});
+
+export const OptimizationRuleConditionsSchema = z.union([
+  ContentLengthConditionsSchema,
+  ToolPresenceConditionsSchema,
+]);
+
+export const OptimizationRuleTypeSchema = z.enum([
+  "content_length",
+  "tool_presence",
+]);
 
 export const OptimizationRuleEntityTypeSchema = z.enum([
   "organization",
@@ -46,6 +56,12 @@ export const UpdateOptimizationRuleSchema = createUpdateSchema(
   extendedFields,
 );
 
+export type ContentLengthConditions = z.infer<
+  typeof ContentLengthConditionsSchema
+>;
+export type ToolPresenceConditions = z.infer<
+  typeof ToolPresenceConditionsSchema
+>;
 export type OptimizationRuleConditions = z.infer<
   typeof OptimizationRuleConditionsSchema
 >;

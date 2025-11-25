@@ -1,5 +1,5 @@
 {
-  "id": "2a9c3dd7-0bfa-4541-b3f1-91035c8d5a3f",
+  "id": "92efaf10-4a71-449c-9523-efd3897245db",
   "prevId": "496d2579-20a7-461b-9888-68d30093b470",
   "version": "7",
   "dialect": "postgresql",
@@ -2162,7 +2162,7 @@
           "name": "role",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'member'"
         },
         "created_at": {
@@ -2378,10 +2378,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
+          "notNull": true
         },
         "organization_id": {
           "name": "organization_id",
@@ -2389,14 +2388,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "role": {
+          "name": "role",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "title": {
-          "name": "title",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -2439,12 +2438,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "organization_role_organization_id_name_unique": {
-          "name": "organization_role_organization_id_name_unique",
+        "organization_role_organization_id_role_unique": {
+          "name": "organization_role_organization_id_role_unique",
           "nullsNotDistinct": false,
           "columns": [
             "organization_id",
-            "name"
+            "role"
           ]
         }
       },

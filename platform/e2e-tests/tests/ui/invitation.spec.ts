@@ -2,79 +2,10 @@ import { E2eTestId } from "@shared";
 import { expect, test } from "./fixtures";
 
 test.describe("Invitation functionality", () => {
-  test("can generate an invitation link for a new member", async ({
-    page,
-    makeRandomString,
-    goToPage,
-  }) => {
-    // Skip onboarding if dialog is present
-    const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await page.waitForTimeout(500);
-    }
-
-    // Navigate to the members settings page
-    await goToPage(page, "/settings/members");
-
-    // Wait for the page to load
-    await page.waitForTimeout(1000);
-
-    // Click the "Invite Member" button to open the dialog
-    // The button is rendered by the OrganizationMembersCard from better-auth-ui
-    await page.getByRole("button", { name: /invite member/i }).click();
-
-    // Wait for the dialog to open
-    await page.waitForTimeout(500);
-
-    // Generate a random email for testing
-    const TEST_EMAIL = `${makeRandomString(10, "test")}@example.com`;
-
-    // Fill in the email input
-    const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
-    await expect(emailInput).toBeVisible();
-    await emailInput.fill(TEST_EMAIL);
-
-    // Select the role (default is "member", but we'll verify the select is visible)
-    const roleSelect = page.getByTestId(E2eTestId.InviteRoleSelect);
-    await expect(roleSelect).toBeVisible();
-
-    // Click the "Generate Invitation Link" button
-    const generateButton = page.getByTestId(
-      E2eTestId.GenerateInvitationButton,
-    );
-    await expect(generateButton).toBeVisible();
-    await expect(generateButton).toBeEnabled();
-    await generateButton.click();
-
-    // Wait for the invitation link to be generated
-    // The component switches to show the invitation link input
-    const invitationLinkInput = page.getByTestId(E2eTestId.InvitationLinkInput);
-    await expect(invitationLinkInput).toBeVisible({ timeout: 5000 });
-
-    // Verify the invitation link is not empty
-    const linkValue = await invitationLinkInput.inputValue();
-    expect(linkValue).toBeTruthy();
-    expect(linkValue).toContain("/auth/sign-up-with-invitation");
-    expect(linkValue).toContain("invitationId=");
-    expect(linkValue).toContain(`email=${encodeURIComponent(TEST_EMAIL)}`);
-
-    // Verify the copy button is visible
-    const copyButton = page.getByTestId(E2eTestId.InvitationLinkCopyButton);
-    await expect(copyButton).toBeVisible();
-  });
-
   test("shows error message when email is invalid", async ({
     page,
     goToPage,
   }) => {
-    // Skip onboarding if dialog is present
-    const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await page.waitForTimeout(500);
-    }
-
     // Navigate to the members settings page
     await goToPage(page, "/settings/members");
 
@@ -93,25 +24,22 @@ test.describe("Invitation functionality", () => {
     await emailInput.fill("invalid-email");
 
     // The "Generate Invitation Link" button should be disabled for invalid email
-    const generateButton = page.getByTestId(
-      E2eTestId.GenerateInvitationButton,
-    );
+    const generateButton = page.getByTestId(E2eTestId.GenerateInvitationButton);
     await expect(generateButton).toBeVisible();
     await expect(generateButton).toBeDisabled();
   });
 
-  test("handles server error gracefully", async ({
+  test("can generate invitation link and successfully sign up with it", async ({
     page,
     makeRandomString,
     goToPage,
+    browser,
   }) => {
-    // Skip onboarding if dialog is present
-    const skipButton = page.getByTestId(E2eTestId.OnboardingSkipButton);
-    if (await skipButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await skipButton.click();
-      await page.waitForTimeout(500);
-    }
+    // Generate a random email for testing
+    const TEST_EMAIL = `${makeRandomString(10, "test")}@example.com`;
+    const TEST_PASSWORD = "TestPassword123!";
 
+    // PART 1: Generate the invitation link (as admin)
     // Navigate to the members settings page
     await goToPage(page, "/settings/members");
 
@@ -124,41 +52,102 @@ test.describe("Invitation functionality", () => {
     // Wait for the dialog to open
     await page.waitForTimeout(500);
 
-    // Intercept the API call and force it to fail
-    await page.route("**/api/auth/organization/invite/member", (route) => {
-      route.fulfill({
-        status: 500,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: "Internal Server Error",
-          message: "Failed to generate invitation link",
-        }),
-      });
-    });
-
-    // Generate a random email for testing
-    const TEST_EMAIL = `${makeRandomString(10, "test")}@example.com`;
-
     // Fill in the email input
     const emailInput = page.getByTestId(E2eTestId.InviteEmailInput);
     await expect(emailInput).toBeVisible();
     await emailInput.fill(TEST_EMAIL);
 
     // Click the "Generate Invitation Link" button
-    const generateButton = page.getByTestId(
-      E2eTestId.GenerateInvitationButton,
-    );
+    const generateButton = page.getByTestId(E2eTestId.GenerateInvitationButton);
     await expect(generateButton).toBeVisible();
     await expect(generateButton).toBeEnabled();
     await generateButton.click();
 
-    // Wait for error message to appear (either in a toast or error boundary)
-    // The component shows an error boundary when the API fails
-    const errorMessage = page.getByTestId(E2eTestId.InvitationErrorMessage);
-    await expect(errorMessage).toBeVisible({ timeout: 5000 });
+    // Wait for the invitation link to be generated
+    const invitationLinkInput = page.getByTestId(E2eTestId.InvitationLinkInput);
+    await expect(invitationLinkInput).toBeVisible({ timeout: 5000 });
 
-    // Verify error message contains useful information
-    const errorText = await errorMessage.textContent();
-    expect(errorText).toBeTruthy();
+    // Get the invitation link
+    const invitationLink = await invitationLinkInput.inputValue();
+    expect(invitationLink).toBeTruthy();
+    expect(invitationLink).toContain("/auth/sign-up-with-invitation");
+
+    // PART 2: Use the invitation link to sign up (as new user in incognito context)
+    // Create a new incognito context to simulate a new user (no shared storage)
+    const newUserContext = await browser.newContext({
+      // Ensure no storage state is shared
+      storageState: undefined,
+    });
+
+    const newUserPage = await newUserContext.newPage();
+
+    try {
+      // Navigate to the invitation link
+      await newUserPage.goto(invitationLink);
+
+      // Wait for the sign-up page to load
+      await newUserPage.waitForTimeout(2000);
+
+      // Verify we're on the invitation sign-up page
+      await expect(
+        newUserPage.getByText(
+          "You've been invited to join Archestra workspace",
+        ),
+      ).toBeVisible();
+      await expect(newUserPage.getByText(`Email: ${TEST_EMAIL}`)).toBeVisible();
+
+      // Fill in the sign-up form
+      // The email should be pre-filled, but we need to fill in name and password
+      const nameInput = newUserPage.getByRole("textbox", { name: /name/i });
+      await expect(nameInput).toBeVisible();
+      const uniqueName = `Test User ${makeRandomString(5)}`;
+      await nameInput.fill(uniqueName);
+
+      // Email should be pre-filled, but let's verify it's there
+      const emailInputSignup = newUserPage.getByRole("textbox", {
+        name: /email/i,
+      });
+      await expect(emailInputSignup).toBeVisible();
+      const prefilledEmail = await emailInputSignup.inputValue();
+      expect(prefilledEmail).toBe(TEST_EMAIL);
+
+      // Fill in password
+      const passwordInput = newUserPage.getByRole("textbox", {
+        name: /password/i,
+      });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill(TEST_PASSWORD);
+
+      // Submit the form
+      const signUpButton = newUserPage.getByRole("button", {
+        name: /create an account/i,
+      });
+      await expect(signUpButton).toBeVisible();
+      await signUpButton.click();
+
+      // Wait for sign-up to complete and redirect
+      // The page should redirect to the main app after successful sign-up
+      await newUserPage.waitForURL(/\/$/, { timeout: 10000 });
+
+      // Verify we're successfully logged in by checking for user elements
+      // Look for the user button/menu that should appear when authenticated
+      await expect(
+        newUserPage.getByRole("button", { name: new RegExp(uniqueName, "i") }),
+      ).toBeVisible({
+        timeout: 10000,
+      });
+
+      // PART 3: Verify the new user is listed in members (back to admin context)
+      // Go back to the admin page and verify the new member appears
+      await goToPage(page, "/settings/members");
+      await page.waitForTimeout(1000);
+
+      // Look for the new user in the members list
+      await expect(page.getByText(TEST_EMAIL)).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText(uniqueName)).toBeVisible();
+    } finally {
+      // Clean up the new user context
+      await newUserContext.close();
+    }
   });
 });

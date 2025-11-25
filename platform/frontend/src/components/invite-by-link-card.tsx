@@ -120,7 +120,10 @@ function InviteByLinkCardContent({
                 onValueChange={(value: AnyRoleName) => setRole(value)}
                 disabled={createMutation.isPending}
               >
-                <SelectTrigger id="role" data-testid={E2eTestId.InviteRoleSelect}>
+                <SelectTrigger
+                  id="role"
+                  data-testid={E2eTestId.InviteRoleSelect}
+                >
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>

@@ -140,7 +140,7 @@ export function PromptLibraryGrid({
             key={prompt.id}
             className="justify-between px-0 py-2 hover:border-primary cursor-pointer transition-colors group relative"
           >
-            <CardHeader className="pb-2 px-4">
+            <CardHeader className="pb-2 px-4 relative">
               <div className="flex items-start justify-between gap-2">
                 {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
                 <div
@@ -157,7 +157,11 @@ export function PromptLibraryGrid({
                 >
                   <div className="flex items-baseline gap-2 mb-1.5">
                     <CardTitle className="text-base truncate">
-                      {prompt.name}
+                      <TruncatedText
+                        message={prompt.name}
+                        className="text-base truncate pr-0"
+                        maxLength={25}
+                      />
                     </CardTitle>
                     <span className="text-xs text-muted-foreground flex-shrink-0">
                       v{prompt.version}
@@ -193,42 +197,43 @@ export function PromptLibraryGrid({
                     <McpToolsDisplay agentId={prompt.agentId} />
                   </div>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    asChild
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className=" mt-2 h-4 w-4 flex-shrink-0"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onEdit(prompt)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onViewVersionHistory(prompt);
-                      }}
-                    >
-                      <HistoryIcon className="mr-2 h-4 w-4" />
-                      Version History
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setPromptToDelete(prompt.id)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  asChild
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-[-2px] right-2"
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className=" mt-2 h-4 w-4 flex-shrink-0"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onEdit(prompt)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewVersionHistory(prompt);
+                    }}
+                  >
+                    <HistoryIcon className="mr-2 h-4 w-4" />
+                    Version History
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setPromptToDelete(prompt.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CardHeader>
             <CardContent
               className="pt-0 pb-3 space-y-2"

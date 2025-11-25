@@ -125,11 +125,16 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           predefined: false,
         });
       } catch (error) {
-        const err = error as { status?: number; message?: string };
+        const err = error as {
+          status?: string;
+          statusCode?: number;
+          message?: string;
+          body?: { message?: string };
+        };
         logger.error({ error }, "Failed to create role");
         throw new ApiError(
-          err.status || 400,
-          err.message || "Failed to create role",
+          err.statusCode || 400,
+          err.body?.message || err.message || "Failed to create role",
         );
       }
     },

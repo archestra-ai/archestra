@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertOrganizationRole } from "@/types";
-import OrganizationRoleModel from "./organization-role";
 import UserModel from "./user";
 
 describe("User.getUserPermissions", () => {
@@ -58,21 +57,27 @@ describe("User.getUserPermissions", () => {
   });
 
   test("should return permissions for custom role", async () => {
-    // Create a custom role
-    const customRoleId = crypto.randomUUID();
+    // Create a custom role via direct DB insert
     const customRole: InsertOrganizationRole = {
-      id: customRoleId,
+      role: "custom_role",
       name: "Custom Role",
       organizationId: testOrgId,
       permission: { profile: ["read", "create"] },
     };
-    await OrganizationRoleModel.create(customRole);
+    const [createdRole] = await db
+      .insert(schema.organizationRolesTable)
+      .values({
+        id: crypto.randomUUID(),
+        ...customRole,
+        permission: JSON.stringify(customRole.permission),
+      })
+      .returning();
 
     // Add user with custom role
     await db.insert(schema.membersTable).values({
       userId: testUserId,
       organizationId: testOrgId,
-      role: customRoleId,
+      role: createdRole.role,
       createdAt: new Date(),
       id: crypto.randomUUID(),
     });

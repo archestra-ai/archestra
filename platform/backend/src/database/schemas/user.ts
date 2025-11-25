@@ -11,6 +11,9 @@ const usersTable = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  // Although the RBAC uses members with roles, we are keeping the role on the user
+  // because it's required by better-auth admin plugin.
+  // If removing this field and admin plugin, make sure the seed isn't crashing.
   role: text("role"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),

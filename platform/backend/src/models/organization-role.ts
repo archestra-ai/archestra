@@ -152,7 +152,7 @@ class OrganizationRoleModel {
   }
 
   /**
-   * Get a role by name and organization
+   * Get a role by identifier, e.g. "member" (buit-in) or "reader" (custom)
    */
   static async getByIdentifier(
     identifier: string,
@@ -163,7 +163,6 @@ class OrganizationRoleModel {
       return generatePredefinedRole(identifier, organizationId);
     }
 
-    // Query custom role from database by name
     const [result] = await db
       .select({
         ...getTableColumns(schema.organizationRolesTable),

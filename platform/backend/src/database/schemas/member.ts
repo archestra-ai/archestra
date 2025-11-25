@@ -11,8 +11,8 @@ const member = pgTable("member", {
   userId: text("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  // Built-in role name or custom role name.
-  // It's a name not an id, because better-auth references the roles by names.
+  // Role identifier e.g. "member" (buit-in) or "reader" (custom)
+  // It's because better-auth references the roles by identifiers not uuids.
   role: text("role").default(MEMBER_ROLE_NAME).notNull(),
   createdAt: timestamp("created_at").notNull(),
 });

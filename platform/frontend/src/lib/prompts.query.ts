@@ -53,7 +53,12 @@ export function useUpdatePrompt() {
       data,
     }: {
       id: string;
-      data: { name?: string; userPrompt?: string; systemPrompt?: string };
+      data: {
+        name?: string;
+        agentId?: string;
+        userPrompt?: string;
+        systemPrompt?: string;
+      };
     }) => {
       const response = await updatePrompt({ path: { id }, body: data });
       return response.data;

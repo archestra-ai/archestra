@@ -94,6 +94,7 @@ class PromptModel {
       .update(schema.promptsTable)
       .set({
         name: input.name,
+        agentId: input.agentId,
         userPrompt: input.userPrompt,
         systemPrompt: input.systemPrompt,
       })

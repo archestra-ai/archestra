@@ -12757,6 +12757,7 @@ export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 export type UpdatePromptData = {
     body?: {
         name?: string;
+        agentId?: string;
         userPrompt?: string | null;
         systemPrompt?: string | null;
     };

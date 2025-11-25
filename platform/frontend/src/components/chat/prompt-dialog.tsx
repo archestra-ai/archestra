@@ -83,6 +83,7 @@ export function PromptDialog({
           id: prompt.id,
           data: {
             name,
+            agentId,
             userPrompt: userPrompt || undefined,
             systemPrompt: systemPrompt || undefined,
           },
@@ -128,11 +129,7 @@ export function PromptDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="agentId">Profile *</Label>
-            <Select
-              value={agentId}
-              onValueChange={setAgentId}
-              disabled={!!prompt} // Can't change agent for existing prompt
-            >
+            <Select value={agentId} onValueChange={setAgentId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a profile" />
               </SelectTrigger>
@@ -146,22 +143,22 @@ export function PromptDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="userPrompt">User Prompt</Label>
-            <Textarea
-              id="userPrompt"
-              value={userPrompt}
-              onChange={(e) => setUserPrompt(e.target.value)}
-              placeholder="Enter user prompt (shown to user, sent to LLM)"
-              className="min-h-[150px] font-mono"
-            />
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>
             <Textarea
               id="systemPrompt"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               placeholder="Enter system prompt (instructions for the LLM)"
+              className="min-h-[150px] font-mono"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="userPrompt">User Prompt</Label>
+            <Textarea
+              id="userPrompt"
+              value={userPrompt}
+              onChange={(e) => setUserPrompt(e.target.value)}
+              placeholder="Enter user prompt (shown to user, sent to LLM)"
               className="min-h-[150px] font-mono"
             />
           </div>

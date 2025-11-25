@@ -2,14 +2,13 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type FormEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -24,9 +23,11 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
+import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -151,31 +152,6 @@ export default function ChatPage() {
     }
   }, [conversationId, currentAgentId]);
 
-  // Fetch MCP tools from gateway (same as used in chat backend)
-  const { data: mcpTools = [] } = useChatAgentMcpTools(currentAgentId);
-
-  // Group tools by MCP server name (everything before the last __)
-  const groupedTools = useMemo(
-    () =>
-      mcpTools.reduce(
-        (acc, tool) => {
-          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
-          // Last part is tool name, everything else is server name
-          const serverName =
-            parts.length > 1
-              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
-              : "default";
-          if (!acc[serverName]) {
-            acc[serverName] = [];
-          }
-          acc[serverName].push(tool);
-          return acc;
-        },
-        {} as Record<string, typeof mcpTools>,
-      ),
-    [mcpTools],
-  );
-
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
@@ -212,10 +188,19 @@ export default function ChatPage() {
     setIsPromptDialogOpen(true);
   }, []);
 
+  // Listen for custom event from layout to open dialog
+  useEffect(() => {
+    const handleOpenDialog = () => {
+      handleCreatePrompt();
+    };
+    window.addEventListener("open-prompt-dialog", handleOpenDialog);
+    return () => {
+      window.removeEventListener("open-prompt-dialog", handleOpenDialog);
+    };
+  }, [handleCreatePrompt]);
+
   const handleDeletePrompt = useCallback(
     async (promptId: string) => {
-      if (!confirm("Are you sure you want to delete this prompt?")) return;
-
       try {
         await deletePromptMutation.mutateAsync(promptId);
       } catch (error) {
@@ -377,210 +362,158 @@ export default function ChatPage() {
     );
   }
 
+  const promptBadge = (
+    <>
+      {conversationPrompt ? (
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
+                  Prompt: {conversationPrompt.name}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                className="max-w-md max-h-64 overflow-y-auto"
+              >
+                <div className="space-y-2">
+                  {conversationPrompt.userPrompt && (
+                    <div>
+                      <div className="font-semibold text-xs mb-1">
+                        User Prompt:
+                      </div>
+                      <pre className="text-xs whitespace-pre-wrap">
+                        {conversationPrompt.userPrompt}
+                      </pre>
+                    </div>
+                  )}
+                  {conversationPrompt.systemPrompt && (
+                    <div>
+                      <div className="font-semibold text-xs mb-1">
+                        System Prompt:
+                      </div>
+                      <pre className="text-xs whitespace-pre-wrap">
+                        {conversationPrompt.systemPrompt}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (!conversationId) {
+    return (
+      <PageLayout
+        title="New Chat"
+        description="Start a free chat or select a prompt from your library to start a guided chat"
+        actionButton={
+          <Button onClick={handleCreatePrompt} size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Prompt
+          </Button>
+        }
+      >
+        <PromptLibraryGrid
+          prompts={prompts}
+          onSelectPrompt={handleSelectPrompt}
+          onEdit={handleEditPrompt}
+          onDelete={handleDeletePrompt}
+        />
+        <PromptDialog
+          open={isPromptDialogOpen}
+          onOpenChange={(open) => {
+            setIsPromptDialogOpen(open);
+            if (!open) {
+              setEditingPromptId(null);
+            }
+          }}
+          prompt={editingPrompt}
+        />
+      </PageLayout>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
-        {!conversationId ? (
-          <PromptLibraryGrid
-            prompts={prompts}
-            onSelectPrompt={handleSelectPrompt}
-            onEdit={handleEditPrompt}
-            onDelete={handleDeletePrompt}
-            onCreate={handleCreatePrompt}
-          />
-        ) : (
-          <div className="flex flex-col h-full">
-            {error && <ChatError error={error} />}
-            <StreamTimeoutWarning status={status} messages={messages} />
+        <div className="flex flex-col h-full">
+          {error && <ChatError error={error} />}
+          <StreamTimeoutWarning status={status} messages={messages} />
 
-            <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
-              <div className="flex-1" />
-              {conversation?.agent?.name && (
-                <div className="flex-1 text-center">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {conversation.agent.name}
-                  </span>
-                </div>
-              )}
-              <div className="flex-1 flex justify-end gap-2 items-center">
-                {conversationPrompt?.systemPrompt && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs font-medium cursor-help">
-                          System Prompt
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="bottom"
-                        className="max-w-md max-h-64 overflow-y-auto"
-                      >
-                        <pre className="text-xs whitespace-pre-wrap">
-                          {conversationPrompt.systemPrompt}
-                        </pre>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleHideToolCalls}
-                  className="text-xs"
-                >
-                  {hideToolCalls ? (
-                    <>
-                      <Eye className="h-3 w-3 mr-1" />
-                      Show tool calls
-                    </>
-                  ) : (
-                    <>
-                      <EyeOff className="h-3 w-3 mr-1" />
-                      Hide tool calls
-                    </>
-                  )}
-                </Button>
+          <div className="sticky top-0 z-10 bg-background border-b p-2 flex items-center justify-between">
+            <div className="flex-1" />
+            {conversation?.agent?.name && (
+              <div className="flex-1 text-center">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {conversation.agent.name}
+                </span>
               </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              <ChatMessages
-                messages={messages}
-                hideToolCalls={hideToolCalls}
-                status={status}
-              />
-            </div>
-
-            <div className="sticky bottom-0 bg-background border-t p-4">
-              <div className="max-w-3xl mx-auto space-y-3">
-                {conversationPrompt && (
-                  <div className="flex items-center gap-2">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
-                            Prompt: {conversationPrompt.name}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="max-w-md max-h-64 overflow-y-auto"
-                        >
-                          <div className="space-y-2">
-                            {conversationPrompt.userPrompt && (
-                              <div>
-                                <div className="font-semibold text-xs mb-1">
-                                  User Prompt:
-                                </div>
-                                <pre className="text-xs whitespace-pre-wrap">
-                                  {conversationPrompt.userPrompt}
-                                </pre>
-                              </div>
-                            )}
-                            {conversationPrompt.systemPrompt && (
-                              <div>
-                                <div className="font-semibold text-xs mb-1">
-                                  System Prompt:
-                                </div>
-                                <pre className="text-xs whitespace-pre-wrap">
-                                  {conversationPrompt.systemPrompt}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
+            )}
+            <div className="flex-1 flex justify-end gap-2 items-center">
+              {promptBadge}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleHideToolCalls}
+                className="text-xs"
+              >
+                {hideToolCalls ? (
+                  <>
+                    <Eye className="h-3 w-3 mr-1" />
+                    Show tool calls
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    Hide tool calls
+                  </>
                 )}
-                {currentAgentId && Object.keys(groupedTools).length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    <TooltipProvider>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(groupedTools).map(
-                          ([serverName, tools]) => (
-                            <Tooltip key={serverName}>
-                              <TooltipTrigger asChild>
-                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                  <span className="font-medium">
-                                    {serverName}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    ({tools.length}{" "}
-                                    {tools.length === 1 ? "tool" : "tools"})
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                className="max-w-sm max-h-64 overflow-y-auto"
-                              >
-                                <div className="space-y-1">
-                                  {tools.map((tool) => {
-                                    const parts = tool.name.split(
-                                      MCP_SERVER_TOOL_NAME_SEPARATOR,
-                                    );
-                                    const toolName =
-                                      parts.length > 1
-                                        ? parts[parts.length - 1]
-                                        : tool.name;
-                                    return (
-                                      <div
-                                        key={tool.name}
-                                        className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                      >
-                                        <div className="font-mono font-medium">
-                                          {toolName}
-                                        </div>
-                                        {tool.description && (
-                                          <div className="text-muted-foreground mt-0.5">
-                                            {tool.description}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          ),
-                        )}
-                      </div>
-                    </TooltipProvider>
-                  </div>
-                )}
-                <PromptInput onSubmit={handleSubmit}>
-                  <PromptInputBody>
-                    <PromptInputTextarea placeholder="Type a message..." />
-                  </PromptInputBody>
-                  <PromptInputToolbar>
-                    <PromptInputTools />
-                    <PromptInputSubmit
-                      status={status === "error" ? "ready" : status}
-                      onStop={stop}
-                    />
-                  </PromptInputToolbar>
-                </PromptInput>
-              </div>
+              </Button>
             </div>
           </div>
-        )}
+
+          <div className="flex-1 overflow-y-auto">
+            <ChatMessages
+              messages={messages}
+              hideToolCalls={hideToolCalls}
+              status={status}
+            />
+          </div>
+
+          <div className="sticky bottom-0 bg-background border-t p-4">
+            <div className="max-w-3xl mx-auto space-y-3">
+              {currentAgentId && (
+                <McpToolsDisplay
+                  agentId={currentAgentId}
+                  className="text-xs text-muted-foreground"
+                />
+              )}
+              <PromptInput onSubmit={handleSubmit}>
+                <PromptInputBody>
+                  <PromptInputTextarea placeholder="Type a message..." />
+                </PromptInputBody>
+                <PromptInputToolbar>
+                  <PromptInputTools />
+                  <PromptInputSubmit
+                    status={status === "error" ? "ready" : status}
+                    onStop={stop}
+                  />
+                </PromptInputToolbar>
+              </PromptInput>
+            </div>
+          </div>
+        </div>
       </div>
 
       <CustomServerRequestDialog
         isOpen={isCustomServerDialogOpen}
         onClose={() => setIsCustomServerDialogOpen(false)}
-      />
-
-      <PromptDialog
-        open={isPromptDialogOpen}
-        onOpenChange={(open) => {
-          setIsPromptDialogOpen(open);
-          if (!open) {
-            setEditingPromptId(null);
-          }
-        }}
-        prompt={editingPrompt}
       />
     </div>
   );

@@ -521,9 +521,9 @@ export async function assignToolToAgent(
   | "updated"
   | null
 > {
-  // Validate that agent exists
-  const agent = await AgentModel.findById(agentId);
-  if (!agent) {
+  // Validate that agent exists (using lightweight exists() to avoid N+1 queries)
+  const agentExists = await AgentModel.exists(agentId);
+  if (!agentExists) {
     return {
       status: 404,
       error: {

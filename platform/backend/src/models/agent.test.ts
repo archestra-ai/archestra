@@ -11,6 +11,24 @@ describe("AgentModel", () => {
     expect(await AgentModel.findAll()).toHaveLength(3);
   });
 
+  describe("exists", () => {
+    test("returns true for an existing agent", async () => {
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      const exists = await AgentModel.exists(agent.id);
+      expect(exists).toBe(true);
+    });
+
+    test("returns false for a non-existent agent", async () => {
+      const nonExistentId = "00000000-0000-0000-0000-000000000000";
+      const exists = await AgentModel.exists(nonExistentId);
+      expect(exists).toBe(false);
+    });
+  });
+
   describe("Access Control", () => {
     test("can create agent with team assignments", async ({
       makeUser,

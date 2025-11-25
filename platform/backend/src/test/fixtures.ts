@@ -61,6 +61,7 @@ interface TestFixtures {
   makeInvitation: typeof makeInvitation;
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
+  makeAuthHeaders: typeof makeAuthHeaders;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
@@ -264,8 +265,8 @@ async function makeTrustedDataPolicy(
 }
 
 /**
- * Creates a test custom organization role using the OrganizationRole model
- * Returns the created role
+ * Creates a test custom organization role via direct DB insert
+ * (bypasses Better Auth API for test simplicity)
  */
 async function makeCustomRole(
   organizationId: string,
@@ -274,14 +275,29 @@ async function makeCustomRole(
   > = {},
 ): Promise<OrganizationRole> {
   const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
-  return await OrganizationRoleModel.create({
-    // Don't specify id - let Better Auth generate it
+  const roleData = {
     role: roleName,
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
     permission: { profile: ["read"] },
     ...overrides,
-  });
+  };
+
+  const id = crypto.randomUUID();
+  const [result] = await db
+    .insert(schema.organizationRolesTable)
+    .values({
+      id,
+      ...roleData,
+      permission: JSON.stringify(roleData.permission),
+    })
+    .returning();
+
+  return {
+    ...result,
+    predefined: false,
+    permission: JSON.parse(result.permission),
+  };
 }
 
 /**
@@ -449,6 +465,15 @@ async function makeSession(
     userAgent: "Mozilla/5.0 Test Agent",
     ...overrides,
   });
+}
+
+/**
+ * Creates authenticated headers from a session token for Better Auth API calls
+ */
+function makeAuthHeaders(sessionToken: string): HeadersInit {
+  return {
+    cookie: `archestra.session_token=${sessionToken}`,
+  };
 }
 
 /**
@@ -634,6 +659,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSession: async ({}, use) => {
     await use(makeSession);
+  },
+  makeAuthHeaders: async ({}, use) => {
+    await use(makeAuthHeaders);
   },
   makeConversation: async ({}, use) => {
     await use(makeConversation);

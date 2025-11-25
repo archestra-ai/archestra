@@ -99,10 +99,9 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
           permission,
           organizationId,
         },
-        "Creating role with better-auth API",
+        "Creating role",
       );
 
-      // Use better-auth's createOrgRole API
       try {
         const result = await betterAuth.api.createOrgRole({
           headers: request.headers as HeadersInit,
@@ -110,20 +109,17 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
             role: roleIdentifier,
             permission,
             additionalFields: {
-              name, // Pass display name in additionalFields
+              name,
             },
             organizationId,
           },
         });
 
-        logger.info({ result }, "Better-auth createOrgRole result");
-
-        // Extract the role data from better-auth response
         if (!result.roleData) {
           throw new ApiError(500, "Role created but data not returned");
         }
 
-        // Add predefined flag and ensure updatedAt is defined
+        logger.info({ role: result.roleData }, "Role created successfully");
         return reply.send({
           ...result.roleData,
           updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
@@ -131,8 +127,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } catch (error) {
         const err = error as { status?: number; message?: string };
-        logger.error({ error }, "Better-auth createOrgRole failed");
-        // Better-auth returns detailed error messages
+        logger.error({ error }, "Failed to create role");
         throw new ApiError(
           err.status || 400,
           err.message || "Failed to create role",
@@ -230,19 +225,29 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Build update data - at least one field must be present
-      const updateData: Partial<UpdateOrganizationRole> = {};
+      // Build update data
+      const updateData: Record<string, unknown> = {};
       if (name) updateData.name = name;
       if (permission) updateData.permission = permission;
 
-      return reply.send(
-        await OrganizationRoleModel.update(
-          headers as HeadersInit,
+      const result = await betterAuth.api.updateOrgRole({
+        headers: headers as HeadersInit,
+        body: {
           roleId,
           organizationId,
-          updateData as UpdateOrganizationRole,
-        ),
-      );
+          data: updateData,
+        },
+      });
+
+      if (!result.roleData) {
+        throw new ApiError(500, "Role updated but data not returned");
+      }
+
+      return reply.send({
+        ...result.roleData,
+        updatedAt: result.roleData.updatedAt || new Date(),
+        predefined: false,
+      });
     },
   );
 
@@ -276,13 +281,15 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, deleteCheck.reason || "Cannot delete role");
       }
 
-      return reply.send({
-        success: await OrganizationRoleModel.delete(
-          headers as HeadersInit,
+      await betterAuth.api.deleteOrgRole({
+        headers: headers as HeadersInit,
+        body: {
           roleId,
           organizationId,
-        ),
+        },
       });
+
+      return reply.send({ success: true });
     },
   );
 };

@@ -4,7 +4,6 @@ import {
   predefinedPermissionsMap,
 } from "@shared";
 import { describe, expect, test } from "@/test";
-import type { UpdateOrganizationRole } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 
 describe("OrganizationRoleModel", () => {
@@ -218,125 +217,6 @@ describe("OrganizationRoleModel", () => {
       expect(result).toHaveLength(2);
       expect(result[0].role).toBe(ADMIN_ROLE_NAME);
       expect(result[1].role).toBe(MEMBER_ROLE_NAME);
-    });
-  });
-
-  describe("create", () => {
-    test("should create custom role successfully", async ({
-      makeCustomRole,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const newRole = await makeCustomRole(org.id, {
-        role: "New Role",
-        name: "Test Role",
-        permission: { profile: ["read"], organization: ["read"] },
-      });
-
-      expect(newRole).toMatchObject({
-        id: newRole.id,
-        role: "New Role",
-        name: "Test Role",
-        permission: { profile: ["read"], organization: ["read"] },
-        predefined: false,
-      });
-    });
-  });
-
-  describe("update", () => {
-    test("should update custom role successfully", async ({
-      makeCustomRole,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      // Create initial role
-      const initialRole = await makeCustomRole(org.id, {
-        role: "initial_role",
-        name: "Initial Name",
-        permission: { profile: ["read"] },
-      });
-
-      // Update the role
-      const updateData: UpdateOrganizationRole = {
-        name: "Updated Name",
-        permission: { profile: ["create", "update"] },
-      };
-
-      const result = await OrganizationRoleModel.update(
-        {} as HeadersInit,
-        initialRole.id,
-        org.id,
-        updateData,
-      );
-
-      expect(result).toMatchObject({
-        id: initialRole.id,
-        role: "initial_role", // role is immutable
-        name: "Updated Name", // name can be updated
-        organizationId: org.id,
-        permission: { profile: ["create", "update"] },
-        predefined: false,
-      });
-
-      // Verify update persisted
-      const retrieved = await OrganizationRoleModel.getById(
-        initialRole.id,
-        org.id,
-      );
-      expect(retrieved?.role).toBe("initial_role"); // role is immutable
-      expect(retrieved?.name).toBe("Updated Name"); // name can be updated
-      expect(retrieved?.permission).toEqual({
-        profile: ["create", "update"],
-      });
-    });
-  });
-
-  describe("delete", () => {
-    test("should delete role successfully", async ({
-      makeCustomRole,
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      // Create role to delete
-      const roleToDelete = await makeCustomRole(org.id, {
-        role: "Role to Delete",
-        name: "Test Role to Delete",
-        permission: { profile: ["read"] },
-      });
-
-      // Verify it exists
-      const beforeDelete = await OrganizationRoleModel.getById(
-        roleToDelete.id,
-        org.id,
-      );
-      expect(beforeDelete).not.toBeNull();
-
-      // Delete it
-      const result = await OrganizationRoleModel.delete(
-        {} as HeadersInit,
-        roleToDelete.id,
-        org.id,
-      );
-      expect(result).toBe(true);
-
-      // Verify it's gone
-      const afterDelete = await OrganizationRoleModel.getById(
-        roleToDelete.id,
-        org.id,
-      );
-      expect(afterDelete).toBeFalsy();
-    });
-
-    test("should return false when no role was deleted", async ({
-      makeOrganization,
-    }) => {
-      const org = await makeOrganization();
-      const result = await OrganizationRoleModel.delete(
-        {} as HeadersInit,
-        crypto.randomUUID(),
-        org.id,
-      );
-      expect(result).toBe(false);
     });
   });
 

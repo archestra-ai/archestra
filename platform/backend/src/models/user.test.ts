@@ -58,14 +58,21 @@ describe("User.getUserPermissions", () => {
   });
 
   test("should return permissions for custom role", async () => {
-    // Create a custom role
+    // Create a custom role via direct DB insert
     const customRole: InsertOrganizationRole = {
       role: "custom_role",
       name: "Custom Role",
       organizationId: testOrgId,
       permission: { profile: ["read", "create"] },
     };
-    const createdRole = await OrganizationRoleModel.create(customRole);
+    const [createdRole] = await db
+      .insert(schema.organizationRolesTable)
+      .values({
+        id: crypto.randomUUID(),
+        ...customRole,
+        permission: JSON.stringify(customRole.permission),
+      })
+      .returning();
 
     // Add user with custom role
     await db.insert(schema.membersTable).values({

@@ -12054,7 +12054,7 @@ export type GetRolesResponses = {
         id: string;
         organizationId?: string;
         role: string;
-        title: string;
+        name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
@@ -12068,7 +12068,7 @@ export type GetRolesResponse = GetRolesResponses[keyof GetRolesResponses];
 
 export type CreateRoleData = {
     body: {
-        title: string;
+        name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
@@ -12145,7 +12145,7 @@ export type CreateRoleResponses = {
         id: string;
         organizationId?: string;
         role: string;
-        title: string;
+        name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
@@ -12318,7 +12318,7 @@ export type GetRoleResponses = {
         id: string;
         organizationId?: string;
         role: string;
-        title: string;
+        name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
@@ -12332,7 +12332,7 @@ export type GetRoleResponse = GetRoleResponses[keyof GetRoleResponses];
 
 export type UpdateRoleData = {
     body?: {
-        title?: string;
+        name?: string;
         permission?: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };
@@ -12414,7 +12414,7 @@ export type UpdateRoleResponses = {
         id: string;
         organizationId?: string;
         role: string;
-        title: string;
+        name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
         };

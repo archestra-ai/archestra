@@ -60,23 +60,23 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new custom role",
         tags: ["Roles"],
         body: z.object({
-          title: CreateUpdateRoleTitleSchema,
+          name: CreateUpdateRoleTitleSchema,
           permission: PermissionsSchema,
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (request, reply) => {
-      const { title, permission } = request.body;
+      const { name, permission } = request.body;
       const { organizationId } = request;
 
-      // Generate immutable name from title
-      const name = generateRoleName(title);
+      // Generate immutable role identifier from name
+      const roleIdentifier = generateRoleName(name);
 
       logger.info(
         {
-          title,
           name,
+          roleIdentifier,
           permission,
           organizationId,
         },
@@ -88,10 +88,10 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await betterAuth.api.createOrgRole({
           headers: request.headers as HeadersInit,
           body: {
-            role: name,
+            role: roleIdentifier,
             permission,
             additionalFields: {
-              title, // Pass title in additionalFields
+              name, // Pass display name in additionalFields
             },
             organizationId,
           },
@@ -110,7 +110,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const responseData = {
           id: roleData.id,
           role: roleData.role,
-          title: roleData.title || title,
+          name: roleData.name || name,
           organizationId: roleData.organizationId,
           permission: roleData.permission,
           predefined: false,
@@ -164,20 +164,20 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateRole,
         description:
-          "Update a custom role (title and/or permissions only, name is immutable)",
+          "Update a custom role (name and/or permissions only, role identifier is immutable)",
         tags: ["Roles"],
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,
         }),
         body: z.object({
-          title: CreateUpdateRoleTitleSchema.optional(),
+          name: CreateUpdateRoleTitleSchema.optional(),
           permission: PermissionsSchema.optional(),
         }),
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
     async (
-      { params: { roleId }, body: { title, permission }, user, organizationId },
+      { params: { roleId }, body: { name, permission }, user, organizationId },
       reply,
     ) => {
       // Cannot update predefined roles
@@ -217,7 +217,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await OrganizationRoleModel.update(roleId, {
-          title,
+          name,
           permission: permission ?? existingRole.permission,
         }),
       );

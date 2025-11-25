@@ -2,6 +2,7 @@ import { ac, adminRole, memberRole } from "@shared";
 import {
   adminClient,
   apiKeyClient,
+  inferOrgAdditionalFields,
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
@@ -21,6 +22,16 @@ export const authClient = createAuthClient({
         admin: adminRole,
         member: memberRole,
       },
+      schema: inferOrgAdditionalFields({
+        organizationRole: {
+          additionalFields: {
+            name: {
+              type: "string",
+              required: true,
+            },
+          },
+        },
+      }),
     }),
     nextCookies(),
     adminClient(),

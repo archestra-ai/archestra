@@ -21,7 +21,7 @@ const generatePredefinedRole = (
 ): OrganizationRole => ({
   id: roleName,
   role: roleName,
-  title: roleName,
+  name: roleName,
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(roleName),
   predefined: true,

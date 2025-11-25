@@ -67,7 +67,7 @@ export function RolesList() {
 
     createMutation.mutate(
       {
-        title: roleName,
+        name: roleName,
         permission,
       },
       {
@@ -101,7 +101,7 @@ export function RolesList() {
       {
         roleId: selectedRole.id,
         data: {
-          title: roleName,
+          name: roleName,
           permission,
         },
       },
@@ -137,7 +137,7 @@ export function RolesList() {
 
   const openEditDialog = useCallback((role: Role) => {
     setSelectedRole(role);
-    setRoleName(role.title);
+    setRoleName(role.name);
     setPermission(role.permission);
     setEditDialogOpen(true);
   }, []);
@@ -207,7 +207,7 @@ export function RolesList() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h4 className="font-semibold capitalize">
-                            {role.title}
+                            {role.name}
                           </h4>
                           <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                             System
@@ -253,7 +253,7 @@ export function RolesList() {
                     <div className="flex items-center gap-3">
                       <Shield className="h-5 w-5" />
                       <div>
-                        <h4 className="font-semibold">{role.title}</h4>
+                        <h4 className="font-semibold">{role.name}</h4>
                         {/* <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                           <Users className="h-3 w-3" />
                           <span>
@@ -398,7 +398,7 @@ export function RolesList() {
           <DialogHeader>
             <DialogTitle>Delete Role</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the role "{roleToDelete?.title}"?
+              Are you sure you want to delete the role "{roleToDelete?.name}"?
               This action cannot be undone.
             </DialogDescription>
           </DialogHeader>

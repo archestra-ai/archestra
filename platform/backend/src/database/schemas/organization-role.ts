@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 
 export const organizationRole = pgTable(
@@ -9,7 +9,7 @@ export const organizationRole = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     role: text("role").notNull(), // Immutable identifier (lowercase, no spaces) - used by better-auth
-    title: text("title").notNull(), // Editable display name - shown in UI
+    name: text("name").notNull(), // Editable display name - shown in UI
     permission: text("permission").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").$onUpdate(

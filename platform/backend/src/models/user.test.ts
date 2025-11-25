@@ -61,7 +61,7 @@ describe("User.getUserPermissions", () => {
     // Create a custom role
     const customRole: InsertOrganizationRole = {
       role: "custom_role",
-      title: "Custom Role",
+      name: "Custom Role",
       organizationId: testOrgId,
       permission: { profile: ["read", "create"] },
     };

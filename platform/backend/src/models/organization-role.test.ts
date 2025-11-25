@@ -91,7 +91,7 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role",
-        title: "Custom Role",
+        name: "Test Role",
         permission: { profile: ["read"] },
       });
 
@@ -100,7 +100,7 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: customRole.id,
         role: "Custom Role",
-        title: "Custom Role",
+        name: "Test Role",
         organizationId: org.id,
         permission: { profile: ["read"] },
         predefined: false,
@@ -138,7 +138,7 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role",
-        title: "Custom Role",
+        name: "Test Role",
         permission: { profile: ["read", "create"] },
       });
 
@@ -172,13 +172,13 @@ describe("OrganizationRoleModel", () => {
       // Create some custom roles
       const customRole1 = await makeCustomRole(org.id, {
         role: "Custom Role 1",
-        title: "Custom Role 1",
+        name: "Test Role 1",
         permission: { profile: ["read"] },
       });
 
       await makeCustomRole(org.id, {
         role: "Custom Role 2",
-        title: "Custom Role 2",
+        name: "Test Role 2",
         permission: { profile: ["create"] },
       });
 
@@ -204,7 +204,7 @@ describe("OrganizationRoleModel", () => {
       expect(customRoles.find((r) => r.id === customRole1.id)).toMatchObject({
         id: customRole1.id,
         role: "Custom Role 1",
-        title: "Custom Role 1",
+        name: "Test Role 1",
         permission: { profile: ["read"] },
       });
     });
@@ -251,7 +251,7 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       await makeCustomRole(org.id, {
         role: "Existing Role",
-        title: "Existing Role",
+        name: "Test Role",
         permission: { profile: ["read"] },
       });
 
@@ -270,7 +270,7 @@ describe("OrganizationRoleModel", () => {
       // Create a custom role
       const currentRole = await makeCustomRole(org.id, {
         role: "Current Role",
-        title: "Current Role",
+        name: "Test Role",
         permission: { profile: ["read"] },
       });
 
@@ -292,14 +292,14 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const newRole = await makeCustomRole(org.id, {
         role: "New Role",
-        title: "New Role",
+        name: "Test Role",
         permission: { profile: ["read"], organization: ["read"] },
       });
 
       expect(newRole).toMatchObject({
         id: newRole.id,
         role: "New Role",
-        title: "New Role",
+        name: "Test Role",
         permission: { profile: ["read"], organization: ["read"] },
         predefined: false,
       });
@@ -315,13 +315,13 @@ describe("OrganizationRoleModel", () => {
       // Create initial role
       const initialRole = await makeCustomRole(org.id, {
         role: "initial_role",
-        title: "Initial Title",
+        name: "Initial Name",
         permission: { profile: ["read"] },
       });
 
       // Update the role
       const updateData: UpdateOrganizationRole = {
-        title: "Updated Title",
+        name: "Updated Name",
         permission: { profile: ["create", "update"] },
       };
 
@@ -333,7 +333,7 @@ describe("OrganizationRoleModel", () => {
       expect(result).toMatchObject({
         id: initialRole.id,
         role: "initial_role", // role is immutable
-        title: "Updated Title", // title can be updated
+        name: "Updated Name", // name can be updated
         organizationId: org.id,
         permission: { profile: ["create", "update"] },
         predefined: false,
@@ -345,7 +345,7 @@ describe("OrganizationRoleModel", () => {
         org.id,
       );
       expect(retrieved?.role).toBe("initial_role"); // role is immutable
-      expect(retrieved?.title).toBe("Updated Title"); // title can be updated
+      expect(retrieved?.name).toBe("Updated Title"); // title can be updated
       expect(retrieved?.permission).toEqual({
         profile: ["create", "update"],
       });
@@ -361,7 +361,7 @@ describe("OrganizationRoleModel", () => {
       // Create role to delete
       const roleToDelete = await makeCustomRole(org.id, {
         role: "Role to Delete",
-        title: "Role to Delete",
+        name: "Test Role to Delete",
         permission: { profile: ["read"] },
       });
 
@@ -429,7 +429,7 @@ describe("OrganizationRoleModel", () => {
       // Create custom role
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role",
-        title: "Custom Role",
+        name: "Test Role",
         permission: { profile: ["read"] },
       });
 
@@ -451,7 +451,7 @@ describe("OrganizationRoleModel", () => {
       // Create custom role
       const customRole = await makeCustomRole(org.id, {
         role: "Custom Role With Members",
-        title: "Custom Role With Members",
+        name: "Test Role With Members",
         permission: { profile: ["read"] },
       });
 

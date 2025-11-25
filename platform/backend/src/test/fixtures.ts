@@ -270,14 +270,14 @@ async function makeTrustedDataPolicy(
 async function makeCustomRole(
   organizationId: string,
   overrides: Partial<
-    Pick<InsertOrganizationRole, "role" | "title" | "permission">
+    Pick<InsertOrganizationRole, "role" | "name" | "permission">
   > = {},
 ): Promise<OrganizationRole> {
   const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
   return await OrganizationRoleModel.create({
     // Don't specify id - let Better Auth generate it
     role: roleName,
-    title: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
+    name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
     permission: { profile: ["read"] },
     ...overrides,

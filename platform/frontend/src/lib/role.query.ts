@@ -1,6 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useIsAuthenticated } from "./auth.hook";
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -123,7 +123,9 @@ export function useDeleteRole() {
  * Filters out predefined roles and returns only custom ones
  */
 export function useCustomRoles() {
-  const userIsAuthenticated = useIsAuthenticated();
+  const session = authClient.useSession();
+  const userIsAuthenticated = session.data?.user != null;
+
   return useQuery({
     queryKey: roleKeys.custom(),
     queryFn: async () => {

@@ -29,12 +29,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const isAuthPageAndUserLoggedIn = isAuthPage && isLoggedIn;
   const isNotAuthPageAndUserNotLoggedIn = !isAuthPage && !isLoggedIn;
 
-  // Get required permissions for current page
+  // Get required permissions for current page (only check if logged in)
   const requiredPermissions = requiredPagePermissionsMap[pathname];
   const { data: hasRequiredPermissions, isPending: isPermissionCheckPending } =
     useHasPermissions(requiredPermissions || {});
 
-  const loading = isAuthCheckPending || isPermissionCheckPending;
+  // Only wait for permissions check if user is logged in and not on auth page
+  const shouldCheckPermissions = isLoggedIn && !isAuthPage;
+  const loading = isAuthCheckPending || (shouldCheckPermissions && isPermissionCheckPending);
 
   // Set Sentry user context when user is authenticated
   useEffect(() => {

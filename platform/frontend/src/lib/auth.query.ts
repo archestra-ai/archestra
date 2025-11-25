@@ -16,12 +16,16 @@ export function useSession() {
 }
 
 export function useCurrentOrgMembers() {
+  const session = authClient.useSession();
+  const isAuthenticated = session.data?.user != null;
+
   return useQuery({
     queryKey: ["auth", "orgMembers"],
     queryFn: async () => {
       const { data } = await authClient.organization.listMembers();
       return data?.members ?? [];
     },
+    enabled: isAuthenticated,
   });
 }
 
@@ -30,6 +34,9 @@ export function useCurrentOrgMembers() {
  * Avoid using directly in components and use useHasPermissions instead.
  */
 function useAllPermissions() {
+  const session = authClient.useSession();
+  const isAuthenticated = session.data?.user != null;
+
   return useQuery({
     queryKey: ["auth", "userPermissions"],
     queryFn: async () => {
@@ -38,6 +45,7 @@ function useAllPermissions() {
     },
     retry: false,
     throwOnError: false,
+    enabled: isAuthenticated,
   });
 }
 

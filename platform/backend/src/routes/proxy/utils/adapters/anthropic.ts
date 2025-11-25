@@ -310,7 +310,7 @@ export async function convertToolResultsToToon(
                 },
                 "convertToolResultsToToon: compressed (string content)",
               );
-              logger.info(
+              logger.debug(
                 {
                   toolCallId: contentBlock.tool_use_id,
                   before: noncompressed,
@@ -373,7 +373,7 @@ export async function convertToolResultsToToon(
                     },
                     "convertToolResultsToToon: compressed (array content)",
                   );
-                  logger.info(
+                  logger.debug(
                     {
                       toolCallId: contentBlock.tool_use_id,
                       before: noncompressed,

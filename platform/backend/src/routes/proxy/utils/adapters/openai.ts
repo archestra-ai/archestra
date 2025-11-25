@@ -285,7 +285,7 @@ export async function convertToolResultsToToon(
             },
             "convertToolResultsToToon: compressed",
           );
-          logger.info(
+          logger.debug(
             {
               toolCallId: message.tool_call_id,
               before: noncompressed,

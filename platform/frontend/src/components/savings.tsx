@@ -85,31 +85,33 @@ export function Savings({
           <TooltipContent className="max-w-xs">
             {isUnifiedView ? (
               // UCS (Unified Cost Savings) tooltip format
-              <div className="space-y-1.5 text-sm">
+              <div className="space-y-0.5 text-sm">
                 {totalSavings === 0 ? (
                   <div className={colorClass}>No cost savings available</div>
                 ) : (
                   <>
                     <div>Baseline Cost: {formatCost(baselineCostNum)}</div>
                     <div>Actual Cost: {formatCost(actualCost)}</div>
-                    <div className="text-green-600 dark:text-green-400 font-medium">
+                    <div className="font-semibold">
                       Savings: {formatCost(totalSavings)} (-
                       {savingsPercent}%)
                     </div>
 
-                    <div className="border-t border-border pt-1.5 mt-1.5 space-y-1">
+                    <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
                       {costOptimizationSavings > 0 && (
-                        <div className="text-muted-foreground">
-                          Model cost optimization: -
-                          {formatCost(costOptimizationSavings)}
+                        <div>
+                          <div>Model cost optimization:</div>
+                          <div>-{formatCost(costOptimizationSavings)}</div>
                         </div>
                       )}
 
                       {toonCostSavingsNum > 0 && toonTokensSaved && (
-                        <div className="text-muted-foreground">
-                          Tool result compression: -
-                          {formatCost(toonCostSavingsNum)} (
-                          {toonTokensSaved.toLocaleString()} tokens saved)
+                        <div>
+                          <div>Tool result compression:</div>
+                          <div>
+                            -{formatCost(toonCostSavingsNum)} (
+                            {toonTokensSaved.toLocaleString()} tokens saved)
+                          </div>
                         </div>
                       )}
                     </div>

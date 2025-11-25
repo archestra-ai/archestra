@@ -65,7 +65,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
-import { ChatConfigDialog } from "./chat-config-dialog";
+// Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
 export default function AgentsPage() {
   return (
@@ -221,7 +221,7 @@ function Agents() {
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
     (typeof agents)[number] | null
   >(null);
-  const [chatConfigAgent, setChatConfigAgent] = useState<
+  const [_chatConfigAgent, setChatConfigAgent] = useState<
     (typeof agents)[number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
@@ -556,13 +556,7 @@ function Agents() {
           />
         )}
 
-        {chatConfigAgent && (
-          <ChatConfigDialog
-            agent={chatConfigAgent}
-            open={!!chatConfigAgent}
-            onOpenChange={(open) => !open && setChatConfigAgent(null)}
-          />
-        )}
+        {/* Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library */}
 
         {editingAgent && (
           <EditAgentDialog

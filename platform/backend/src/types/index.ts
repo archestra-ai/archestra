@@ -1,6 +1,5 @@
 export * from "./account";
 export * from "./agent";
-export * from "./agent-prompt";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";

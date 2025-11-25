@@ -1,0 +1,15 @@
+{
+  "id": "0062_restructure_prompts",
+  "prevId": "0061_toon_compressor",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {},
+  "enums": {},
+  "schemas": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}
+

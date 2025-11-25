@@ -133,14 +133,11 @@ async function seedN8NSystemPrompt(): Promise<void> {
   }
 
   // Check if N8N system prompt already exists
-  const existingPrompts = await PromptModel.findByOrganizationId(
-    org.id,
-    "system",
-  );
+  const existingPrompts = await PromptModel.findByOrganizationId(org.id);
   const n8nPrompt = existingPrompts.find((p) => p.name === "n8n Expert");
 
   if (!n8nPrompt) {
-    const n8nSystemPromptContent = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
+    const _n8nSystemPromptContent = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
 
 ## Core Principles
 
@@ -318,12 +315,11 @@ return $input.all().map(item => ({
 
 **Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
-    await PromptModel.create(org.id, user.id, {
-      name: "n8n Expert",
-      type: "system",
-      content: n8nSystemPromptContent,
-    });
-    logger.info("✓ Seeded n8n Expert system prompt");
+    // TODO: Update prompt seeding for new schema (requires agentId)
+    // For now, skip seeding prompts since they need to be associated with specific agents
+    logger.info(
+      "✓ Skipping n8n Expert system prompt seeding (needs agent association in new schema)",
+    );
   } else {
     logger.info("✓ n8n Expert system prompt already exists, skipping");
   }
@@ -355,20 +351,16 @@ async function seedDefaultRegularPrompts(): Promise<void> {
   ];
 
   // Check existing regular prompts
-  const existingPrompts = await PromptModel.findByOrganizationId(
-    org.id,
-    "regular",
-  );
+  const existingPrompts = await PromptModel.findByOrganizationId(org.id);
 
   for (const promptData of defaultPrompts) {
     const exists = existingPrompts.find((p) => p.name === promptData.name);
     if (!exists) {
-      await PromptModel.create(org.id, user.id, {
-        name: promptData.name,
-        type: "regular",
-        content: promptData.content,
-      });
-      logger.info(`✓ Seeded regular prompt: ${promptData.name}`);
+      // TODO: Update prompt seeding for new schema (requires agentId)
+      // For now, skip seeding prompts since they need to be associated with specific agents
+      logger.info(
+        `✓ Skipping regular prompt seeding: ${promptData.name} (needs agent association in new schema)`,
+      );
     } else {
       logger.info(
         `✓ Regular prompt already exists: ${promptData.name}, skipping`,

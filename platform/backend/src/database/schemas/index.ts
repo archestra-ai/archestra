@@ -1,7 +1,6 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentLabelsTable } from "./agent-label";
-export { default as agentPromptsTable } from "./agent-prompt";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";

@@ -22,9 +22,10 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { AllAgentsPrompts } from "@/components/chat/all-agents-prompts";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { PromptDialog } from "@/components/chat/prompt-dialog";
+import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ import {
   useCreateConversation,
 } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
 
@@ -70,6 +72,15 @@ export default function ChatPage() {
   // State for MCP installation request dialogs
   const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
     useState(false);
+
+  // State for prompt management
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+
+  // Fetch prompts and current editing prompt
+  const { data: prompts = [] } = usePrompts();
+  const { data: editingPrompt } = usePrompt(editingPromptId || "");
+  const deletePromptMutation = useDeletePrompt();
 
   const chatSession = useChatSession(conversationId);
 
@@ -99,6 +110,12 @@ export default function ChatPage() {
 
   // Fetch conversation with messages
   const { data: conversation } = useConversation(conversationId);
+
+  // Find the prompt associated with the current conversation's agent
+  const conversationPrompts = prompts.filter(
+    (p) => p.agentId === conversation?.agentId,
+  );
+  const conversationPrompt = conversationPrompts[0]; // Use first prompt for this agent
 
   // Get current agent info
   const currentAgentId = conversation?.agentId;
@@ -162,12 +179,17 @@ export default function ChatPage() {
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
 
-  // Handle prompt selection from all agents view
-  const handleSelectPromptFromAllAgents = useCallback(
-    async (agentId: string, prompt: string) => {
-      // Store the pending prompt to send after conversation loads
-      // Empty string means "free chat" - don't send a message
-      pendingPromptRef.current = prompt || undefined;
+  // Handle prompt selection from library
+  const handleSelectPrompt = useCallback(
+    async (agentId: string, promptId?: string) => {
+      // If promptId is provided, fetch the prompt and use its userPrompt
+      if (promptId) {
+        const selectedPrompt = prompts.find((p) => p.id === promptId);
+        if (selectedPrompt?.userPrompt) {
+          pendingPromptRef.current = selectedPrompt.userPrompt;
+        }
+      }
+
       // Create conversation for the selected agent
       const newConversation =
         await createConversationMutation.mutateAsync(agentId);
@@ -177,7 +199,30 @@ export default function ChatPage() {
         selectConversation(newConversation.id);
       }
     },
-    [createConversationMutation, selectConversation],
+    [createConversationMutation, selectConversation, prompts],
+  );
+
+  const handleEditPrompt = useCallback((prompt: (typeof prompts)[number]) => {
+    setEditingPromptId(prompt.id);
+    setIsPromptDialogOpen(true);
+  }, []);
+
+  const handleCreatePrompt = useCallback(() => {
+    setEditingPromptId(null);
+    setIsPromptDialogOpen(true);
+  }, []);
+
+  const handleDeletePrompt = useCallback(
+    async (promptId: string) => {
+      if (!confirm("Are you sure you want to delete this prompt?")) return;
+
+      try {
+        await deletePromptMutation.mutateAsync(promptId);
+      } catch (error) {
+        console.error("Failed to delete prompt:", error);
+      }
+    },
+    [deletePromptMutation],
   );
 
   // Persist hide tool calls preference
@@ -336,7 +381,13 @@ export default function ChatPage() {
     <div className="flex h-screen w-full">
       <div className="flex-1 flex flex-col w-full">
         {!conversationId ? (
-          <AllAgentsPrompts onSelectPrompt={handleSelectPromptFromAllAgents} />
+          <PromptLibraryGrid
+            prompts={prompts}
+            onSelectPrompt={handleSelectPrompt}
+            onEdit={handleEditPrompt}
+            onDelete={handleDeletePrompt}
+            onCreate={handleCreatePrompt}
+          />
         ) : (
           <div className="flex flex-col h-full">
             {error && <ChatError error={error} />}
@@ -351,7 +402,26 @@ export default function ChatPage() {
                   </span>
                 </div>
               )}
-              <div className="flex-1 flex justify-end">
+              <div className="flex-1 flex justify-end gap-2 items-center">
+                {conversationPrompt?.systemPrompt && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs font-medium cursor-help">
+                          System Prompt
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        className="max-w-md max-h-64 overflow-y-auto"
+                      >
+                        <pre className="text-xs whitespace-pre-wrap">
+                          {conversationPrompt.systemPrompt}
+                        </pre>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -383,6 +453,46 @@ export default function ChatPage() {
 
             <div className="sticky bottom-0 bg-background border-t p-4">
               <div className="max-w-3xl mx-auto space-y-3">
+                {conversationPrompt && (
+                  <div className="flex items-center gap-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs font-medium cursor-help">
+                            Prompt: {conversationPrompt.name}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="max-w-md max-h-64 overflow-y-auto"
+                        >
+                          <div className="space-y-2">
+                            {conversationPrompt.userPrompt && (
+                              <div>
+                                <div className="font-semibold text-xs mb-1">
+                                  User Prompt:
+                                </div>
+                                <pre className="text-xs whitespace-pre-wrap">
+                                  {conversationPrompt.userPrompt}
+                                </pre>
+                              </div>
+                            )}
+                            {conversationPrompt.systemPrompt && (
+                              <div>
+                                <div className="font-semibold text-xs mb-1">
+                                  System Prompt:
+                                </div>
+                                <pre className="text-xs whitespace-pre-wrap">
+                                  {conversationPrompt.systemPrompt}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                )}
                 {currentAgentId && Object.keys(groupedTools).length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
@@ -460,6 +570,17 @@ export default function ChatPage() {
       <CustomServerRequestDialog
         isOpen={isCustomServerDialogOpen}
         onClose={() => setIsCustomServerDialogOpen(false)}
+      />
+
+      <PromptDialog
+        open={isPromptDialogOpen}
+        onOpenChange={(open) => {
+          setIsPromptDialogOpen(open);
+          if (!open) {
+            setEditingPromptId(null);
+          }
+        }}
+        prompt={editingPrompt}
       />
     </div>
   );

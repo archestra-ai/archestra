@@ -26,17 +26,17 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
-  const isAuthPageAndUserLoggedIn = isAuthPage && isLoggedIn;
-  const isNotAuthPageAndUserNotLoggedIn = !isAuthPage && !isLoggedIn;
 
-  // Get required permissions for current page (only check if logged in)
+  // Get required permissions for current page
   const requiredPermissions = requiredPagePermissionsMap[pathname];
   const { data: hasRequiredPermissions, isPending: isPermissionCheckPending } =
     useHasPermissions(requiredPermissions || {});
 
-  // Only wait for permissions check if user is logged in and not on auth page
-  const shouldCheckPermissions = isLoggedIn && !isAuthPage;
-  const loading = isAuthCheckPending || (shouldCheckPermissions && isPermissionCheckPending);
+  // On auth pages, only wait for auth check (no permission check needed)
+  // On other pages, wait for both auth and permission checks
+  const loading = isAuthPage
+    ? isAuthCheckPending
+    : isAuthCheckPending || isPermissionCheckPending;
 
   // Set Sentry user context when user is authenticated
   useEffect(() => {
@@ -65,19 +65,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     if (isAuthCheckPending) {
       // If auth check is pending, don't do anything
       return;
-    } else if (isAuthPageAndUserLoggedIn) {
+    } else if (isAuthPage && isLoggedIn) {
       // User is logged in but on auth page, redirect to home
       router.push("/");
-    } else if (isNotAuthPageAndUserNotLoggedIn) {
+    } else if (!isAuthPage && !isLoggedIn) {
       // User is not logged in and not on auth page, redirect to sign-in
       router.push("/auth/sign-in");
     }
-  }, [
-    isAuthCheckPending,
-    isAuthPageAndUserLoggedIn,
-    isNotAuthPageAndUserNotLoggedIn,
-    router,
-  ]);
+  }, [isAuthCheckPending, isAuthPage, isLoggedIn, router]);
 
   // Redirect to home if page is protected and user is not authorized
   useEffect(() => {
@@ -90,12 +85,13 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     }
   }, [loading, requiredPermissions, hasRequiredPermissions, router]);
 
+  // Show loading while checking auth/permissions
   if (loading) {
     return null;
-  }
-
-  // During redirect, show nothing
-  if (isAuthPageAndUserLoggedIn || isNotAuthPageAndUserNotLoggedIn) {
+  } else if (isAuthPage && isLoggedIn) {
+    // During redirects, show nothing to avoid flash
+    return null;
+  } else if (!isAuthPage && !isLoggedIn) {
     return null;
   }
 

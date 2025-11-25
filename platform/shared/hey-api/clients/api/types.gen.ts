@@ -12161,7 +12161,7 @@ export type DeleteRoleData = {
     body?: never;
     path: {
         /**
-         * Custom role ID
+         * Custom role ID (base62)
          */
         roleId: string;
     };

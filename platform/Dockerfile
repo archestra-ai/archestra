@@ -34,6 +34,12 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 
+ARG VERSION=dev
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV ARCHESTRA_VERSION=$VERSION
+
 # Turbo remote caching
 # https://turborepo.com/docs/guides/tools/docker#example
 ARG TURBO_TEAM
@@ -43,14 +49,11 @@ ARG TURBO_TOKEN
 ENV TURBO_TOKEN=$TURBO_TOKEN
 
 # Build all workspace
-ENV NEXT_TELEMETRY_DISABLED=1
 # Use Docker secret to securely pass Sentry auth token during build
 # The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
-RUN --mount=type=secret,id=sentry_auth_token \
-    if [ -f /run/secrets/sentry_auth_token ]; then \
-        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
-    fi && \
+# https://docs.docker.com/build/building/secrets/#target
+RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     pnpm build
 
 # <----- Final unified stage ----->
@@ -60,10 +63,9 @@ WORKDIR /app
 ARG VERSION=dev
 
 ENV NODE_ENV=production
-# disable telemetry for next.js
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV ARCHESTRA_VERSION=$VERSION
 
-ENV ARCHESTRA_VERSION=${VERSION}
 ENV ARCHESTRA_FRONTEND_URL=""
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_ANALYTICS="enabled"

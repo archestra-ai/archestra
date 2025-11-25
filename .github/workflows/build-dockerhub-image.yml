@@ -25,7 +25,7 @@ on:
         required: false
       DOCKER_PASSWORD:
         required: false
-      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+      SENTRY_SOURCE_MAP_AUTH_TOKEN:
         required: false
       TURBOREPO_REMOTE_CACHING_TOKEN:
         required: false
@@ -84,7 +84,7 @@ jobs:
             TURBO_TEAM=${{ env.TURBO_TEAM }}
             TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
-            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+            sentry_auth_token=${{ secrets.SENTRY_SOURCE_MAP_AUTH_TOKEN }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
 
       - name: Export digest

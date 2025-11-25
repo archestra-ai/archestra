@@ -52,7 +52,7 @@ jobs:
             TURBO_TEAM=${{ env.TURBO_TEAM }}
             TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
-            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+            sentry_auth_token=${{ secrets.SENTRY_SOURCE_MAP_AUTH_TOKEN }}
           push: true
           tags: |
             europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}

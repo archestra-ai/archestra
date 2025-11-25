@@ -1,3 +1,5 @@
+import { encode as toonEncode } from "@toon-format/toon";
+import logger from "@/logging";
 import type {
   Anthropic,
   CommonMessage,
@@ -181,7 +183,10 @@ export function toolCallsToCommon(
 /**
  * Convert common tool results to Anthropic user message with tool_result blocks
  */
-export function toolResultsToMessages(results: CommonToolResult[]): Array<{
+export function toolResultsToMessages(
+  results: CommonToolResult[],
+  convertToToon = false,
+): Array<{
   role: "user";
   content: Array<{
     type: "tool_result";
@@ -197,16 +202,221 @@ export function toolResultsToMessages(results: CommonToolResult[]): Array<{
   return [
     {
       role: "user" as const,
-      content: results.map((result) => ({
-        type: "tool_result" as const,
-        tool_use_id: result.id,
-        content: result.isError
-          ? `Error: ${result.error || "Tool execution failed"}`
-          : JSON.stringify(result.content),
-        is_error: result.isError,
-      })),
+      content: results.map((result) => {
+        let content: string;
+        if (result.isError) {
+          content = `Error: ${result.error || "Tool execution failed"}`;
+        } else if (convertToToon) {
+          const beforeJson = JSON.stringify(result.content);
+          const afterToon = toonEncode(result.content);
+          logger.info(
+            {
+              toolName: result.name,
+              toolCallId: result.id,
+              beforeLength: beforeJson.length,
+              afterLength: afterToon.length,
+              compressionRatio: (
+                (1 - afterToon.length / beforeJson.length) *
+                100
+              ).toFixed(2),
+            },
+            "TOON conversion completed",
+          );
+          logger.debug(
+            {
+              toolName: result.name,
+              toolCallId: result.id,
+              before: beforeJson,
+              after: afterToon,
+            },
+            "TOON conversion before/after",
+          );
+          content = afterToon;
+        } else {
+          content = JSON.stringify(result.content);
+        }
+
+        return {
+          type: "tool_result" as const,
+          tool_use_id: result.id,
+          content,
+          is_error: result.isError,
+        };
+      }),
     },
   ];
+}
+
+/**
+ * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression statistics
+ */
+export function convertToolResultsToToon(messages: AnthropicMessages): {
+  messages: AnthropicMessages;
+  compressionStats: {
+    totalBeforeLength: number;
+    totalAfterLength: number;
+    toolResults: number;
+  };
+} {
+  let toolResultCount = 0;
+  let totalBeforeLength = 0;
+  let totalAfterLength = 0;
+
+  const result = messages.map((message) => {
+    // Only process user messages with content arrays that contain tool_result blocks
+    if (message.role === "user" && Array.isArray(message.content)) {
+      const updatedContent = message.content.map((contentBlock) => {
+        if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
+          toolResultCount++;
+          logger.info(
+            {
+              toolCallId: contentBlock.tool_use_id,
+              contentType: typeof contentBlock.content,
+              isArray: Array.isArray(contentBlock.content),
+            },
+            "Processing tool_result for TOON conversion",
+          );
+
+          // Handle string content
+          if (typeof contentBlock.content === "string") {
+            try {
+              const parsed = JSON.parse(contentBlock.content);
+              const beforeJson = contentBlock.content;
+              const afterToon = toonEncode(parsed);
+
+              // Track compression stats
+              totalBeforeLength += beforeJson.length;
+              totalAfterLength += afterToon.length;
+
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  beforeLength: beforeJson.length,
+                  afterLength: afterToon.length,
+                  compressionRatio: (
+                    (1 - afterToon.length / beforeJson.length) *
+                    100
+                  ).toFixed(2),
+                  toonPreview: afterToon.substring(0, 150),
+                },
+                "TOON conversion completed (string content)",
+              );
+              logger.debug(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  before: beforeJson,
+                  after: afterToon,
+                },
+                "TOON conversion before/after",
+              );
+
+              return {
+                ...contentBlock,
+                content: afterToon,
+              };
+            } catch {
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  contentPreview:
+                    typeof contentBlock.content === "string"
+                      ? contentBlock.content.substring(0, 100)
+                      : "non-string",
+                },
+                "Skipping TOON conversion - string content is not JSON",
+              );
+              return contentBlock;
+            }
+          }
+
+          // Handle array content (content blocks format)
+          if (Array.isArray(contentBlock.content)) {
+            const updatedBlocks = contentBlock.content.map((block) => {
+              if (block.type === "text" && typeof block.text === "string") {
+                try {
+                  // Try to parse as JSON
+                  const parsed = JSON.parse(block.text);
+                  const beforeJson = block.text;
+                  const afterToon = toonEncode(parsed);
+
+                  // Track compression stats
+                  totalBeforeLength += beforeJson.length;
+                  totalAfterLength += afterToon.length;
+
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      beforeLength: beforeJson.length,
+                      afterLength: afterToon.length,
+                      compressionRatio: (
+                        (1 - afterToon.length / beforeJson.length) *
+                        100
+                      ).toFixed(2),
+                      toonPreview: afterToon.substring(0, 150),
+                    },
+                    "TOON conversion completed (array content)",
+                  );
+                  logger.debug(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      before: beforeJson,
+                      after: afterToon,
+                    },
+                    "TOON conversion before/after",
+                  );
+
+                  return {
+                    ...block,
+                    text: afterToon,
+                  };
+                } catch {
+                  // Not JSON, keep as-is
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      blockType: block.type,
+                      textPreview: block.text?.substring(0, 100),
+                    },
+                    "Skipping TOON conversion - content is not JSON",
+                  );
+                  return block;
+                }
+              }
+              return block;
+            });
+
+            return {
+              ...contentBlock,
+              content: updatedBlocks,
+            };
+          }
+        }
+        return contentBlock;
+      });
+
+      return {
+        ...message,
+        content: updatedContent,
+      };
+    }
+
+    return message;
+  });
+
+  logger.info(
+    { messageCount: messages.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  return {
+    messages: result,
+    compressionStats: {
+      totalBeforeLength,
+      totalAfterLength,
+      toolResults: toolResultCount,
+    },
+  };
 }
 
 /** Returns input and output usage tokens */

@@ -225,6 +225,7 @@ const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>
           <UserButton
+            size="default"
             align="center"
             className="w-full bg-transparent hover:bg-transparent text-foreground"
             disableDefaultLinks

@@ -70,15 +70,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgents,
         description: "Get all agents without pagination",
         tags: ["Agents"],
+        querystring: z.object({
+          useInChat: z.coerce.boolean().optional(),
+        }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async ({ headers, user }, reply) => {
+    async ({ headers, user, query: filterParams }, reply) => {
       const { success: isAgentAdmin } = await hasPermission(
         { profile: ["admin"] },
         headers,
       );
-      return reply.send(await AgentModel.findAll(user.id, isAgentAdmin));
+      return reply.send(
+        await AgentModel.findAll(user.id, isAgentAdmin, filterParams),
+      );
     },
   );
 

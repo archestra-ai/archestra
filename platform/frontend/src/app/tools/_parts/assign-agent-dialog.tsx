@@ -35,7 +35,7 @@ export function AssignAgentDialog({
   open,
   onOpenChange,
 }: AssignAgentDialogProps) {
-  const { data: agents } = useAgents({});
+  const { data: agents } = useAgents();
   const assignMutation = useAssignTool();
   const { data: mcpCatalog } = useInternalMcpCatalog();
   const [searchQuery, setSearchQuery] = useState("");

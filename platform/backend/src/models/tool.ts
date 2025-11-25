@@ -321,6 +321,104 @@ class ToolModel {
   }
 
   /**
+   * Bulk create tools for an MCP server (catalog-based tools)
+   * Fetches existing tools in a single query, then bulk inserts only new tools
+   * Returns all tools (existing + newly created) to avoid N+1 queries
+   */
+  static async bulkCreateToolsIfNotExists(
+    tools: Array<{
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      catalogId: string;
+      mcpServerId: string;
+    }>,
+  ): Promise<Tool[]> {
+    if (tools.length === 0) {
+      return [];
+    }
+
+    // Group tools by catalogId (all tools should have the same catalogId in practice)
+    const catalogId = tools[0].catalogId;
+    const toolNames = tools.map((t) => t.name);
+
+    // Fetch all existing tools for this catalog in a single query
+    const existingTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          isNull(schema.toolsTable.agentId),
+          eq(schema.toolsTable.catalogId, catalogId),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+
+    const existingToolsByName = new Map(existingTools.map((t) => [t.name, t]));
+
+    // Prepare tools to insert (only those that don't exist)
+    const toolsToInsert: InsertTool[] = [];
+    const resultTools: Tool[] = [];
+
+    for (const tool of tools) {
+      const existingTool = existingToolsByName.get(tool.name);
+      if (existingTool) {
+        resultTools.push(existingTool);
+      } else {
+        toolsToInsert.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+          catalogId: tool.catalogId,
+          mcpServerId: tool.mcpServerId,
+          agentId: null,
+        });
+      }
+    }
+
+    // Bulk insert new tools if any
+    if (toolsToInsert.length > 0) {
+      const insertedTools = await db
+        .insert(schema.toolsTable)
+        .values(toolsToInsert)
+        .onConflictDoNothing()
+        .returning();
+
+      // If some tools weren't inserted due to conflict, fetch them
+      if (insertedTools.length < toolsToInsert.length) {
+        const insertedNames = new Set(insertedTools.map((t) => t.name));
+        const missingNames = toolsToInsert
+          .filter((t) => !insertedNames.has(t.name))
+          .map((t) => t.name);
+
+        if (missingNames.length > 0) {
+          const conflictTools = await db
+            .select()
+            .from(schema.toolsTable)
+            .where(
+              and(
+                isNull(schema.toolsTable.agentId),
+                eq(schema.toolsTable.catalogId, catalogId),
+                inArray(schema.toolsTable.name, missingNames),
+              ),
+            );
+          resultTools.push(...insertedTools, ...conflictTools);
+        } else {
+          resultTools.push(...insertedTools);
+        }
+      } else {
+        resultTools.push(...insertedTools);
+      }
+    }
+
+    // Return tools in the same order as input
+    const resultToolsByName = new Map(resultTools.map((t) => [t.name, t]));
+    return tools
+      .map((t) => resultToolsByName.get(t.name))
+      .filter((t): t is Tool => t !== undefined);
+  }
+
+  /**
    * Assign Archestra built-in tools to an agent
    * Creates the tools globally if they don't exist, then assigns them via junction table
    */

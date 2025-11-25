@@ -40,16 +40,21 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
     request: OpenAi.API.ChatCompletionRequestSchema,
+    processedRequest:
+      OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
     response: OpenAi.API.ChatCompletionResponseSchema,
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["gemini:generateContent"]),
     request: Gemini.API.GenerateContentRequestSchema,
+    processedRequest:
+      Gemini.API.GenerateContentRequestSchema.nullable().optional(),
     response: Gemini.API.GenerateContentResponseSchema,
   }),
   BaseSelectInteractionSchema.extend({
     type: z.enum(["anthropic:messages"]),
     request: Anthropic.API.MessagesRequestSchema,
+    processedRequest: Anthropic.API.MessagesRequestSchema.nullable().optional(),
     response: Anthropic.API.MessagesResponseSchema,
   }),
 ]);
@@ -59,6 +64,7 @@ export const InsertInteractionSchema = createInsertSchema(
   {
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
+    processedRequest: InteractionRequestSchema.nullable().optional(),
     response: InteractionResponseSchema,
   },
 );

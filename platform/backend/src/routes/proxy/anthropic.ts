@@ -318,10 +318,38 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to Anthropic messages
-      const filteredMessages = utils.adapters.anthropic.applyUpdates(
+      let filteredMessages = utils.adapters.anthropic.applyUpdates(
         body.messages,
         toolResultUpdates,
       );
+
+      // Convert tool results to TOON format if enabled on agent
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+
+      if (resolvedAgent.convertToolResultsToToon) {
+        const { messages: convertedMessages, compressionStats } =
+          utils.adapters.anthropic.convertToolResultsToToon(filteredMessages);
+        filteredMessages = convertedMessages;
+
+        // Calculate token counts if tool results were actually compressed
+        if (compressionStats.toolResults > 0) {
+          const tokenizer = utils.tokenizers.getTokenizer("anthropic");
+          // Estimate tokens from character count (character length serves as proxy)
+          toonTokensBefore = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalBeforeLength),
+            },
+          ]);
+          toonTokensAfter = tokenizer.countTokens([
+            {
+              role: "user",
+              content: "x".repeat(compressionStats.totalAfterLength),
+            },
+          ]);
+        }
+      }
 
       fastify.log.info(
         {
@@ -329,6 +357,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalMessagesCount: body.messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
+          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -631,6 +660,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: {
             id: messageStartEvent?.message.id || "msg-unknown",
             type: "message",
@@ -646,6 +679,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outputTokens: tokenUsage.output,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         // Send message_delta with stop_reason and usage
@@ -750,12 +785,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
+              processedRequest: {
+                ...body,
+                messages: filteredMessages,
+              },
               response: response,
               model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
               cost: cost?.toFixed(10) ?? null,
               baselineCost: baselineCost?.toFixed(10) ?? null,
+              toonTokensBefore,
+              toonTokensAfter,
             });
 
             return reply.send(response);
@@ -791,12 +832,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: response,
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
           cost: cost?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
         });
 
         return reply.send(response);

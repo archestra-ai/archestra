@@ -4,6 +4,7 @@ import db, { schema } from "@/database";
 class McpServerTeamModel {
   /**
    * Get all MCP server IDs that a user has access to (through team membership)
+   * Optimized to use a single query with joins instead of consecutive queries
    */
   static async getUserAccessibleMcpServerIds(
     userId: string,
@@ -17,29 +18,23 @@ class McpServerTeamModel {
       return allServers.map((server) => server.id);
     }
 
-    // Get all team IDs the user is a member of
-    const userTeams = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
-
-    const teamIds = userTeams.map((t) => t.teamId);
-
-    if (teamIds.length === 0) {
-      return [];
-    }
-
-    // Get all MCP servers assigned to these teams
+    // Get all MCP servers assigned to teams the user is a member of in a single query
     const mcpServerTeams = await db
       .select({ mcpServerId: schema.mcpServerTeamsTable.mcpServerId })
       .from(schema.mcpServerTeamsTable)
-      .where(inArray(schema.mcpServerTeamsTable.teamId, teamIds));
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServerTeamsTable.teamId, schema.teamMembersTable.teamId),
+      )
+      .where(eq(schema.teamMembersTable.userId, userId));
 
-    return mcpServerTeams.map((st) => st.mcpServerId);
+    // Use Set to remove duplicates (user might be in multiple teams with same MCP server)
+    return Array.from(new Set(mcpServerTeams.map((st) => st.mcpServerId)));
   }
 
   /**
    * Check if a user has access to a specific MCP server (through team membership)
+   * Optimized to use a single query with joins instead of consecutive queries
    */
   static async userHasMcpServerAccess(
     userId: string,
@@ -51,26 +46,18 @@ class McpServerTeamModel {
       return true;
     }
 
-    // Get all team IDs the user is a member of
-    const userTeams = await db
-      .select({ teamId: schema.teamMembersTable.teamId })
-      .from(schema.teamMembersTable)
-      .where(eq(schema.teamMembersTable.userId, userId));
-
-    const teamIds = userTeams.map((t) => t.teamId);
-
-    if (teamIds.length === 0) {
-      return false;
-    }
-
-    // Check if the MCP server is assigned to any of the user's teams
+    // Check if the MCP server is assigned to any team the user is a member of in a single query
     const mcpServerTeam = await db
       .select()
       .from(schema.mcpServerTeamsTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServerTeamsTable.teamId, schema.teamMembersTable.teamId),
+      )
       .where(
         and(
           eq(schema.mcpServerTeamsTable.mcpServerId, mcpServerId),
-          inArray(schema.mcpServerTeamsTable.teamId, teamIds),
+          eq(schema.teamMembersTable.userId, userId),
         ),
       )
       .limit(1);

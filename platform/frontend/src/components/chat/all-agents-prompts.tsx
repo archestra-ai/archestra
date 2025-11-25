@@ -165,7 +165,7 @@ function AgentSection({
 }
 
 export function AllAgentsPrompts({ onSelectPrompt }: AllAgentsPromptsProps) {
-  const { data: agents } = useAgents();
+  const { data: agents } = useAgents({ filters: { useInChat: true } });
   const { data: allPrompts } = usePrompts({ type: "regular" });
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrompt, setSelectedPrompt] = useState<{

@@ -3,8 +3,7 @@ import db, { schema } from "@/database";
 import type {
   InsertOptimizationRule,
   OptimizationRule,
-  OptimizationRuleContentLengthConditions,
-  OptimizationRuleToolPresenceConditions,
+  OptimizationRuleConditions,
   SupportedProvider,
   UpdateOptimizationRule,
 } from "@/types";
@@ -45,8 +44,7 @@ class OptimizationRuleModel {
             eq(schema.teamsTable.organizationId, organizationId),
           ),
         ),
-      )
-      .orderBy(asc(schema.optimizationRulesTable.priority));
+      );
 
     return rules;
   }
@@ -65,8 +63,7 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
-      )
-      .orderBy(asc(schema.optimizationRulesTable.priority));
+      );
 
     return rules;
   }
@@ -93,6 +90,7 @@ class OptimizationRuleModel {
   }
 
   // Evaluate rules for a given agent and context
+  // Rules use AND logic: all specified conditions must match
   static evaluateRules(
     rules: OptimizationRule[],
     context: {
@@ -103,21 +101,17 @@ class OptimizationRuleModel {
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      let matches = false;
+      const conditions = rule.conditions as OptimizationRuleConditions;
+      let matches = true;
 
-      switch (rule.ruleType) {
-        case "content_length": {
-          const conditions =
-            rule.conditions as OptimizationRuleContentLengthConditions;
-          matches = context.tokenCount <= conditions.maxLength;
-          break;
-        }
-        case "tool_presence": {
-          const conditions =
-            rule.conditions as OptimizationRuleToolPresenceConditions;
-          matches = context.hasTools === conditions.hasTools;
-          break;
-        }
+      // Check maxLength condition if specified
+      if (conditions.maxLength !== undefined) {
+        matches = matches && context.tokenCount <= conditions.maxLength;
+      }
+
+      // Check hasTools condition if specified (AND logic)
+      if (conditions.hasTools !== undefined) {
+        matches = matches && context.hasTools === conditions.hasTools;
       }
 
       if (matches) {

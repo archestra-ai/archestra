@@ -227,7 +227,6 @@ function Agents() {
     name: string;
     teams: string[];
     labels: AgentLabel[];
-    optimizeCost?: boolean;
     considerContextUntrusted: boolean;
     useInChat?: boolean;
     convertToolResultsToToon?: boolean;
@@ -411,35 +410,6 @@ function Agents() {
       ),
     },
     {
-      id: "optimizeCost",
-      header: "Optimize Cost",
-      size: 130,
-      cell: ({ row }) => {
-        const agent = row.original;
-        return (
-          <WithPermissions permissions={{ profile: ["update"] }}>
-            <Switch
-              checked={agent.optimizeCost ?? false}
-              onCheckedChange={async (checked) => {
-                try {
-                  await updateAgent.mutateAsync({
-                    id: agent.id,
-                    data: { optimizeCost: checked },
-                  });
-                  toast.success(
-                    `Cost optimization ${checked ? "enabled" : "disabled"}`,
-                  );
-                } catch (_error) {
-                  toast.error("Failed to update cost optimization");
-                }
-              }}
-              disabled={updateAgent.isPending}
-            />
-          </WithPermissions>
-        );
-      },
-    },
-    {
       id: "actions",
       header: "Actions",
       size: 176,
@@ -581,7 +551,6 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<AgentLabel[]>([]);
-  const [optimizeCost, setOptimizeCost] = useState<boolean>(false);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
   const [useInChat, setUseInChat] = useState(true);
@@ -649,7 +618,6 @@ function CreateAgentDialog({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
-          optimizeCost,
           considerContextUntrusted,
           useInChat,
           convertToolResultsToToon,
@@ -667,7 +635,6 @@ function CreateAgentDialog({
       name,
       assignedTeamIds,
       labels,
-      optimizeCost,
       considerContextUntrusted,
       createAgent,
       useInChat,
@@ -781,25 +748,6 @@ function CreateAgentDialog({
                   availableKeys={availableKeys}
                 />
 
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="create-optimize-cost">
-                        Cost Optimization
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically select cheaper models when appropriate
-                        (e.g., gpt-4o-mini for short contexts)
-                      </p>
-                    </div>
-                    <Switch
-                      id="create-optimize-cost"
-                      checked={optimizeCost}
-                      onCheckedChange={setOptimizeCost}
-                    />
-                  </div>
-                </div>
-
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="consider-context-untrusted"
@@ -911,7 +859,6 @@ function EditAgentDialog({
     name: string;
     teams: string[];
     labels: AgentLabel[];
-    optimizeCost?: boolean;
     considerContextUntrusted: boolean;
     useInChat?: boolean;
     convertToolResultsToToon?: boolean;
@@ -924,9 +871,6 @@ function EditAgentDialog({
     agent.teams || [],
   );
   const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
-  const [optimizeCost, setOptimizeCost] = useState<boolean>(
-    agent.optimizeCost || false,
-  );
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
   );
@@ -982,7 +926,6 @@ function EditAgentDialog({
             name: name.trim(),
             teams: assignedTeamIds,
             labels: updatedLabels,
-            optimizeCost,
             considerContextUntrusted,
             useInChat,
             convertToolResultsToToon,
@@ -999,7 +942,6 @@ function EditAgentDialog({
       name,
       assignedTeamIds,
       labels,
-      optimizeCost,
       updateAgent,
       onOpenChange,
       considerContextUntrusted,
@@ -1110,23 +1052,6 @@ function EditAgentDialog({
               onLabelsChange={setLabels}
               availableKeys={availableKeys}
             />
-
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="optimize-cost">Cost Optimization</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically select cheaper models when appropriate (e.g.,
-                    gpt-4o-mini for short contexts)
-                  </p>
-                </div>
-                <Switch
-                  id="optimize-cost"
-                  checked={optimizeCost}
-                  onCheckedChange={setOptimizeCost}
-                />
-              </div>
-            </div>
 
             <div className="flex items-center space-x-2">
               <Checkbox

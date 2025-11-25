@@ -9,7 +9,6 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
-  type UpdateOrganizationRole,
 } from "@/types";
 
 const CreateUpdateRoleNameSchema = z

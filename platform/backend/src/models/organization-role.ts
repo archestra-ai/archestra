@@ -7,13 +7,9 @@ import {
   predefinedPermissionsMap,
   type Resource,
 } from "@shared";
-import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  InsertOrganizationRole,
-  OrganizationRole,
-  UpdateOrganizationRole,
-} from "@/types";
+import type { OrganizationRole } from "@/types";
 
 const generatePredefinedRole = (
   role: PredefinedRoleName,

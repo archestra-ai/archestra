@@ -9,7 +9,6 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
-  OrganizationRoleModel,
   SessionModel,
   ToolInvocationPolicyModel,
   ToolModel,

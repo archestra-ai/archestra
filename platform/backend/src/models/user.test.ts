@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertOrganizationRole } from "@/types";
-import OrganizationRoleModel from "./organization-role";
 import UserModel from "./user";
 
 describe("User.getUserPermissions", () => {

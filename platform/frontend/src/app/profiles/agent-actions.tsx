@@ -12,7 +12,6 @@ type Agent = NonNullable<
 type AgentActionsProps = {
   agent: Agent;
   onConnect: (agent: Pick<Agent, "id" | "name">) => void;
-  onConfigureChat: (agent: Agent) => void;
   onEdit: (agent: Omit<Agent, "tools">) => void;
   onDelete: (agentId: string) => void;
 };
@@ -20,7 +19,6 @@ type AgentActionsProps = {
 export function AgentActions({
   agent,
   onConnect,
-  onConfigureChat,
   onEdit,
   onDelete,
 }: AgentActionsProps) {
@@ -38,19 +36,6 @@ export function AgentActions({
         }}
       >
         <Plug className="h-4 w-4" />
-      </PermissionButton>
-      <PermissionButton
-        permissions={{ profile: ["update"], prompt: ["read"] }}
-        aria-label="Prompts"
-        tooltip="Prompts"
-        variant="outline"
-        size="icon-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onConfigureChat(agent);
-        }}
-      >
-        <MessageCircle className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
         permissions={{ profile: ["update"] }}

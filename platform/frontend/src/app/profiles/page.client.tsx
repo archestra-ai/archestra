@@ -222,9 +222,6 @@ function Agents() {
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
     (typeof agents)[number] | null
   >(null);
-  const [_chatConfigAgent, setChatConfigAgent] = useState<
-    (typeof agents)[number] | null
-  >(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
@@ -453,7 +450,6 @@ function Agents() {
           <AgentActions
             agent={agent}
             onConnect={setConnectingAgent}
-            onConfigureChat={setChatConfigAgent}
             onEdit={setEditingAgent}
             onDelete={setDeletingAgentId}
           />

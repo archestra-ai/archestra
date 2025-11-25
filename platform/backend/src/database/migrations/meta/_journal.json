@@ -435,6 +435,13 @@
       "when": 1764015866435,
       "tag": "0061_toon_compressor",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1764080634529,
+      "tag": "0062_burly_shatterstar",
+      "breakpoints": true
     }
   ]
 }

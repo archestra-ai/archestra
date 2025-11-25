@@ -1,1 +1,0 @@
-ALTER TABLE "interactions" ADD COLUMN "toon_cost_savings" numeric(13, 10);

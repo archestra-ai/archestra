@@ -45,7 +45,6 @@ class UserModel {
         await db
           .update(schema.usersTable)
           .set({
-            role,
             emailVerified: true,
           })
           .where(eq(schema.usersTable.email, email));
@@ -93,7 +92,7 @@ class UserModel {
       )
       .limit(1);
 
-    if (!memberRecord[0]) {
+    if (!memberRecord[0] || !memberRecord[0].role) {
       return {};
     }
 

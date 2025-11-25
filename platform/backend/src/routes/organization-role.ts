@@ -17,7 +17,10 @@ const CreateUpdateRoleTitleSchema = z
   .min(1, "Role title is required")
   .max(50, "Role title must be less than 50 characters");
 
-const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
+const CustomRoleIdSchema = z
+  .string()
+  .min(1)
+  .describe("Custom role ID (base62)");
 const PredefinedRoleNameOrCustomRoleIdSchema = z
   .union([PredefinedRoleNameSchema, CustomRoleIdSchema])
   .describe("Predefined role name or custom role ID");

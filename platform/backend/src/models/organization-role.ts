@@ -312,9 +312,14 @@ class OrganizationRoleModel {
   }
 
   static async create(data: InsertOrganizationRole): Promise<OrganizationRole> {
+    // Generate a test ID since Better Auth would normally generate this
+    // This method is only used in tests - production uses betterAuth.api.createOrgRole()
+    const id = crypto.randomUUID();
+
     const [result] = await db
       .insert(schema.organizationRolesTable)
       .values({
+        id,
         ...data,
         permission: JSON.stringify(data.permission),
       })
@@ -327,15 +332,24 @@ class OrganizationRoleModel {
     };
   }
 
+  /**
+   * Update a custom role via Better Auth
+   * Note: This is a placeholder - actual implementation should be in the route handler
+   * to have access to request headers
+   */
   static async update(
     roleId: string,
     data: UpdateOrganizationRole,
   ): Promise<OrganizationRole> {
+    // Direct database update as fallback
+    // Better Auth updateOrgRole should be called from route handler with headers
     const [result] = await db
       .update(schema.organizationRolesTable)
       .set({
         ...data,
-        permission: JSON.stringify(data.permission),
+        permission: data.permission
+          ? JSON.stringify(data.permission)
+          : undefined,
       })
       .where(eq(schema.organizationRolesTable.id, roleId))
       .returning();
@@ -347,6 +361,10 @@ class OrganizationRoleModel {
     };
   }
 
+  /**
+   * Delete a custom role via direct database operation
+   * Note: This works because Better Auth doesn't enforce referential integrity checks
+   */
   static async delete(roleId: string): Promise<boolean> {
     const result = await db
       .delete(schema.organizationRolesTable)

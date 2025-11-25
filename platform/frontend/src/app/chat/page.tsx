@@ -1,7 +1,6 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -43,11 +42,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useChatSession } from "@/contexts/global-chat-context";
-import {
-  useChatAgentMcpTools,
-  useConversation,
-  useCreateConversation,
-} from "@/lib/chat.query";
+import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 

@@ -26,7 +26,9 @@ export function PageLayout({
             </h1>
             {actionButton}
           </div>
-          <p className="text-sm text-muted-foreground mb-8">{description}</p>
+          <div className="text-sm text-muted-foreground mb-8">
+            {description}
+          </div>
         </div>
         {tabs.length > 0 && (
           <div className="flex gap-4 mb-0">

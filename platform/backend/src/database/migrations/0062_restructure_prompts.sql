@@ -42,3 +42,8 @@ ALTER TABLE "prompts" ADD CONSTRAINT "prompts_agent_id_agents_id_fk" FOREIGN KEY
 -- Step 6: Drop junction table
 DROP TABLE "agent_prompts";
 
+-- Step 7: Add promptId to conversations table (nullable - free chat has no prompt)
+ALTER TABLE "conversations" ADD COLUMN "prompt_id" uuid;
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_prompt_id_prompts_id_fk" 
+  FOREIGN KEY ("prompt_id") REFERENCES "prompts"("id") ON DELETE set null ON UPDATE no action;
+

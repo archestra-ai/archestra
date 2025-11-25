@@ -264,7 +264,6 @@ function OptimizationRuleInlineForm({
     hasTools: initialData?.hasTools ?? false,
     provider: initialData?.provider || "openai",
     targetModel: initialData?.targetModel || "",
-    priority: initialData?.priority || "1",
     enabled: initialData?.enabled ?? true,
   });
 
@@ -278,8 +277,7 @@ function OptimizationRuleInlineForm({
       ? formData.maxLength
       : formData.hasTools !== undefined) &&
     formData.provider &&
-    formData.targetModel &&
-    formData.priority;
+    formData.targetModel;
 
   return (
     <TableRow className="bg-muted/30">
@@ -417,26 +415,6 @@ function OptimizationRuleInlineForm({
         />
       </TableCell>
       <TableCell className="p-2">
-        <Input
-          id="priority"
-          type="number"
-          min="1"
-          value={formData.priority}
-          onChange={(e) =>
-            setFormData({ ...formData, priority: e.target.value })
-          }
-          placeholder="1"
-          required
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              if (isValid) handleSubmit();
-            }
-          }}
-          className="w-16"
-        />
-      </TableCell>
-      <TableCell className="p-2">
         <div className="flex gap-2">
           <Button
             onClick={() => handleSubmit()}
@@ -505,7 +483,6 @@ function OptimizationRuleRow({
           : undefined,
       provider: rule.provider,
       targetModel: rule.targetModel,
-      priority: String(rule.priority),
       enabled: rule.enabled,
     };
 
@@ -571,7 +548,6 @@ function OptimizationRuleRow({
           )}
         </div>
       </TableCell>
-      <TableCell>{rule.priority}</TableCell>
       <TableCell className="pl-2 text-foreground">
         <div className="flex items-center gap-2">
           <PermissionButton
@@ -637,7 +613,7 @@ export default function OptimizationRulesPage() {
   // Sort rules once on initial load, then maintain order
   useEffect(() => {
     if (!hasInitialized.current && allRules.length > 0) {
-      // Initial sort: enabled first, then by priority (highest first)
+      // Initial sort: enabled first
       const sorted = sortOptimizationRules(allRules);
       setRuleOrder(sorted.map((rule) => rule.id));
       hasInitialized.current = true;
@@ -665,13 +641,6 @@ export default function OptimizationRulesPage() {
   const orderedRules = ruleOrder
     .map((id) => allRules.find((rule) => rule.id === id))
     .filter((rule): rule is OptimizationRule => rule !== undefined);
-
-  // Calculate max priority for new rules
-  const maxPriority =
-    allRules.length > 0
-      ? Math.max(...allRules.map((rule) => rule.priority))
-      : 0;
-  const nextPriority = maxPriority + 1;
 
   // Helper function to get entity name for "Applied to" column
   const getEntityName = useCallback(
@@ -701,7 +670,6 @@ export default function OptimizationRulesPage() {
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
-          priority: Number(data.priority),
           enabled: data.enabled,
           // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
         } as any);
@@ -725,7 +693,6 @@ export default function OptimizationRulesPage() {
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
-          priority: Number(data.priority),
           enabled: data.enabled,
           // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
         } as any);
@@ -837,25 +804,6 @@ export default function OptimizationRulesPage() {
                     </TooltipProvider>
                   </div>
                 </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    Order
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-70 text-wrap">
-                          <p>
-                            Rules are evaluated in order (1, 2, 3...). The first
-                            matching rule is applied. If no rules match, the
-                            original model is used.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -899,7 +847,6 @@ export default function OptimizationRulesPage() {
                         ruleType: "content_length",
                         provider: "anthropic",
                         targetModel: "",
-                        priority: String(nextPriority),
                         enabled: true,
                       }}
                       onSave={handleCreateRule}

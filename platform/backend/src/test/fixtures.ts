@@ -340,7 +340,7 @@ async function makeMcpServer(
 /**
  * Creates a test internal MCP catalog item
  */
-export async function makeInternalMcpCatalog(
+async function makeInternalMcpCatalog(
   overrides: Partial<
     Pick<
       InsertInternalMcpCatalog,

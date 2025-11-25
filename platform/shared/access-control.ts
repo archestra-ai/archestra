@@ -289,6 +289,7 @@ export const RouteId = {
   CreatePrompt: "createPrompt",
   GetPrompt: "getPrompt",
   GetPromptVersions: "getPromptVersions",
+  RollbackPrompt: "rollbackPrompt",
   UpdatePrompt: "updatePrompt",
   DeletePrompt: "deletePrompt",
 
@@ -632,6 +633,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
+  },
+  [RouteId.RollbackPrompt]: {
+    prompt: ["update"],
   },
   [RouteId.UpdatePrompt]: {
     prompt: ["update"],

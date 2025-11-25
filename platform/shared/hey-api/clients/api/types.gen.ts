@@ -2080,268 +2080,6 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type GetAgentPromptsData = {
-    body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type GetAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentPromptsError = GetAgentPromptsErrors[keyof GetAgentPromptsErrors];
-
-export type GetAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-        prompt: {
-            id: string;
-            organizationId: string;
-            name: string;
-            type: 'system' | 'regular';
-            content: string;
-            version: number;
-            parentPromptId: string | null;
-            isActive: boolean;
-            createdBy: string;
-            createdAt: string;
-            updatedAt: string;
-        };
-    }>;
-};
-
-export type GetAgentPromptsResponse = GetAgentPromptsResponses[keyof GetAgentPromptsResponses];
-
-export type AssignAgentPromptsData = {
-    body?: {
-        systemPromptId?: string | null;
-        regularPromptIds?: Array<string>;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type AssignAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type AssignAgentPromptsError = AssignAgentPromptsErrors[keyof AssignAgentPromptsErrors];
-
-export type AssignAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-    }>;
-};
-
-export type AssignAgentPromptsResponse = AssignAgentPromptsResponses[keyof AssignAgentPromptsResponses];
-
-export type DeleteAgentPromptData = {
-    body?: never;
-    path: {
-        agentId: string;
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts/{promptId}';
-};
-
-export type DeleteAgentPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteAgentPromptError = DeleteAgentPromptErrors[keyof DeleteAgentPromptErrors];
-
-export type DeleteAgentPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteAgentPromptResponse = DeleteAgentPromptResponses[keyof DeleteAgentPromptResponses];
-
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -5435,6 +5173,7 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5528,6 +5267,7 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5698,6 +5438,7 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5792,6 +5533,7 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -7197,6 +6939,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -7212,6 +6955,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -7227,6 +6971,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -7328,6 +7073,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7343,6 +7089,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7358,6 +7105,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     };
 };
@@ -12685,9 +12433,7 @@ export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof Get
 export type GetPromptsData = {
     body?: never;
     path?: never;
-    query?: {
-        type?: 'system' | 'regular';
-    };
+    query?: never;
     url: '/api/prompts';
 };
 
@@ -12758,18 +12504,14 @@ export type GetPromptsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
@@ -12778,8 +12520,12 @@ export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
 export type CreatePromptData = {
     body: {
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
+        version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -12853,18 +12599,14 @@ export type CreatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13025,18 +12767,14 @@ export type GetPromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13044,8 +12782,9 @@ export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 
 export type UpdatePromptData = {
     body?: {
-        name?: string;
-        content?: string;
+        agentId?: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
     };
     path: {
         id: string;
@@ -13121,18 +12860,14 @@ export type UpdatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13214,22 +12949,109 @@ export type GetPromptVersionsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type RollbackPromptData = {
+    body: {
+        versionId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/rollback';
+};
+
+export type RollbackPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
+
+export type RollbackPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

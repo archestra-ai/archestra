@@ -6,6 +6,13 @@ export const E2eTestId = {
   OnboardingNextButton: "onboarding-next-button",
   OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
+  InviteMemberButton: "invite-member-button",
+  InviteEmailInput: "invite-email-input",
+  InviteRoleSelect: "invite-role-select",
+  GenerateInvitationButton: "generate-invitation-button",
+  InvitationLinkInput: "invitation-link-input",
+  InvitationLinkCopyButton: "invitation-link-copy-button",
+  InvitationErrorMessage: "invitation-error-message",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

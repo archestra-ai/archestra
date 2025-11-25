@@ -24,6 +24,7 @@ import {
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
+import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +66,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
-import { ChatConfigDialog } from "./chat-config-dialog";
+// Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
 export default function AgentsPage() {
   return (
@@ -219,9 +220,6 @@ function Agents() {
     name: string;
   } | null>(null);
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
-    (typeof agents)[number] | null
-  >(null);
-  const [chatConfigAgent, setChatConfigAgent] = useState<
     (typeof agents)[number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
@@ -452,7 +450,6 @@ function Agents() {
           <AgentActions
             agent={agent}
             onConnect={setConnectingAgent}
-            onConfigureChat={setChatConfigAgent}
             onEdit={setEditingAgent}
             onDelete={setDeletingAgentId}
           />
@@ -462,125 +459,115 @@ function Agents() {
   ];
 
   return (
-    <div className="w-full h-full">
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight mb-2">
-                Profiles
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Profiles are a way to organize access, available MCP tools, cost
-                limits, logging/o11y, etc. <br />
-                <br />A profile can be: an N8N workflow, a custom application,
-                or a team sharing an MCP gateway.{" "}
-                <a
-                  href="https://archestra.ai/docs/platform-agents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  Read more in the docs
-                </a>
-              </p>
+    <PageLayout
+      title="Profiles"
+      description={
+        <p className="text-sm text-muted-foreground">
+          Profiles are a way to organize access, available MCP tools, cost
+          limits, logging/o11y, etc. <br />
+          <br />A profile can be: an N8N workflow, a custom application, or a
+          team sharing an MCP gateway.{" "}
+          <a
+            href="https://archestra.ai/docs/platform-agents"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            Read more in the docs
+          </a>
+        </p>
+      }
+      actionButton={
+        <PermissionButton
+          permissions={{ profile: ["create"] }}
+          onClick={() => setIsCreateDialogOpen(true)}
+          data-testid={E2eTestId.CreateAgentButton}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Create Profile
+        </PermissionButton>
+      }
+    >
+      <div className="w-full h-full">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <DebouncedInput
+                placeholder="Search profiles by name..."
+                initialValue={searchQuery}
+                onChange={handleSearchChange}
+                className="pl-9"
+              />
             </div>
-            <PermissionButton
-              permissions={{ profile: ["create"] }}
-              onClick={() => setIsCreateDialogOpen(true)}
-              data-testid={E2eTestId.CreateAgentButton}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Profile
-            </PermissionButton>
           </div>
+
+          {!agents || agents.length === 0 ? (
+            <div className="text-muted-foreground">
+              {nameFilter
+                ? "No profiles found matching your search"
+                : "No profiles found"}
+            </div>
+          ) : (
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total || 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+              />
+            </div>
+          )}
+
+          <CreateAgentDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          />
+
+          {connectingAgent && (
+            <ConnectAgentDialog
+              agent={connectingAgent}
+              open={!!connectingAgent}
+              onOpenChange={(open) => !open && setConnectingAgent(null)}
+            />
+          )}
+
+          {assigningToolsAgent && (
+            <AssignToolsDialog
+              agent={assigningToolsAgent}
+              open={!!assigningToolsAgent}
+              onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
+            />
+          )}
+
+          {/* Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library */}
+
+          {editingAgent && (
+            <EditAgentDialog
+              agent={editingAgent}
+              open={!!editingAgent}
+              onOpenChange={(open) => !open && setEditingAgent(null)}
+            />
+          )}
+
+          {deletingAgentId && (
+            <DeleteAgentDialog
+              agentId={deletingAgentId}
+              open={!!deletingAgentId}
+              onOpenChange={(open) => !open && setDeletingAgentId(null)}
+            />
+          )}
         </div>
       </div>
-
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <DebouncedInput
-              placeholder="Search profiles by name..."
-              initialValue={searchQuery}
-              onChange={handleSearchChange}
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {!agents || agents.length === 0 ? (
-          <div className="text-muted-foreground">
-            {nameFilter
-              ? "No profiles found matching your search"
-              : "No profiles found"}
-          </div>
-        ) : (
-          <div data-testid={E2eTestId.AgentsTable}>
-            <DataTable
-              columns={columns}
-              data={agents}
-              sorting={sorting}
-              onSortingChange={handleSortingChange}
-              manualSorting={true}
-              manualPagination={true}
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: pagination?.total || 0,
-              }}
-              onPaginationChange={handlePaginationChange}
-            />
-          </div>
-        )}
-
-        <CreateAgentDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-        />
-
-        {connectingAgent && (
-          <ConnectAgentDialog
-            agent={connectingAgent}
-            open={!!connectingAgent}
-            onOpenChange={(open) => !open && setConnectingAgent(null)}
-          />
-        )}
-
-        {assigningToolsAgent && (
-          <AssignToolsDialog
-            agent={assigningToolsAgent}
-            open={!!assigningToolsAgent}
-            onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
-          />
-        )}
-
-        {chatConfigAgent && (
-          <ChatConfigDialog
-            agent={chatConfigAgent}
-            open={!!chatConfigAgent}
-            onOpenChange={(open) => !open && setChatConfigAgent(null)}
-          />
-        )}
-
-        {editingAgent && (
-          <EditAgentDialog
-            agent={editingAgent}
-            open={!!editingAgent}
-            onOpenChange={(open) => !open && setEditingAgent(null)}
-          />
-        )}
-
-        {deletingAgentId && (
-          <DeleteAgentDialog
-            agentId={deletingAgentId}
-            open={!!deletingAgentId}
-            onOpenChange={(open) => !open && setDeletingAgentId(null)}
-          />
-        )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 

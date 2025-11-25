@@ -7,23 +7,30 @@ export function PageLayout({
   description,
   children,
   tabs = [],
+  actionButton,
 }: {
   children: React.ReactNode;
   tabs?: { label: string; href: string }[];
   title: string;
   description: React.ReactNode;
+  actionButton?: React.ReactNode;
 }) {
   const pathname = usePathname();
   return (
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className="mx-auto max-w-7xl px-4 pt-8 md:px-8">
-          <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-            {title}
-          </h1>
-          <p className="text-sm text-muted-foreground mb-8">{description}</p>
+          <div className="flex justify-between items-start">
+            <h1 className="mb-2 text-2xl font-semibold tracking-tight">
+              {title}
+            </h1>
+            {actionButton}
+          </div>
+          <div className="text-sm text-muted-foreground mb-8">
+            {description}
+          </div>
           {tabs.length > 0 && (
-            <div className="flex gap-4">
+            <div className="flex gap-4 mb-0">
               {tabs.map((tab) => (
                 <Link
                   key={tab.href}
@@ -43,6 +50,7 @@ export function PageLayout({
               ))}
             </div>
           )}
+          {!tabs.length && <div className="mb-8" />}
         </div>
       </div>
       {children}

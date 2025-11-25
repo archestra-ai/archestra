@@ -1,6 +1,11 @@
 "use client";
 
-import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  type AnyRoleName,
+  E2eTestId,
+  MEMBER_ROLE_NAME,
+} from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
@@ -101,6 +106,7 @@ function InviteByLinkCardContent({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={createMutation.isPending}
+                data-testid={E2eTestId.InviteEmailInput}
               />
               <p className="text-xs text-muted-foreground">
                 The email of the person you want to invite
@@ -114,7 +120,10 @@ function InviteByLinkCardContent({
                 onValueChange={(value: AnyRoleName) => setRole(value)}
                 disabled={createMutation.isPending}
               >
-                <SelectTrigger id="role">
+                <SelectTrigger
+                  id="role"
+                  data-testid={E2eTestId.InviteRoleSelect}
+                >
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
@@ -139,6 +148,7 @@ function InviteByLinkCardContent({
               onClick={handleGenerateLink}
               disabled={createMutation.isPending || !isValidEmail}
               className="w-full"
+              data-testid={E2eTestId.GenerateInvitationButton}
             >
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -151,12 +161,18 @@ function InviteByLinkCardContent({
             <div className="space-y-2">
               <Label>Invitation Link</Label>
               <div className="flex items-center gap-2">
-                <Input value={invitationLink} readOnly className="flex-1" />
+                <Input
+                  value={invitationLink}
+                  readOnly
+                  className="flex-1"
+                  data-testid={E2eTestId.InvitationLinkInput}
+                />
                 <Button
                   type="button"
                   size="icon"
                   variant="outline"
                   onClick={handleCopyLink}
+                  data-testid={E2eTestId.InvitationLinkCopyButton}
                 >
                   {isCopied ? (
                     <Check className="h-4 w-4 text-green-600" />
@@ -205,7 +221,10 @@ export function InviteByLinkCard({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
+                <p
+                  className="text-sm text-muted-foreground mb-4"
+                  data-testid={E2eTestId.InvitationErrorMessage}
+                >
                   {error?.message || "Failed to create invitation"}
                 </p>
                 <Button onClick={resetErrorBoundary} variant="outline">

@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          * by setting this to true.. would need to test though..
          */
         // apiKey: true,
-        customRoles: (customRoles || []).map(({ name }) => ({
-          role: name,
+        customRoles: (customRoles || []).map(({ role, name }) => ({
+          role,
           label: name,
         })),
       }}

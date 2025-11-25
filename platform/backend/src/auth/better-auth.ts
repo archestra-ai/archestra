@@ -124,7 +124,7 @@ export const auth = betterAuth({
       const { path, method, body } = ctx;
 
       // Validate email format for invitations
-      if (path === "/organization/invite/member" && method === "POST") {
+      if (path === "/organization/invite-member" && method === "POST") {
         if (!z.email().safeParse(body.email).success) {
           throw new APIError("BAD_REQUEST", {
             message: "Invalid email format",
@@ -185,7 +185,7 @@ export const auth = betterAuth({
     }),
     after: createAuthMiddleware(async ({ path, method, body, context }) => {
       // Delete invitation from DB when canceled (instead of marking as canceled)
-      if (path === "/organization/cancel/invitation" && method === "POST") {
+      if (path === "/organization/cancel-invitation" && method === "POST") {
         const invitationId = body.invitationId;
 
         if (invitationId) {
@@ -217,7 +217,7 @@ export const auth = betterAuth({
       }
 
       // Ensure member is actually deleted from DB when removed from organization
-      if (path === "/organization/remove/member" && method === "POST") {
+      if (path === "/organization/remove-member" && method === "POST") {
         const { memberIdOrUserId, organizationId } = body;
 
         if (memberIdOrUserId) {

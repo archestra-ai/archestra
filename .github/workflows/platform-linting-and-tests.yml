@@ -12,6 +12,8 @@ on:
         required: true
       TURBOREPO_REMOTE_CACHING_TEAM:
         required: true
+      PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN:
+        required: true
 
 jobs:
   platform-linting-and-tests:
@@ -109,6 +111,8 @@ jobs:
           build-args: |
             TURBO_TEAM=${{ env.TURBO_TEAM }}
             TURBO_TOKEN=${{ env.TURBO_TOKEN }}
+          secrets: |
+            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
 

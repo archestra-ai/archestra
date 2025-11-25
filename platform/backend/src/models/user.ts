@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   DEFAULT_ADMIN_EMAIL,
   type Permissions,
+  type PredefinedRoleName,
 } from "@shared";
 import { and, eq, getTableColumns } from "drizzle-orm";
 import { betterAuth } from "@/auth";
@@ -12,14 +13,15 @@ import type { UpdateUser } from "@/types";
 import OrganizationRoleModel from "./organization-role";
 
 class UserModel {
-  /** Creates user and associates it with an admin member */
-  static async createOrGetExistingDefaultUser({
+  static async createOrGetExistingDefaultAdminUser({
     email = config.auth.adminDefaultEmail,
     password = config.auth.adminDefaultPassword,
+    role = ADMIN_ROLE_NAME,
     name = "Admin",
   }: {
     email?: string;
     password?: string;
+    role?: PredefinedRoleName;
     name?: string;
   } = {}) {
     try {
@@ -43,6 +45,7 @@ class UserModel {
         await db
           .update(schema.usersTable)
           .set({
+            role,
             emailVerified: true,
           })
           .where(eq(schema.usersTable.email, email));
@@ -90,7 +93,7 @@ class UserModel {
       )
       .limit(1);
 
-    if (!memberRecord[0] || !memberRecord[0].role) {
+    if (!memberRecord[0]) {
       return {};
     }
 

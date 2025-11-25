@@ -169,6 +169,78 @@ class AgentToolModel {
   }
 
   /**
+   * Bulk create agent-tool relationships for multiple agents and tools
+   * Assigns all tools to all agents in a single query to avoid N+1
+   */
+  static async bulkCreateForAgentsAndTools(
+    agentIds: string[],
+    toolIds: string[],
+    options?: Partial<
+      Pick<
+        InsertAgentTool,
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
+        | "responseModifierTemplate"
+        | "credentialSourceMcpServerId"
+        | "executionSourceMcpServerId"
+      >
+    >,
+  ): Promise<void> {
+    if (agentIds.length === 0 || toolIds.length === 0) return;
+
+    // Build all possible combinations
+    const assignments: Array<{
+      agentId: string;
+      toolId: string;
+      allowUsageWhenUntrustedDataIsPresent?: boolean;
+      toolResultTreatment?: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+      responseModifierTemplate?: string | null;
+      credentialSourceMcpServerId?: string | null;
+      executionSourceMcpServerId?: string | null;
+    }> = [];
+
+    for (const agentId of agentIds) {
+      for (const toolId of toolIds) {
+        assignments.push({
+          agentId,
+          toolId,
+          ...options,
+        });
+      }
+    }
+
+    // Check which assignments already exist
+    const existingAssignments = await db
+      .select({
+        agentId: schema.agentToolsTable.agentId,
+        toolId: schema.agentToolsTable.toolId,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          inArray(schema.agentToolsTable.agentId, agentIds),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
+      );
+
+    const existingSet = new Set(
+      existingAssignments.map((a) => `${a.agentId}:${a.toolId}`),
+    );
+
+    // Filter out existing assignments
+    const newAssignments = assignments.filter(
+      (a) => !existingSet.has(`${a.agentId}:${a.toolId}`),
+    );
+
+    if (newAssignments.length > 0) {
+      await db
+        .insert(schema.agentToolsTable)
+        .values(newAssignments)
+        .onConflictDoNothing();
+    }
+  }
+
+  /**
    * Creates a new agent-tool assignment or updates credentials if it already exists.
    * Returns the status: "created", "updated", or "unchanged".
    */

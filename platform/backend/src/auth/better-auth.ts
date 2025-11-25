@@ -41,10 +41,34 @@ export const auth = betterAuth({
       dynamicAccessControl: {
         enabled: true,
         maximumRolesPerOrganization: 50, // Configurable limit for custom roles
+        validateRoleName: async (roleName: string) => {
+          // Role names must be lowercase alphanumeric with underscores
+          if (!/^[a-z0-9_]+$/.test(roleName)) {
+            throw new Error(
+              "Role name must be lowercase letters, numbers, and underscores only",
+            );
+          }
+          if (roleName.length < 2) {
+            throw new Error("Role name must be at least 2 characters");
+          }
+          if (roleName.length > 50) {
+            throw new Error("Role name must be less than 50 characters");
+          }
+        },
       },
       roles: {
         admin: adminRole,
         member: memberRole,
+      },
+      schema: {
+        organizationRole: {
+          additionalFields: {
+            name: {
+              type: "string",
+              required: true,
+            },
+          },
+        },
       },
       features: {
         team: {

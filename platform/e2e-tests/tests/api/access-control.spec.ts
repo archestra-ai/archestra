@@ -70,7 +70,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
 
     expect(duplicateResponse.status()).toBe(400);
     const error = await duplicateResponse.json();
-    expect(error.error.message).toContain("already exists");
+    expect(error.error.message).toContain("That role name is already taken");
   });
 
   test("should fail to create role with reserved predefined name", async ({
@@ -94,7 +94,7 @@ test.describe("Organization Roles API - CRUD Operations", () => {
 
     expect(response.status()).toBe(400);
     const error = await response.json();
-    expect(error.error.message).toContain("already exists or is reserved");
+    expect(error.error.message).toContain("That role name is already taken");
   });
 
   test("should get a specific role by ID", async ({

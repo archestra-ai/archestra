@@ -2,14 +2,13 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
-  OrganizationRoleModel,
   SessionModel,
   ToolInvocationPolicyModel,
   ToolModel,
@@ -37,7 +36,7 @@ import type {
 } from "@/types";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "role" | "emailVerified">
+  Pick<InsertUser, "email" | "name" | "emailVerified">
 >;
 
 /**
@@ -61,13 +60,13 @@ interface TestFixtures {
   makeInvitation: typeof makeInvitation;
   makeAccount: typeof makeAccount;
   makeSession: typeof makeSession;
+  makeAuthHeaders: typeof makeAuthHeaders;
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
 }
 
 async function _makeUser(
-  role: AnyRoleName,
   namePrefix: string,
   overrides: MakeUserOverrides = {},
 ) {
@@ -79,7 +78,6 @@ async function _makeUser(
       name: `${namePrefix} ${userId.substring(0, 8)}`,
       email: `${userId}@test.com`,
       emailVerified: true,
-      role,
       ...overrides,
     })
     .returning();
@@ -87,17 +85,19 @@ async function _makeUser(
 }
 
 /**
- * Creates a test user in the database
+ * Creates a test user in the database (without organization membership)
+ * Use makeMember() to create the user-organization-role relationship
  */
 async function makeUser(overrides: MakeUserOverrides = {}) {
-  return await _makeUser(MEMBER_ROLE_NAME, "Test User", overrides);
+  return await _makeUser("Test User", overrides);
 }
 
 /**
- * Creates a test admin user in the database
+ * Creates a test admin user in the database (without organization membership)
+ * Use makeMember() with role override to create the user-organization-role relationship
  */
 async function makeAdmin(overrides: MakeUserOverrides = {}) {
-  return await _makeUser(ADMIN_ROLE_NAME, "Admin User", overrides);
+  return await _makeUser("Admin User", overrides);
 }
 
 /**
@@ -264,20 +264,39 @@ async function makeTrustedDataPolicy(
 }
 
 /**
- * Creates a test custom organization role using the OrganizationRole model
- * Returns the created role
+ * Creates a test custom organization role via direct DB insert
+ * (bypasses Better Auth API for test simplicity)
  */
 async function makeCustomRole(
   organizationId: string,
-  overrides: Partial<Pick<InsertOrganizationRole, "name" | "permission">> = {},
+  overrides: Partial<
+    Pick<InsertOrganizationRole, "role" | "name" | "permission">
+  > = {},
 ): Promise<OrganizationRole> {
-  return await OrganizationRoleModel.create({
-    id: crypto.randomUUID(),
+  const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
+  const roleData = {
+    role: roleName,
     name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
     permission: { profile: ["read"] },
     ...overrides,
-  });
+  };
+
+  const id = crypto.randomUUID();
+  const [result] = await db
+    .insert(schema.organizationRolesTable)
+    .values({
+      id,
+      ...roleData,
+      permission: JSON.stringify(roleData.permission),
+    })
+    .returning();
+
+  return {
+    ...result,
+    predefined: false,
+    permission: JSON.parse(result.permission),
+  };
 }
 
 /**
@@ -445,6 +464,15 @@ async function makeSession(
     userAgent: "Mozilla/5.0 Test Agent",
     ...overrides,
   });
+}
+
+/**
+ * Creates authenticated headers from a session token for Better Auth API calls
+ */
+function makeAuthHeaders(sessionToken: string): HeadersInit {
+  return {
+    cookie: `archestra.session_token=${sessionToken}`,
+  };
 }
 
 /**
@@ -630,6 +658,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSession: async ({}, use) => {
     await use(makeSession);
+  },
+  makeAuthHeaders: async ({}, use) => {
+    await use(makeAuthHeaders);
   },
   makeConversation: async ({}, use) => {
     await use(makeConversation);

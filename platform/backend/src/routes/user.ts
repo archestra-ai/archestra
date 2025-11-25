@@ -22,7 +22,7 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Get user's member record to find their role
       const member = await MemberModel.getByUserId(user.id);
 
-      if (!member) {
+      if (!member || !member.role) {
         throw new ApiError(404, "User is not a member of any organization");
       }
 

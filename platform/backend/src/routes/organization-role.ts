@@ -1,13 +1,14 @@
 import { PermissionsSchema, PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { betterAuth } from "@/auth";
+import logger from "@/logging";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
-  UuidIdSchema,
 } from "@/types";
 
 const CreateUpdateRoleNameSchema = z
@@ -15,10 +16,23 @@ const CreateUpdateRoleNameSchema = z
   .min(1, "Role name is required")
   .max(50, "Role name must be less than 50 characters");
 
-const CustomRoleIdSchema = UuidIdSchema.describe("Custom role ID");
+const CustomRoleIdSchema = z
+  .string()
+  .min(1)
+  .describe("Custom role ID (base62)");
 const PredefinedRoleNameOrCustomRoleIdSchema = z
   .union([PredefinedRoleNameSchema, CustomRoleIdSchema])
   .describe("Predefined role name or custom role ID");
+
+/**
+ * Generates an immutable role identifier from a human-readable name
+ */
+const generateRoleIdentifier = (title: string): string => {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
+};
 
 const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -53,16 +67,9 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async ({ body: { name, permission }, user, organizationId }, reply) => {
-      // Check role name uniqueness
-      const isUnique = await OrganizationRoleModel.isNameUnique(
-        name,
-        organizationId,
-      );
-
-      if (!isUnique) {
-        throw new ApiError(400, "Role name already exists or is reserved");
-      }
+    async (request, reply) => {
+      const { name, permission } = request.body;
+      const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
       const userPermissions = await UserModel.getUserPermissions(
@@ -82,13 +89,54 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      return reply.send(
-        await OrganizationRoleModel.create({
+      const roleIdentifier = generateRoleIdentifier(name);
+
+      logger.info(
+        {
           name,
+          roleIdentifier,
           permission,
           organizationId,
-        }),
+        },
+        "Creating role",
       );
+
+      try {
+        const result = await betterAuth.api.createOrgRole({
+          headers: request.headers as HeadersInit,
+          body: {
+            role: roleIdentifier,
+            permission,
+            additionalFields: {
+              name,
+            },
+            organizationId,
+          },
+        });
+
+        if (!result.roleData) {
+          throw new ApiError(500, "Role created but data not returned");
+        }
+
+        logger.info({ role: result.roleData }, "Role created successfully");
+        return reply.send({
+          ...result.roleData,
+          updatedAt: result.roleData.updatedAt || result.roleData.createdAt,
+          predefined: false,
+        });
+      } catch (error) {
+        const err = error as {
+          status?: string;
+          statusCode?: number;
+          message?: string;
+          body?: { message?: string };
+        };
+        logger.error({ error }, "Failed to create role");
+        throw new ApiError(
+          err.statusCode || 400,
+          err.body?.message || err.message || "Failed to create role",
+        );
+      }
     },
   );
 
@@ -137,7 +185,13 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { roleId }, body: { name, permission }, user, organizationId },
+      {
+        params: { roleId },
+        body: { name, permission },
+        user,
+        organizationId,
+        headers,
+      },
       reply,
     ) => {
       // Cannot update predefined roles
@@ -153,19 +207,6 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!existingRole) {
         throw new ApiError(404, "Role not found");
-      }
-
-      // Check name uniqueness if name is being changed
-      if (name) {
-        const isUnique = await OrganizationRoleModel.isNameUnique(
-          name,
-          organizationId,
-          roleId,
-        );
-
-        if (!isUnique) {
-          throw new ApiError(400, "Role name already exists or is reserved");
-        }
       }
 
       // Validate permissions if being changed
@@ -188,12 +229,29 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(
-        await OrganizationRoleModel.update(roleId, {
-          name,
-          permission: permission ?? existingRole.permission,
-        }),
-      );
+      // Build update data
+      const updateData: Record<string, unknown> = {};
+      if (name) updateData.name = name;
+      if (permission) updateData.permission = permission;
+
+      const result = await betterAuth.api.updateOrgRole({
+        headers: headers as HeadersInit,
+        body: {
+          roleId,
+          organizationId,
+          data: updateData,
+        },
+      });
+
+      if (!result.roleData) {
+        throw new ApiError(500, "Role updated but data not returned");
+      }
+
+      return reply.send({
+        ...result.roleData,
+        updatedAt: result.roleData.updatedAt || new Date(),
+        predefined: false,
+      });
     },
   );
 
@@ -210,7 +268,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { roleId }, organizationId }, reply) => {
+    async ({ params: { roleId }, organizationId, headers }, reply) => {
       // Check if role exists first
       const role = await OrganizationRoleModel.getById(roleId, organizationId);
       if (!role) {
@@ -227,9 +285,15 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, deleteCheck.reason || "Cannot delete role");
       }
 
-      return reply.send({
-        success: await OrganizationRoleModel.delete(roleId),
+      await betterAuth.api.deleteOrgRole({
+        headers: headers as HeadersInit,
+        body: {
+          roleId,
+          organizationId,
+        },
       });
+
+      return reply.send({ success: true });
     },
   );
 };

@@ -444,33 +444,74 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Check if we have an existing session
         if (sessionId && activeSessions.has(sessionId)) {
-          fastify.log.info(
-            {
-              agentId,
-              sessionId,
-            },
-            "Reusing existing session",
-          );
-
           const sessionData = activeSessions.get(sessionId);
           if (!sessionData) {
             throw new Error("Session data not found");
           }
 
-          transport = sessionData.transport;
-          server = sessionData.server;
-          // Update last access time
-          sessionData.lastAccess = Date.now();
+          // Health check: ping the server to verify connection is still alive
+          try {
+            await sessionData.server.ping();
+            fastify.log.info(
+              {
+                agentId,
+                sessionId,
+              },
+              "Session ping successful, reusing existing session",
+            );
 
-          // If this is a re-initialize request on an existing session,
-          // we can just reuse the existing server/transport
-          if (isInitialize) {
+            transport = sessionData.transport;
+            server = sessionData.server;
+            // Update last access time
+            sessionData.lastAccess = Date.now();
+
+            // If this is a re-initialize request on an existing session,
+            // we can just reuse the existing server/transport
+            if (isInitialize) {
+              fastify.log.info(
+                { agentId, sessionId },
+                "Re-initialize on existing session - will reuse existing server",
+              );
+            }
+          } catch (error) {
+            // Session ping failed - clean up and create new session
+            fastify.log.warn(
+              {
+                agentId,
+                sessionId,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "Session ping failed, cleaning up stale session",
+            );
+            activeSessions.delete(sessionId);
+
+            // If this is not an initialize request, we can't recover
+            if (!isInitialize) {
+              fastify.log.error(
+                { agentId, sessionId, method: request.body?.method },
+                "Non-initialize request with failed session - cannot recover",
+              );
+              reply.status(400);
+              return {
+                jsonrpc: "2.0",
+                error: {
+                  code: -32000,
+                  message: "Bad Request: Invalid or expired session",
+                },
+                id: null,
+              };
+            }
+
+            // Fall through to create new session for initialize requests
             fastify.log.info(
               { agentId, sessionId },
-              "Re-initialize on existing session - will reuse existing server",
+              "Initialize request with failed session - will create new session",
             );
           }
-        } else if (isInitialize) {
+        }
+
+        // Create new session if needed (for initialize requests without valid session)
+        if (isInitialize && (!sessionId || !activeSessions.has(sessionId))) {
           // Initialize request - create new session
           // Generate session ID upfront if not provided by client
           // This prevents race condition where notifications/initialized arrives
@@ -494,6 +535,24 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           server = newServer;
           transport = createTransport(agentId, effectiveSessionId, fastify.log);
+
+          // Set up transport close handler to clean up session immediately
+          // This ensures stale sessions are removed when the client disconnects
+          transport.onclose = () => {
+            fastify.log.info(
+              { agentId, sessionId: effectiveSessionId },
+              "Transport closed - cleaning up session",
+            );
+            activeSessions.delete(effectiveSessionId);
+            fastify.log.info(
+              {
+                agentId,
+                sessionId: effectiveSessionId,
+                remainingSessions: activeSessions.size,
+              },
+              "Session cleaned up after transport close",
+            );
+          };
 
           // Connect server to transport (this also starts the transport)
           fastify.log.info({ agentId }, "Connecting server to transport");

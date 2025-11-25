@@ -36,8 +36,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@better-auth/core':
-        specifier: ^1.3.34
-        version: 1.4.1(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.0)(jose@6.1.2)(kysely@0.28.8)(nanostores@1.1.0)
+        specifier: 1.3.34
+        version: 1.3.34(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.0)(jose@6.1.2)(kysely@0.28.8)(nanostores@1.1.0)
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.1.0
@@ -677,16 +677,6 @@ packages:
       '@better-auth/utils': 0.3.0
       '@better-fetch/fetch': 1.1.18
       better-call: 1.0.19
-      jose: ^6.1.0
-      kysely: ^0.28.5
-      nanostores: ^1.0.1
-
-  '@better-auth/core@1.4.1':
-    resolution: {integrity: sha512-N4kyRdA472WGLoCjsJpUeYdZZvpoBDgP65hUeQQxTQYwBTqD9O17Tokax9CdNbkb4g34sTfxaJCfcncE3Hy4SA==}
-    peerDependencies:
-      '@better-auth/utils': 0.3.0
-      '@better-fetch/fetch': 1.1.18
-      better-call: 1.1.0
       jose: ^6.1.0
       kysely: ^0.28.5
       nanostores: ^1.0.1
@@ -7930,11 +7920,10 @@ snapshots:
       nanostores: 1.1.0
       zod: 4.1.12
 
-  '@better-auth/core@1.4.1(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.0)(jose@6.1.2)(kysely@0.28.8)(nanostores@1.1.0)':
+  '@better-auth/core@1.3.34(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.1.0)(jose@6.1.2)(kysely@0.28.8)(nanostores@1.1.0)':
     dependencies:
       '@better-auth/utils': 0.3.0
       '@better-fetch/fetch': 1.1.18
-      '@standard-schema/spec': 1.0.0
       better-call: 1.1.0
       jose: 6.1.2
       kysely: 0.28.8

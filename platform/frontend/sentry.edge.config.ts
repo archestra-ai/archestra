@@ -13,6 +13,7 @@ if (dsn) {
   Sentry.init({
     dsn,
     environment: process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || process.env.NODE_ENV?.toLowerCase(),
+    release: process.env.NEXT_PUBLIC_ARCHESTRA_VERSION || "dev",
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
     tracesSampleRate: 1,

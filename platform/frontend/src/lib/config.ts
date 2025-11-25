@@ -49,6 +49,7 @@ const getWebSocketUrl = (): string => {
  * because the runtime variable isn't yet available in build-time.
  */
 export default {
+  version: process.env.NEXT_PUBLIC_ARCHESTRA_VERSION || "dev",
   api: {
     /**
      * Display URL for showing to users (absolute URL for external agents).

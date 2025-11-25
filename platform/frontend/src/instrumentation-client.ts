@@ -14,6 +14,7 @@ if (dsn) {
   Sentry.init({
     dsn,
     environment,
+    release: process.env.NEXT_PUBLIC_ARCHESTRA_VERSION || "dev",
 
     // Add optional integrations for additional features
     integrations: [Sentry.replayIntegration()],

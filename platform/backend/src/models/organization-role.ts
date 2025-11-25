@@ -16,14 +16,14 @@ import type {
 } from "@/types";
 
 const generatePredefinedRole = (
-  roleName: PredefinedRoleName,
+  role: PredefinedRoleName,
   organizationId: string,
 ): OrganizationRole => ({
-  id: roleName,
-  role: roleName,
-  name: roleName,
+  id: role,
+  role: role,
+  name: role,
   organizationId,
-  permission: OrganizationRoleModel.getPredefinedRolePermissions(roleName),
+  permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
   predefined: true,
   // we don't really care too much about the createdAt and updatedAt for predefined roles..
   createdAt: new Date(),

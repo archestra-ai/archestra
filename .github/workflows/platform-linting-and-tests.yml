@@ -12,6 +12,10 @@ on:
         required: true
       TURBOREPO_REMOTE_CACHING_TEAM:
         required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
 
 jobs:
   platform-linting-and-tests:
@@ -60,7 +64,7 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Setup environment
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -111,6 +115,30 @@ jobs:
             TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
+
+      # Run docker scout to check for vulnerabilities and recommendations
+      # https://github.com/docker/scout-action
+      - name: Docker Scout
+        if: ${{ github.event_name != 'pull_request_target' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+        with:
+          command: cves,recommendations,compare
+          image: ${{ steps.meta.outputs.tags }}
+          to: docker.io/archestra/platform:latest
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          ignore-unchanged: true
+          only-severities: critical,high
+          write-comment: true
+          github-token: ${{ secrets.GITHUB_TOKEN }} # to be able to write the comment
+
+      # Upload SARIF result to GitHub Code Scanning
+      # https://github.com/docker/scout-action?tab=readme-ov-file#analyze-vulnerabilities-and-upload-report-to-github-code-scanning
+      - name: Upload SARIF result
+        if: ${{ github.event_name != 'pull_request_target' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: sarif.output.json
 
       - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

@@ -13,5 +13,6 @@ export * as adapters from "./adapters";
 export * as costOptimization from "./cost-optimization";
 export * as toolInvocation from "./tool-invocation";
 export * as tools from "./tools";
+export * as toonConversion from "./toon-conversion";
 export * as tracing from "./tracing";
 export * as trustedData from "./trusted-data";

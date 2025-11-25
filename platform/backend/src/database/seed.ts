@@ -1,7 +1,9 @@
+import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
   DualLlmConfigModel,
+  MemberModel,
   OrganizationModel,
   PromptModel,
   ToolModel,
@@ -10,22 +12,28 @@ import {
 import type { InsertDualLlmConfig } from "@/types";
 
 /**
- * Seeds admin user with organization and member relationship
+ * Seeds admin user
  */
 export async function seedDefaultUserAndOrg(
   config: {
     email?: string;
     password?: string;
+    role?: PredefinedRoleName;
     name?: string;
-    role?: string;
   } = {},
 ) {
-  const user = await UserModel.createOrGetExistingDefaultAdminUser(config);
-  if (!user) {
+  const user = await UserModel.createOrGetExistingDefaultUser(config);
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  if (!user || !org) {
     throw new Error("Failed to seed admin user and default organization");
   }
 
-  logger.info("Seeded admin user and default organization");
+  const existingMember = await MemberModel.getByUserId(user.id);
+
+  if (!existingMember) {
+    await MemberModel.create(user.id, org.id, config.role || ADMIN_ROLE_NAME);
+  }
+  logger.info("✓ Seeded admin user and default organization");
   return user;
 }
 
@@ -116,7 +124,7 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
  */
 async function seedN8NSystemPrompt(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const user = await UserModel.createOrGetExistingDefaultUser();
   if (!user) {
     logger.error(
       "Failed to get or create default admin user, skipping n8n prompt seeding",
@@ -326,7 +334,7 @@ return $input.all().map(item => ({
  */
 async function seedDefaultRegularPrompts(): Promise<void> {
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
-  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const user = await UserModel.createOrGetExistingDefaultUser();
   if (!user) {
     logger.error(
       "Failed to get or create default admin user, skipping regular prompts seeding",

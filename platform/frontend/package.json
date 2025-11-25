@@ -39,7 +39,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "@sentry/nextjs": "^10.25.0",
+    "@sentry/nextjs": "^10.27.0",
     "@shared": "workspace:*",
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-table": "^8.21.3",

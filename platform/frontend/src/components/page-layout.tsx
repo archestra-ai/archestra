@@ -29,29 +29,29 @@ export function PageLayout({
           <div className="text-sm text-muted-foreground mb-8">
             {description}
           </div>
+          {tabs.length > 0 && (
+            <div className="flex gap-4 mb-0">
+              {tabs.map((tab) => (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={cn(
+                    "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
+                    pathname.includes(tab.href)
+                      ? "text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {tab.label}
+                  {pathname.includes(tab.href) && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+          {!tabs.length && <div className="mb-8" />}
         </div>
-        {tabs.length > 0 && (
-          <div className="flex gap-4 mb-0">
-            {tabs.map((tab) => (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={cn(
-                  "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                  pathname.includes(tab.href)
-                    ? "text-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {tab.label}
-                {pathname.includes(tab.href) && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
-              </Link>
-            ))}
-          </div>
-        )}
-        {!tabs.length && <div className="mb-8" />}
       </div>
       {children}
     </div>

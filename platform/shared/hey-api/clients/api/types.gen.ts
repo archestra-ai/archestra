@@ -5173,6 +5173,7 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5266,6 +5267,7 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5436,6 +5438,7 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5530,6 +5533,7 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -12493,6 +12497,9 @@ export type GetPromptsResponses = {
         agentId: string;
         userPrompt: string | null;
         systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -12506,6 +12513,9 @@ export type CreatePromptData = {
         agentId: string;
         userPrompt?: string | null;
         systemPrompt?: string | null;
+        version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -12582,6 +12592,9 @@ export type CreatePromptResponses = {
         agentId: string;
         userPrompt: string | null;
         systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -12747,6 +12760,9 @@ export type GetPromptResponses = {
         agentId: string;
         userPrompt: string | null;
         systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -12756,7 +12772,6 @@ export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 
 export type UpdatePromptData = {
     body?: {
-        name?: string;
         agentId?: string;
         userPrompt?: string | null;
         systemPrompt?: string | null;
@@ -12838,12 +12853,195 @@ export type UpdatePromptResponses = {
         agentId: string;
         userPrompt: string | null;
         systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
         createdAt: string;
         updatedAt: string;
     };
 };
 
 export type UpdatePromptResponse = UpdatePromptResponses[keyof UpdatePromptResponses];
+
+export type GetPromptVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/versions';
+};
+
+export type GetPromptVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPromptVersionsError = GetPromptVersionsErrors[keyof GetPromptVersionsErrors];
+
+export type GetPromptVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type RollbackPromptData = {
+    body: {
+        versionId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/rollback';
+};
+
+export type RollbackPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
+
+export type RollbackPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;

@@ -25,6 +25,7 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { PromptDialog } from "@/components/chat/prompt-dialog";
 import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
+import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useChatSession } from "@/contexts/global-chat-context";
+import { useAgents } from "@/lib/agent.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
@@ -72,11 +74,15 @@ export default function ChatPage() {
   // State for prompt management
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<
+    (typeof prompts)[number] | null
+  >(null);
 
   // Fetch prompts and current editing prompt
   const { data: prompts = [] } = usePrompts();
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
+  const { data: allAgents = [] } = useAgents();
 
   const chatSession = useChatSession(conversationId);
 
@@ -373,14 +379,14 @@ export default function ChatPage() {
                 className="max-w-md max-h-64 overflow-y-auto"
               >
                 <div className="space-y-2">
-                  {conversationPrompt.userPrompt && (
+                  {conversationPrompt.agentId && (
                     <div>
-                      <div className="font-semibold text-xs mb-1">
-                        User Prompt:
+                      <div className="font-semibold text-xs mb-1">Agent:</div>
+                      <div className="text-xs">
+                        {allAgents.find(
+                          (a) => a.id === conversationPrompt.agentId,
+                        )?.name || "Unknown Profile"}
                       </div>
-                      <pre className="text-xs whitespace-pre-wrap">
-                        {conversationPrompt.userPrompt}
-                      </pre>
                     </div>
                   )}
                   {conversationPrompt.systemPrompt && (
@@ -419,6 +425,7 @@ export default function ChatPage() {
           onSelectPrompt={handleSelectPrompt}
           onEdit={handleEditPrompt}
           onDelete={handleDeletePrompt}
+          onViewVersionHistory={setVersionHistoryPrompt}
         />
         <PromptDialog
           open={isPromptDialogOpen}
@@ -429,6 +436,16 @@ export default function ChatPage() {
             }
           }}
           prompt={editingPrompt}
+          onViewVersionHistory={setVersionHistoryPrompt}
+        />
+        <PromptVersionHistoryDialog
+          open={!!versionHistoryPrompt}
+          onOpenChange={(open) => {
+            if (!open) {
+              setVersionHistoryPrompt(null);
+            }
+          }}
+          prompt={versionHistoryPrompt}
         />
       </PageLayout>
     );

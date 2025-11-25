@@ -20,6 +20,10 @@ export const UpdatePromptSchema = createUpdateSchema(schema.promptsTable).omit({
   createdAt: true,
   updatedAt: true,
   organizationId: true,
+  name: true, // Don't allow changing name (breaks versioning)
+  version: true,
+  parentPromptId: true,
+  isActive: true,
 });
 
 export type Prompt = z.infer<typeof SelectPromptSchema>;

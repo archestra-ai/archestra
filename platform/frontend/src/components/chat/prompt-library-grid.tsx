@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import {
+  History as HistoryIcon,
   MessageSquarePlus,
   MoreVertical,
   Pencil,
@@ -61,6 +62,7 @@ interface PromptLibraryGridProps {
   onSelectPrompt: (agentId: string, promptId?: string) => void;
   onEdit: (prompt: Prompt) => void;
   onDelete: (promptId: string) => void;
+  onViewVersionHistory: (prompt: Prompt) => void;
 }
 
 export function PromptLibraryGrid({
@@ -68,6 +70,7 @@ export function PromptLibraryGrid({
   onSelectPrompt,
   onEdit,
   onDelete,
+  onViewVersionHistory,
 }: PromptLibraryGridProps) {
   const { data: allAgents = [] } = useAgents();
   const agents = allAgents.filter((agent) => agent.useInChat);
@@ -152,9 +155,14 @@ export function PromptLibraryGrid({
                   role="button"
                   tabIndex={0}
                 >
-                  <CardTitle className="text-base mb-1.5 truncate">
-                    {prompt.name}
-                  </CardTitle>
+                  <div className="flex items-baseline gap-2 mb-1.5">
+                    <CardTitle className="text-base truncate">
+                      {prompt.name}
+                    </CardTitle>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      v{prompt.version}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-1">
                     {prompt.systemPrompt && (
                       <TooltipProvider>
@@ -202,6 +210,15 @@ export function PromptLibraryGrid({
                     <DropdownMenuItem onClick={() => onEdit(prompt)}>
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewVersionHistory(prompt);
+                      }}
+                    >
+                      <HistoryIcon className="mr-2 h-4 w-4" />
+                      Version History
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => setPromptToDelete(prompt.id)}

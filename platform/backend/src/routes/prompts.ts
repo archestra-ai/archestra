@@ -106,12 +106,78 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/prompts/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetPromptVersions,
+        description: "Get all versions of a prompt",
+        tags: ["Prompts"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(z.array(SelectPromptSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const versions = await PromptModel.findVersions(id);
+
+      if (versions.length === 0) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      // Verify first version belongs to this organization
+      if (versions[0].organizationId !== organizationId) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      return reply.send(versions);
+    },
+  );
+
+  fastify.post(
+    "/api/prompts/:id/rollback",
+    {
+      schema: {
+        operationId: RouteId.RollbackPrompt,
+        description: "Rollback to a specific version of a prompt",
+        tags: ["Prompts"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          versionId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectPromptSchema),
+      },
+    },
+    async ({ params: { id }, body: { versionId }, organizationId }, reply) => {
+      // Verify the prompt belongs to this organization
+      const existingPrompt = await PromptModel.findByIdAndOrganizationId(
+        id,
+        organizationId,
+      );
+
+      if (!existingPrompt) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      const rolledBack = await PromptModel.rollback(id, versionId);
+
+      if (!rolledBack) {
+        throw new ApiError(400, "Invalid version or rollback failed");
+      }
+
+      return reply.send(rolledBack);
+    },
+  );
+
   fastify.delete(
     "/api/prompts/:id",
     {
       schema: {
         operationId: RouteId.DeletePrompt,
-        description: "Delete a prompt",
+        description: "Delete a prompt and all its versions",
         tags: ["Prompts"],
         params: z.object({
           id: UuidIdSchema,

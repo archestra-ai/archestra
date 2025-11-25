@@ -6,8 +6,14 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 
-const { getPrompts, createPrompt, getPrompt, updatePrompt, deletePrompt } =
-  archestraApiSdk;
+const {
+  getPrompts,
+  createPrompt,
+  getPrompt,
+  getPromptVersions,
+  updatePrompt,
+  deletePrompt,
+} = archestraApiSdk;
 
 export function usePrompts(params?: {
   initialData?: archestraApiTypes.GetPromptsResponses["200"];
@@ -23,6 +29,14 @@ export function usePrompt(id: string) {
   return useQuery({
     queryKey: ["prompts", id],
     queryFn: async () => (await getPrompt({ path: { id } })).data ?? null,
+    enabled: !!id,
+  });
+}
+
+export function usePromptVersions(id: string) {
+  return useQuery({
+    queryKey: ["prompts", id, "versions"],
+    queryFn: async () => (await getPromptVersions({ path: { id } })).data ?? [],
     enabled: !!id,
   });
 }
@@ -54,7 +68,6 @@ export function useUpdatePrompt() {
     }: {
       id: string;
       data: {
-        name?: string;
         agentId?: string;
         userPrompt?: string;
         systemPrompt?: string;
@@ -66,6 +79,38 @@ export function useUpdatePrompt() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
       queryClient.invalidateQueries({ queryKey: ["prompts", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["prompts", variables.id, "versions"],
+      });
+    },
+  });
+}
+
+export function useRollbackPrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      versionId,
+    }: {
+      id: string;
+      versionId: string;
+    }) => {
+      // Manual API call until SDK is regenerated after server restart
+      const response = await fetch(`/api/prompts/${id}/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      if (!response.ok) throw new Error("Rollback failed");
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["prompts", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["prompts", variables.id, "versions"],
+      });
     },
   });
 }

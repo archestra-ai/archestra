@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { MessageCircle, Pencil, Plug, Trash2 } from "lucide-react";
+import { Pencil, Plug, Trash2 } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useAgentsPaginated } from "@/lib/agent.query";

@@ -32,12 +32,14 @@ interface PromptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prompt?: Prompt | null;
+  onViewVersionHistory?: (prompt: Prompt) => void;
 }
 
 export function PromptDialog({
   open,
   onOpenChange,
   prompt,
+  onViewVersionHistory,
 }: PromptDialogProps) {
   const { data: allAgents = [] } = useAgents();
   const agents = allAgents.filter((agent) => agent.useInChat);
@@ -82,13 +84,12 @@ export function PromptDialog({
         await updatePrompt.mutateAsync({
           id: prompt.id,
           data: {
-            name,
             agentId,
             userPrompt: userPrompt || undefined,
             systemPrompt: systemPrompt || undefined,
           },
         });
-        toast.success("Prompt updated successfully");
+        toast.success("New version created successfully");
       } else {
         await createPrompt.mutateAsync({
           name,
@@ -110,23 +111,44 @@ export function PromptDialog({
         <DialogHeader>
           <DialogTitle>
             {prompt ? "Edit Prompt" : "Create New Prompt"}
+            {prompt && onViewVersionHistory && (
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => {
+                  onOpenChange(false);
+                  onViewVersionHistory(prompt);
+                }}
+                className="text-xs h-auto p-0 ml-2"
+              >
+                Version History
+              </Button>
+            )}
           </DialogTitle>
           <DialogDescription>
             {prompt
-              ? "Update the prompt information"
+              ? "This will create a new version of the prompt"
               : "Create a new prompt for a profile"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="promptName">Name *</Label>
-            <Input
-              id="promptName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter prompt name"
-            />
-          </div>
+          {!prompt && (
+            <div className="space-y-2">
+              <Label htmlFor="promptName">Name *</Label>
+              <Input
+                id="promptName"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter prompt name"
+              />
+            </div>
+          )}
+          {prompt && (
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <div className="text-sm font-medium">{prompt.name}</div>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="agentId">Profile *</Label>
             <Select value={agentId} onValueChange={setAgentId}>

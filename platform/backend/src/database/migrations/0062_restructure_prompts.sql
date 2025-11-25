@@ -27,12 +27,9 @@ WHERE p."is_active" = true;
 -- Step 3: Delete old prompt records (inactive + orphaned, including originals that were migrated)
 DELETE FROM "prompts" WHERE "agent_id" IS NULL;
 
--- Step 4: Drop old columns
+-- Step 4: Drop old columns (keep version, parent_prompt_id, is_active for versioning)
 ALTER TABLE "prompts" DROP COLUMN "type";
 ALTER TABLE "prompts" DROP COLUMN "content";
-ALTER TABLE "prompts" DROP COLUMN "version";
-ALTER TABLE "prompts" DROP COLUMN "parent_prompt_id";
-ALTER TABLE "prompts" DROP COLUMN "is_active";
 ALTER TABLE "prompts" DROP COLUMN "created_by";
 
 -- Step 5: Add NOT NULL constraint and FK

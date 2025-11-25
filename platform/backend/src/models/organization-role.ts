@@ -154,13 +154,13 @@ class OrganizationRoleModel {
   /**
    * Get a role by name and organization
    */
-  static async getByName(
-    roleName: string,
+  static async getByIdentifier(
+    identifier: string,
     organizationId: string,
   ): Promise<OrganizationRole | null> {
     // Check if it's a predefined role first
-    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
-      return generatePredefinedRole(roleName, organizationId);
+    if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+      return generatePredefinedRole(identifier, organizationId);
     }
 
     // Query custom role from database by name
@@ -172,7 +172,7 @@ class OrganizationRoleModel {
       .from(schema.organizationRolesTable)
       .where(
         and(
-          eq(schema.organizationRolesTable.role, roleName),
+          eq(schema.organizationRolesTable.role, identifier),
           eq(schema.organizationRolesTable.organizationId, organizationId),
         ),
       )
@@ -226,15 +226,15 @@ class OrganizationRoleModel {
   }
 
   static async getPermissions(
-    roleName: string,
+    identifier: string,
     organizationId: string,
   ): Promise<Permissions> {
-    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
-      return OrganizationRoleModel.getPredefinedRolePermissions(roleName);
+    if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+      return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }
 
-    const role = await OrganizationRoleModel.getByName(
-      roleName,
+    const role = await OrganizationRoleModel.getByIdentifier(
+      identifier,
       organizationId,
     );
 

@@ -9,7 +9,6 @@ import {
 } from "@shared";
 import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import logger from "@/logging";
 import type {
   InsertOrganizationRole,
   OrganizationRole,
@@ -17,14 +16,14 @@ import type {
 } from "@/types";
 
 const generatePredefinedRole = (
-  role: PredefinedRoleName,
+  roleName: PredefinedRoleName,
   organizationId: string,
 ): OrganizationRole => ({
-  id: role,
-  name: role,
-  title: role,
+  id: roleName,
+  role: roleName,
+  title: roleName,
   organizationId,
-  permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
+  permission: OrganizationRoleModel.getPredefinedRolePermissions(roleName),
   predefined: true,
   // we don't really care too much about the createdAt and updatedAt for predefined roles..
   createdAt: new Date(),
@@ -106,7 +105,7 @@ class OrganizationRoleModel {
     }
 
     // Check if it's a predefined role
-    if (OrganizationRoleModel.isPredefinedRole(role.name)) {
+    if (OrganizationRoleModel.isPredefinedRole(role.role)) {
       return { canDelete: false, reason: "Cannot delete predefined roles" };
     }
 
@@ -117,7 +116,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.membersTable.organizationId, organizationId),
-          eq(schema.membersTable.role, role.name),
+          eq(schema.membersTable.role, role.role),
         ),
       )
       .limit(1);
@@ -136,7 +135,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.invitationsTable.organizationId, organizationId),
-          eq(schema.invitationsTable.role, role.name),
+          eq(schema.invitationsTable.role, role.role),
           eq(schema.invitationsTable.status, "pending"),
         ),
       )
@@ -156,12 +155,12 @@ class OrganizationRoleModel {
    * Validate role name uniqueness within organization
    */
   static async isNameUnique(
-    name: string,
+    roleName: string,
     organizationId: string,
     excludeRoleId?: string,
   ): Promise<boolean> {
     // Check predefined role names first
-    if (OrganizationRoleModel.isPredefinedRole(name)) {
+    if (OrganizationRoleModel.isPredefinedRole(roleName)) {
       return false;
     }
 
@@ -171,7 +170,7 @@ class OrganizationRoleModel {
       .from(schema.organizationRolesTable)
       .where(
         and(
-          eq(schema.organizationRolesTable.name, name),
+          eq(schema.organizationRolesTable.role, roleName),
           eq(schema.organizationRolesTable.organizationId, organizationId),
           excludeRoleId
             ? ne(schema.organizationRolesTable.id, excludeRoleId)
@@ -241,7 +240,7 @@ class OrganizationRoleModel {
       .from(schema.organizationRolesTable)
       .where(
         and(
-          eq(schema.organizationRolesTable.name, roleName),
+          eq(schema.organizationRolesTable.role, roleName),
           eq(schema.organizationRolesTable.organizationId, organizationId),
         ),
       )
@@ -265,7 +264,10 @@ class OrganizationRoleModel {
       return OrganizationRoleModel.getPredefinedRolePermissions(roleName);
     }
 
-    const role = await OrganizationRoleModel.getByName(roleName, organizationId);
+    const role = await OrganizationRoleModel.getByName(
+      roleName,
+      organizationId,
+    );
 
     if (!role) {
       return {};

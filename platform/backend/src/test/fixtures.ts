@@ -2,7 +2,7 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
-import { ADMIN_ROLE_NAME, type AnyRoleName, MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -37,7 +37,7 @@ import type {
 } from "@/types";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "role" | "emailVerified">
+  Pick<InsertUser, "email" | "name" | "emailVerified">
 >;
 
 /**
@@ -67,7 +67,6 @@ interface TestFixtures {
 }
 
 async function _makeUser(
-  role: AnyRoleName,
   namePrefix: string,
   overrides: MakeUserOverrides = {},
 ) {
@@ -79,7 +78,6 @@ async function _makeUser(
       name: `${namePrefix} ${userId.substring(0, 8)}`,
       email: `${userId}@test.com`,
       emailVerified: true,
-      role,
       ...overrides,
     })
     .returning();
@@ -87,17 +85,19 @@ async function _makeUser(
 }
 
 /**
- * Creates a test user in the database
+ * Creates a test user in the database (without organization membership)
+ * Use makeMember() to create the user-organization-role relationship
  */
 async function makeUser(overrides: MakeUserOverrides = {}) {
-  return await _makeUser(MEMBER_ROLE_NAME, "Test User", overrides);
+  return await _makeUser("Test User", overrides);
 }
 
 /**
- * Creates a test admin user in the database
+ * Creates a test admin user in the database (without organization membership)
+ * Use makeMember() with role override to create the user-organization-role relationship
  */
 async function makeAdmin(overrides: MakeUserOverrides = {}) {
-  return await _makeUser(ADMIN_ROLE_NAME, "Admin User", overrides);
+  return await _makeUser("Admin User", overrides);
 }
 
 /**
@@ -269,11 +269,15 @@ async function makeTrustedDataPolicy(
  */
 async function makeCustomRole(
   organizationId: string,
-  overrides: Partial<Pick<InsertOrganizationRole, "name" | "permission">> = {},
+  overrides: Partial<
+    Pick<InsertOrganizationRole, "role" | "title" | "permission">
+  > = {},
 ): Promise<OrganizationRole> {
+  const roleName = `test_role_${crypto.randomUUID().substring(0, 8)}`;
   return await OrganizationRoleModel.create({
-    id: crypto.randomUUID(),
-    name: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
+    // Don't specify id - let Better Auth generate it
+    role: roleName,
+    title: `Test Role ${crypto.randomUUID().substring(0, 8)}`,
     organizationId,
     permission: { profile: ["read"] },
     ...overrides,

@@ -66,39 +66,66 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async ({ body: { title, permission }, request, organizationId }, reply) => {
+    async (request, reply) => {
+      const { title, permission } = request.body;
+      const { organizationId } = request;
+
       // Generate immutable name from title
       const name = generateRoleName(title);
 
-      logger.info({
-        title,
-        name,
-        permission,
-        organizationId,
-      }, "🔍 Creating role with better-auth API");
+      logger.info(
+        {
+          title,
+          name,
+          permission,
+          organizationId,
+        },
+        "🔍 Creating role with better-auth API",
+      );
 
-      // Use better-auth's createRole API
+      // Use better-auth's createOrgRole API
       try {
-        const result = await betterAuth.api.organization.createRole({
+        const result = await betterAuth.api.createOrgRole({
           headers: request.headers as HeadersInit,
           body: {
             role: name,
             permission,
-            data: {
-              title, // Store title in additionalFields
+            additionalFields: {
+              title, // Pass title in additionalFields
             },
+            organizationId,
           },
         });
 
-        logger.info({ result }, "✅ Better-auth createRole result");
+        logger.info({ result }, "✅ Better-auth createOrgRole result");
 
-        return reply.send(result);
-      } catch (error: any) {
-        logger.error({ error }, "❌ Better-auth createRole failed");
+        // Extract the role data from better-auth response
+        if (!result.roleData) {
+          throw new ApiError(500, "Role created but data not returned");
+        }
+
+        const roleData = result.roleData;
+
+        // Transform to our expected format
+        const responseData = {
+          id: roleData.id,
+          role: roleData.role,
+          title: roleData.title || title,
+          organizationId: roleData.organizationId,
+          permission: roleData.permission,
+          predefined: false,
+          createdAt: roleData.createdAt,
+          updatedAt: roleData.updatedAt || roleData.createdAt,
+        };
+
+        return reply.send(responseData);
+      } catch (error) {
+        const err = error as { status?: number; message?: string };
+        logger.error({ error }, "❌ Better-auth createOrgRole failed");
         // Better-auth returns detailed error messages
         throw new ApiError(
-          error.status || 400,
-          error.message || "Failed to create role",
+          err.status || 400,
+          err.message || "Failed to create role",
         );
       }
     },
@@ -136,7 +163,8 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateRole,
-        description: "Update a custom role (title and/or permissions only, name is immutable)",
+        description:
+          "Update a custom role (title and/or permissions only, name is immutable)",
         tags: ["Roles"],
         params: z.object({
           roleId: PredefinedRoleNameOrCustomRoleIdSchema,

@@ -44,7 +44,9 @@ export const auth = betterAuth({
         validateRoleName: async (roleName: string) => {
           // Role names must be lowercase alphanumeric with underscores
           if (!/^[a-z0-9_]+$/.test(roleName)) {
-            throw new Error("Role name must be lowercase letters, numbers, and underscores only");
+            throw new Error(
+              "Role name must be lowercase letters, numbers, and underscores only",
+            );
           }
           if (roleName.length < 2) {
             throw new Error("Role name must be at least 2 characters");

@@ -39,7 +39,7 @@ export const UpdateOrganizationRoleSchema = createUpdateSchema(
     permission: PermissionsSchema,
   },
 ).omit({
-  name: true, // Name is immutable, cannot be updated
+  role: true, // Role name is immutable, cannot be updated
 });
 
 export type OrganizationRole = z.infer<typeof SelectOrganizationRoleSchema>;

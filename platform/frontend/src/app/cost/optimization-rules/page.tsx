@@ -114,14 +114,9 @@ function formatProviderName(provider: string): string {
   return provider;
 }
 
-// Sort optimization rules: enabled first, then by priority (highest first)
-function sortOptimizationRules(rules: OptimizationRule[]): OptimizationRule[] {
-  return [...rules].sort((a, b) => {
-    if (a.enabled !== b.enabled) {
-      return a.enabled ? -1 : 1;
-    }
-    return a.priority - b.priority;
-  });
+// Preserve order as-is - no sorting
+function preserveRuleOrder(rules: OptimizationRule[]): OptimizationRule[] {
+  return [...rules];
 }
 
 // Sort models by total cost (input + output price) ascending
@@ -610,12 +605,11 @@ export default function OptimizationRulesPage() {
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  // Sort rules once on initial load, then maintain order
+  // Initialize order on first load, then maintain it
   useEffect(() => {
     if (!hasInitialized.current && allRules.length > 0) {
-      // Initial sort: enabled first
-      const sorted = sortOptimizationRules(allRules);
-      setRuleOrder(sorted.map((rule) => rule.id));
+      // Initialize with current order from backend
+      setRuleOrder(allRules.map((rule) => rule.id));
       hasInitialized.current = true;
     } else if (hasInitialized.current) {
       setRuleOrder((ruleOrder) => {
@@ -624,15 +618,8 @@ export default function OptimizationRulesPage() {
         );
         if (newRules.length === 0) return ruleOrder;
 
-        // Re-sort all rules to maintain proper order
-        const allRulesInOrder = [
-          ...ruleOrder
-            .map((id) => allRules.find((rule) => rule.id === id))
-            .filter((rule): rule is OptimizationRule => rule !== undefined),
-          ...newRules,
-        ];
-        const sorted = sortOptimizationRules(allRulesInOrder);
-        return sorted.map((rule) => rule.id);
+        // Add new rules to the end, preserving existing order
+        return [...ruleOrder, ...newRules.map((rule) => rule.id)];
       });
     }
   }, [allRules]);

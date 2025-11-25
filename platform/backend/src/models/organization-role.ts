@@ -8,6 +8,7 @@ import {
   type Resource,
 } from "@shared";
 import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
+import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import type {
   InsertOrganizationRole,
@@ -302,45 +303,54 @@ class OrganizationRoleModel {
   }
 
   /**
-   * Update a custom role via Better Auth
-   * Note: This is a placeholder - actual implementation should be in the route handler
-   * to have access to request headers
+   * Update a custom role via Better Auth API
    */
   static async update(
+    headers: HeadersInit,
     roleId: string,
+    organizationId: string,
     data: UpdateOrganizationRole,
   ): Promise<OrganizationRole> {
-    // Direct database update as fallback
-    // Better Auth updateOrgRole should be called from route handler with headers
-    const [result] = await db
-      .update(schema.organizationRolesTable)
-      .set({
-        ...data,
-        permission: data.permission
-          ? JSON.stringify(data.permission)
-          : undefined,
-      })
-      .where(eq(schema.organizationRolesTable.id, roleId))
-      .returning();
+    const result = await betterAuth.api.updateOrgRole({
+      headers,
+      body: {
+        roleId,
+        organizationId,
+        data: {
+          ...(data.name && { name: data.name }),
+          ...(data.permission && { permission: data.permission }),
+        },
+      },
+    });
+
+    if (!result.roleData) {
+      throw new Error("Role updated but data not returned");
+    }
 
     return {
-      ...result,
+      ...result.roleData,
+      updatedAt: result.roleData.updatedAt || new Date(),
       predefined: false,
-      permission: JSON.parse(result.permission),
     };
   }
 
   /**
-   * Delete a custom role via direct database operation
-   * Note: This works because Better Auth doesn't enforce referential integrity checks
+   * Delete a custom role via Better Auth API
    */
-  static async delete(roleId: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.id, roleId))
-      .returning();
+  static async delete(
+    headers: HeadersInit,
+    roleId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    await betterAuth.api.deleteOrgRole({
+      headers,
+      body: {
+        roleId,
+        organizationId,
+      },
+    });
 
-    return result.length > 0;
+    return true;
   }
 }
 

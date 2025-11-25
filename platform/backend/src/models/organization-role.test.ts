@@ -263,7 +263,9 @@ describe("OrganizationRoleModel", () => {
       };
 
       const result = await OrganizationRoleModel.update(
+        {} as HeadersInit,
         initialRole.id,
+        org.id,
         updateData,
       );
 
@@ -310,7 +312,11 @@ describe("OrganizationRoleModel", () => {
       expect(beforeDelete).not.toBeNull();
 
       // Delete it
-      const result = await OrganizationRoleModel.delete(roleToDelete.id);
+      const result = await OrganizationRoleModel.delete(
+        {} as HeadersInit,
+        roleToDelete.id,
+        org.id,
+      );
       expect(result).toBe(true);
 
       // Verify it's gone
@@ -321,9 +327,16 @@ describe("OrganizationRoleModel", () => {
       expect(afterDelete).toBeFalsy();
     });
 
-    test("should return false when no role was deleted", async () => {
-      const result = await OrganizationRoleModel.delete(crypto.randomUUID());
-      expect(result).toBe(false);
+    test("should return true even when no role was deleted", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.delete(
+        {} as HeadersInit,
+        crypto.randomUUID(),
+        org.id,
+      );
+      expect(result).toBe(true);
     });
   });
 

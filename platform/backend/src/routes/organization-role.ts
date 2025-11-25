@@ -9,6 +9,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
+  type UpdateOrganizationRole,
 } from "@/types";
 
 const CreateUpdateRoleNameSchema = z
@@ -184,10 +185,10 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async (
-      { params: { roleId }, body: { name, permission }, user, organizationId },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const { roleId } = request.params;
+      const { name, permission } = request.body;
+      const { user, organizationId } = request;
       // Cannot update predefined roles
       if (OrganizationRoleModel.isPredefinedRole(roleId)) {
         throw new ApiError(403, "Cannot update predefined roles");
@@ -223,11 +224,18 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // Build update data - at least one field must be present
+      const updateData: Partial<UpdateOrganizationRole> = {};
+      if (name) updateData.name = name;
+      if (permission) updateData.permission = permission;
+
       return reply.send(
-        await OrganizationRoleModel.update(roleId, {
-          name,
-          permission: permission ?? existingRole.permission,
-        }),
+        await OrganizationRoleModel.update(
+          request.headers as HeadersInit,
+          roleId,
+          organizationId,
+          updateData as UpdateOrganizationRole,
+        ),
       );
     },
   );
@@ -245,7 +253,10 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { roleId }, organizationId }, reply) => {
+    async (request, reply) => {
+      const { roleId } = request.params;
+      const { organizationId } = request;
+
       // Check if role exists first
       const role = await OrganizationRoleModel.getById(roleId, organizationId);
       if (!role) {
@@ -263,7 +274,11 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({
-        success: await OrganizationRoleModel.delete(roleId),
+        success: await OrganizationRoleModel.delete(
+          request.headers as HeadersInit,
+          roleId,
+          organizationId,
+        ),
       });
     },
   );

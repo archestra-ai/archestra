@@ -29,6 +29,68 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("existsBatch", () => {
+    test("returns Set of existing agent IDs", async () => {
+      const agent1 = await AgentModel.create({
+        name: "Test Agent 1",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Test Agent 2",
+        teams: [],
+      });
+      const nonExistentId = "00000000-0000-0000-0000-000000000000";
+
+      const existingIds = await AgentModel.existsBatch([
+        agent1.id,
+        agent2.id,
+        nonExistentId,
+      ]);
+
+      expect(existingIds).toBeInstanceOf(Set);
+      expect(existingIds.size).toBe(2);
+      expect(existingIds.has(agent1.id)).toBe(true);
+      expect(existingIds.has(agent2.id)).toBe(true);
+      expect(existingIds.has(nonExistentId)).toBe(false);
+    });
+
+    test("returns empty Set for empty input", async () => {
+      const existingIds = await AgentModel.existsBatch([]);
+
+      expect(existingIds).toBeInstanceOf(Set);
+      expect(existingIds.size).toBe(0);
+    });
+
+    test("returns empty Set when no agents exist", async () => {
+      const nonExistentId1 = "00000000-0000-0000-0000-000000000000";
+      const nonExistentId2 = "00000000-0000-0000-0000-000000000001";
+
+      const existingIds = await AgentModel.existsBatch([
+        nonExistentId1,
+        nonExistentId2,
+      ]);
+
+      expect(existingIds).toBeInstanceOf(Set);
+      expect(existingIds.size).toBe(0);
+    });
+
+    test("handles duplicate IDs in input", async () => {
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+      });
+
+      const existingIds = await AgentModel.existsBatch([
+        agent.id,
+        agent.id,
+        agent.id,
+      ]);
+
+      expect(existingIds.size).toBe(1);
+      expect(existingIds.has(agent.id)).toBe(true);
+    });
+  });
+
   describe("Access Control", () => {
     test("can create agent with team assignments", async ({
       makeUser,

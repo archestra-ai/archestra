@@ -12,6 +12,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
   AgentToolSortBySchema,
@@ -174,6 +175,39 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments } = request.body;
 
+      // Extract unique IDs for batch fetching to avoid N+1 queries
+      const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
+      const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+
+      // Batch fetch all required data in parallel
+      const [existingAgentIds, tools] = await Promise.all([
+        AgentModel.existsBatch(uniqueAgentIds),
+        ToolModel.getByIds(uniqueToolIds),
+      ]);
+
+      // Create maps for efficient lookup
+      const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+
+      // Extract unique catalog IDs from tools that have them
+      const uniqueCatalogIds = [
+        ...new Set(
+          tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
+        ),
+      ];
+
+      // Batch fetch catalog items if needed
+      const catalogItemsMap =
+        uniqueCatalogIds.length > 0
+          ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+          : new Map<string, InternalMcpCatalog>();
+
+      // Prepare pre-fetched data to pass to assignToolToAgent
+      const preFetchedData = {
+        existingAgentIds,
+        toolsMap,
+        catalogItemsMap,
+      };
+
       const results = await Promise.allSettled(
         assignments.map((assignment) =>
           assignToolToAgent(
@@ -181,6 +215,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.toolId,
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
+            preFetchedData,
           ),
         ),
       );
@@ -506,12 +541,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 /**
  * Assigns a single tool to a single agent with validation.
  * Returns null on success/update, "duplicate" if already exists with same credentials, or an error object if validation fails.
+ *
+ * @param preFetchedData - Optional pre-fetched data to avoid N+1 queries in bulk operations
  */
 export async function assignToolToAgent(
   agentId: string,
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,
   executionSourceMcpServerId: string | null | undefined,
+  preFetchedData?: {
+    existingAgentIds?: Set<string>;
+    toolsMap?: Map<string, Tool>;
+    catalogItemsMap?: Map<string, InternalMcpCatalog>;
+  },
 ): Promise<
   | {
       status: 400 | 404;
@@ -521,8 +563,14 @@ export async function assignToolToAgent(
   | "updated"
   | null
 > {
-  // Validate that agent exists (using lightweight exists() to avoid N+1 queries)
-  const agentExists = await AgentModel.exists(agentId);
+  // Validate that agent exists (using pre-fetched data or lightweight exists() to avoid N+1 queries)
+  let agentExists: boolean;
+  if (preFetchedData?.existingAgentIds) {
+    agentExists = preFetchedData.existingAgentIds.has(agentId);
+  } else {
+    agentExists = await AgentModel.exists(agentId);
+  }
+
   if (!agentExists) {
     return {
       status: 404,
@@ -533,8 +581,14 @@ export async function assignToolToAgent(
     };
   }
 
-  // Validate that tool exists
-  const tool = await ToolModel.findById(toolId);
+  // Validate that tool exists (using pre-fetched data to avoid N+1 queries)
+  let tool: Tool | null;
+  if (preFetchedData?.toolsMap) {
+    tool = preFetchedData.toolsMap.get(toolId) || null;
+  } else {
+    tool = await ToolModel.findById(toolId);
+  }
+
   if (!tool) {
     return {
       status: 404,
@@ -547,7 +601,13 @@ export async function assignToolToAgent(
 
   // Check if tool is from local server (requires executionSourceMcpServerId)
   if (tool.catalogId) {
-    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    let catalogItem: InternalMcpCatalog | null;
+    if (preFetchedData?.catalogItemsMap) {
+      catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
+    } else {
+      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    }
+
     if (catalogItem?.serverType === "local") {
       if (!executionSourceMcpServerId) {
         return {

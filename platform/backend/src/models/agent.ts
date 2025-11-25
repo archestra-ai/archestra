@@ -346,6 +346,37 @@ class AgentModel {
     }
   }
 
+  /**
+   * Check if an agent exists without loading related data (teams, labels, tools).
+   * Use this for validation to avoid N+1 queries in bulk operations.
+   */
+  static async exists(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, id))
+      .limit(1);
+
+    return result !== undefined;
+  }
+
+  /**
+   * Batch check if multiple agents exist.
+   * Returns a Set of agent IDs that exist.
+   */
+  static async existsBatch(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) {
+      return new Set();
+    }
+
+    const results = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(inArray(schema.agentsTable.id, ids));
+
+    return new Set(results.map((r) => r.id));
+  }
+
   static async findById(
     id: string,
     userId?: string,

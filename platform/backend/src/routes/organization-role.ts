@@ -185,10 +185,16 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationRoleSchema),
       },
     },
-    async (request, reply) => {
-      const { roleId } = request.params;
-      const { name, permission } = request.body;
-      const { user, organizationId } = request;
+    async (
+      {
+        params: { roleId },
+        body: { name, permission },
+        user,
+        organizationId,
+        headers,
+      },
+      reply,
+    ) => {
       // Cannot update predefined roles
       if (OrganizationRoleModel.isPredefinedRole(roleId)) {
         throw new ApiError(403, "Cannot update predefined roles");
@@ -231,7 +237,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await OrganizationRoleModel.update(
-          request.headers as HeadersInit,
+          headers as HeadersInit,
           roleId,
           organizationId,
           updateData as UpdateOrganizationRole,
@@ -253,10 +259,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async (request, reply) => {
-      const { roleId } = request.params;
-      const { organizationId } = request;
-
+    async ({ params: { roleId }, organizationId, headers }, reply) => {
       // Check if role exists first
       const role = await OrganizationRoleModel.getById(roleId, organizationId);
       if (!role) {
@@ -275,7 +278,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         success: await OrganizationRoleModel.delete(
-          request.headers as HeadersInit,
+          headers as HeadersInit,
           roleId,
           organizationId,
         ),

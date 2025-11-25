@@ -6939,6 +6939,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -6954,6 +6955,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -6969,6 +6971,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -7070,6 +7073,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7085,6 +7089,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7100,6 +7105,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     };
 };

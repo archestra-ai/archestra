@@ -213,8 +213,16 @@ export function PromptLibraryGrid({
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onEdit(prompt)}>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(prompt);
+                    }}
+                  >
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </DropdownMenuItem>
@@ -228,7 +236,10 @@ export function PromptLibraryGrid({
                     Version History
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => setPromptToDelete(prompt.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPromptToDelete(prompt.id);
+                    }}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete

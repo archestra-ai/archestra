@@ -8,9 +8,9 @@
   "type": "module",
   "scripts": {
     "build": "tsdown",
-    "start": "NODE_ENV=production node --enable-source-maps dist/server.js",
-    "dev": "tsdown --watch --onSuccess \"node --enable-source-maps dist/server.js\"",
-    "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.js\"",
+    "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
+    "dev": "tsdown --watch --onSuccess \"node --enable-source-maps dist/server.mjs\"",
+    "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.mjs\"",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",

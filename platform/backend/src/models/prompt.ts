@@ -159,6 +159,7 @@ class PromptModel {
    * Update a prompt - creates a new version
    * Finds the most recent version (by version number) and creates a new version with incremented version number
    * Deactivates the currently active version
+   * If name is changed, updates all versions to use the new name
    */
   static async update(id: string, input: UpdatePrompt): Promise<Prompt | null> {
     // Find the prompt by ID to get the prompt family (name, agentId, organizationId)
@@ -167,17 +168,40 @@ class PromptModel {
       return null;
     }
 
+    // Determine the name to use (new name if provided, otherwise keep current)
+    const newName = input.name ?? promptById.name;
+    const oldName = promptById.name;
+    const nameChanged = input.name !== undefined && input.name !== oldName;
+
+    // If name is being changed, update all versions to use the new name
+    if (nameChanged) {
+      await db
+        .update(schema.promptsTable)
+        .set({ name: newName })
+        .where(
+          and(
+            eq(schema.promptsTable.organizationId, promptById.organizationId),
+            eq(schema.promptsTable.name, oldName),
+            eq(schema.promptsTable.agentId, promptById.agentId),
+          ),
+        );
+    }
+
+    // Determine the agentId to use (new agentId if provided, otherwise keep current)
+    const newAgentId = input.agentId || promptById.agentId;
+
     // Find the MOST RECENT version (highest version number) for this prompt family
     // This ensures we always increment from the latest version number,
     // regardless of which version is active
+    // Use the new name and agentId for finding versions
     const [latestVersion] = await db
       .select()
       .from(schema.promptsTable)
       .where(
         and(
           eq(schema.promptsTable.organizationId, promptById.organizationId),
-          eq(schema.promptsTable.name, promptById.name),
-          eq(schema.promptsTable.agentId, promptById.agentId),
+          eq(schema.promptsTable.name, newName),
+          eq(schema.promptsTable.agentId, newAgentId),
         ),
       )
       .orderBy(desc(schema.promptsTable.version))
@@ -194,20 +218,20 @@ class PromptModel {
       .where(
         and(
           eq(schema.promptsTable.organizationId, promptById.organizationId),
-          eq(schema.promptsTable.name, promptById.name),
-          eq(schema.promptsTable.agentId, promptById.agentId),
+          eq(schema.promptsTable.name, newName),
+          eq(schema.promptsTable.agentId, newAgentId),
           eq(schema.promptsTable.isActive, true),
         ),
       );
 
-    // Create new version (keep same name for version tracking)
+    // Create new version
     // Use the input values, falling back to latest version's values
     const [newVersion] = await db
       .insert(schema.promptsTable)
       .values({
         organizationId: latestVersion.organizationId,
-        name: latestVersion.name, // Keep same name for versioning
-        agentId: input.agentId || latestVersion.agentId,
+        name: newName,
+        agentId: newAgentId,
         userPrompt: input.userPrompt ?? latestVersion.userPrompt,
         systemPrompt: input.systemPrompt ?? latestVersion.systemPrompt,
         version: latestVersion.version + 1,

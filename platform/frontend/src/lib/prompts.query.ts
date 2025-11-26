@@ -68,6 +68,7 @@ export function useUpdatePrompt() {
     }: {
       id: string;
       data: {
+        name?: string;
         agentId?: string;
         userPrompt?: string;
         systemPrompt?: string;

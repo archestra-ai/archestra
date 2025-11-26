@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.6.7](https://github.com/archestra-ai/archestra/compare/platform-v0.6.6...platform-v0.6.7) (2025-11-26)
+
+
+### Features
+
+* Add tool compressor ([#1207](https://github.com/archestra-ai/archestra/issues/1207)) ([9985512](https://github.com/archestra-ai/archestra/commit/9985512f970a639c9ea759315c0ae8f1c9550052))
+* calculate tool compression savings ([#1244](https://github.com/archestra-ai/archestra/issues/1244)) ([c012521](https://github.com/archestra-ai/archestra/commit/c012521d12703a918af8eac4f7cd13f7c0213cca))
+* token-based optimization rules ([#1225](https://github.com/archestra-ai/archestra/issues/1225)) ([833004b](https://github.com/archestra-ai/archestra/commit/833004b9c608cf381d1f6e3a504e9dbe207fc75f))
+* tool policy refactoring - ability to reuse tool policies ([#1208](https://github.com/archestra-ai/archestra/issues/1208)) ([83afafe](https://github.com/archestra-ai/archestra/commit/83afafe904913246ceadf2b315decb9f0fe629c4))
+
+
+### Bug Fixes
+
+* allow installing no-auth remote servers ([#1259](https://github.com/archestra-ai/archestra/issues/1259)) ([ba796eb](https://github.com/archestra-ai/archestra/commit/ba796ebb35cd410cd77d91b75ab54edf2e180e1d))
+* certain UI dialogs only show a subset of Profiles ([#1229](https://github.com/archestra-ai/archestra/issues/1229)) ([405485c](https://github.com/archestra-ai/archestra/commit/405485c54b11391d12cc1e2de0184f81a97db344))
+* custom role permissions ([#1239](https://github.com/archestra-ai/archestra/issues/1239)) ([dab7cc0](https://github.com/archestra-ai/archestra/commit/dab7cc0858505827724f85e59492aed2740afe74))
+* fix propagation in prompt card ([#1248](https://github.com/archestra-ai/archestra/issues/1248)) ([564b152](https://github.com/archestra-ai/archestra/commit/564b152fc7918c95b5f599c325a631952362e62d))
+* LLM cost optimization rules UI polish ([#1256](https://github.com/archestra-ai/archestra/issues/1256)) ([c4ae5b5](https://github.com/archestra-ai/archestra/commit/c4ae5b5e0ee03bd65aa8c4fbe087462de53ba5bd))
+* no permission check if not logged in ([#1249](https://github.com/archestra-ai/archestra/issues/1249)) ([2aa09de](https://github.com/archestra-ai/archestra/commit/2aa09de10ca0aa5ca4e6d4411af25a8b529668e2))
+* org-wide cost optimization rules ([#1211](https://github.com/archestra-ai/archestra/issues/1211)) ([939f6b9](https://github.com/archestra-ai/archestra/commit/939f6b9e788ece60a160141c3def0f7798ca4b9a))
+* pnpm install needs CI=true ([#1212](https://github.com/archestra-ai/archestra/issues/1212)) ([7e32d8e](https://github.com/archestra-ai/archestra/commit/7e32d8e0dc17c2a84af4c3b613c2829c79517f1b))
+* pre-fill optimization rules ([#1260](https://github.com/archestra-ai/archestra/issues/1260)) ([20e4259](https://github.com/archestra-ai/archestra/commit/20e4259591206ec8330c82fb157c396ab299d212))
+* prompt management fixes ([#1266](https://github.com/archestra-ai/archestra/issues/1266)) ([802859c](https://github.com/archestra-ai/archestra/commit/802859ccb96acfb94096e55ef67447d52689144d))
+* readme ([#1214](https://github.com/archestra-ai/archestra/issues/1214)) ([d4107c1](https://github.com/archestra-ai/archestra/commit/d4107c11e21ae2585a21ee1e0dc54f60e6e99628))
+* update readme ([#1213](https://github.com/archestra-ai/archestra/issues/1213)) ([0cf88ee](https://github.com/archestra-ai/archestra/commit/0cf88ee97688146d4107600dd14d893f290d48ae))
+
+
+### Dependencies
+
+* address critical `supervisor` CVE ([#1255](https://github.com/archestra-ai/archestra/issues/1255)) ([4187e66](https://github.com/archestra-ai/archestra/commit/4187e665780449d1d6560fdfa8970245921674aa))
+* address critical golang CVE ([#1257](https://github.com/archestra-ai/archestra/issues/1257)) ([090d197](https://github.com/archestra-ai/archestra/commit/090d1972fda30197c23e85c2b5a18f6d1491e1d5))
+* bump @sentry/nextjs from 10.26.0 to 10.27.0 in /platform ([#1230](https://github.com/archestra-ai/archestra/issues/1230)) ([1f4d612](https://github.com/archestra-ai/archestra/commit/1f4d612a3f10b31dd3318b65131ad5175648768e))
+* bump @sentry/node from 10.26.0 to 10.27.0 in /platform ([#1231](https://github.com/archestra-ai/archestra/issues/1231)) ([a5b0a49](https://github.com/archestra-ai/archestra/commit/a5b0a49b33993197854eaa64eac19187666b95e4))
+* bump import-in-the-middle from 1.15.0 to 2.0.0 in /platform ([#1253](https://github.com/archestra-ai/archestra/issues/1253)) ([b30aa4c](https://github.com/archestra-ai/archestra/commit/b30aa4c98351734d81f86284d8de0f58910117f7))
+* bump require-in-the-middle from 7.5.2 to 8.0.1 in /platform ([#1252](https://github.com/archestra-ai/archestra/issues/1252)) ([6901acc](https://github.com/archestra-ai/archestra/commit/6901acc6394f78cb8e606f04cea647729cb33c1f))
+* bump the platform-dependencies group in /platform with 2 updates ([#1251](https://github.com/archestra-ai/archestra/issues/1251)) ([d1c3d9d](https://github.com/archestra-ai/archestra/commit/d1c3d9d40f28755d913cfa6a0235266ab8dfe326))
+* pin `esbuild` to `0.27.0` ([#1264](https://github.com/archestra-ai/archestra/issues/1264)) ([795c049](https://github.com/archestra-ai/archestra/commit/795c04900cbac9ba593ce8658218b926aa2e9935))
+
+
+### Code Refactoring
+
+* Move chat streaming to run in the background ([#1216](https://github.com/archestra-ai/archestra/issues/1216)) ([70e4bfb](https://github.com/archestra-ai/archestra/commit/70e4bfb4a805f8b05ec215b0404fcb48adb4c3bf))
+
+
+### Miscellaneous Chores
+
+* address `McpServerTeamModel` consecutive db query perf issue ([#1235](https://github.com/archestra-ai/archestra/issues/1235)) ([6f22da8](https://github.com/archestra-ai/archestra/commit/6f22da826bacd30df069e335922b51c5ec77186e))
+* address bulk agent-tool assignment N+1 query perf issues ([#1237](https://github.com/archestra-ai/archestra/issues/1237)) ([5acbb34](https://github.com/archestra-ai/archestra/commit/5acbb34b65e6dd291359e2bfffeefe50b78adc6d))
+* address db migration unique constraint issue ([d98f27e](https://github.com/archestra-ai/archestra/commit/d98f27e63ed656889e6653b7e26a1dfd02e41d16))
+* address Dockerfile warnings ([#1254](https://github.com/archestra-ai/archestra/issues/1254)) ([916f299](https://github.com/archestra-ai/archestra/commit/916f299bdfd8bfd0d9c596b2c36287720df22241))
+* address n+1 query perf issue ([#1236](https://github.com/archestra-ai/archestra/issues/1236)) ([b7ac067](https://github.com/archestra-ai/archestra/commit/b7ac067a88c9c9e86e6e2f25747ceb07c584b98f))
+* address several (more) N+1 query issues ([#1238](https://github.com/archestra-ai/archestra/issues/1238)) ([a3bb166](https://github.com/archestra-ai/archestra/commit/a3bb166a5b605e1dbba5c689a62f685b277290c3))
+* bump better auth ([#1267](https://github.com/archestra-ai/archestra/issues/1267)) ([2bf8ed8](https://github.com/archestra-ai/archestra/commit/2bf8ed8a9fbb6a349d0928817362851def8fa480))
+* **deps:** bump body-parser from 2.2.0 to 2.2.1 in /platform/examples/ai-sdk-express ([#1245](https://github.com/archestra-ai/archestra/issues/1245)) ([7a7a58b](https://github.com/archestra-ai/archestra/commit/7a7a58b8e20f9077487032a5bbf7892beb7f58e6))
+* **deps:** bump body-parser from 2.2.0 to 2.2.1 in /platform/examples/mastra-ai ([#1247](https://github.com/archestra-ai/archestra/issues/1247)) ([fdca356](https://github.com/archestra-ai/archestra/commit/fdca3567a41610cafc9cadb29b78a7bddaffb3f2))
+* fix catalog URL ([5dfa6b9](https://github.com/archestra-ai/archestra/commit/5dfa6b9aab4aaa2a6afbf6792e468a32452fd4db))
+* improve local server install ([#1221](https://github.com/archestra-ai/archestra/issues/1221)) ([0bab6e8](https://github.com/archestra-ai/archestra/commit/0bab6e85d703946166d47560fbe5d9506569f4d4))
+* improve prompt management ([#1240](https://github.com/archestra-ai/archestra/issues/1240)) ([8d40a8b](https://github.com/archestra-ai/archestra/commit/8d40a8b703618d4a8f7e36b118c0944cdee99b43))
+* improve prompt management ([#1268](https://github.com/archestra-ai/archestra/issues/1268)) ([c840e03](https://github.com/archestra-ai/archestra/commit/c840e0308c74268175fd67c3866963f6c5304ca6))
+* invitation UX e2e test ([#1242](https://github.com/archestra-ai/archestra/issues/1242)) ([e63423d](https://github.com/archestra-ai/archestra/commit/e63423da27baa3df2e509e00993053aff8e089e7))
+* make cli chat to work with bedrock directly ([#1209](https://github.com/archestra-ai/archestra/issues/1209)) ([101f4b8](https://github.com/archestra-ai/archestra/commit/101f4b8919606f015ad6c144d91d94b0c7e51253))
+* only fetch custom roles if authenticated ([#1233](https://github.com/archestra-ai/archestra/issues/1233)) ([fc40a1a](https://github.com/archestra-ai/archestra/commit/fc40a1ab3692ee7369e5288111edb0a6219fc24c))
+* revert (incomplete) tool policy refactor ([#1228](https://github.com/archestra-ai/archestra/issues/1228)) ([2874752](https://github.com/archestra-ai/archestra/commit/2874752c549a16c146bce03a3c0971dd94b748f5))
+* use `tsdown` instead of `tsup` ([#1246](https://github.com/archestra-ai/archestra/issues/1246)) ([c4e3a67](https://github.com/archestra-ai/archestra/commit/c4e3a67d7a4a62f979460b0f596f4e610430cd18))
+
 ## [0.6.6](https://github.com/archestra-ai/archestra/compare/platform-v0.6.5...platform-v0.6.6) (2025-11-20)
 
 

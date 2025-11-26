@@ -142,92 +142,103 @@ class OptimizationRuleModel {
 
   /**
    * Ensure default optimization rules and token prices exist for common cheaper models
+   * @param organizationId - The organization ID
+   * @param provider - Optional provider filter to only add rules for specific provider
    */
   static async ensureDefaultOptimizationRules(
     organizationId: string,
+    provider?: SupportedProvider,
   ): Promise<void> {
-    // First ensure token prices exist for the models used in optimization rules
-    const defaultPrices: InsertTokenPrice[] = [
-      {
-        model: "gpt-4o-mini",
-        pricePerMillionInput: "0.15",
-        pricePerMillionOutput: "0.60",
-      },
-      {
-        model: "claude-3-5-sonnet",
-        pricePerMillionInput: "3.00",
-        pricePerMillionOutput: "15.00",
-      },
-    ];
+    // Define prices per provider
+    const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
+      openai: [
+        {
+          model: "gpt-4o-mini",
+          pricePerMillionInput: "0.15",
+          pricePerMillionOutput: "0.60",
+        },
+      ],
+      anthropic: [
+        {
+          model: "claude-3-5-sonnet",
+          pricePerMillionInput: "3.00",
+          pricePerMillionOutput: "15.00",
+        },
+      ],
+      gemini: [],
+    };
 
-    await db
-      .insert(schema.tokenPricesTable)
-      .values(defaultPrices)
-      .onConflictDoNothing({
-        target: schema.tokenPricesTable.model,
-      });
+    // Define rules per provider
+    const rulesByProvider: Record<SupportedProvider, InsertOptimizationRule[]> =
+      {
+        openai: [
+          {
+            entityType: "organization",
+            entityId: organizationId,
+            ruleType: "tool_presence",
+            conditions: { hasTools: false },
+            provider: "openai",
+            targetModel: "gpt-4o-mini",
+            enabled: true,
+          },
+          {
+            entityType: "organization",
+            entityId: organizationId,
+            ruleType: "content_length",
+            conditions: { maxLength: 1000 },
+            provider: "openai",
+            targetModel: "gpt-4o-mini",
+            enabled: true,
+          },
+        ],
+        anthropic: [
+          {
+            entityType: "organization",
+            entityId: organizationId,
+            ruleType: "tool_presence",
+            conditions: { hasTools: false },
+            provider: "anthropic",
+            targetModel: "claude-3-5-sonnet",
+            enabled: true,
+          },
+          {
+            entityType: "organization",
+            entityId: organizationId,
+            ruleType: "content_length",
+            conditions: { maxLength: 1000 },
+            provider: "anthropic",
+            targetModel: "claude-3-5-sonnet",
+            enabled: true,
+          },
+        ],
+        gemini: [],
+      };
 
-    const defaultRules: InsertOptimizationRule[] = [
-      // OpenAI rules
-      {
-        entityType: "organization",
-        entityId: organizationId,
-        ruleType: "tool_presence",
-        conditions: { hasTools: false },
-        provider: "openai",
-        targetModel: "gpt-4o-mini",
-        enabled: true,
-      },
-      {
-        entityType: "organization",
-        entityId: organizationId,
-        ruleType: "content_length",
-        conditions: { maxLength: 1000 },
-        provider: "openai",
-        targetModel: "gpt-4o-mini",
-        enabled: true,
-      },
-      // Anthropic rules
-      {
-        entityType: "organization",
-        entityId: organizationId,
-        ruleType: "tool_presence",
-        conditions: { hasTools: false },
-        provider: "anthropic",
-        targetModel: "claude-3-5-sonnet",
-        enabled: true,
-      },
-      {
-        entityType: "organization",
-        entityId: organizationId,
-        ruleType: "content_length",
-        conditions: { maxLength: 1000 },
-        provider: "anthropic",
-        targetModel: "claude-3-5-sonnet",
-        enabled: true,
-      },
-    ];
+    // Filter by provider if specified
+    const providers: SupportedProvider[] = provider
+      ? [provider]
+      : ["openai", "anthropic", "gemini"];
+
+    const defaultPrices = providers.flatMap((p) => pricesByProvider[p]);
+    const defaultRules = providers.flatMap((p) => rulesByProvider[p]);
+
+    // Insert token prices
+    if (defaultPrices.length > 0) {
+      await db
+        .insert(schema.tokenPricesTable)
+        .values(defaultPrices)
+        .onConflictDoNothing({
+          target: schema.tokenPricesTable.model,
+        });
+    }
 
     // Get existing rules for this organization
     const existingRules =
       await OptimizationRuleModel.findByOrganizationId(organizationId);
 
-    // Filter out rules that already exist
-    const rulesToCreate = defaultRules.filter((rule) => {
-      return !existingRules.some(
-        (existing) =>
-          existing.entityType === rule.entityType &&
-          existing.entityId === rule.entityId &&
-          existing.provider === rule.provider &&
-          existing.ruleType === rule.ruleType &&
-          JSON.stringify(existing.conditions) ===
-            JSON.stringify(rule.conditions),
-      );
-    });
-
-    // Insert new rules
-    if (rulesToCreate.length > 0) {
-      await db.insert(schema.optimizationRulesTable).values(rulesToCreate);
+    // Insert new rules if there are no other existing rules
+    if (existingRules.length === 0) {
+      await db.insert(schema.optimizationRulesTable).values(defaultRules);
     }
   }
 }

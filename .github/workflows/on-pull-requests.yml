@@ -62,6 +62,7 @@ jobs:
       contents: write
       security-events: write
       id-token: write # Required for Workload Identity Federation
+      pull-requests: write # Required for Docker Scout to write a comment to a PR
     uses: ./.github/workflows/platform-linting-and-tests.yml
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
@@ -75,6 +76,7 @@ jobs:
       contents: write
       security-events: write
       id-token: write # Required for Workload Identity Federation
+      pull-requests: write # Required for Docker Scout to write a comment to a PR
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}

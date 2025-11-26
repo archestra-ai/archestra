@@ -128,7 +128,7 @@ export function PromptLibraryGrid({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Free Chat Tile */}
         <Card
-          className="min-h-[100px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
+          className="justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
           onClick={() => setIsFreeChatDialogOpen(true)}
         >
           <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -278,10 +278,10 @@ function PromptTile({
 
   return (
     <Card
-      className="min-h-[100px] flex flex-col justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
+      className="h-[130px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
       onClick={handlePromptClick}
     >
-      <CardHeader className="pb-1.5 px-4 relative flex-shrink-0">
+      <CardHeader className="pb-1.5 px-4 relative">
         <div className="flex items-start justify-between gap-2">
           {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
           <div

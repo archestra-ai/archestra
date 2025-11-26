@@ -2,9 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 import {
   type Action,
   ADMIN_ROLE_NAME,
@@ -16,6 +13,9 @@ import {
 } from "@shared";
 import logger from "@/logging";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 function getResourceDescription(resource: Resource): string {
   const descriptions: Record<Resource, string> = {
     profile: "Profiles that can use tools and interact with users",
@@ -25,6 +25,7 @@ function getResourceDescription(resource: Resource): string {
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
     organization: "Organization settings",
+    ssoProvider: "SSO providers for authentication",
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",
     internalMcpCatalog: "Internal MCP server catalog management",
@@ -194,7 +195,7 @@ async function main() {
   const markdownContent = generateMarkdownContent();
   const docsFilePath = path.join(
     __dirname,
-    "../../../../../website/app/app/docs/content/platform-access-control.md",
+    "../../../../docs/pages/platform-access-control.md",
   );
 
   // Ensure directory exists

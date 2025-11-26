@@ -28,6 +28,7 @@ export { organizationRole as organizationRolesTable } from "./organization-role"
 export { default as promptsTable } from "./prompt";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as ssoProvidersTable } from "./sso-provider";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";

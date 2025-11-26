@@ -1,3 +1,4 @@
+import { ssoClient } from "@better-auth/sso/client";
 import { ac, adminRole, memberRole } from "@shared";
 import {
   adminClient,
@@ -37,6 +38,8 @@ export const authClient = createAuthClient({
     adminClient(),
     apiKeyClient(),
     twoFactorClient(),
+    // TODO: add this conditionally..
+    ssoClient(),
   ],
   fetchOptions: {
     credentials: "include",

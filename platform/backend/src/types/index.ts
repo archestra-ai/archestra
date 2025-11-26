@@ -25,6 +25,7 @@ export * from "./prompt";
 export * from "./role";
 export * from "./secret";
 export * from "./session";
+export * from "./sso-provider";
 export * from "./statistics";
 export * from "./team";
 export * from "./token-price";

@@ -463,6 +463,13 @@
       "when": 1764151221623,
       "tag": "0065_keen_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1764186334811,
+      "tag": "0066_bored_lethal_legion",
+      "breakpoints": true
     }
   ]
 }

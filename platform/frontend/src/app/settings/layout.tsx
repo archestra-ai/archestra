@@ -22,6 +22,8 @@ export default function SettingsLayout({
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },
           { label: "Roles", href: "/settings/roles" },
+          // TODO: conditionally show this if SSO is enabled
+          { label: "SSO Providers", href: "/settings/sso-providers" },
           { label: "Appearance", href: "/settings/appearance" },
         ]
       : []),

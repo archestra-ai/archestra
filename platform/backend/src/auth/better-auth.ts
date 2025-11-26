@@ -1,3 +1,4 @@
+import { sso } from "@better-auth/sso";
 import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -102,6 +103,8 @@ export const auth = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
+    // TODO: add this conditionally..
+    sso(),
   ],
 
   user: {

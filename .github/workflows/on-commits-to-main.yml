@@ -49,9 +49,9 @@ jobs:
           platforms: linux/amd64
           build-args: |
             VERSION=${{ github.sha }}
-            TURBO_TEAM=${{ env.TURBO_TEAM }}
-            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
             sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           push: true
           tags: |

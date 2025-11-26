@@ -110,9 +110,9 @@ jobs:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
-          build-args: |
-            TURBO_TEAM=${{ env.TURBO_TEAM }}
-            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
 
@@ -332,9 +332,9 @@ jobs:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
-          build-args: |
-            TURBO_TEAM=${{ env.TURBO_TEAM }}
-            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
 

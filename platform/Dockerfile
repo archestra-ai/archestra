@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM node:24.11.1-alpine3.22 AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -78,9 +78,6 @@ RUN apk add --no-cache \
 # Install supervisor from edge repository to address CVE-2023-27482
 # https://nvd.nist.gov/vuln/detail/cve-2023-27482
 RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
-
-# Install Go 1.24.10 to fix CVE-2024-24790 and CVE-2025-22871 in stdlib
-RUN apk add --no-cache go=1.24.10-r0
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

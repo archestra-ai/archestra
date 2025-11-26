@@ -64,3 +64,18 @@ This command will:
 - Open the Archestra UI at <http://localhost:3000>
 
 **Note**: By default, the platform allows localhost origins on any port for CORS configuration. For production deployments or custom CORS configuration, see [Environment Variables](/docs/platform-deployment#environment-variables).
+
+### 3. Dependency Security
+
+The platform has two security protections:
+
+1. **Install scripts are disabled** - Prevents malicious code execution during install
+2. **7-day minimum release age** - Delays installation of newly published packages
+
+If a package requires scripts to work:
+
+```bash
+pnpm rebuild <package-name>
+```
+
+This is rarely needed. Most packages work without scripts.

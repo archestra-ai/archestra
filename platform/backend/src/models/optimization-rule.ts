@@ -141,13 +141,33 @@ class OptimizationRuleModel {
   }
 
   /**
+   * Get all unique providers from interactions table
+   */
+  private static async getAllProvidersFromInteractions(): Promise<
+    SupportedProvider[]
+  > {
+    const results = await db
+      .select({
+        providerDiscriminator: schema.interactionsTable.type,
+      })
+      .from(schema.interactionsTable)
+      .groupBy(schema.interactionsTable.type);
+
+    // Convert discriminators like "openai:chatCompletions" to providers like "openai"
+    const providers = results
+      .map((row) => row.providerDiscriminator?.split(":")[0])
+      .filter(Boolean) as SupportedProvider[];
+
+    // Return unique providers
+    return [...new Set(providers)];
+  }
+
+  /**
    * Ensure default optimization rules and token prices exist for common cheaper models
    * @param organizationId - The organization ID
-   * @param provider - Optional provider filter to only add rules for specific provider
    */
   static async ensureDefaultOptimizationRules(
     organizationId: string,
-    provider?: SupportedProvider,
   ): Promise<void> {
     // Define prices per provider
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
@@ -214,10 +234,14 @@ class OptimizationRuleModel {
         gemini: [],
       };
 
-    // Filter by provider if specified
-    const providers: SupportedProvider[] = provider
-      ? [provider]
-      : ["openai", "anthropic", "gemini"];
+    // Filter by provider if specified, otherwise get providers from interactions
+    let providers: SupportedProvider[] =
+      await OptimizationRuleModel.getAllProvidersFromInteractions();
+
+    // Fall back to Anthropic if no interactions exist yet
+    if (providers.length === 0) {
+      providers = ["anthropic"];
+    }
 
     const defaultPrices = providers.flatMap((p) => pricesByProvider[p]);
     const defaultRules = providers.flatMap((p) => rulesByProvider[p]);
@@ -236,9 +260,19 @@ class OptimizationRuleModel {
     const existingRules =
       await OptimizationRuleModel.findByOrganizationId(organizationId);
 
-    // Insert new rules if there are no other existing rules
-    if (existingRules.length === 0) {
-      await db.insert(schema.optimizationRulesTable).values(defaultRules);
+    // Get providers that already have rules (don't add defaults if any rules exist for provider)
+    const providersWithRules = new Set(
+      existingRules.map((rule) => rule.provider),
+    );
+
+    // Only insert rules for providers that have no existing rules
+    const rulesToCreate = defaultRules.filter(
+      (rule) => !providersWithRules.has(rule.provider),
+    );
+
+    // Insert new rules
+    if (rulesToCreate.length > 0) {
+      await db.insert(schema.optimizationRulesTable).values(rulesToCreate);
     }
   }
 }

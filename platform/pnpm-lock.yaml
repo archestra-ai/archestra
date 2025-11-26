@@ -203,6 +203,9 @@ importers:
       tsdown:
         specifier: ^0.16.6
         version: 0.16.7(typescript@5.9.3)
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -500,6 +503,9 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.10.1
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -14526,7 +14532,6 @@ snapshots:
       get-tsconfig: 4.13.0
     optionalDependencies:
       fsevents: 2.3.3
-    optional: true
 
   turbo-darwin-64@2.6.1:
     optional: true

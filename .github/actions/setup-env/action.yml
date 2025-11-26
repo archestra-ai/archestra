@@ -22,11 +22,6 @@ runs:
         cache: "pnpm"
         cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
-      with:
-        version: 1.3.3
-
     - name: Install dependencies
       shell: bash
       working-directory: ${{ inputs.working-directory }}

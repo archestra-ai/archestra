@@ -1,7 +1,8 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { PromptModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { AgentTeamModel, PromptModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -18,13 +19,33 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetPrompts,
-        description: "Get all prompts for the organization",
+        description:
+          "Get all prompts for the organization filtered by user's accessible agents",
         tags: ["Prompts"],
         response: constructResponseSchema(z.array(SelectPromptSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send(await PromptModel.findByOrganizationId(organizationId));
+    async ({ organizationId, user, headers }, reply) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      // Get accessible agent IDs for this user (chat-enabled agents only)
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        isAgentAdmin,
+        true, // chatOnly - filter to agents with useInChat = true
+      );
+
+      // Filter prompts to only those assigned to accessible agents
+      const prompts = await PromptModel.findByOrganizationIdAndAccessibleAgents(
+        organizationId,
+        accessibleAgentIds,
+      );
+
+      return reply.send(prompts);
     },
   );
 

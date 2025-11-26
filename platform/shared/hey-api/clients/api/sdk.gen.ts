@@ -1271,7 +1271,7 @@ export const getOnboardingStatus = <ThrowOnError extends boolean = false>(option
 };
 
 /**
- * Get all prompts for the organization
+ * Get all prompts for the organization filtered by user's accessible agents
  */
 export const getPrompts = <ThrowOnError extends boolean = false>(options?: Options<GetPromptsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPromptsResponses, GetPromptsErrors, ThrowOnError>({

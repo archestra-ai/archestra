@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM node:24.11.1-alpine3.22 AS base
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
@@ -68,13 +68,23 @@ ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
-# Install PostgreSQL 17 and supervisord
-RUN apk add --no-cache \
-    postgresql17 \
-    postgresql17-contrib \
-    supervisor \
-    su-exec \
-    && mkdir -p /var/log/supervisor
+RUN apk --no-cache upgrade && \
+    # Install PostgreSQL 17 and supervisord
+    apk add --no-cache postgresql17 postgresql17-contrib su-exec && \
+    # Remove NPM-related files and directories (as we do not use npm and it just brings extra dependencies/vulnerabilities)
+    # See https://github.com/grafana/grafana-image-renderer/pull/625
+    rm -rf /usr/local/lib/node_modules/npm && \
+    rm -rf /usr/local/bin/npm && \
+    rm -rf /usr/local/bin/npx && \
+    rm -rf /root/.npm && \
+    rm -rf /root/.node-gyp && \
+    mkdir -p /var/log/supervisor && \
+    # Clean up
+    rm -rf /tmp/*
+
+# Install supervisor from edge repository to address CVE-2023-27482
+# https://nvd.nist.gov/vuln/detail/cve-2023-27482
+RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

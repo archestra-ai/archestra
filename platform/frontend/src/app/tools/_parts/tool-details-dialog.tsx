@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import type { archestraApiTypes } from "@shared";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,75 +9,131 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import { ToolAssignmentsPanel } from "./tool-assignments-panel";
-import { ToolPoliciesPanel } from "./tool-policies-panel";
-import type { Tool } from "./types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { isMcpTool } from "@/lib/tool.utils";
+import { formatDate } from "@/lib/utils";
+import { ResponseModifierEditor } from "./response-modifier-editor";
+import { ToolCallPolicies } from "./tool-call-policies";
+import { ToolReadonlyDetails } from "./tool-readonly-details";
+import { ToolResultPolicies } from "./tool-result-policies";
 
-type TabId = "policies" | "assignments";
-
-export function ToolDetailsDialog({
-  tool,
-  open,
-  onOpenChange,
-}: {
-  tool: Tool | null;
+interface ToolDetailsDialogProps {
+  agentTool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {
-  const [activeTab, setActiveTab] = useState<TabId>("policies");
+}
 
-  if (!tool) return null;
+export function ToolDetailsDialog({
+  agentTool,
+  open,
+  onOpenChange,
+}: ToolDetailsDialogProps) {
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
+  if (!agentTool) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1200px] flex-col">
-        <DialogHeader className="flex-shrink-0 space-y-2">
-          <DialogTitle className="text-2xl font-semibold flex items-center gap-2">
-            {tool.name}
-            <Badge variant="outline">
-              {tool.mcpServer
-                ? `MCP Server: ${tool.mcpServer.name}`
-                : "LLM Proxy"}
-            </Badge>
-          </DialogTitle>
-
-          {tool.description && (
-            <TruncatedText
-              message={tool.description}
-              maxLength={500}
-              className="text-sm text-muted-foreground"
-            />
-          )}
+      <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <DialogTitle className="text-xl font-semibold tracking-tight">
+                {agentTool.tool.name}
+              </DialogTitle>
+              {agentTool.tool.description && (
+                <TruncatedText
+                  message={agentTool.tool.description}
+                  maxLength={200}
+                  className="text-sm text-muted-foreground mt-1"
+                />
+              )}
+            </div>
+            <div className="flex gap-6 text-sm ml-6">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Agent
+                </div>
+                <div className="text-sm text-foreground mt-0.5">
+                  {agentTool.agent.name || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Origin
+                </div>
+                <div className="mt-0.5">
+                  {isMcpTool(agentTool.tool) ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="default" className="bg-indigo-500">
+                            MCP Server
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            {
+                              internalMcpCatalogItems?.find(
+                                (item) => item.id === agentTool.tool.catalogId,
+                              )?.name
+                            }
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="secondary" className="bg-orange-800">
+                            Intercepted
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Tool discovered via agent-LLM communication</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Detected
+                </div>
+                <div className="text-sm text-foreground mt-0.5">
+                  {formatDate({ date: agentTool.createdAt })}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Updated
+                </div>
+                <div className="text-sm text-foreground mt-0.5">
+                  {formatDate({ date: agentTool.updatedAt })}
+                </div>
+              </div>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto pr-2">
-          <div className="flex gap-4 border-b pb-2 text-sm font-medium">
-            {[
-              { id: "policies", label: "Policies" },
-              { id: "assignments", label: "Assignments" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as TabId)}
-                className={cn(
-                  "relative pb-2 transition-colors",
-                  activeTab === tab.id
-                    ? "text-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {tab.label}
-                {activeTab === tab.id && (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
-                )}
-              </button>
-            ))}
+        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+          <div className="space-y-6">
+            <ToolReadonlyDetails agentTool={agentTool} />
+            <div className="grid grid-cols-2 gap-6">
+              <ToolCallPolicies agentTool={agentTool} />
+              <ToolResultPolicies agentTool={agentTool} />
+            </div>
+            <ResponseModifierEditor agentTool={agentTool} />
           </div>
-
-          {activeTab === "policies" && <ToolPoliciesPanel tool={tool} />}
-          {activeTab === "assignments" && <ToolAssignmentsPanel tool={tool} />}
         </div>
       </DialogContent>
     </Dialog>

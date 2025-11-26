@@ -158,6 +158,7 @@ export const RouteId = {
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
+  BulkUpdateAgentTools: "bulkUpdateAgentTools",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -191,12 +192,6 @@ export const RouteId = {
   RestartMcpServer: "restartMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   McpProxy: "mcpProxy",
-
-  // Tool Policy Routes
-  GetToolPoliciesForTool: "getToolPoliciesForTool",
-  CreateToolPolicy: "createToolPolicy",
-  UpdateToolPolicy: "updateToolPolicy",
-  DeleteToolPolicy: "deleteToolPolicy",
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -294,6 +289,7 @@ export const RouteId = {
   CreatePrompt: "createPrompt",
   GetPrompt: "getPrompt",
   GetPromptVersions: "getPromptVersions",
+  RollbackPrompt: "rollbackPrompt",
   UpdatePrompt: "updatePrompt",
   DeletePrompt: "deletePrompt",
 
@@ -390,6 +386,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkAssignTools]: {
     profile: ["update"],
   },
+  [RouteId.BulkUpdateAgentTools]: {
+    profile: ["update"],
+    tool: ["update"],
+  },
   [RouteId.UnassignToolFromAgent]: {
     profile: ["update"],
   },
@@ -405,18 +405,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetTools]: {
     tool: ["read"],
-  },
-  [RouteId.GetToolPoliciesForTool]: {
-    policy: ["read"],
-  },
-  [RouteId.CreateToolPolicy]: {
-    policy: ["create"],
-  },
-  [RouteId.UpdateToolPolicy]: {
-    policy: ["update"],
-  },
-  [RouteId.DeleteToolPolicy]: {
-    policy: ["delete"],
   },
   [RouteId.GetInteractions]: {
     interaction: ["read"],
@@ -645,6 +633,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
+  },
+  [RouteId.RollbackPrompt]: {
+    prompt: ["update"],
   },
   [RouteId.UpdatePrompt]: {
     prompt: ["update"],

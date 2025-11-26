@@ -1,5 +1,5 @@
 {
-  "id": "496d2579-20a7-461b-9888-68d30093b470",
+  "id": "56f6370b-9a60-46bd-9b9c-9c051c60c12a",
   "prevId": "5883379b-e45f-414a-a62b-02b5038d6c68",
   "version": "7",
   "dialect": "postgresql",
@@ -368,9 +368,23 @@
           "primaryKey": false,
           "notNull": true
         },
-        "tool_policy_id": {
-          "name": "tool_policy_id",
-          "type": "uuid",
+        "allow_usage_when_untrusted_data_is_present": {
+          "name": "allow_usage_when_untrusted_data_is_present",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "tool_result_treatment": {
+          "name": "tool_result_treatment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'untrusted'"
+        },
+        "response_modifier_template": {
+          "name": "response_modifier_template",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -427,19 +441,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_tools_tool_policy_id_tool_policies_id_fk": {
-          "name": "agent_tools_tool_policy_id_tool_policies_id_fk",
-          "tableFrom": "agent_tools",
-          "tableTo": "tool_policies",
-          "columnsFrom": [
-            "tool_policy_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk": {
@@ -535,6 +536,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "convert_tool_results_to_toon": {
+          "name": "convert_tool_results_to_toon",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -1034,6 +1042,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "processed_request": {
+          "name": "processed_request",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "response": {
           "name": "response",
           "type": "jsonb",
@@ -1073,6 +1087,18 @@
         "cost": {
           "name": "cost",
           "type": "numeric(13, 10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "toon_tokens_before": {
+          "name": "toon_tokens_before",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "toon_tokens_after": {
+          "name": "toon_tokens_after",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -2992,8 +3018,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tool_policy_id": {
-          "name": "tool_policy_id",
+        "agent_tool_id": {
+          "name": "agent_tool_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3045,12 +3071,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tool_invocation_policies_tool_policy_id_tool_policies_id_fk": {
-          "name": "tool_invocation_policies_tool_policy_id_tool_policies_id_fk",
+        "tool_invocation_policies_agent_tool_id_agent_tools_id_fk": {
+          "name": "tool_invocation_policies_agent_tool_id_agent_tools_id_fk",
           "tableFrom": "tool_invocation_policies",
-          "tableTo": "tool_policies",
+          "tableTo": "agent_tools",
           "columnsFrom": [
-            "tool_policy_id"
+            "agent_tool_id"
           ],
           "columnsTo": [
             "id"
@@ -3061,113 +3087,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.tool_policies": {
-      "name": "tool_policies",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_id": {
-          "name": "tool_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allow_usage_when_untrusted_data_is_present": {
-          "name": "allow_usage_when_untrusted_data_is_present",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "tool_result_treatment": {
-          "name": "tool_result_treatment",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'untrusted'"
-        },
-        "response_modifier_template": {
-          "name": "response_modifier_template",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "tool_policies_tool_id_tools_id_fk": {
-          "name": "tool_policies_tool_id_tools_id_fk",
-          "tableFrom": "tool_policies",
-          "tableTo": "tools",
-          "columnsFrom": [
-            "tool_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "tool_policies_organization_id_organization_id_fk": {
-          "name": "tool_policies_organization_id_organization_id_fk",
-          "tableFrom": "tool_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "tool_policies_name_unique": {
-          "name": "tool_policies_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "name"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3304,8 +3223,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tool_policy_id": {
-          "name": "tool_policy_id",
+        "agent_tool_id": {
+          "name": "agent_tool_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3358,12 +3277,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "trusted_data_policies_tool_policy_id_tool_policies_id_fk": {
-          "name": "trusted_data_policies_tool_policy_id_tool_policies_id_fk",
+        "trusted_data_policies_agent_tool_id_agent_tools_id_fk": {
+          "name": "trusted_data_policies_agent_tool_id_agent_tools_id_fk",
           "tableFrom": "trusted_data_policies",
-          "tableTo": "tool_policies",
+          "tableTo": "agent_tools",
           "columnsFrom": [
-            "tool_policy_id"
+            "agent_tool_id"
           ],
           "columnsTo": [
             "id"

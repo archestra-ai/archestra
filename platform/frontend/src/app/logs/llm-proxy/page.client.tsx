@@ -2,8 +2,8 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronRightIcon, ChevronUp } from "lucide-react";
-import Link from "next/link";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Savings } from "@/components/savings";
 import { TruncatedText } from "@/components/truncated-text";
@@ -120,6 +120,7 @@ function LogsTable({
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
+  const router = useRouter();
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
@@ -232,33 +233,53 @@ function LogsTable({
       id: "costSavings",
       header: "Cost Savings",
       cell: ({ row }) => {
-        const { cost, baselineCost } = row.original;
+        const {
+          cost,
+          baselineCost,
+          toonCostSavings,
+          toonTokensBefore,
+          toonTokensAfter,
+        } = row.original;
 
-        if (!cost || !baselineCost) {
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-muted-foreground cursor-default">
-                    N/A
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  Cost savings are available when "Cost Optimization" in agent
-                  settings is enabled.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
+        // Calculate tokens saved for display
+        const toonTokensSaved =
+          toonTokensBefore &&
+          toonTokensAfter &&
+          toonTokensBefore > toonTokensAfter
+            ? toonTokensBefore - toonTokensAfter
+            : null;
+
+        // Calculate actual savings amounts
+        const costNum = cost ? Number.parseFloat(cost) : 0;
+        const baselineCostNum = baselineCost
+          ? Number.parseFloat(baselineCost)
+          : 0;
+        const toonCostSavingsNum = toonCostSavings
+          ? Number.parseFloat(toonCostSavings)
+          : 0;
+
+        const costOptimizationSavings = baselineCostNum - costNum;
+        const totalSavings = costOptimizationSavings + toonCostSavingsNum;
+
+        // Show dash if there are no actual savings
+        if (totalSavings === 0) {
+          return <span className="text-xs text-muted-foreground">–</span>;
         }
+
+        // If no cost optimization but has TOON compression, use cost as baseline
+        const effectiveCost = cost || "0";
+        const effectiveBaselineCost = baselineCost || cost || "0";
 
         return (
           <div className="text-xs">
             <Savings
-              cost={cost}
-              baselineCost={baselineCost}
+              cost={effectiveCost}
+              baselineCost={effectiveBaselineCost}
+              toonCostSavings={toonCostSavings}
+              toonTokensSaved={toonTokensSaved}
               format="percent"
               tooltip="hover"
+              showUnifiedTooltip={true}
             />
           </div>
         );
@@ -349,19 +370,6 @@ function LogsTable({
         );
       },
     },
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <Link
-          href={`/logs/${new DynamicInteraction(row.original).id}`}
-          className="flex items-center gap-1 whitespace-nowrap text-sm text-primary hover:underline"
-        >
-          View
-          <ChevronRightIcon className="h-3 w-3" />
-        </Link>
-      ),
-    },
   ];
 
   if (!interactions || interactions.length === 0) {
@@ -388,6 +396,10 @@ function LogsTable({
       manualSorting
       sorting={sorting}
       onSortingChange={setSorting}
+      onRowClick={(row) => {
+        const interaction = new DynamicInteraction(row);
+        router.push(`/logs/${interaction.id}`);
+      }}
     />
   );
 }

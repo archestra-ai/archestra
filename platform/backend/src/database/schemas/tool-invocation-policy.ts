@@ -1,12 +1,12 @@
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
-import toolPoliciesTable from "./tool-policy";
+import agentToolsTable from "./agent-tool";
 
 const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
   id: uuid("id").primaryKey().defaultRandom(),
-  toolPolicyId: uuid("tool_policy_id")
+  agentToolId: uuid("agent_tool_id")
     .notNull()
-    .references(() => toolPoliciesTable.id, { onDelete: "cascade" }),
+    .references(() => agentToolsTable.id, { onDelete: "cascade" }),
   argumentName: text("argument_name").notNull(),
   operator: text("operator")
     .$type<AutonomyPolicyOperator.SupportedOperator>()

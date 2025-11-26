@@ -1,5 +1,4 @@
 export { default as agentRoutes } from "./agent";
-export { default as agentPromptRoutes } from "./agent-prompts";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
@@ -27,5 +26,4 @@ export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
-export { default as toolPolicyRoutes } from "./tool-policy";
 export { default as userRoutes } from "./user";

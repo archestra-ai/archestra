@@ -2080,268 +2080,6 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type GetAgentPromptsData = {
-    body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type GetAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentPromptsError = GetAgentPromptsErrors[keyof GetAgentPromptsErrors];
-
-export type GetAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-        prompt: {
-            id: string;
-            organizationId: string;
-            name: string;
-            type: 'system' | 'regular';
-            content: string;
-            version: number;
-            parentPromptId: string | null;
-            isActive: boolean;
-            createdBy: string;
-            createdAt: string;
-            updatedAt: string;
-        };
-    }>;
-};
-
-export type GetAgentPromptsResponse = GetAgentPromptsResponses[keyof GetAgentPromptsResponses];
-
-export type AssignAgentPromptsData = {
-    body?: {
-        systemPromptId?: string | null;
-        regularPromptIds?: Array<string>;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type AssignAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type AssignAgentPromptsError = AssignAgentPromptsErrors[keyof AssignAgentPromptsErrors];
-
-export type AssignAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-    }>;
-};
-
-export type AssignAgentPromptsResponse = AssignAgentPromptsResponses[keyof AssignAgentPromptsResponses];
-
-export type DeleteAgentPromptData = {
-    body?: never;
-    path: {
-        agentId: string;
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts/{promptId}';
-};
-
-export type DeleteAgentPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteAgentPromptError = DeleteAgentPromptErrors[keyof DeleteAgentPromptErrors];
-
-export type DeleteAgentPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteAgentPromptResponse = DeleteAgentPromptResponses[keyof DeleteAgentPromptResponses];
-
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -2427,9 +2165,9 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
-            optimizeCost: boolean;
             considerContextUntrusted: boolean;
             useInChat: boolean;
+            convertToolResultsToToon: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2483,9 +2221,9 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
+        convertToolResultsToToon?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2567,9 +2305,9 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
+        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2612,7 +2350,9 @@ export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponse
 export type GetAllAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        useInChat?: boolean;
+    };
     url: '/api/agents/all';
 };
 
@@ -2684,9 +2424,9 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
+        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2801,9 +2541,9 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
+        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2999,9 +2739,9 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
+        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3046,9 +2786,9 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
+        convertToolResultsToToon?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3132,9 +2872,9 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
+        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3335,7 +3075,6 @@ export type GetAllAgentToolsData = {
     query?: {
         search?: string;
         agentId?: string;
-        toolId?: string;
         /**
          * Can be 'llm-proxy' or a catalogId
          */
@@ -3422,6 +3161,9 @@ export type GetAllAgentToolsResponses = {
     200: {
         data: Array<{
             id: string;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+            responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
             createdAt: string;
@@ -3456,17 +3198,6 @@ export type GetAllAgentToolsResponses = {
                 mcpServerName: string | null;
                 mcpServerCatalogId: string | null;
             };
-            toolPolicy: {
-                id: string;
-                createdAt: string;
-                updatedAt: string;
-                name: string;
-                toolId: string;
-                organizationId: string;
-                allowUsageWhenUntrustedDataIsPresent: boolean;
-                toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-                responseModifierTemplate: string | null;
-            } | null;
         }>;
         pagination: {
             currentPage: number;
@@ -3565,7 +3296,6 @@ export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
-        toolPolicyId?: string | null;
     } | null;
     path: {
         agentId: string;
@@ -3652,7 +3382,6 @@ export type BulkAssignToolsData = {
             toolId: string;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
-            toolPolicyId?: string | null;
         }>;
     };
     path?: never;
@@ -3741,6 +3470,87 @@ export type BulkAssignToolsResponses = {
 };
 
 export type BulkAssignToolsResponse = BulkAssignToolsResponses[keyof BulkAssignToolsResponses];
+
+export type BulkUpdateAgentToolsData = {
+    body: {
+        ids: Array<string>;
+        field: 'allowUsageWhenUntrustedDataIsPresent' | 'toolResultTreatment';
+        value: boolean | 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools/bulk-update';
+};
+
+export type BulkUpdateAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type BulkUpdateAgentToolsError = BulkUpdateAgentToolsErrors[keyof BulkUpdateAgentToolsErrors];
+
+export type BulkUpdateAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        updatedCount: number;
+    };
+};
+
+export type BulkUpdateAgentToolsResponse = BulkUpdateAgentToolsResponses[keyof BulkUpdateAgentToolsResponses];
 
 export type GetAgentToolsData = {
     body?: never;
@@ -3845,9 +3655,11 @@ export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsRe
 
 export type UpdateAgentToolData = {
     body?: {
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
-        toolPolicyId?: string | null;
     };
     path: {
         id: string;
@@ -3923,7 +3735,9 @@ export type UpdateAgentToolResponses = {
         id?: string;
         agentId?: string;
         toolId?: string;
-        toolPolicyId?: string | null;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
         createdAt?: string;
@@ -4404,7 +4218,7 @@ export type GetToolInvocationPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4419,7 +4233,7 @@ export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesRespons
 
 export type CreateToolInvocationPolicyData = {
     body: {
-        toolPolicyId: string;
+        agentToolId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4496,7 +4310,7 @@ export type CreateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4662,7 +4476,7 @@ export type GetToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4677,7 +4491,7 @@ export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[k
 
 export type UpdateToolInvocationPolicyData = {
     body?: {
-        toolPolicyId?: string;
+        agentToolId?: string;
         argumentName?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
@@ -4756,7 +4570,7 @@ export type UpdateToolInvocationPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
@@ -4841,7 +4655,7 @@ export type GetTrustedDataPoliciesResponses = {
      */
     200: Array<{
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -4856,7 +4670,7 @@ export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[key
 
 export type CreateTrustedDataPolicyData = {
     body: {
-        toolPolicyId: string;
+        agentToolId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -4933,7 +4747,7 @@ export type CreateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5099,7 +4913,7 @@ export type GetTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5114,7 +4928,7 @@ export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof G
 
 export type UpdateTrustedDataPolicyData = {
     body?: {
-        toolPolicyId?: string;
+        agentToolId?: string;
         description?: string;
         attributePath?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5193,7 +5007,7 @@ export type UpdateTrustedDataPolicyResponses = {
      */
     200: {
         id: string;
-        toolPolicyId: string;
+        agentToolId: string;
         description: string;
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
@@ -5351,6 +5165,7 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5368,6 +5183,7 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 export type CreateChatConversationData = {
     body: {
         agentId: string;
+        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
     };
@@ -5444,6 +5260,7 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5614,6 +5431,7 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5708,6 +5526,7 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -7103,6 +6922,7 @@ export type GetInteractionsResponses = {
             id: string;
             agentId: string;
             request: OpenAiChatCompletionRequest;
+            processedRequest?: OpenAiChatCompletionRequest | null;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
             model: string | null;
@@ -7110,11 +6930,15 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
             agentId: string;
             request: GeminiGenerateContentRequest;
+            processedRequest?: GeminiGenerateContentRequest | null;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
             model: string | null;
@@ -7122,11 +6946,15 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
             agentId: string;
             request: AnthropicMessagesRequest;
+            processedRequest?: AnthropicMessagesRequest | null;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
             model: string | null;
@@ -7134,6 +6962,9 @@ export type GetInteractionsResponses = {
             outputTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -7225,6 +7056,7 @@ export type GetInteractionResponses = {
         id: string;
         agentId: string;
         request: OpenAiChatCompletionRequest;
+        processedRequest?: OpenAiChatCompletionRequest | null;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
         model: string | null;
@@ -7232,11 +7064,15 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
         agentId: string;
         request: GeminiGenerateContentRequest;
+        processedRequest?: GeminiGenerateContentRequest | null;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
         model: string | null;
@@ -7244,11 +7080,15 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
         agentId: string;
         request: AnthropicMessagesRequest;
+        processedRequest?: AnthropicMessagesRequest | null;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
         model: string | null;
@@ -7256,6 +7096,9 @@ export type GetInteractionResponses = {
         outputTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     };
 };
@@ -11574,7 +11417,6 @@ export type GetOptimizationRulesResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11596,7 +11438,6 @@ export type CreateOptimizationRuleData = {
         };
         provider: SupportedProvidersInput;
         targetModel: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11681,7 +11522,6 @@ export type CreateOptimizationRuleResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11782,7 +11622,6 @@ export type UpdateOptimizationRuleData = {
         };
         provider?: SupportedProvidersInput;
         targetModel?: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11869,7 +11708,6 @@ export type UpdateOptimizationRuleResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11951,6 +11789,7 @@ export type GetRolesResponses = {
     200: Array<{
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12041,6 +11880,7 @@ export type CreateRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12057,7 +11897,7 @@ export type DeleteRoleData = {
     body?: never;
     path: {
         /**
-         * Custom role ID
+         * Custom role ID (base62)
          */
         roleId: string;
     };
@@ -12213,6 +12053,7 @@ export type GetRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12308,6 +12149,7 @@ export type UpdateRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12579,9 +12421,7 @@ export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof Get
 export type GetPromptsData = {
     body?: never;
     path?: never;
-    query?: {
-        type?: 'system' | 'regular';
-    };
+    query?: never;
     url: '/api/prompts';
 };
 
@@ -12652,18 +12492,14 @@ export type GetPromptsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
@@ -12672,8 +12508,12 @@ export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
 export type CreatePromptData = {
     body: {
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
+        version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -12747,18 +12587,14 @@ export type CreatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -12919,18 +12755,14 @@ export type GetPromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -12938,8 +12770,9 @@ export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 
 export type UpdatePromptData = {
     body?: {
-        name?: string;
-        content?: string;
+        agentId?: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
     };
     path: {
         id: string;
@@ -13015,18 +12848,14 @@ export type UpdatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13108,22 +12937,109 @@ export type GetPromptVersionsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type RollbackPromptData = {
+    body: {
+        versionId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/rollback';
+};
+
+export type RollbackPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
+
+export type RollbackPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;
@@ -14593,433 +14509,10 @@ export type UpdateTokenPriceResponses = {
 
 export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
 
-export type GetToolPoliciesForToolData = {
-    body?: never;
-    path: {
-        toolId: string;
-    };
-    query?: never;
-    url: '/api/tools/{toolId}/policies';
-};
-
-export type GetToolPoliciesForToolErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetToolPoliciesForToolError = GetToolPoliciesForToolErrors[keyof GetToolPoliciesForToolErrors];
-
-export type GetToolPoliciesForToolResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        createdAt: string;
-        updatedAt: string;
-        name: string;
-        toolId: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        toolInvocationPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            argumentName: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'allow_when_context_is_untrusted' | 'block_always';
-            reason: string | null;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        trustedDataPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            description: string;
-            attributePath: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
-            createdAt: string;
-            updatedAt: string;
-        }>;
-    }>;
-};
-
-export type GetToolPoliciesForToolResponse = GetToolPoliciesForToolResponses[keyof GetToolPoliciesForToolResponses];
-
-export type CreateToolPolicyData = {
-    body: {
-        name: string;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate?: string | null;
-    };
-    path: {
-        toolId: string;
-    };
-    query?: never;
-    url: '/api/tools/{toolId}/policies';
-};
-
-export type CreateToolPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type CreateToolPolicyError = CreateToolPolicyErrors[keyof CreateToolPolicyErrors];
-
-export type CreateToolPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        createdAt: string;
-        updatedAt: string;
-        name: string;
-        toolId: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        toolInvocationPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            argumentName: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'allow_when_context_is_untrusted' | 'block_always';
-            reason: string | null;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        trustedDataPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            description: string;
-            attributePath: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
-            createdAt: string;
-            updatedAt: string;
-        }>;
-    };
-};
-
-export type CreateToolPolicyResponse = CreateToolPolicyResponses[keyof CreateToolPolicyResponses];
-
-export type DeleteToolPolicyData = {
-    body?: never;
-    path: {
-        policyId: string;
-    };
-    query?: never;
-    url: '/api/tool-policies/{policyId}';
-};
-
-export type DeleteToolPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteToolPolicyError = DeleteToolPolicyErrors[keyof DeleteToolPolicyErrors];
-
-export type DeleteToolPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteToolPolicyResponse = DeleteToolPolicyResponses[keyof DeleteToolPolicyResponses];
-
-export type UpdateToolPolicyData = {
-    body?: {
-        name?: string;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate?: string | null;
-    };
-    path: {
-        policyId: string;
-    };
-    query?: never;
-    url: '/api/tool-policies/{policyId}';
-};
-
-export type UpdateToolPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type UpdateToolPolicyError = UpdateToolPolicyErrors[keyof UpdateToolPolicyErrors];
-
-export type UpdateToolPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        createdAt: string;
-        updatedAt: string;
-        name: string;
-        toolId: string;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        responseModifierTemplate: string | null;
-        toolInvocationPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            argumentName: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'allow_when_context_is_untrusted' | 'block_always';
-            reason: string | null;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        trustedDataPolicies: Array<{
-            id: string;
-            toolPolicyId: string;
-            description: string;
-            attributePath: string;
-            operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-            value: string;
-            action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
-            createdAt: string;
-            updatedAt: string;
-        }>;
-    };
-};
-
-export type UpdateToolPolicyResponse = UpdateToolPolicyResponses[keyof UpdateToolPolicyResponses];
-
 export type GetToolsData = {
     body?: never;
     path?: never;
-    query?: {
-        search?: string;
-        agentId?: string;
-        origin?: string | 'llm-proxy' | 'mcp';
-        mcpServerOwnerId?: string;
-        excludeArchestraTools?: boolean;
-        sortBy?: 'name' | 'createdAt' | 'assignedProfiles' | 'policyCount';
-        sortDirection?: 'asc' | 'desc';
-        limit?: number;
-        offset?: number;
-    };
+    query?: never;
     url: '/api/tools';
 };
 
@@ -15086,49 +14579,37 @@ export type GetToolsResponses = {
     /**
      * Default Response
      */
-    200: {
-        data: Array<{
-            id: string;
-            catalogId: string | null;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            createdAt: string;
-            updatedAt: string;
-            agent: {
-                id: string;
-                name: string;
-            } | null;
-            mcpServer: {
-                id: string;
-                name: string;
-            } | null;
-            assignedAgentsCount: number;
-            policyCount: number;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
+    200: Array<{
+        id: string;
+        catalogId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
         };
-    };
+        description: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
+    }>;
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

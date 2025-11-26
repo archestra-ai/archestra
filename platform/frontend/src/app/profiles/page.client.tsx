@@ -3,7 +3,15 @@
 import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Search, Tag, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Search,
+  Tag,
+  Wrench,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -16,8 +24,8 @@ import {
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
+import { PageLayout } from "@/components/page-layout";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +48,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -56,7 +63,8 @@ import {
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
 import { AgentActions } from "./agent-actions";
-import { ChatConfigDialog } from "./chat-config-dialog";
+import { AssignToolsDialog } from "./assign-tools-dialog";
+// Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
 export default function AgentsPage() {
   return (
@@ -192,8 +200,6 @@ function Agents() {
     },
   });
 
-  const updateAgent = useUpdateAgent();
-
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
     { id: sortBy, desc: sortDirection === "desc" },
@@ -209,7 +215,7 @@ function Agents() {
     id: string;
     name: string;
   } | null>(null);
-  const [chatConfigAgent, setChatConfigAgent] = useState<
+  const [assigningToolsAgent, setAssigningToolsAgent] = useState<
     (typeof agents)[number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
@@ -217,9 +223,9 @@ function Agents() {
     name: string;
     teams: string[];
     labels: AgentLabel[];
-    optimizeCost?: boolean;
     considerContextUntrusted: boolean;
     useInChat?: boolean;
+    convertToolResultsToToon?: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -364,9 +370,24 @@ function Agents() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      cell: ({ row }) => (
-        <div className="text-sm font-medium">{row.original.tools.length}</div>
-      ),
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {row.original.tools.length}
+            <PermissionButton
+              permissions={{ profile: ["update"] }}
+              tooltip="Assign Tools"
+              aria-label="Assign Tools"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setAssigningToolsAgent(agent)}
+            >
+              <Wrench className="h-4 w-4" />
+            </PermissionButton>
+          </div>
+        );
+      },
     },
     {
       id: "team",
@@ -385,35 +406,6 @@ function Agents() {
       ),
     },
     {
-      id: "optimizeCost",
-      header: "Optimize Cost",
-      size: 130,
-      cell: ({ row }) => {
-        const agent = row.original;
-        return (
-          <WithPermissions permissions={{ profile: ["update"] }}>
-            <Switch
-              checked={agent.optimizeCost ?? false}
-              onCheckedChange={async (checked) => {
-                try {
-                  await updateAgent.mutateAsync({
-                    id: agent.id,
-                    data: { optimizeCost: checked },
-                  });
-                  toast.success(
-                    `Cost optimization ${checked ? "enabled" : "disabled"}`,
-                  );
-                } catch (_error) {
-                  toast.error("Failed to update cost optimization");
-                }
-              }}
-              disabled={updateAgent.isPending}
-            />
-          </WithPermissions>
-        );
-      },
-    },
-    {
       id: "actions",
       header: "Actions",
       size: 176,
@@ -424,7 +416,6 @@ function Agents() {
           <AgentActions
             agent={agent}
             onConnect={setConnectingAgent}
-            onConfigureChat={setChatConfigAgent}
             onEdit={setEditingAgent}
             onDelete={setDeletingAgentId}
           />
@@ -434,117 +425,115 @@ function Agents() {
   ];
 
   return (
-    <div className="w-full h-full">
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight mb-2">
-                Profiles
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Profiles are a way to organize access, available MCP tools, cost
-                limits, logging/o11y, etc. <br />
-                <br />A profile can be: an N8N workflow, a custom application,
-                or a team sharing an MCP gateway.{" "}
-                <a
-                  href="https://archestra.ai/docs/platform-agents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  Read more in the docs
-                </a>
-              </p>
+    <PageLayout
+      title="Profiles"
+      description={
+        <p className="text-sm text-muted-foreground">
+          Profiles are a way to organize access, available MCP tools, cost
+          limits, logging/o11y, etc. <br />
+          <br />A profile can be: an N8N workflow, a custom application, or a
+          team sharing an MCP gateway.{" "}
+          <a
+            href="https://archestra.ai/docs/platform-agents"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
+          >
+            Read more in the docs
+          </a>
+        </p>
+      }
+      actionButton={
+        <PermissionButton
+          permissions={{ profile: ["create"] }}
+          onClick={() => setIsCreateDialogOpen(true)}
+          data-testid={E2eTestId.CreateAgentButton}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Create Profile
+        </PermissionButton>
+      }
+    >
+      <div className="w-full h-full">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <DebouncedInput
+                placeholder="Search profiles by name..."
+                initialValue={searchQuery}
+                onChange={handleSearchChange}
+                className="pl-9"
+              />
             </div>
-            <PermissionButton
-              permissions={{ profile: ["create"] }}
-              onClick={() => setIsCreateDialogOpen(true)}
-              data-testid={E2eTestId.CreateAgentButton}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Profile
-            </PermissionButton>
           </div>
+
+          {!agents || agents.length === 0 ? (
+            <div className="text-muted-foreground">
+              {nameFilter
+                ? "No profiles found matching your search"
+                : "No profiles found"}
+            </div>
+          ) : (
+            <div data-testid={E2eTestId.AgentsTable}>
+              <DataTable
+                columns={columns}
+                data={agents}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                manualSorting={true}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total || 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+              />
+            </div>
+          )}
+
+          <CreateAgentDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          />
+
+          {connectingAgent && (
+            <ConnectAgentDialog
+              agent={connectingAgent}
+              open={!!connectingAgent}
+              onOpenChange={(open) => !open && setConnectingAgent(null)}
+            />
+          )}
+
+          {assigningToolsAgent && (
+            <AssignToolsDialog
+              agent={assigningToolsAgent}
+              open={!!assigningToolsAgent}
+              onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
+            />
+          )}
+
+          {/* Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library */}
+
+          {editingAgent && (
+            <EditAgentDialog
+              agent={editingAgent}
+              open={!!editingAgent}
+              onOpenChange={(open) => !open && setEditingAgent(null)}
+            />
+          )}
+
+          {deletingAgentId && (
+            <DeleteAgentDialog
+              agentId={deletingAgentId}
+              open={!!deletingAgentId}
+              onOpenChange={(open) => !open && setDeletingAgentId(null)}
+            />
+          )}
         </div>
       </div>
-
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <DebouncedInput
-              placeholder="Search profiles by name..."
-              initialValue={searchQuery}
-              onChange={handleSearchChange}
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        {!agents || agents.length === 0 ? (
-          <div className="text-muted-foreground">
-            {nameFilter
-              ? "No profiles found matching your search"
-              : "No profiles found"}
-          </div>
-        ) : (
-          <div data-testid={E2eTestId.AgentsTable}>
-            <DataTable
-              columns={columns}
-              data={agents}
-              sorting={sorting}
-              onSortingChange={handleSortingChange}
-              manualSorting={true}
-              manualPagination={true}
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: pagination?.total || 0,
-              }}
-              onPaginationChange={handlePaginationChange}
-            />
-          </div>
-        )}
-
-        <CreateAgentDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-        />
-
-        {connectingAgent && (
-          <ConnectAgentDialog
-            agent={connectingAgent}
-            open={!!connectingAgent}
-            onOpenChange={(open) => !open && setConnectingAgent(null)}
-          />
-        )}
-
-        {chatConfigAgent && (
-          <ChatConfigDialog
-            agent={chatConfigAgent}
-            open={!!chatConfigAgent}
-            onOpenChange={(open) => !open && setChatConfigAgent(null)}
-          />
-        )}
-
-        {editingAgent && (
-          <EditAgentDialog
-            agent={editingAgent}
-            open={!!editingAgent}
-            onOpenChange={(open) => !open && setEditingAgent(null)}
-          />
-        )}
-
-        {deletingAgentId && (
-          <DeleteAgentDialog
-            agentId={deletingAgentId}
-            open={!!deletingAgentId}
-            onOpenChange={(open) => !open && setDeletingAgentId(null)}
-          />
-        )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -558,10 +547,11 @@ function CreateAgentDialog({
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<AgentLabel[]>([]);
-  const [optimizeCost, setOptimizeCost] = useState<boolean>(false);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
   const [useInChat, setUseInChat] = useState(true);
+  const [convertToolResultsToToon, setConvertToolResultsToToon] =
+    useState(false);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -624,9 +614,9 @@ function CreateAgentDialog({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
-          optimizeCost,
           considerContextUntrusted,
           useInChat,
+          convertToolResultsToToon,
         });
         if (!agent) {
           throw new Error("Failed to create profile");
@@ -641,10 +631,10 @@ function CreateAgentDialog({
       name,
       assignedTeamIds,
       labels,
-      optimizeCost,
       considerContextUntrusted,
       createAgent,
       useInChat,
+      convertToolResultsToToon,
     ],
   );
 
@@ -652,11 +642,11 @@ function CreateAgentDialog({
     setName("");
     setAssignedTeamIds([]);
     setLabels([]);
-    setOptimizeCost(false);
     setSelectedTeamId("");
     setCreatedAgent(null);
     setConsiderContextUntrusted(false);
     setUseInChat(true);
+    setConvertToolResultsToToon(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -753,25 +743,6 @@ function CreateAgentDialog({
                   availableKeys={availableKeys}
                 />
 
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="create-optimize-cost">
-                        Cost Optimization
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically select cheaper models when appropriate
-                        (e.g., gpt-4o-mini for short contexts)
-                      </p>
-                    </div>
-                    <Switch
-                      id="create-optimize-cost"
-                      checked={optimizeCost}
-                      onCheckedChange={setOptimizeCost}
-                    />
-                  </div>
-                </div>
-
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="consider-context-untrusted"
@@ -812,6 +783,27 @@ function CreateAgentDialog({
                     <p className="text-sm text-muted-foreground">
                       If enabled, this profile will be available for usage in
                       the chat.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="convert-tool-results-to-toon"
+                    checked={convertToolResultsToToon}
+                    onCheckedChange={(checked) =>
+                      setConvertToolResultsToToon(checked === true)
+                    }
+                  />
+                  <div className="grid gap-1">
+                    <Label
+                      htmlFor="convert-tool-results-to-toon"
+                      className="text-sm font-medium cursor-pointer"
+                    >
+                      Compress tool results
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Reduces token usage by using TOON format.
                     </p>
                   </div>
                 </div>
@@ -862,9 +854,9 @@ function EditAgentDialog({
     name: string;
     teams: string[];
     labels: AgentLabel[];
-    optimizeCost?: boolean;
     considerContextUntrusted: boolean;
     useInChat?: boolean;
+    convertToolResultsToToon?: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -874,13 +866,13 @@ function EditAgentDialog({
     agent.teams || [],
   );
   const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
-  const [optimizeCost, setOptimizeCost] = useState<boolean>(
-    agent.optimizeCost || false,
-  );
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
   );
   const [useInChat, setUseInChat] = useState(agent.useInChat ?? true);
+  const [convertToolResultsToToon, setConvertToolResultsToToon] = useState(
+    agent.convertToolResultsToToon ?? false,
+  );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -929,9 +921,9 @@ function EditAgentDialog({
             name: name.trim(),
             teams: assignedTeamIds,
             labels: updatedLabels,
-            optimizeCost,
             considerContextUntrusted,
             useInChat,
+            convertToolResultsToToon,
           },
         });
         toast.success("Profile updated successfully");
@@ -945,11 +937,11 @@ function EditAgentDialog({
       name,
       assignedTeamIds,
       labels,
-      optimizeCost,
       updateAgent,
       onOpenChange,
       considerContextUntrusted,
       useInChat,
+      convertToolResultsToToon,
     ],
   );
 
@@ -1056,23 +1048,6 @@ function EditAgentDialog({
               availableKeys={availableKeys}
             />
 
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="optimize-cost">Cost Optimization</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically select cheaper models when appropriate (e.g.,
-                    gpt-4o-mini for short contexts)
-                  </p>
-                </div>
-                <Switch
-                  id="optimize-cost"
-                  checked={optimizeCost}
-                  onCheckedChange={setOptimizeCost}
-                />
-              </div>
-            </div>
-
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="edit-consider-context-untrusted"
@@ -1111,6 +1086,27 @@ function EditAgentDialog({
                 <p className="text-sm text-muted-foreground">
                   If enabled, this profile will be available for usage in the
                   chat.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-convert-tool-results-to-toon"
+                checked={convertToolResultsToToon}
+                onCheckedChange={(checked) =>
+                  setConvertToolResultsToToon(checked === true)
+                }
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="edit-convert-tool-results-to-toon"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Compress tool results
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Reduces token usage by using TOON format.
                 </p>
               </div>
             </div>

@@ -1,19 +1,27 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 
 class AgentTeamModel {
   /**
    * Get all agent IDs that a user has access to (through team membership)
+   * @param chatOnly - If true, only return agents with useInChat = true
    */
   static async getUserAccessibleAgentIds(
     userId: string,
     isAgentAdmin: boolean,
+    chatOnly = false,
   ): Promise<string[]> {
     // Agent admins have access to all agents
     if (isAgentAdmin) {
-      const allAgents = await db
+      const query = db
         .select({ id: schema.agentsTable.id })
         .from(schema.agentsTable);
+
+      const allAgents = chatOnly
+        ? await query.where(eq(schema.agentsTable.useInChat, true))
+        : await query;
+
       return allAgents.map((agent) => agent.id);
     }
 
@@ -25,17 +33,57 @@ class AgentTeamModel {
 
     const teamIds = userTeams.map((t) => t.teamId);
 
+    logger.info(
+      {
+        userId,
+        isAgentAdmin,
+        teamIds,
+        teamCount: teamIds.length,
+      },
+      "getUserAccessibleAgentIds - checking team membership",
+    );
+
     if (teamIds.length === 0) {
+      logger.warn(
+        { userId },
+        "User has no team memberships - returning empty agent list",
+      );
       return [];
     }
 
     // Get all agents assigned to these teams
-    const agentTeams = await db
-      .select({ agentId: schema.agentTeamsTable.agentId })
-      .from(schema.agentTeamsTable)
-      .where(inArray(schema.agentTeamsTable.teamId, teamIds));
+    const agentTeams = chatOnly
+      ? await db
+          .select({ agentId: schema.agentTeamsTable.agentId })
+          .from(schema.agentTeamsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentTeamsTable.agentId, schema.agentsTable.id),
+          )
+          .where(
+            and(
+              inArray(schema.agentTeamsTable.teamId, teamIds),
+              eq(schema.agentsTable.useInChat, true),
+            ),
+          )
+      : await db
+          .select({ agentId: schema.agentTeamsTable.agentId })
+          .from(schema.agentTeamsTable)
+          .where(inArray(schema.agentTeamsTable.teamId, teamIds));
 
-    return agentTeams.map((at) => at.agentId);
+    const accessibleAgentIds = agentTeams.map((at) => at.agentId);
+
+    logger.info(
+      {
+        userId,
+        teamIds,
+        accessibleAgentIds,
+        agentCount: accessibleAgentIds.length,
+      },
+      "getUserAccessibleAgentIds - final result",
+    );
+
+    return accessibleAgentIds;
   }
 
   /**

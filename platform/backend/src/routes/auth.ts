@@ -94,7 +94,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       reply.status(response.status);
 
-      response.headers.forEach((value, key) => {
+      response.headers.forEach((value: string, key: string) => {
         reply.header(key, value);
       });
 

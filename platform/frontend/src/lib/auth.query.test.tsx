@@ -15,6 +15,7 @@ import { authClient } from "./clients/auth/auth-client";
 vi.mock("./clients/auth/auth-client", () => ({
   authClient: {
     getSession: vi.fn(),
+    useSession: vi.fn(),
     organization: {
       listMembers: vi.fn(),
     },
@@ -51,6 +52,14 @@ const createWrapper = () => {
 // Clear mocks before each test
 beforeEach(() => {
   vi.clearAllMocks();
+
+  // Default mock for authClient.useSession - returns authenticated state
+  vi.mocked(authClient.useSession).mockReturnValue({
+    data: {
+      user: { id: "test-user", email: "test@example.com" },
+      session: { id: "test-session" },
+    },
+  } as ReturnType<typeof authClient.useSession>);
 });
 
 describe("useSession", () => {

@@ -222,28 +222,26 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const baselineModel = body.model;
       let model = baselineModel;
-      // Optimize model selection for cost if enabled using dynamic rules
-      if (resolvedAgent.optimizeCost) {
-        const hasTools = mergedTools.length > 0;
-        const optimizedModel = await utils.costOptimization.getOptimizedModel(
-          resolvedAgent,
-          body.messages,
-          "anthropic",
-          hasTools,
-        );
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = mergedTools.length > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        body.messages,
+        "anthropic",
+        hasTools,
+      );
 
-        if (optimizedModel) {
-          model = optimizedModel;
-          fastify.log.info(
-            { resolvedAgentId, optimizedModel },
-            "Optimized model selected",
-          );
-        } else {
-          fastify.log.info(
-            { resolvedAgentId, baselineModel },
-            "No matching optimized model found, proceeding with baseline model",
-          );
-        }
+      if (optimizedModel) {
+        model = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
       }
 
       // Convert to common format and evaluate trusted data policies
@@ -318,10 +316,27 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       // Apply updates back to Anthropic messages
-      const filteredMessages = utils.adapters.anthropic.applyUpdates(
+      let filteredMessages = utils.adapters.anthropic.applyUpdates(
         body.messages,
         toolResultUpdates,
       );
+
+      // Convert tool results to TOON format if enabled on agent
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+      let toonCostSavings: number | null = null;
+
+      if (resolvedAgent.convertToolResultsToToon) {
+        const { messages: convertedMessages, stats } =
+          await utils.adapters.anthropic.convertToolResultsToToon(
+            filteredMessages,
+            model,
+          );
+        filteredMessages = convertedMessages;
+        toonTokensBefore = stats.toonTokensBefore;
+        toonTokensAfter = stats.toonTokensAfter;
+        toonCostSavings = stats.toonCostSavings;
+      }
 
       fastify.log.info(
         {
@@ -329,6 +344,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalMessagesCount: body.messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
+          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -609,28 +625,30 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
         }
 
-        // Only calculate costs if cost optimization is enabled
-        let cost: number | undefined;
-        let baselineCost: number | undefined;
+        // Calculate costs and potential savings done by Archestra.
+        const baselineCost = await utils.costOptimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
 
-        if (resolvedAgent.optimizeCost) {
-          cost = await utils.costOptimization.calculateCost(
+        // Calculate actual cost after Optimization Rules are applied.
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-        }
 
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: {
             id: messageStartEvent?.message.id || "msg-unknown",
             type: "message",
@@ -644,8 +662,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost: cost?.toFixed(10) ?? null,
+          cost: costAfterOptimization?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
         // Send message_delta with stop_reason and usage
@@ -729,33 +750,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
-            // Only calculate costs if cost optimization is enabled
-            let cost: number | undefined;
-            let baselineCost: number | undefined;
+            // Always calculate baseline cost (original requested model)
+            const baselineCost = await utils.costOptimization.calculateCost(
+              body.model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
 
-            if (resolvedAgent.optimizeCost) {
-              cost = await utils.costOptimization.calculateCost(
+            const costAfterOptimization =
+              await utils.costOptimization.calculateCost(
                 model,
                 tokenUsage.input,
                 tokenUsage.output,
               );
-              baselineCost = await utils.costOptimization.calculateCost(
-                body.model,
-                tokenUsage.input,
-                tokenUsage.output,
-              );
-            }
 
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
+              processedRequest: {
+                ...body,
+                messages: filteredMessages,
+              },
               response: response,
               model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
-              cost: cost?.toFixed(10) ?? null,
+              cost: costAfterOptimization?.toFixed(10) ?? null,
               baselineCost: baselineCost?.toFixed(10) ?? null,
+              toonTokensBefore,
+              toonTokensAfter,
+              toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
             });
 
             return reply.send(response);
@@ -770,33 +795,38 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
-        // Only calculate costs if cost optimization is enabled
-        let cost: number | undefined;
-        let baselineCost: number | undefined;
+        // Always calculate costs for proper TOON compression tracking
+        const baselineCost = await utils.costOptimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
 
-        if (resolvedAgent.optimizeCost) {
-          cost = await utils.costOptimization.calculateCost(
+        // Calculate actual cost (potentially optimized model)
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-        }
 
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
+          processedRequest: {
+            ...body,
+            messages: filteredMessages,
+          },
           response: response,
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost: cost?.toFixed(10) ?? null,
+          cost: costAfterOptimization?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
         return reply.send(response);

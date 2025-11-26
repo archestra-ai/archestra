@@ -27,12 +27,6 @@ export async function getOptimizedModel<
   hasTools: boolean,
 ): Promise<string | null> {
   const agentId = agent.id;
-  if (!agent.optimizeCost) {
-    logger.info({ agentId }, "Cost optimization: disabled for profile");
-    return null;
-  }
-
-  logger.info({ agentId }, "Cost optimization: enabled for profile");
 
   // Get organizationId the same way limits do: from agent's teams OR fallback
   let organizationId: string | null = null;
@@ -101,7 +95,7 @@ export async function getOptimizedModel<
   );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.matchByRules(rules, {
     tokenCount,
     hasTools,
   });

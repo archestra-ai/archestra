@@ -9,7 +9,6 @@ import type {
 } from "@/types";
 import MemberModel from "./member";
 import SessionModel from "./session";
-import UserModel from "./user";
 
 class InvitationModel {
   static async getById(invitationId: string) {
@@ -49,9 +48,6 @@ class InvitationModel {
 
       // Create member row linking user to organization
       await MemberModel.create(user.id, organizationId, role);
-
-      // Update user role to match the invitation role
-      await UserModel.patch(user.id, { role });
 
       // Mark invitation as accepted
       await InvitationModel.patch(invitationId, { status: "accepted" });

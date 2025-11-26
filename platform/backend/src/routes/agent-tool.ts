@@ -10,14 +10,16 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
-  ToolPolicyModel,
   UserModel,
 } from "@/models";
+import type { InternalMcpCatalog, Tool } from "@/types";
 import {
   AgentToolFilterSchema,
   AgentToolSortBySchema,
   AgentToolSortDirectionSchema,
   ApiError,
+  BulkUpdateAgentToolsRequestSchema,
+  BulkUpdateAgentToolsResponseSchema,
   constructResponseSchema,
   createPaginatedResponseSchema,
   DeleteObjectResponseSchema,
@@ -102,7 +104,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
             executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-            toolPolicyId: UuidIdSchema.nullable().optional(),
           })
           .nullish(),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
@@ -110,18 +111,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId, toolId } = request.params;
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        toolPolicyId,
-      } = request.body || {};
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } =
+        request.body || {};
 
       const result = await assignToolToAgent(
         agentId,
         toolId,
         credentialSourceMcpServerId,
         executionSourceMcpServerId,
-        toolPolicyId,
       );
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -147,7 +144,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
-              toolPolicyId: UuidIdSchema.nullable().optional(),
             }),
           ),
         }),
@@ -179,6 +175,39 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments } = request.body;
 
+      // Extract unique IDs for batch fetching to avoid N+1 queries
+      const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
+      const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+
+      // Batch fetch all required data in parallel
+      const [existingAgentIds, tools] = await Promise.all([
+        AgentModel.existsBatch(uniqueAgentIds),
+        ToolModel.getByIds(uniqueToolIds),
+      ]);
+
+      // Create maps for efficient lookup
+      const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+
+      // Extract unique catalog IDs from tools that have them
+      const uniqueCatalogIds = [
+        ...new Set(
+          tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
+        ),
+      ];
+
+      // Batch fetch catalog items if needed
+      const catalogItemsMap =
+        uniqueCatalogIds.length > 0
+          ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+          : new Map<string, InternalMcpCatalog>();
+
+      // Prepare pre-fetched data to pass to assignToolToAgent
+      const preFetchedData = {
+        existingAgentIds,
+        toolsMap,
+        catalogItemsMap,
+      };
+
       const results = await Promise.allSettled(
         assignments.map((assignment) =>
           assignToolToAgent(
@@ -186,7 +215,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.toolId,
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
-            assignment.toolPolicyId,
+            preFetchedData,
           ),
         ),
       );
@@ -220,6 +249,30 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send({ succeeded, failed, duplicates });
+    },
+  );
+
+  fastify.post(
+    "/api/agent-tools/bulk-update",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateAgentTools,
+        description: "Update multiple agent tools with the same value in bulk",
+        tags: ["Agent Tools"],
+        body: BulkUpdateAgentToolsRequestSchema,
+        response: constructResponseSchema(BulkUpdateAgentToolsResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { ids, field, value } = request.body;
+
+      const updatedCount = await AgentToolModel.bulkUpdateSameValue(
+        ids,
+        field,
+        value as boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
+      );
+
+      return reply.send({ updatedCount });
     },
   );
 
@@ -286,30 +339,24 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: UuidIdSchema,
         }),
         body: UpdateAgentToolSchema.pick({
+          allowUsageWhenUntrustedDataIsPresent: true,
+          toolResultTreatment: true,
+          responseModifierTemplate: true,
           credentialSourceMcpServerId: true,
           executionSourceMcpServerId: true,
-          toolPolicyId: true,
         }).partial(),
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
     async ({ params: { id }, body }, reply) => {
-      const {
-        credentialSourceMcpServerId,
-        executionSourceMcpServerId,
-        toolPolicyId,
-      } = body;
+      const { credentialSourceMcpServerId, executionSourceMcpServerId } = body;
 
       // Get the agent-tool relationship for validation (needed for both credential and execution source)
       let agentToolForValidation:
         | Awaited<ReturnType<typeof AgentToolModel.findAll>>[number]
         | undefined;
 
-      if (
-        credentialSourceMcpServerId ||
-        executionSourceMcpServerId ||
-        toolPolicyId !== undefined
-      ) {
+      if (credentialSourceMcpServerId || executionSourceMcpServerId) {
         const agentTools = await AgentToolModel.findAll();
         agentToolForValidation = agentTools.find((at) => at.id === id);
 
@@ -347,20 +394,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(
             validationError.status,
             validationError.error.message,
-          );
-        }
-      }
-
-      if (
-        toolPolicyId !== undefined &&
-        toolPolicyId !== null &&
-        agentToolForValidation
-      ) {
-        const policy = await ToolPolicyModel.findById(toolPolicyId);
-        if (!policy || policy.toolId !== agentToolForValidation.tool.id) {
-          throw new ApiError(
-            400,
-            "Selected tool policy is invalid for this tool",
           );
         }
       }
@@ -508,13 +541,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 /**
  * Assigns a single tool to a single agent with validation.
  * Returns null on success/update, "duplicate" if already exists with same credentials, or an error object if validation fails.
+ *
+ * @param preFetchedData - Optional pre-fetched data to avoid N+1 queries in bulk operations
  */
 export async function assignToolToAgent(
   agentId: string,
   toolId: string,
   credentialSourceMcpServerId: string | null | undefined,
   executionSourceMcpServerId: string | null | undefined,
-  toolPolicyId: string | null | undefined,
+  preFetchedData?: {
+    existingAgentIds?: Set<string>;
+    toolsMap?: Map<string, Tool>;
+    catalogItemsMap?: Map<string, InternalMcpCatalog>;
+  },
 ): Promise<
   | {
       status: 400 | 404;
@@ -524,9 +563,15 @@ export async function assignToolToAgent(
   | "updated"
   | null
 > {
-  // Validate that agent exists
-  const agent = await AgentModel.findById(agentId);
-  if (!agent) {
+  // Validate that agent exists (using pre-fetched data or lightweight exists() to avoid N+1 queries)
+  let agentExists: boolean;
+  if (preFetchedData?.existingAgentIds) {
+    agentExists = preFetchedData.existingAgentIds.has(agentId);
+  } else {
+    agentExists = await AgentModel.exists(agentId);
+  }
+
+  if (!agentExists) {
     return {
       status: 404,
       error: {
@@ -536,8 +581,14 @@ export async function assignToolToAgent(
     };
   }
 
-  // Validate that tool exists
-  const tool = await ToolModel.findById(toolId);
+  // Validate that tool exists (using pre-fetched data to avoid N+1 queries)
+  let tool: Tool | null;
+  if (preFetchedData?.toolsMap) {
+    tool = preFetchedData.toolsMap.get(toolId) || null;
+  } else {
+    tool = await ToolModel.findById(toolId);
+  }
+
   if (!tool) {
     return {
       status: 404,
@@ -550,7 +601,13 @@ export async function assignToolToAgent(
 
   // Check if tool is from local server (requires executionSourceMcpServerId)
   if (tool.catalogId) {
-    const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    let catalogItem: InternalMcpCatalog | null;
+    if (preFetchedData?.catalogItemsMap) {
+      catalogItem = preFetchedData.catalogItemsMap.get(tool.catalogId) || null;
+    } else {
+      catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
+    }
+
     if (catalogItem?.serverType === "local") {
       if (!executionSourceMcpServerId) {
         return {
@@ -575,19 +632,6 @@ export async function assignToolToAgent(
           },
         };
       }
-    }
-  }
-
-  if (toolPolicyId) {
-    const policy = await ToolPolicyModel.findById(toolPolicyId);
-    if (!policy || policy.toolId !== toolId) {
-      return {
-        status: 400,
-        error: {
-          message: "Selected tool policy is invalid for this tool",
-          type: "validation_error",
-        },
-      };
     }
   }
 
@@ -621,7 +665,6 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
-    toolPolicyId,
   );
 
   // Return appropriate status

@@ -1,4 +1,4 @@
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertInternalMcpCatalog,
@@ -45,6 +45,25 @@ class InternalMcpCatalogModel {
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
     return catalogItem || null;
+  }
+
+  /**
+   * Batch fetch multiple catalog items by IDs.
+   * Returns a Map of catalog ID to catalog item.
+   */
+  static async getByIds(
+    ids: string[],
+  ): Promise<Map<string, InternalMcpCatalog>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const catalogItems = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(inArray(schema.internalMcpCatalogTable.id, ids));
+
+    return new Map(catalogItems.map((item) => [item.id, item]));
   }
 
   static async findByName(name: string): Promise<InternalMcpCatalog | null> {

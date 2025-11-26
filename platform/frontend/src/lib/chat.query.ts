@@ -47,9 +47,15 @@ export function useCreateConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (agentId: string) => {
+    mutationFn: async ({
+      agentId,
+      promptId,
+    }: {
+      agentId: string;
+      promptId?: string;
+    }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId },
+        body: { agentId, promptId },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;

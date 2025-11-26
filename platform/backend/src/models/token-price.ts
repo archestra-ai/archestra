@@ -85,18 +85,28 @@ class TokenPriceModel {
   }
 
   /**
-   * Get all unique models from interactions table
+   * Get all unique models from interactions table (both actual and requested models)
    */
   static async getAllModelsFromInteractions(): Promise<string[]> {
     const results = await db
       .select({
         model: schema.interactionsTable.model,
+        requestedModel: sql<string>`${schema.interactionsTable.request} ->> 'model'`,
       })
-      .from(schema.interactionsTable)
-      .where(sql`${schema.interactionsTable.model} IS NOT NULL`)
-      .groupBy(schema.interactionsTable.model);
+      .from(schema.interactionsTable);
 
-    return results.map((row) => row.model).filter(Boolean) as string[];
+    // Collect both actual models and requested models
+    const models = new Set<string>();
+    for (const row of results) {
+      if (row.model) {
+        models.add(row.model);
+      }
+      if (row.requestedModel) {
+        models.add(row.requestedModel);
+      }
+    }
+
+    return [...models];
   }
 
   /**

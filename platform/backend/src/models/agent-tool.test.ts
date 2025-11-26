@@ -218,19 +218,13 @@ describe("AgentToolModel.findAllPaginated", () => {
       const tool3 = await makeTool({ name: "tool-3" });
 
       await makeAgentTool(agent.id, tool1.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: true,
-        },
+        allowUsageWhenUntrustedDataIsPresent: true,
       });
       await makeAgentTool(agent.id, tool2.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: false,
-        },
+        allowUsageWhenUntrustedDataIsPresent: false,
       });
       await makeAgentTool(agent.id, tool3.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: true,
-        },
+        allowUsageWhenUntrustedDataIsPresent: true,
       });
 
       const resultAsc = await AgentToolModel.findAllPaginated(
@@ -243,15 +237,11 @@ describe("AgentToolModel.findAllPaginated", () => {
       );
 
       // false comes before true
-      expect(
-        resultAsc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(false);
-      expect(
-        resultAsc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultAsc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
+      expect(resultAsc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
+      expect(resultAsc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(true);
+      expect(resultAsc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(true);
 
       const resultDesc = await AgentToolModel.findAllPaginated(
         { limit: 10, offset: 0 },
@@ -262,15 +252,15 @@ describe("AgentToolModel.findAllPaginated", () => {
         { excludeArchestraTools: true },
       );
 
-      expect(
-        resultDesc.data[0].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultDesc.data[1].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(true);
-      expect(
-        resultDesc.data[2].toolPolicy?.allowUsageWhenUntrustedDataIsPresent,
-      ).toBe(false);
+      expect(resultDesc.data[0].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[1].allowUsageWhenUntrustedDataIsPresent).toBe(
+        true,
+      );
+      expect(resultDesc.data[2].allowUsageWhenUntrustedDataIsPresent).toBe(
+        false,
+      );
     });
 
     test("sorts by createdAt by default", async ({
@@ -375,28 +365,6 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].agent.id).toBe(agent1.id);
-    });
-
-    test("filters by toolId", async ({
-      makeAgent,
-      makeTool,
-      makeAgentTool,
-    }) => {
-      const agent = await makeAgent();
-      const tool1 = await makeTool({ name: "Tool One" });
-      const tool2 = await makeTool({ name: "Tool Two" });
-
-      await makeAgentTool(agent.id, tool1.id);
-      await makeAgentTool(agent.id, tool2.id);
-
-      const result = await AgentToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        undefined,
-        { toolId: tool1.id },
-      );
-
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0].tool.id).toBe(tool1.id);
     });
 
     test("filters by origin (llm-proxy)", async ({
@@ -809,6 +777,132 @@ describe("AgentToolModel.findAllPaginated", () => {
 
       const finalToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(finalToolIds.length).toBe(initialToolIds.length);
+    });
+  });
+
+  describe("bulkCreateForAgentsAndTools", () => {
+    test("creates agent-tool relationships for multiple agents and tools in bulk", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+      const tool1 = await makeTool({ name: "tool-1" });
+      const tool2 = await makeTool({ name: "tool-2" });
+
+      await AgentToolModel.bulkCreateForAgentsAndTools(
+        [agent1.id, agent2.id],
+        [tool1.id, tool2.id],
+      );
+
+      // Verify all combinations were created
+      const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
+      const agent2Tools = await AgentToolModel.findToolIdsByAgent(agent2.id);
+
+      expect(agent1Tools).toContain(tool1.id);
+      expect(agent1Tools).toContain(tool2.id);
+      expect(agent2Tools).toContain(tool1.id);
+      expect(agent2Tools).toContain(tool2.id);
+    });
+
+    test("applies options to all created relationships", async ({
+      makeAgent,
+      makeTool,
+      makeMcpServer,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+      const tool1 = await makeTool({ name: "bulk-test-tool-1" });
+      const tool2 = await makeTool({ name: "bulk-test-tool-2" });
+      const mcpServer = await makeMcpServer();
+
+      await AgentToolModel.bulkCreateForAgentsAndTools(
+        [agent1.id, agent2.id],
+        [tool1.id, tool2.id],
+        {
+          executionSourceMcpServerId: mcpServer.id,
+          allowUsageWhenUntrustedDataIsPresent: true,
+        },
+      );
+
+      // Verify options were applied by checking specific tool assignments
+      const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
+      const agent2Tools = await AgentToolModel.findToolIdsByAgent(agent2.id);
+
+      expect(agent1Tools).toContain(tool1.id);
+      expect(agent1Tools).toContain(tool2.id);
+      expect(agent2Tools).toContain(tool1.id);
+      expect(agent2Tools).toContain(tool2.id);
+
+      // Verify options by querying the assignments directly
+      const allAssignments = await AgentToolModel.findAll();
+      const relevantAssignments = allAssignments.filter(
+        (at) =>
+          [agent1.id, agent2.id].includes(at.agent.id) &&
+          [tool1.id, tool2.id].includes(at.tool.id),
+      );
+
+      expect(relevantAssignments).toHaveLength(4);
+      relevantAssignments.forEach((assignment) => {
+        expect(assignment.executionSourceMcpServerId).toBe(mcpServer.id);
+        expect(assignment.allowUsageWhenUntrustedDataIsPresent).toBe(true);
+      });
+    });
+
+    test("skips existing relationships and only creates new ones", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+      const tool1 = await makeTool({ name: "tool-1" });
+      const tool2 = await makeTool({ name: "tool-2" });
+      const tool3 = await makeTool({ name: "tool-3" });
+
+      // Create one relationship manually
+      await makeAgentTool(agent1.id, tool1.id);
+
+      // Try to create all combinations in bulk
+      await AgentToolModel.bulkCreateForAgentsAndTools(
+        [agent1.id, agent2.id],
+        [tool1.id, tool2.id, tool3.id],
+      );
+
+      // Verify all relationships exist (including the pre-existing one)
+      const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
+      const agent2Tools = await AgentToolModel.findToolIdsByAgent(agent2.id);
+
+      expect(agent1Tools).toContain(tool1.id);
+      expect(agent1Tools).toContain(tool2.id);
+      expect(agent1Tools).toContain(tool3.id);
+      expect(agent2Tools).toContain(tool1.id);
+      expect(agent2Tools).toContain(tool2.id);
+      expect(agent2Tools).toContain(tool3.id);
+    });
+
+    test("handles empty agent IDs array", async ({ makeTool }) => {
+      const tool1 = await makeTool({ name: "tool-1" });
+
+      await AgentToolModel.bulkCreateForAgentsAndTools([], [tool1.id]);
+
+      // Should not throw and should not create any relationships
+      const allAssignments = await AgentToolModel.findAll();
+      const relevantAssignments = allAssignments.filter(
+        (at) => at.tool.id === tool1.id,
+      );
+      expect(relevantAssignments).toHaveLength(0);
+    });
+
+    test("handles empty tool IDs array", async ({ makeAgent }) => {
+      const agent1 = await makeAgent({ name: "Agent 1" });
+
+      await AgentToolModel.bulkCreateForAgentsAndTools([agent1.id], []);
+
+      // Should not throw and should not create any relationships
+      const agent1Tools = await AgentToolModel.findToolIdsByAgent(agent1.id);
+      // Only Archestra tools should be present
+      expect(agent1Tools.length).toBeGreaterThan(0);
     });
   });
 });

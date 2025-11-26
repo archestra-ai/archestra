@@ -1,3 +1,7 @@
+import { encode as toonEncode } from "@toon-format/toon";
+import logger from "@/logging";
+import { TokenPriceModel } from "@/models";
+import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMessage,
   CommonToolCall,
@@ -5,6 +9,7 @@ import type {
   OpenAi,
   ToolResultUpdates,
 } from "@/types";
+import type { CompressionStats } from "../toon-conversion";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -175,14 +180,185 @@ export function toolCallsToCommon(
  */
 export function toolResultsToMessages(
   results: CommonToolResult[],
+  convertToToon = false,
 ): Array<{ role: "tool"; tool_call_id: string; content: string }> {
-  return results.map((result) => ({
-    role: "tool" as const,
-    tool_call_id: result.id,
-    content: result.isError
-      ? `Error: ${result.error || "Tool execution failed"}`
-      : JSON.stringify(result.content),
-  }));
+  return results.map((result) => {
+    let content: string;
+    if (result.isError) {
+      content = `Error: ${result.error || "Tool execution failed"}`;
+    } else if (convertToToon) {
+      const beforeJson = JSON.stringify(result.content);
+      const afterToon = toonEncode(result.content);
+      logger.info(
+        {
+          toolName: result.name,
+          toolCallId: result.id,
+          beforeLength: beforeJson.length,
+          afterLength: afterToon.length,
+          compressionRatio: (
+            (1 - afterToon.length / beforeJson.length) *
+            100
+          ).toFixed(2),
+        },
+        "TOON conversion completed",
+      );
+      logger.debug(
+        {
+          toolName: result.name,
+          toolCallId: result.id,
+          before: beforeJson,
+          after: afterToon,
+        },
+        "TOON conversion before/after",
+      );
+      content = afterToon;
+    } else {
+      content = JSON.stringify(result.content);
+    }
+
+    return {
+      role: "tool" as const,
+      tool_call_id: result.id,
+      content,
+    };
+  });
+}
+
+/**
+ * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression stats (tokens and cost savings)
+ */
+export async function convertToolResultsToToon(
+  messages: OpenAiMessages,
+  model: string,
+): Promise<{
+  messages: OpenAiMessages;
+  stats: CompressionStats;
+}> {
+  const tokenizer = getTokenizer("openai");
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
+
+  const result = messages.map((message) => {
+    // Only process tool messages (tool results)
+    if (message.role === "tool") {
+      logger.info(
+        {
+          toolCallId: message.tool_call_id,
+          contentType: typeof message.content,
+          provider: "openai",
+        },
+        "convertToolResultsToToon: tool message found",
+      );
+
+      // Only convert string content
+      if (typeof message.content === "string") {
+        try {
+          // Parse JSON to validate it's actually JSON
+          const parsed = JSON.parse(message.content);
+          const noncompressed = message.content;
+          const compressed = toonEncode(parsed);
+
+          // Count tokens for before and after
+          const tokensBefore = tokenizer.countTokens([
+            { role: "user", content: noncompressed },
+          ]);
+          const tokensAfter = tokenizer.countTokens([
+            { role: "user", content: compressed },
+          ]);
+
+          // Track compression stats in tokens
+          totalTokensBefore += tokensBefore;
+          totalTokensAfter += tokensAfter;
+          toolResultCount++;
+
+          logger.info(
+            {
+              toolCallId: message.tool_call_id,
+              beforeLength: noncompressed.length,
+              afterLength: compressed.length,
+              tokensBefore,
+              tokensAfter,
+              toonPreview: compressed.substring(0, 150),
+              provider: "openai",
+            },
+            "convertToolResultsToToon: compressed",
+          );
+          logger.debug(
+            {
+              toolCallId: message.tool_call_id,
+              before: noncompressed,
+              after: compressed,
+              provider: "openai",
+              supposedToBeJson: parsed,
+            },
+            "convertToolResultsToToon: before/after",
+          );
+
+          return {
+            ...message,
+            content: compressed,
+          };
+        } catch {
+          // If it's not valid JSON, skip conversion
+          logger.info(
+            {
+              toolCallId: message.tool_call_id,
+              contentPreview:
+                typeof message.content === "string"
+                  ? message.content.substring(0, 100)
+                  : "non-string",
+            },
+            "Skipping TOON conversion - content is not JSON",
+          );
+          return message;
+        }
+      }
+    }
+
+    return message;
+  });
+
+  logger.info(
+    { messageCount: messages.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  // Calculate cost savings
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      let tokenPrice = await TokenPriceModel.findByModel(model);
+
+      // If no token price exists, create a default one
+      if (!tokenPrice) {
+        logger.info(
+          { model },
+          "Token price not found for model, creating default price",
+        );
+        tokenPrice = await TokenPriceModel.upsertForModel(model, {
+          pricePerMillionInput: "50.00",
+          pricePerMillionOutput: "50.00",
+        });
+      }
+
+      // TOON compresses tool results (output tokens from previous LLM calls)
+      const outputPricePerToken =
+        Number(tokenPrice.pricePerMillionOutput) / 1000000;
+      toonCostSavings = tokensSaved * outputPricePerToken;
+    }
+  }
+
+  return {
+    messages: result,
+    stats: {
+      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
+      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
+      toonCostSavings,
+    },
+  };
 }
 
 /** Returns input and output usage tokens */

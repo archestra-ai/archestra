@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -20,25 +21,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useUpdateToolPolicy } from "@/lib/tool-policy.query";
-import type { ToolPolicy } from "./types";
+import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 
 interface ResponseModifierEditorProps {
-  toolPolicy: ToolPolicy;
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 }
 
 export function ResponseModifierEditor({
-  toolPolicy: { id, toolId, responseModifierTemplate },
+  agentTool: { id, responseModifierTemplate, tool },
 }: ResponseModifierEditorProps) {
-  const updateToolPolicy = useUpdateToolPolicy(toolId);
+  const agentToolPatchMutation = useAgentToolPatchMutation();
   const [template, setTemplate] = useState<string>(
     responseModifierTemplate || "",
   );
 
   const handleSave = useCallback(async () => {
     try {
-      await updateToolPolicy.mutateAsync({
-        policyId: id,
+      await agentToolPatchMutation.mutateAsync({
+        id,
         responseModifierTemplate: template || null,
       });
       toast.success("Response modifier template saved");
@@ -46,7 +46,7 @@ export function ResponseModifierEditor({
       toast.error("Failed to save template");
       console.error("Save error:", error);
     }
-  }, [id, template, updateToolPolicy]);
+  }, [id, template, agentToolPatchMutation]);
 
   const handleClear = useCallback(() => {
     setTemplate("");
@@ -55,19 +55,18 @@ export function ResponseModifierEditor({
   const hasChanges = template !== (responseModifierTemplate || "");
 
   // Show message if not an MCP tool
-  // TODO: update backend response to return tool object, not just toolId
-  // if (!tool.catalogId) {
-  //   return (
-  //     <Card>
-  //       <CardHeader>
-  //         <CardTitle>Response Modifier</CardTitle>
-  //         <CardDescription>
-  //           Response modifiers are only available for MCP tools
-  //         </CardDescription>
-  //       </CardHeader>
-  //     </Card>
-  //   );
-  // }
+  if (!tool.catalogId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Response Modifier</CardTitle>
+          <CardDescription>
+            Response modifiers are only available for MCP tools
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -114,10 +113,10 @@ export function ResponseModifierEditor({
         <div className="flex gap-2">
           <Button
             onClick={handleSave}
-            disabled={!hasChanges || updateToolPolicy.isPending}
+            disabled={!hasChanges || agentToolPatchMutation.isPending}
             size="sm"
           >
-            {updateToolPolicy.isPending ? (
+            {agentToolPatchMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Saving...

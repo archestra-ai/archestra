@@ -8,10 +8,10 @@ import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
   AgentModel,
-  AgentPromptModel,
   ChatSettingsModel,
   ConversationModel,
   MessageModel,
+  PromptModel,
   SecretModel,
 } from "@/models";
 import {
@@ -58,38 +58,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools, agent prompts, and chat settings in parallel
-      const [mcpTools, agentPrompts, chatSettings] = await Promise.all([
+      const [mcpTools, prompt, chatSettings] = await Promise.all([
         getChatMcpTools(conversation.agentId),
-        AgentPromptModel.findByAgentIdWithPrompts(conversation.agentId),
+        PromptModel.findById(conversation.promptId),
         ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
 
-      // Separate system and regular prompts
-      const systemPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "system",
-      );
-      const regularPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "regular",
-      );
-
-      // Build system prompt from agent's assigned prompts
+      // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
+      const systemPromptParts: string[] = [];
+      const userPromptParts: string[] = [];
 
-      if (systemPrompts.length > 0) {
-        systemPrompt = systemPrompts[0].prompt.content;
+      // Collect system and user prompts from all assigned prompts
+      if (prompt?.systemPrompt) {
+        systemPromptParts.push(prompt.systemPrompt);
+      }
+      if (prompt?.userPrompt) {
+        userPromptParts.push(prompt.userPrompt);
       }
 
-      // Append regular prompts to system prompt if any exist
-      if (regularPrompts.length > 0) {
-        const regularPromptsText = regularPrompts
-          .map((ap) => ap.prompt.content)
-          .join("\n\n");
-
-        if (systemPrompt) {
-          systemPrompt = `${systemPrompt}\n\n${regularPromptsText}`;
-        } else {
-          systemPrompt = regularPromptsText;
-        }
+      // Combine all prompts into system prompt (system prompts first, then user prompts)
+      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
+        const allParts = [...systemPromptParts, ...userPromptParts];
+        systemPrompt = allParts.join("\n\n");
       }
 
       fastify.log.info(
@@ -100,9 +91,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
-          promptsCount: agentPrompts.length,
-          hasSystemPrompt: systemPrompts.length > 0,
-          regularPromptsCount: regularPrompts.length,
+          promptId: prompt?.id,
+          hasSystemPromptParts: systemPromptParts.length > 0,
+          hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
         },
         "Starting chat stream",
@@ -331,7 +322,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
-        throw new ApiError(404, "Agent not found");
+        return [];
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
@@ -359,17 +350,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
           agentId: true,
+          promptId: true,
           title: true,
           selectedModel: true,
         })
           .required({ agentId: true })
-          .partial({ title: true, selectedModel: true }),
+          .partial({ promptId: true, title: true, selectedModel: true }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
       {
-        body: { agentId, title, selectedModel },
+        body: { agentId, promptId, title, selectedModel },
         user,
         organizationId,
         headers,
@@ -389,12 +381,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Create conversation with agent
+      // Create conversation with agent and optional prompt
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
           organizationId,
           agentId,
+          promptId,
           title,
           selectedModel: selectedModel || config.chat.defaultModel,
         }),

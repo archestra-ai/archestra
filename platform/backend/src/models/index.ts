@@ -1,7 +1,6 @@
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentLabelModel } from "./agent-label";
-export { default as AgentPromptModel } from "./agent-prompt";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as ChatSettingsModel } from "./chat-settings";
@@ -30,6 +29,5 @@ export { default as TeamModel } from "./team";
 export { default as TokenPriceModel } from "./token-price";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
-export { default as ToolPolicyModel } from "./tool-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";

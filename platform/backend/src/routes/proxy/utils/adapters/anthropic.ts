@@ -1,3 +1,7 @@
+import { encode as toonEncode } from "@toon-format/toon";
+import logger from "@/logging";
+import { TokenPriceModel } from "@/models";
+import { getTokenizer } from "@/tokenizers";
 import type {
   Anthropic,
   CommonMessage,
@@ -5,6 +9,7 @@ import type {
   CommonToolResult,
   ToolResultUpdates,
 } from "@/types";
+import type { CompressionStats } from "../toon-conversion";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -181,7 +186,10 @@ export function toolCallsToCommon(
 /**
  * Convert common tool results to Anthropic user message with tool_result blocks
  */
-export function toolResultsToMessages(results: CommonToolResult[]): Array<{
+export function toolResultsToMessages(
+  results: CommonToolResult[],
+  convertToToon = false,
+): Array<{
   role: "user";
   content: Array<{
     type: "tool_result";
@@ -197,16 +205,251 @@ export function toolResultsToMessages(results: CommonToolResult[]): Array<{
   return [
     {
       role: "user" as const,
-      content: results.map((result) => ({
-        type: "tool_result" as const,
-        tool_use_id: result.id,
-        content: result.isError
-          ? `Error: ${result.error || "Tool execution failed"}`
-          : JSON.stringify(result.content),
-        is_error: result.isError,
-      })),
+      content: results.map((result) => {
+        let content: string;
+        if (result.isError) {
+          content = `Error: ${result.error || "Tool execution failed"}`;
+        } else if (convertToToon) {
+          const beforeJson = JSON.stringify(result.content);
+          const afterToon = toonEncode(result.content);
+          logger.info(
+            {
+              toolName: result.name,
+              toolCallId: result.id,
+              beforeLength: beforeJson.length,
+              afterLength: afterToon.length,
+              compressionRatio: (
+                (1 - afterToon.length / beforeJson.length) *
+                100
+              ).toFixed(2),
+            },
+            "TOON conversion completed",
+          );
+          logger.debug(
+            {
+              toolName: result.name,
+              toolCallId: result.id,
+              before: beforeJson,
+              after: afterToon,
+            },
+            "TOON conversion before/after",
+          );
+          content = afterToon;
+        } else {
+          content = JSON.stringify(result.content);
+        }
+
+        return {
+          type: "tool_result" as const,
+          tool_use_id: result.id,
+          content,
+          is_error: result.isError,
+        };
+      }),
     },
   ];
+}
+
+/**
+ * Convert tool results in messages to TOON format
+ * Returns both the converted messages and compression stats (tokens and cost savings)
+ */
+export async function convertToolResultsToToon(
+  messages: AnthropicMessages,
+  model: string,
+): Promise<{
+  messages: AnthropicMessages;
+  stats: CompressionStats;
+}> {
+  const tokenizer = getTokenizer("anthropic");
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
+
+  const result = messages.map((message) => {
+    // Only process user messages with content arrays that contain tool_result blocks
+    if (message.role === "user" && Array.isArray(message.content)) {
+      const updatedContent = message.content.map((contentBlock) => {
+        if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
+          toolResultCount++;
+          logger.info(
+            {
+              toolCallId: contentBlock.tool_use_id,
+              contentType: typeof contentBlock.content,
+              isArray: Array.isArray(contentBlock.content),
+            },
+            "Processing tool_result for TOON conversion",
+          );
+
+          // Handle string content
+          if (typeof contentBlock.content === "string") {
+            try {
+              const parsed = JSON.parse(contentBlock.content);
+              const noncompressed = contentBlock.content;
+              const compressed = toonEncode(parsed);
+
+              // Count tokens for before and after
+              const tokensBefore = tokenizer.countTokens([
+                { role: "user", content: noncompressed },
+              ]);
+              const tokensAfter = tokenizer.countTokens([
+                { role: "user", content: compressed },
+              ]);
+              totalTokensBefore += tokensBefore;
+              totalTokensAfter += tokensAfter;
+
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  beforeLength: noncompressed.length,
+                  afterLength: compressed.length,
+                  tokensBefore,
+                  tokensAfter,
+                  toonPreview: compressed.substring(0, 150),
+                  provider: "anthropic",
+                },
+                "convertToolResultsToToon: compressed (string content)",
+              );
+              logger.debug(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  before: noncompressed,
+                  after: compressed,
+                  provider: "anthropic",
+                  supposedToBeJson: parsed,
+                },
+                "convertToolResultsToToon: before/after",
+              );
+
+              return {
+                ...contentBlock,
+                content: compressed,
+              };
+            } catch {
+              logger.info(
+                {
+                  toolCallId: contentBlock.tool_use_id,
+                  contentPreview:
+                    typeof contentBlock.content === "string"
+                      ? contentBlock.content.substring(0, 100)
+                      : "non-string",
+                },
+                "convertToolResultsToToon: skipping - string content is not JSON",
+              );
+              return contentBlock;
+            }
+          }
+
+          // Handle array content (content blocks format)
+          if (Array.isArray(contentBlock.content)) {
+            const updatedBlocks = contentBlock.content.map((block) => {
+              if (block.type === "text" && typeof block.text === "string") {
+                try {
+                  // Try to parse as JSON
+                  const parsed = JSON.parse(block.text);
+                  const noncompressed = block.text;
+                  const compressed = toonEncode(parsed);
+
+                  // Count tokens for before and after
+                  const tokensBefore = tokenizer.countTokens([
+                    { role: "user", content: noncompressed },
+                  ]);
+                  const tokensAfter = tokenizer.countTokens([
+                    { role: "user", content: compressed },
+                  ]);
+
+                  // Track compression stats in tokens
+                  totalTokensBefore += tokensBefore;
+                  totalTokensAfter += tokensAfter;
+
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      beforeLength: noncompressed.length,
+                      afterLength: compressed.length,
+                      tokensBefore,
+                      tokensAfter,
+                      toonPreview: compressed.substring(0, 150),
+                    },
+                    "convertToolResultsToToon: compressed (array content)",
+                  );
+                  logger.debug(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      before: noncompressed,
+                      after: compressed,
+                      provider: "anthropic",
+                      supposedToBeJson: parsed,
+                    },
+                    "convertToolResultsToToon: before/after",
+                  );
+
+                  return {
+                    ...block,
+                    text: compressed,
+                  };
+                } catch {
+                  // Not JSON, keep as-is
+                  logger.info(
+                    {
+                      toolCallId: contentBlock.tool_use_id,
+                      blockType: block.type,
+                      textPreview: block.text?.substring(0, 100),
+                    },
+                    "convertToolResultsToToon: skipping - content is not JSON",
+                  );
+                  return block;
+                }
+              }
+              return block;
+            });
+
+            return {
+              ...contentBlock,
+              content: updatedBlocks,
+            };
+          }
+        }
+        return contentBlock;
+      });
+
+      return {
+        ...message,
+        content: updatedContent,
+      };
+    }
+
+    return message;
+  });
+
+  logger.info(
+    { messageCount: messages.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  // Calculate cost savings
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        // TOON compresses tool results (output tokens from previous LLM calls)
+        const outputPricePerToken =
+          Number(tokenPrice.pricePerMillionOutput) / 1000000;
+        toonCostSavings = tokensSaved * outputPricePerToken;
+      }
+    }
+  }
+
+  return {
+    messages: result,
+    stats: {
+      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
+      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
+      toonCostSavings,
+    },
+  };
 }
 
 /** Returns input and output usage tokens */

@@ -740,99 +740,186 @@ describe("ToolModel", () => {
     });
   });
 
-  describe("findAllPaginated", () => {
-    test("returns paginated list with assignment and policy counts", async ({
-      makeAdmin,
-      makeAgent,
-      makeTool,
-      makeAgentTool,
+  describe("bulkCreateToolsIfNotExists", () => {
+    test("creates multiple tools for an MCP server in bulk", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
     }) => {
-      const admin = await makeAdmin();
-      const agent = await makeAgent();
-
-      const tool = await makeTool({
-        name: "policy-tool",
-        description: "Tool with policies",
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({
+        catalogId: catalog.id,
       });
 
-      await makeAgentTool(agent.id, tool.id, {
-        toolPolicy: {
-          allowUsageWhenUntrustedDataIsPresent: true,
+      const toolsToCreate = [
+        {
+          name: "tool-1",
+          description: "First tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
         },
-      });
+        {
+          name: "tool-2",
+          description: "Second tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-3",
+          description: "Third tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
 
-      const result = await ToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        { sortBy: "createdAt", sortDirection: "desc" },
-        {},
-        admin.id,
-        true,
-      );
+      const createdTools =
+        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
-      const record = result.data.find((item) => item.id === tool.id);
-      expect(record).toBeDefined();
-      expect(record?.assignedAgentsCount).toBe(1);
-      expect(record?.policyCount).toBeGreaterThanOrEqual(1);
-      expect(result.pagination.total).toBeGreaterThan(0);
-    });
+      expect(createdTools).toHaveLength(3);
+      expect(createdTools.map((t) => t.name)).toContain("tool-1");
+      expect(createdTools.map((t) => t.name)).toContain("tool-2");
+      expect(createdTools.map((t) => t.name)).toContain("tool-3");
 
-    test("applies search filters", async ({ makeAdmin, makeTool }) => {
-      const admin = await makeAdmin();
-
-      await makeTool({
-        name: "searchable-tool",
-        description: "Custom search tool",
-      });
-
-      const result = await ToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        {},
-        { search: "searchable" },
-        admin.id,
-        true,
-      );
-
-      expect(result.data.length).toBeGreaterThan(0);
-      result.data.forEach((tool) => {
-        expect(
-          tool.name.toLowerCase().includes("searchable") ||
-            (tool.description ?? "").toLowerCase().includes("searchable"),
-        ).toBe(true);
+      // Verify all tools have correct catalogId and mcpServerId
+      createdTools.forEach((tool) => {
+        expect(tool.catalogId).toBe(catalog.id);
+        expect(tool.mcpServerId).toBe(mcpServer.id);
+        expect(tool.agentId).toBeNull();
       });
     });
 
-    test("filters by agent assignment", async ({
-      makeAdmin,
-      makeAgent,
+    test("returns existing tools when some tools already exist", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
-      makeAgentTool,
     }) => {
-      const admin = await makeAdmin();
-      const agent = await makeAgent();
-      const otherAgent = await makeAgent();
-
-      const targetTool = await makeTool({
-        name: "assigned-tool",
-        description: "Assigned to agent",
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({
+        catalogId: catalog.id,
       });
-      await makeAgentTool(agent.id, targetTool.id);
 
-      const otherTool = await makeTool({
-        name: "unassigned-tool",
-        description: "Not assigned",
+      // Create one tool manually
+      const existingTool = await makeTool({
+        name: "tool-1",
+        catalogId: catalog.id,
+        mcpServerId: mcpServer.id,
       });
-      await makeAgentTool(otherAgent.id, otherTool.id);
 
-      const result = await ToolModel.findAllPaginated(
-        { limit: 10, offset: 0 },
-        {},
-        { agentId: agent.id },
-        admin.id,
-        true,
-      );
+      const toolsToCreate = [
+        {
+          name: "tool-1", // Already exists
+          description: "First tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-2", // New
+          description: "Second tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-3", // New
+          description: "Third tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
 
-      expect(result.data.some((tool) => tool.id === targetTool.id)).toBe(true);
-      expect(result.data.some((tool) => tool.id === otherTool.id)).toBe(false);
+      const createdTools =
+        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+      expect(createdTools).toHaveLength(3);
+      // Should return the existing tool
+      expect(createdTools.find((t) => t.id === existingTool.id)).toBeDefined();
+      // Should create new tools
+      expect(createdTools.map((t) => t.name)).toContain("tool-2");
+      expect(createdTools.map((t) => t.name)).toContain("tool-3");
+    });
+
+    test("maintains input order in returned tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({
+        catalogId: catalog.id,
+      });
+
+      const toolsToCreate = [
+        {
+          name: "tool-c",
+          description: "Tool C",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-a",
+          description: "Tool A",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+        {
+          name: "tool-b",
+          description: "Tool B",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      const createdTools =
+        await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+      expect(createdTools).toHaveLength(3);
+      // Should maintain input order
+      expect(createdTools[0].name).toBe("tool-c");
+      expect(createdTools[1].name).toBe("tool-a");
+      expect(createdTools[2].name).toBe("tool-b");
+    });
+
+    test("handles empty tools array", async () => {
+      const createdTools = await ToolModel.bulkCreateToolsIfNotExists([]);
+      expect(createdTools).toHaveLength(0);
+    });
+
+    test("handles conflict during insert and fetches existing tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({
+        catalogId: catalog.id,
+      });
+
+      const toolsToCreate = [
+        {
+          name: "conflict-tool",
+          description: "Tool that might conflict",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+          mcpServerId: mcpServer.id,
+        },
+      ];
+
+      // Create tools in parallel to simulate race condition
+      const [result1, result2] = await Promise.all([
+        ToolModel.bulkCreateToolsIfNotExists(toolsToCreate),
+        ToolModel.bulkCreateToolsIfNotExists(toolsToCreate),
+      ]);
+
+      // Both should return the same tool (one created, one fetched)
+      expect(result1).toHaveLength(1);
+      expect(result2).toHaveLength(1);
+      expect(result1[0].name).toBe("conflict-tool");
+      expect(result2[0].name).toBe("conflict-tool");
     });
   });
 });

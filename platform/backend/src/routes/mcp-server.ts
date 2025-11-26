@@ -327,24 +327,28 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Persist tools in the database
                 // Use catalog item name (without userId) for tool naming to avoid duplicates across users
                 const toolNamePrefix = capturedCatalogName || mcpServer.name;
-                for (const tool of tools) {
-                  // Use createToolIfNotExists to avoid duplicates when multiple users install the same server
-                  const createdTool = await ToolModel.createToolIfNotExists({
-                    name: ToolModel.slugifyName(toolNamePrefix, tool.name),
-                    description: tool.description,
-                    parameters: tool.inputSchema,
-                    catalogId: capturedCatalogId,
-                    mcpServerId: mcpServer.id,
-                  });
+                const toolsToCreate = tools.map((tool) => ({
+                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  description: tool.description,
+                  parameters: tool.inputSchema,
+                  catalogId: capturedCatalogId,
+                  mcpServerId: mcpServer.id,
+                }));
 
-                  // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
-                  if (agentIds && agentIds.length > 0) {
-                    for (const agentId of agentIds) {
-                      await AgentToolModel.create(agentId, createdTool.id, {
-                        executionSourceMcpServerId: mcpServer.id,
-                      });
-                    }
-                  }
+                // Bulk create tools to avoid N+1 queries
+                const createdTools =
+                  await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+                // If agentIds were provided, create agent-tool assignments with executionSourceMcpServerId
+                if (agentIds && agentIds.length > 0) {
+                  const toolIds = createdTools.map((t) => t.id);
+                  await AgentToolModel.bulkCreateForAgentsAndTools(
+                    agentIds,
+                    toolIds,
+                    {
+                      executionSourceMcpServerId: mcpServer.id,
+                    },
+                  );
                 }
 
                 // Set status to success after tools are fetched
@@ -411,22 +415,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Persist tools in the database with source='mcp_server' and mcpServerId
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
-        for (const tool of tools) {
-          const createdTool = await ToolModel.createToolIfNotExists({
-            name: ToolModel.slugifyName(mcpServer.name, tool.name),
-            description: tool.description,
-            parameters: tool.inputSchema,
-            catalogId: catalogItem.id,
-            mcpServerId: mcpServer.id,
-          });
+        const toolsToCreate = tools.map((tool) => ({
+          name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          description: tool.description,
+          parameters: tool.inputSchema,
+          catalogId: catalogItem.id,
+          mcpServerId: mcpServer.id,
+        }));
 
-          // If agentIds were provided, create agent-tool assignments
-          // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
-          if (agentIds && agentIds.length > 0) {
-            for (const agentId of agentIds) {
-              await AgentToolModel.create(agentId, createdTool.id);
-            }
-          }
+        // Bulk create tools to avoid N+1 queries
+        const createdTools =
+          await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
+
+        // If agentIds were provided, create agent-tool assignments
+        // Note: Remote servers don't use executionSourceMcpServerId (they route via HTTP)
+        if (agentIds && agentIds.length > 0) {
+          const toolIds = createdTools.map((t) => t.id);
+          await AgentToolModel.bulkCreateForAgentsAndTools(agentIds, toolIds);
         }
 
         // Set status to success for non-local servers

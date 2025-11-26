@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitModel, TokenPriceModel } from "@/models";
+import { LimitModel, OptimizationRuleModel, TokenPriceModel } from "@/models";
 import {
   ApiError,
   CreateLimitSchema,
@@ -39,6 +39,13 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Cleanup limits if needed before fetching
       if (organizationId) {
         await LimitModel.cleanupLimitsIfNeeded(organizationId);
+      }
+
+      // Ensure default token prices and optimization rules exist
+      if (organizationId) {
+        await OptimizationRuleModel.ensureDefaultOptimizationRules(
+          organizationId,
+        );
       }
 
       // Ensure all models from interactions have pricing records

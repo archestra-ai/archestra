@@ -1,14 +1,14 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { PromptModel } from "@/models";
+import { hasPermission } from "@/auth";
+import { AgentTeamModel, PromptModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertPromptSchema,
-  PromptTypeSchema,
-  SelectPromptWithAgentsSchema,
+  SelectPromptSchema,
   UpdatePromptSchema,
   UuidIdSchema,
 } from "@/types";
@@ -19,20 +19,33 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetPrompts,
-        description: "Get all prompts for the organization",
+        description:
+          "Get all prompts for the organization filtered by user's accessible agents",
         tags: ["Prompts"],
-        querystring: z.object({
-          type: PromptTypeSchema.optional(),
-        }),
-        response: constructResponseSchema(
-          z.array(SelectPromptWithAgentsSchema),
-        ),
+        response: constructResponseSchema(z.array(SelectPromptSchema)),
       },
     },
-    async ({ organizationId, query }, reply) => {
-      return reply.send(
-        await PromptModel.findByOrganizationId(organizationId, query.type),
+    async ({ organizationId, user, headers }, reply) => {
+      // Check if user is an agent admin
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
       );
+
+      // Get accessible agent IDs for this user (chat-enabled agents only)
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        user.id,
+        isAgentAdmin,
+        true, // chatOnly - filter to agents with useInChat = true
+      );
+
+      // Filter prompts to only those assigned to accessible agents
+      const prompts = await PromptModel.findByOrganizationIdAndAccessibleAgents(
+        organizationId,
+        accessibleAgentIds,
+      );
+
+      return reply.send(prompts);
     },
   );
 
@@ -44,17 +57,11 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new prompt",
         tags: ["Prompts"],
         body: InsertPromptSchema,
-        response: constructResponseSchema(SelectPromptWithAgentsSchema),
+        response: constructResponseSchema(SelectPromptSchema),
       },
     },
-    async ({ body: { name, type, content }, organizationId, user }, reply) => {
-      return reply.send(
-        await PromptModel.create(organizationId, user.id, {
-          name,
-          type,
-          content,
-        }),
-      );
+    async ({ body, organizationId }, reply) => {
+      return reply.send(await PromptModel.create(organizationId, body));
     },
   );
 
@@ -68,17 +75,55 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectPromptWithAgentsSchema),
+        response: constructResponseSchema(SelectPromptSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
-      const prompt = await PromptModel.findById(id);
+    async ({ params: { id }, organizationId }, reply) => {
+      const prompt = await PromptModel.findByIdAndOrganizationId(
+        id,
+        organizationId,
+      );
 
       if (!prompt) {
         throw new ApiError(404, "Prompt not found");
       }
 
       return reply.send(prompt);
+    },
+  );
+
+  fastify.patch(
+    "/api/prompts/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdatePrompt,
+        description: "Update a prompt",
+        tags: ["Prompts"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: UpdatePromptSchema,
+        response: constructResponseSchema(SelectPromptSchema),
+      },
+    },
+    async ({ params, body, organizationId }, reply) => {
+      // Verify the prompt belongs to this organization
+      const existingPrompt = await PromptModel.findByIdAndOrganizationId(
+        params.id,
+        organizationId,
+      );
+
+      if (!existingPrompt) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      const updated = await PromptModel.update(params.id, body);
+
+      if (!updated) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      return reply.send(updated);
     },
   );
 
@@ -92,15 +137,18 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(
-          z.array(SelectPromptWithAgentsSchema),
-        ),
+        response: constructResponseSchema(z.array(SelectPromptSchema)),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
       const versions = await PromptModel.findVersions(id);
 
       if (versions.length === 0) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
+      // Verify first version belongs to this organization
+      if (versions[0].organizationId !== organizationId) {
         throw new ApiError(404, "Prompt not found");
       }
 
@@ -108,32 +156,40 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.patch(
-    "/api/prompts/:id",
+  fastify.post(
+    "/api/prompts/:id/rollback",
     {
       schema: {
-        operationId: RouteId.UpdatePrompt,
-        description:
-          "Update a prompt (creates a new version, deactivates old version)",
+        operationId: RouteId.RollbackPrompt,
+        description: "Rollback to a specific version of a prompt",
         tags: ["Prompts"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdatePromptSchema,
-        response: constructResponseSchema(SelectPromptWithAgentsSchema),
+        body: z.object({
+          versionId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectPromptSchema),
       },
     },
-    async ({ params, body: { name, content }, user }, reply) => {
-      const updated = await PromptModel.update(params.id, user.id, {
-        name,
-        content,
-      });
+    async ({ params: { id }, body: { versionId }, organizationId }, reply) => {
+      // Verify the prompt belongs to this organization
+      const existingPrompt = await PromptModel.findByIdAndOrganizationId(
+        id,
+        organizationId,
+      );
 
-      if (!updated) {
+      if (!existingPrompt) {
         throw new ApiError(404, "Prompt not found");
       }
 
-      return reply.send(updated);
+      const rolledBack = await PromptModel.rollback(id, versionId);
+
+      if (!rolledBack) {
+        throw new ApiError(400, "Invalid version or rollback failed");
+      }
+
+      return reply.send(rolledBack);
     },
   );
 
@@ -150,7 +206,17 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async ({ params: { id }, organizationId }, reply) => {
+      // Verify the prompt belongs to this organization
+      const existingPrompt = await PromptModel.findByIdAndOrganizationId(
+        id,
+        organizationId,
+      );
+
+      if (!existingPrompt) {
+        throw new ApiError(404, "Prompt not found");
+      }
+
       const success = await PromptModel.delete(id);
 
       if (!success) {

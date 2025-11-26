@@ -41,7 +41,7 @@ setup("authenticate", async ({ page }) => {
   await page.waitForTimeout(1000);
 
   // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
+  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({
     timeout: 10000,
   });
 

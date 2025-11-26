@@ -41,15 +41,15 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await LimitModel.cleanupLimitsIfNeeded(organizationId);
       }
 
-      // Ensure all models from interactions have pricing records
-      await TokenPriceModel.ensureAllModelsHavePricing();
-
       // Ensure default token prices and optimization rules exist
       if (organizationId) {
         await OptimizationRuleModel.ensureDefaultOptimizationRules(
           organizationId,
         );
       }
+
+      // Ensure all models from interactions have pricing records
+      await TokenPriceModel.ensureAllModelsHavePricing();
 
       const limits = await LimitModel.findAll(entityType, entityId, limitType);
 

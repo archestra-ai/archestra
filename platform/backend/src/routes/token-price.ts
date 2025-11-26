@@ -24,15 +24,16 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      // Ensure all models from interactions have pricing
-      await TokenPriceModel.ensureAllModelsHavePricing();
-
-      // Ensure default token prices and optimization rules exist
+      // Ensure default token prices and optimization rules exist first
+      // This sets correct pricing for cheaper models before generic $50 fallback
       if (organizationId) {
         await OptimizationRuleModel.ensureDefaultOptimizationRules(
           organizationId,
         );
       }
+
+      // Ensure all models from interactions have pricing
+      await TokenPriceModel.ensureAllModelsHavePricing();
 
       return reply.send(await TokenPriceModel.findAll());
     },

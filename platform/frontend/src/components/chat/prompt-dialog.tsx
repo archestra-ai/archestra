@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -163,6 +164,12 @@ export function PromptDialog({
                 ))}
               </SelectContent>
             </Select>
+            {agentId && (
+              <McpToolsDisplay
+                agentId={agentId}
+                className="text-xs text-muted-foreground"
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="systemPrompt">System Prompt</Label>

@@ -1,6 +1,7 @@
 "use client";
 
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import {
   Tooltip,
@@ -16,7 +17,7 @@ interface McpToolsDisplayProps {
 }
 
 export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
-  const { data: mcpTools = [] } = useChatAgentMcpTools(agentId);
+  const { data: mcpTools = [], isLoading } = useChatAgentMcpTools(agentId);
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(
@@ -39,6 +40,17 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
       ),
     [mcpTools],
   );
+
+  if (isLoading) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Loading tools...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (Object.keys(groupedTools).length === 0) {
     return null;

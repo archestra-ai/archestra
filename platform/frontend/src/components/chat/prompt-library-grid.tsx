@@ -1,6 +1,9 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import {
+  type archestraApiTypes,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@shared";
 import {
   History as HistoryIcon,
   MessageSquarePlus,
@@ -10,7 +13,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +55,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgents } from "@/lib/agent.query";
+import { useChatAgentMcpTools } from "@/lib/chat.query";
 import { TruncatedText } from "../truncated-text";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
@@ -125,7 +128,7 @@ export function PromptLibraryGrid({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Free Chat Tile */}
         <Card
-          className="min-h-[136px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
+          className="justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
           onClick={() => setIsFreeChatDialogOpen(true)}
         >
           <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -135,132 +138,23 @@ export function PromptLibraryGrid({
         </Card>
 
         {/* Prompt Tiles */}
-        {filteredPrompts.map((prompt) => (
-          <Card
-            key={prompt.id}
-            className="justify-between px-0 py-2 hover:border-primary cursor-pointer transition-colors group relative"
-            onClick={() => handlePromptClick(prompt)}
-          >
-            <CardHeader className="pb-2 px-4 relative">
-              <div className="flex items-start justify-between gap-2">
-                {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
-                <div
-                  className="flex-1 min-w-0"
-                  onClick={() => handlePromptClick(prompt)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handlePromptClick(prompt);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="flex items-baseline gap-2 mb-1.5">
-                    <CardTitle className="text-base truncate">
-                      <TruncatedText
-                        message={prompt.name}
-                        className="text-base truncate pr-0"
-                        maxLength={25}
-                      />
-                    </CardTitle>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      v{prompt.version}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {prompt.systemPrompt && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge
-                              variant="secondary"
-                              className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
-                            >
-                              System Prompt
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-md max-h-64 overflow-y-auto">
-                            <pre className="text-xs whitespace-pre-wrap">
-                              {prompt.systemPrompt}
-                            </pre>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    <Badge
-                      variant="secondary"
-                      className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs"
-                    >
-                      {allAgents.find((a) => a.id === prompt.agentId)?.name ||
-                        "Unknown Profile"}
-                    </Badge>
-                    <McpToolsDisplay agentId={prompt.agentId} />
-                  </div>
-                </div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  asChild
-                  onClick={(e) => e.stopPropagation()}
-                  className="absolute top-[-2px] right-2"
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className=" mt-2 h-4 w-4 flex-shrink-0"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(prompt);
-                    }}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onViewVersionHistory(prompt);
-                    }}
-                  >
-                    <HistoryIcon className="mr-2 h-4 w-4" />
-                    Version History
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPromptToDelete(prompt.id);
-                    }}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardHeader>
-            <CardContent className="pt-0 pb-3 space-y-2">
-              {prompt.userPrompt && (
-                <>
-                  <span className="text-xs">User prompt:</span>
-                  <TruncatedText
-                    message={prompt.userPrompt}
-                    className="text-xs text-muted-foreground line-clamp-2"
-                    maxLength={100}
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+        {filteredPrompts.map((prompt) => {
+          const profileName = prompt.agentId
+            ? allAgents.find((a) => a.id === prompt.agentId)?.name
+            : null;
+
+          return (
+            <PromptTile
+              key={prompt.id}
+              prompt={prompt}
+              profileName={profileName}
+              onPromptClick={handlePromptClick}
+              onEdit={onEdit}
+              onDelete={setPromptToDelete}
+              onViewVersionHistory={onViewVersionHistory}
+            />
+          );
+        })}
       </div>
 
       {/* Free Chat Agent Selection Dialog */}
@@ -336,5 +230,245 @@ export function PromptLibraryGrid({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// Separate component to use MCP tools hook
+interface PromptTileProps {
+  prompt: Prompt;
+  profileName: string | null | undefined;
+  onPromptClick: (prompt: Prompt) => void;
+  onEdit: (prompt: Prompt) => void;
+  onDelete: (promptId: string) => void;
+  onViewVersionHistory: (prompt: Prompt) => void;
+}
+
+function PromptTile({
+  prompt,
+  profileName,
+  onPromptClick,
+  onEdit,
+  onDelete,
+  onViewVersionHistory,
+}: PromptTileProps) {
+  const { data: mcpTools = [] } = useChatAgentMcpTools(prompt.agentId);
+
+  // Group tools by MCP server name (same logic as McpToolsDisplay)
+  const groupedTools = useMemo(
+    () =>
+      mcpTools.reduce(
+        (acc, tool) => {
+          const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+          const serverName =
+            parts.length > 1
+              ? parts.slice(0, -1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+              : "default";
+          if (!acc[serverName]) {
+            acc[serverName] = [];
+          }
+          acc[serverName].push(tool);
+          return acc;
+        },
+        {} as Record<string, typeof mcpTools>,
+      ),
+    [mcpTools],
+  );
+
+  const handlePromptClick = () => onPromptClick(prompt);
+
+  return (
+    <Card
+      className="h-[130px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
+      onClick={handlePromptClick}
+    >
+      <CardHeader className="pb-1.5 px-4 relative">
+        <div className="flex items-start justify-between gap-2">
+          {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
+          <div
+            className="flex-1 min-w-0"
+            onClick={handlePromptClick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handlePromptClick();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="flex items-baseline gap-2">
+              <CardTitle className="text-base truncate">
+                <TruncatedText
+                  message={prompt.name}
+                  className="text-base truncate pr-0"
+                  maxLength={25}
+                />
+              </CardTitle>
+              <span className="text-xs text-muted-foreground flex-shrink-0">
+                v{prompt.version}
+              </span>
+            </div>
+          </div>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            asChild
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-[-2px] right-2"
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className=" mt-2 h-4 w-4 flex-shrink-0"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(prompt);
+              }}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewVersionHistory(prompt);
+              }}
+            >
+              <HistoryIcon className="mr-2 h-4 w-4" />
+              Version History
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(prompt.id);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardHeader>
+      <div className="px-4 pb-1.5 mt-auto">
+        <div className="flex flex-wrap gap-1">
+          {prompt.systemPrompt && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
+                  >
+                    System Prompt
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md max-h-64 overflow-y-auto">
+                  <pre className="text-xs whitespace-pre-wrap">
+                    {prompt.systemPrompt}
+                  </pre>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {profileName && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs cursor-default"
+                  >
+                    {profileName}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="max-w-sm max-h-64 overflow-y-auto"
+                >
+                  <div className="space-y-2">
+                    <div className="font-medium text-sm">
+                      Profile: {profileName}
+                    </div>
+                    {Object.keys(groupedTools).length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          MCP Tools:
+                        </div>
+                        {Object.entries(groupedTools).map(
+                          ([serverName, tools]) => (
+                            <div key={serverName} className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className="font-medium">
+                                  {serverName}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  ({tools.length}{" "}
+                                  {tools.length === 1 ? "tool" : "tools"})
+                                </span>
+                              </div>
+                              <div className="space-y-0.5 pl-2">
+                                {tools.map((tool) => {
+                                  const parts = tool.name.split(
+                                    MCP_SERVER_TOOL_NAME_SEPARATOR,
+                                  );
+                                  const toolName =
+                                    parts.length > 1
+                                      ? parts[parts.length - 1]
+                                      : tool.name;
+                                  return (
+                                    <div
+                                      key={tool.name}
+                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                    >
+                                      <div className="font-mono font-medium">
+                                        {toolName}
+                                      </div>
+                                      {tool.description && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {tool.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {prompt.userPrompt && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="secondary"
+                    className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
+                  >
+                    User Prompt
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md max-h-64 overflow-y-auto">
+                  <pre className="text-xs whitespace-pre-wrap">
+                    {prompt.userPrompt}
+                  </pre>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -5183,6 +5183,7 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 export type CreateChatConversationData = {
     body: {
         agentId: string;
+        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
     };

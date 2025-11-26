@@ -83,6 +83,7 @@ export default function ChatPage() {
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
   const { data: allAgents = [] } = useAgents();
+  const chatAgents = allAgents.filter((agent) => agent.useInChat);
 
   const chatSession = useChatSession(conversationId);
 
@@ -113,11 +114,10 @@ export default function ChatPage() {
   // Fetch conversation with messages
   const { data: conversation } = useConversation(conversationId);
 
-  // Find the prompt associated with the current conversation's agent
-  const conversationPrompts = prompts.filter(
-    (p) => p.agentId === conversation?.agentId,
-  );
-  const conversationPrompt = conversationPrompts[0]; // Use first prompt for this agent
+  // Find the specific prompt for this conversation (if any)
+  const conversationPrompt = conversation?.promptId
+    ? prompts.find((p) => p.id === conversation.promptId)
+    : undefined;
 
   // Get current agent info
   const currentAgentId = conversation?.agentId;
@@ -167,9 +167,11 @@ export default function ChatPage() {
         }
       }
 
-      // Create conversation for the selected agent
-      const newConversation =
-        await createConversationMutation.mutateAsync(agentId);
+      // Create conversation for the selected agent with optional promptId
+      const newConversation = await createConversationMutation.mutateAsync({
+        agentId,
+        promptId,
+      });
       if (newConversation) {
         // Mark this as a newly created conversation
         newlyCreatedConversationRef.current = newConversation.id;
@@ -363,6 +365,9 @@ export default function ChatPage() {
     );
   }
 
+  const profileName = conversationPrompt?.agentId
+    ? allAgents.find((a) => a.id === conversationPrompt.agentId)?.name
+    : null;
   const promptBadge = (
     <>
       {conversationPrompt ? (
@@ -379,14 +384,10 @@ export default function ChatPage() {
                 className="max-w-md max-h-64 overflow-y-auto"
               >
                 <div className="space-y-2">
-                  {conversationPrompt.agentId && (
+                  {profileName && (
                     <div>
                       <div className="font-semibold text-xs mb-1">Agent:</div>
-                      <div className="text-xs">
-                        {allAgents.find(
-                          (a) => a.id === conversationPrompt.agentId,
-                        )?.name || "Unknown Profile"}
-                      </div>
+                      <div className="text-xs">{profileName}</div>
                     </div>
                   )}
                   {conversationPrompt.systemPrompt && (
@@ -409,15 +410,37 @@ export default function ChatPage() {
   );
 
   if (!conversationId) {
+    const hasNoChatAgents = chatAgents.length === 0;
+
     return (
       <PageLayout
         title="New Chat"
         description="Start a free chat or select a prompt from your library to start a guided chat"
         actionButton={
-          <Button onClick={handleCreatePrompt} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Prompt
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={handleCreatePrompt}
+                    size="sm"
+                    disabled={hasNoChatAgents}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Prompt
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {hasNoChatAgents && (
+                <TooltipContent>
+                  <p>
+                    You don't have access to any profile that the prompt can be
+                    assigned to
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         }
       >
         <PromptLibraryGrid

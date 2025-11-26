@@ -170,10 +170,15 @@ const registerMetricsPlugin = async (
  *
  * This is to avoid exposing the metrics endpoint, by default, the metrics endpoint
  */
+let metricsServerInstance: Awaited<
+  ReturnType<typeof createFastifyInstance>
+> | null = null;
+
 const startMetricsServer = async () => {
   const { secret: metricsSecret } = observability.metrics;
 
   const metricsServer = createFastifyInstance();
+  metricsServerInstance = metricsServer;
 
   // Add authentication hook for metrics endpoint if secret is configured
   if (metricsSecret) {
@@ -373,6 +378,35 @@ const start = async () => {
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async (signal: string) => {
+      fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+
+      try {
+        // Close WebSocket server
+        websocketService.stop();
+
+        // Close metrics server
+        if (metricsServerInstance) {
+          await metricsServerInstance.close();
+          fastify.log.info("Metrics server closed");
+        }
+
+        // Close main server
+        await fastify.close();
+        fastify.log.info("Main server closed");
+
+        process.exit(0);
+      } catch (error) {
+        fastify.log.error({ error }, "Error during shutdown");
+        process.exit(1);
+      }
+    };
+
+    // Handle shutdown signals
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

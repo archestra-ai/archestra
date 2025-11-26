@@ -12,8 +12,8 @@
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
-    "codegen:api-client": "node --loader ts-node/esm --project tsconfig.ts-node.json hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
-    "codegen:theme-css": "node --loader ts-node/esm --project tsconfig.ts-node.json ./themes/generate-theme-css.ts",
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts && biome check --write ./hey-api/clients",
+    "codegen:theme-css": "tsx ./themes/generate-theme-css.ts",
     "check:ci": "pnpm type-check && biome ci"
   },
   "keywords": [],
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.87.5",
     "@types/node": "^24",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }
 }

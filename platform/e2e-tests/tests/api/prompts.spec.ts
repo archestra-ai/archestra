@@ -40,7 +40,9 @@ test.describe("Prompts API", () => {
       urlSuffix: "/api/prompts",
     });
     const allPrompts = await allPromptsResponse.json();
-    const foundPrompt = allPrompts.find((p: { id: string }) => p.id === originalPrompt.id);
+    const foundPrompt = allPrompts.find(
+      (p: { id: string }) => p.id === originalPrompt.id,
+    );
     expect(foundPrompt).toBeDefined();
     expect(foundPrompt.agentId).toBe(agent.id);
 
@@ -58,7 +60,9 @@ test.describe("Prompts API", () => {
     // Verify a new version was created
     expect(updatedPrompt.id).not.toBe(originalPrompt.id);
     expect(updatedPrompt.version).toBe(2);
-    expect(updatedPrompt.systemPrompt).toBe("You are an updated helpful assistant.");
+    expect(updatedPrompt.systemPrompt).toBe(
+      "You are an updated helpful assistant.",
+    );
     expect(updatedPrompt.agentId).toBe(agent.id);
     expect(updatedPrompt.isActive).toBe(true);
 
@@ -199,7 +203,9 @@ test.describe("Prompts API", () => {
     });
     const prompt2AfterUpdate = await prompt2AfterUpdateResponse.json();
     expect(prompt2AfterUpdate.version).toBe(1);
-    expect(prompt2AfterUpdate.systemPrompt).toBe("Original shared prompt content.");
+    expect(prompt2AfterUpdate.systemPrompt).toBe(
+      "Original shared prompt content.",
+    );
 
     const prompt3AfterUpdateResponse = await makeApiRequest({
       request,
@@ -208,7 +214,9 @@ test.describe("Prompts API", () => {
     });
     const prompt3AfterUpdate = await prompt3AfterUpdateResponse.json();
     expect(prompt3AfterUpdate.version).toBe(1);
-    expect(prompt3AfterUpdate.systemPrompt).toBe("Original shared prompt content.");
+    expect(prompt3AfterUpdate.systemPrompt).toBe(
+      "Original shared prompt content.",
+    );
 
     // Cleanup
     await makeApiRequest({
@@ -249,7 +257,10 @@ test.describe("Prompts API", () => {
     makeApiRequest,
   }) => {
     // Create an agent first since prompts now require agentId
-    const createAgentResponse = await createAgent(request, "Test Agent for Prompt");
+    const createAgentResponse = await createAgent(
+      request,
+      "Test Agent for Prompt",
+    );
     const agent = await createAgentResponse.json();
 
     const createResponse = await makeApiRequest({

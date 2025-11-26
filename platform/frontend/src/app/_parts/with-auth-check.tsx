@@ -21,11 +21,15 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: session, isPending: isAuthCheckPending } =
-    authClient.useSession();
+  const {
+    data: session,
+    isPending: isAuthPending,
+    isRefetching: isAuthRefetching,
+  } = authClient.useSession();
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
+  const isAuthInitializing = isAuthPending && !isAuthRefetching;
 
   // Get required permissions for current page
   const requiredPermissions = requiredPagePermissionsMap[pathname];
@@ -34,9 +38,9 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // On auth pages, only wait for auth check (no permission check needed)
   // On other pages, wait for both auth and permission checks
-  const loading = isAuthPage
-    ? isAuthCheckPending
-    : isAuthCheckPending || isPermissionCheckPending;
+  const inProgress = isAuthPage
+    ? isAuthInitializing
+    : isAuthInitializing || isPermissionCheckPending;
 
   // Set Sentry user context when user is authenticated
   useEffect(() => {
@@ -62,7 +66,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {
-    if (isAuthCheckPending) {
+    if (isAuthInitializing) {
       // If auth check is pending, don't do anything
       return;
     } else if (isAuthPage && isLoggedIn) {
@@ -72,21 +76,21 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       // User is not logged in and not on auth page, redirect to sign-in
       router.push("/auth/sign-in");
     }
-  }, [isAuthCheckPending, isAuthPage, isLoggedIn, router]);
+  }, [isAuthInitializing, isAuthPage, isLoggedIn, router]);
 
   // Redirect to home if page is protected and user is not authorized
   useEffect(() => {
-    if (loading) {
+    if (inProgress) {
       return;
     }
 
     if (requiredPermissions && !hasRequiredPermissions) {
       router.push("/");
     }
-  }, [loading, requiredPermissions, hasRequiredPermissions, router]);
+  }, [inProgress, requiredPermissions, hasRequiredPermissions, router]);
 
   // Show loading while checking auth/permissions
-  if (loading) {
+  if (inProgress) {
     return null;
   } else if (isAuthPage && isLoggedIn) {
     // During redirects, show nothing to avoid flash

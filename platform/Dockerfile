@@ -34,23 +34,20 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 
-# Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-ARG TURBO_TEAM
-ENV TURBO_TEAM=$TURBO_TEAM
-
-ARG TURBO_TOKEN
-ENV TURBO_TOKEN=$TURBO_TOKEN
-
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-# Use Docker secret to securely pass Sentry auth token during build
-# The token is mounted from /run/secrets/sentry_auth_token and not persisted in the final image
+
+# Use Docker secrets to securely pass various sensitive environment variables during build
+# These environment variables are NOT persisted in the final image
+#
+# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
+# https://turborepo.com/docs/guides/tools/docker#example
+#
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
-RUN --mount=type=secret,id=sentry_auth_token \
-    if [ -f /run/secrets/sentry_auth_token ]; then \
-        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
-    fi && \
+# https://docs.docker.com/build/building/secrets/#target
+RUN --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
+    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
+    --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     pnpm build
 
 # <----- Final unified stage ----->
@@ -64,33 +61,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_FRONTEND_URL=""
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_ANALYTICS="enabled"
-
-ENV ARCHESTRA_OPENAI_BASE_URL="https://api.openai.com/v1"
-ENV ARCHESTRA_ANTHROPIC_BASE_URL="https://api.anthropic.com"
-
-ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
-ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
-ENV ARCHESTRA_AUTH_COOKIE_DOMAIN=""
-ENV ARCHESTRA_AUTH_SECRET=""
-
-ENV ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="false"
-ENV ARCHESTRA_ORCHESTRATOR_KUBECONFIG=""
-ENV ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="default"
 ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"
-
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME=""
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD=""
-ENV ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=""
-
-ENV ARCHESTRA_LOGGING_LEVEL="info"
-ENV ARCHESTRA_METRICS_SECRET="archestra-metrics-secret"
-
-ENV ARCHESTRA_SENTRY_BACKEND_DSN=""
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
@@ -115,7 +89,7 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend --filter=@frontend
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
@@ -169,9 +143,9 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-# HOSTNAME is a hardcoded value, and NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
+# NEXT_PUBLIC_* variables are mapped from ARCHESTRA_* ENV variables
 # All other environment variables (NODE_ENV, etc.) are inherited automatically
-environment=HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s"
+environment=NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="%(ENV_ARCHESTRA_API_BASE_URL)s",NEXT_PUBLIC_ARCHESTRA_ANALYTICS="%(ENV_ARCHESTRA_ANALYTICS)s",NEXT_PUBLIC_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN="%(ENV_ARCHESTRA_SENTRY_FRONTEND_DSN)s",NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT="%(ENV_ARCHESTRA_SENTRY_ENVIRONMENT)s",NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="%(ENV_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED)s"
 EOF
 
 # Create postgres program configuration (to be conditionally included)

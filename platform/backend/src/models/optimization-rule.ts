@@ -1,6 +1,5 @@
 import { and, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import TokenPriceModel from "@/models/token-price";
 import type {
   ContentLengthConditions,
   InsertOptimizationRule,

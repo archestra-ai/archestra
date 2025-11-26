@@ -1,5 +1,6 @@
 import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 /**
@@ -16,8 +17,7 @@ export function useSession() {
 }
 
 export function useCurrentOrgMembers() {
-  const session = authClient.useSession();
-  const isAuthenticated = session.data?.user != null;
+  const isAuthenticated = useIsAuthenticated();
 
   return useQuery({
     queryKey: ["auth", "orgMembers"],
@@ -34,8 +34,7 @@ export function useCurrentOrgMembers() {
  * Avoid using directly in components and use useHasPermissions instead.
  */
 function useAllPermissions() {
-  const session = authClient.useSession();
-  const isAuthenticated = session.data?.user != null;
+  const isAuthenticated = useIsAuthenticated();
 
   return useQuery({
     queryKey: ["auth", "userPermissions"],

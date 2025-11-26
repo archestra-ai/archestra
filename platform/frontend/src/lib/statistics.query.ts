@@ -12,6 +12,7 @@ const {
   getAgentStatistics,
   getModelStatistics,
   getOverviewStatistics,
+  getCostSavingsStatistics,
 } = archestraApiSdk;
 
 export function useTeamStatistics({
@@ -85,6 +86,26 @@ export function useOverviewStatistics({
     queryKey: ["statistics", "overview", timeframe],
     queryFn: async () => {
       const response = await getOverviewStatistics({
+        query: { timeframe },
+      });
+      return response.data;
+    },
+    initialData,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
+export function useCostSavingsStatistics({
+  timeframe = "24h",
+  initialData,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  initialData?: archestraApiTypes.GetCostSavingsStatisticsResponses["200"];
+} = {}) {
+  return useSuspenseQuery({
+    queryKey: ["statistics", "cost-savings", timeframe],
+    queryFn: async () => {
+      const response = await getCostSavingsStatistics({
         query: { timeframe },
       });
       return response.data;

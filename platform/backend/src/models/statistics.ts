@@ -3,6 +3,7 @@ import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AgentStatistics,
+  CostSavingsStatistics,
   ModelStatistics,
   OverviewStatistics,
   StatisticsTimeSeriesData,
@@ -784,6 +785,183 @@ class StatisticsModel {
       topTeam,
       topAgent,
       topModel,
+    };
+  }
+
+  /**
+   * Calculate actual cost: cost - toon_savings
+   * This represents the final cost after all optimizations
+   * - cost = cost after model optimization
+   * - toonSavings = savings from TOON compression
+   * - actual cost = cost after both model optimization and TOON
+   */
+  private static calculateActualCost(
+    cost: number,
+    toonSavings: number,
+  ): number {
+    return cost - toonSavings;
+  }
+
+  /**
+   * Get cost savings statistics
+   */
+  static async getCostSavingsStatistics(
+    timeframe: StatisticsTimeFrame,
+    userId?: string,
+    isAgentAdmin?: boolean,
+  ): Promise<CostSavingsStatistics> {
+    const interval = StatisticsModel.getTimeframeInterval(timeframe);
+    const timeBucket = StatisticsModel.getTimeBucket(timeframe);
+
+    // Get accessible agent IDs for users that are non-agent admins
+    let accessibleAgentIds: string[] = [];
+    if (userId && !isAgentAdmin) {
+      accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
+
+      if (accessibleAgentIds.length === 0) {
+        return {
+          totalBaselineCost: 0,
+          totalActualCost: 0,
+          totalSavings: 0,
+          totalOptimizationSavings: 0,
+          totalToonSavings: 0,
+          timeSeries: [],
+        };
+      }
+    }
+
+    const query = db
+      .select({
+        timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+        baselineCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.baselineCost}), 0) AS DECIMAL)`,
+        actualCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DECIMAL)`,
+        toonSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.toonCostSavings}), 0) AS DECIMAL)`,
+      })
+      .from(schema.interactionsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.interactionsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          ...(interval
+            ? [
+                gte(
+                  schema.interactionsTable.createdAt,
+                  sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+                ),
+              ]
+            : (() => {
+                const customRange =
+                  StatisticsModel.parseCustomTimeframe(timeframe);
+                return customRange
+                  ? [
+                      gte(
+                        schema.interactionsTable.createdAt,
+                        customRange.startTime,
+                      ),
+                      lte(
+                        schema.interactionsTable.createdAt,
+                        customRange.endTime,
+                      ),
+                    ]
+                  : [];
+              })()),
+          ...(accessibleAgentIds.length > 0
+            ? [inArray(schema.agentsTable.id, accessibleAgentIds)]
+            : []),
+        ),
+      )
+      .groupBy(
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      )
+      .orderBy(
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      );
+
+    const rawTimeSeriesData = await query;
+
+    // Custom grouping for cost savings data
+    interface CostSavingsRow {
+      timeBucket: string;
+      baselineCost: number;
+      actualCost: number;
+      toonSavings: number;
+    }
+
+    const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
+
+    // Group by custom intervals if needed
+    const grouped = new Map<string, CostSavingsRow>();
+
+    for (const row of rawTimeSeriesData) {
+      const bucketKey =
+        intervalMinutes >= 60 && timeframe !== "7d" && timeframe !== "90d"
+          ? row.timeBucket
+          : StatisticsModel.roundToBucket(row.timeBucket, intervalMinutes);
+
+      if (!grouped.has(bucketKey)) {
+        grouped.set(bucketKey, {
+          timeBucket: bucketKey,
+          baselineCost: 0,
+          actualCost: 0,
+          toonSavings: 0,
+        });
+      }
+
+      const existing = grouped.get(bucketKey);
+      if (!existing) continue;
+
+      existing.baselineCost += Number(row.baselineCost);
+      existing.actualCost += Number(row.actualCost);
+      existing.toonSavings += Number(row.toonSavings);
+    }
+
+    const timeSeriesData = Array.from(grouped.values()).sort(
+      (a, b) =>
+        new Date(a.timeBucket).getTime() - new Date(b.timeBucket).getTime(),
+    );
+
+    // Calculate totals and build time series
+    let totalBaselineCost = 0;
+    let totalActualCost = 0;
+    let totalOptimizationSavings = 0;
+    let totalToonSavings = 0;
+
+    const timeSeries = timeSeriesData.map((row) => {
+      const baselineCost = Number(row.baselineCost);
+      const cost = Number(row.actualCost);
+      const toonSavings = Number(row.toonSavings);
+
+      const actualCost = StatisticsModel.calculateActualCost(cost, toonSavings);
+      const optimizationSavings = baselineCost - cost;
+
+      totalBaselineCost += baselineCost;
+      totalActualCost += actualCost;
+      totalOptimizationSavings += optimizationSavings;
+      totalToonSavings += toonSavings;
+
+      return {
+        timestamp: row.timeBucket,
+        baselineCost,
+        actualCost,
+        optimizationSavings,
+        toonSavings,
+      };
+    });
+
+    const totalSavings = totalBaselineCost - totalActualCost;
+
+    return {
+      totalBaselineCost,
+      totalActualCost,
+      totalSavings,
+      totalOptimizationSavings,
+      totalToonSavings,
+      timeSeries,
     };
   }
 }

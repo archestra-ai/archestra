@@ -325,6 +325,7 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostSavingsStatistics: "getCostSavingsStatistics",
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
@@ -703,6 +704,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetCostSavingsStatistics]: {
     interaction: ["read"],
   },
   [RouteId.GetOptimizationRules]: {

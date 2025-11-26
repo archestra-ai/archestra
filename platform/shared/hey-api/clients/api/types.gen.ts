@@ -13391,6 +13391,96 @@ export type GetOverviewStatisticsResponses = {
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
+export type GetCostSavingsStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/cost-savings';
+};
+
+export type GetCostSavingsStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetCostSavingsStatisticsError = GetCostSavingsStatisticsErrors[keyof GetCostSavingsStatisticsErrors];
+
+export type GetCostSavingsStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalBaselineCost: number;
+        totalActualCost: number;
+        totalSavings: number;
+        totalOptimizationSavings: number;
+        totalToonSavings: number;
+        timeSeries: Array<{
+            timestamp: string;
+            baselineCost: number;
+            actualCost: number;
+            optimizationSavings: number;
+            toonSavings: number;
+        }>;
+    };
+};
+
+export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses[keyof GetCostSavingsStatisticsResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;

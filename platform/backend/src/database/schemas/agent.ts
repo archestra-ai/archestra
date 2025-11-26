@@ -5,7 +5,6 @@ const agentsTable = pgTable("agents", {
   name: text("name").notNull(),
   isDemo: boolean("is_demo").notNull().default(false),
   isDefault: boolean("is_default").notNull().default(false),
-  optimizeCost: boolean("optimize_cost").notNull().default(false),
   considerContextUntrusted: boolean("consider_context_untrusted")
     .notNull()
     .default(false),

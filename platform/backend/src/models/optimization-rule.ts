@@ -1,11 +1,11 @@
-import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
+import { and, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
+  ContentLengthConditions,
   InsertOptimizationRule,
   OptimizationRule,
-  OptimizationRuleContentLengthConditions,
-  OptimizationRuleToolPresenceConditions,
   SupportedProvider,
+  ToolPresenceConditions,
   UpdateOptimizationRule,
 } from "@/types";
 
@@ -45,8 +45,7 @@ class OptimizationRuleModel {
             eq(schema.teamsTable.organizationId, organizationId),
           ),
         ),
-      )
-      .orderBy(asc(schema.optimizationRulesTable.priority));
+      );
 
     return rules;
   }
@@ -65,8 +64,7 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
-      )
-      .orderBy(asc(schema.optimizationRulesTable.priority));
+      );
 
     return rules;
   }
@@ -92,36 +90,48 @@ class OptimizationRuleModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  // Evaluate rules for a given agent and context
-  static evaluateRules(
+  // Evaluate rules for a given context
+  // Rules are grouped by models. If all rules in such group match, returns the model.
+  static matchByRules(
     rules: OptimizationRule[],
     context: {
       tokenCount: number;
       hasTools: boolean;
     },
   ): string | null {
+    const rulesByModel: Record<string, OptimizationRule[]> = {};
+
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      let matches = false;
+      const model = rule.targetModel;
+      if (!rulesByModel[model]) {
+        rulesByModel[model] = [];
+      }
+      rulesByModel[model].push(rule);
+    }
 
-      switch (rule.ruleType) {
-        case "content_length": {
-          const conditions =
-            rule.conditions as OptimizationRuleContentLengthConditions;
-          matches = context.tokenCount <= conditions.maxLength;
-          break;
-        }
-        case "tool_presence": {
-          const conditions =
-            rule.conditions as OptimizationRuleToolPresenceConditions;
-          matches = context.hasTools === conditions.hasTools;
-          break;
+    for (const [model, modelRules] of Object.entries(rulesByModel)) {
+      let match = true;
+
+      for (const rule of modelRules) {
+        if (rule.ruleType === "content_length") {
+          const conditions = rule.conditions as ContentLengthConditions;
+          if (context.tokenCount > conditions.maxLength) {
+            match = false;
+            break;
+          }
+        } else if (rule.ruleType === "tool_presence") {
+          const conditions = rule.conditions as ToolPresenceConditions;
+          if (context.hasTools !== conditions.hasTools) {
+            match = false;
+            break;
+          }
         }
       }
 
-      if (matches) {
-        return rule.targetModel;
+      if (match) {
+        return model;
       }
     }
 

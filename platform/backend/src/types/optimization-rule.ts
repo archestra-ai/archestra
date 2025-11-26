@@ -11,17 +11,17 @@ import { SupportedProvidersSchema } from "./llm-providers";
  * Content length optimization rule conditions
  * maxLength is measured in tokens (not characters)
  */
-export const OptimizationRuleContentLengthConditionsSchema = z.object({
+export const ContentLengthConditionsSchema = z.object({
   maxLength: z.number().int().positive(),
 });
 
-export const OptimizationRuleToolPresenceConditionsSchema = z.object({
+export const ToolPresenceConditionsSchema = z.object({
   hasTools: z.boolean(),
 });
 
 export const OptimizationRuleConditionsSchema = z.union([
-  OptimizationRuleContentLengthConditionsSchema,
-  OptimizationRuleToolPresenceConditionsSchema,
+  ContentLengthConditionsSchema,
+  ToolPresenceConditionsSchema,
 ]);
 
 export const OptimizationRuleTypeSchema = z.enum([
@@ -56,11 +56,11 @@ export const UpdateOptimizationRuleSchema = createUpdateSchema(
   extendedFields,
 );
 
-export type OptimizationRuleContentLengthConditions = z.infer<
-  typeof OptimizationRuleContentLengthConditionsSchema
+export type ContentLengthConditions = z.infer<
+  typeof ContentLengthConditionsSchema
 >;
-export type OptimizationRuleToolPresenceConditions = z.infer<
-  typeof OptimizationRuleToolPresenceConditionsSchema
+export type ToolPresenceConditions = z.infer<
+  typeof ToolPresenceConditionsSchema
 >;
 export type OptimizationRuleConditions = z.infer<
   typeof OptimizationRuleConditionsSchema

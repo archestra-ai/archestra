@@ -72,7 +72,6 @@ type RuleFormData = {
   hasTools?: boolean;
   provider: OptimizationRule["provider"];
   targetModel: string;
-  priority: string;
   enabled: boolean;
 };
 
@@ -112,16 +111,6 @@ function formatProviderName(provider: string): string {
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";
   return provider;
-}
-
-// Sort optimization rules: enabled first, then by priority (highest first)
-function sortOptimizationRules(rules: OptimizationRule[]): OptimizationRule[] {
-  return [...rules].sort((a, b) => {
-    if (a.enabled !== b.enabled) {
-      return a.enabled ? -1 : 1;
-    }
-    return a.priority - b.priority;
-  });
 }
 
 // Sort models by total cost (input + output price) ascending
@@ -193,10 +182,10 @@ function ModelSelector({
   // If no models available for this provider, show message
   if (modelsWithCurrent.length === 0) {
     return (
-      <div className="px-2 flex gap-2 text-sm whitespace-nowrap">
+      <div className="px-2 text-sm">
         <span className="text-muted-foreground">
           No pricing configured for {formatProviderName(provider)} models.
-        </span>
+        </span>{" "}
         <Link
           href="/cost/token-price"
           className="hover:text-foreground hover:underline"
@@ -264,7 +253,6 @@ function OptimizationRuleInlineForm({
     hasTools: initialData?.hasTools ?? false,
     provider: initialData?.provider || "openai",
     targetModel: initialData?.targetModel || "",
-    priority: initialData?.priority || "1",
     enabled: initialData?.enabled ?? true,
   });
 
@@ -278,8 +266,7 @@ function OptimizationRuleInlineForm({
       ? formData.maxLength
       : formData.hasTools !== undefined) &&
     formData.provider &&
-    formData.targetModel &&
-    formData.priority;
+    formData.targetModel;
 
   return (
     <TableRow className="bg-muted/30">
@@ -417,26 +404,6 @@ function OptimizationRuleInlineForm({
         />
       </TableCell>
       <TableCell className="p-2">
-        <Input
-          id="priority"
-          type="number"
-          min="1"
-          value={formData.priority}
-          onChange={(e) =>
-            setFormData({ ...formData, priority: e.target.value })
-          }
-          placeholder="1"
-          required
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              if (isValid) handleSubmit();
-            }
-          }}
-          className="w-16"
-        />
-      </TableCell>
-      <TableCell className="p-2">
         <div className="flex gap-2">
           <Button
             onClick={() => handleSubmit()}
@@ -505,7 +472,6 @@ function OptimizationRuleRow({
           : undefined,
       provider: rule.provider,
       targetModel: rule.targetModel,
-      priority: String(rule.priority),
       enabled: rule.enabled,
     };
 
@@ -571,7 +537,6 @@ function OptimizationRuleRow({
           )}
         </div>
       </TableCell>
-      <TableCell>{rule.priority}</TableCell>
       <TableCell className="pl-2 text-foreground">
         <div className="flex items-center gap-2">
           <PermissionButton
@@ -634,12 +599,11 @@ export default function OptimizationRulesPage() {
   const updateRule = useUpdateOptimizationRule();
   const deleteRule = useDeleteOptimizationRule();
 
-  // Sort rules once on initial load, then maintain order
+  // Initialize order on first load, then maintain it
   useEffect(() => {
     if (!hasInitialized.current && allRules.length > 0) {
-      // Initial sort: enabled first, then by priority (highest first)
-      const sorted = sortOptimizationRules(allRules);
-      setRuleOrder(sorted.map((rule) => rule.id));
+      // Initialize with current order from backend
+      setRuleOrder(allRules.map((rule) => rule.id));
       hasInitialized.current = true;
     } else if (hasInitialized.current) {
       setRuleOrder((ruleOrder) => {
@@ -648,15 +612,8 @@ export default function OptimizationRulesPage() {
         );
         if (newRules.length === 0) return ruleOrder;
 
-        // Re-sort all rules to maintain proper order
-        const allRulesInOrder = [
-          ...ruleOrder
-            .map((id) => allRules.find((rule) => rule.id === id))
-            .filter((rule): rule is OptimizationRule => rule !== undefined),
-          ...newRules,
-        ];
-        const sorted = sortOptimizationRules(allRulesInOrder);
-        return sorted.map((rule) => rule.id);
+        // Add new rules to the end, preserving existing order
+        return [...ruleOrder, ...newRules.map((rule) => rule.id)];
       });
     }
   }, [allRules]);
@@ -665,13 +622,6 @@ export default function OptimizationRulesPage() {
   const orderedRules = ruleOrder
     .map((id) => allRules.find((rule) => rule.id === id))
     .filter((rule): rule is OptimizationRule => rule !== undefined);
-
-  // Calculate max priority for new rules
-  const maxPriority =
-    allRules.length > 0
-      ? Math.max(...allRules.map((rule) => rule.priority))
-      : 0;
-  const nextPriority = maxPriority + 1;
 
   // Helper function to get entity name for "Applied to" column
   const getEntityName = useCallback(
@@ -701,7 +651,6 @@ export default function OptimizationRulesPage() {
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
-          priority: Number(data.priority),
           enabled: data.enabled,
           // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
         } as any);
@@ -725,7 +674,6 @@ export default function OptimizationRulesPage() {
           conditions: formDataToConditions(data),
           provider: data.provider,
           targetModel: data.targetModel,
-          priority: Number(data.priority),
           enabled: data.enabled,
           // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
         } as any);
@@ -803,14 +751,13 @@ export default function OptimizationRulesPage() {
         {rulesLoading ? (
           <LoadingSkeleton count={3} prefix="optimization-rules" />
         ) : (
-          <Table>
+          <Table className="min-w-[1020px]">
             <colgroup>
               <col className="w-20" />
+              <col className="w-40" />
               <col />
-              <col />
-              <col />
-              <col />
-              <col className="w-20" />
+              <col className="w-40" />
+              <col className="w-60" />
               <col className="w-28" />
             </colgroup>
             <TableHeader>
@@ -837,25 +784,6 @@ export default function OptimizationRulesPage() {
                     </TooltipProvider>
                   </div>
                 </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    Order
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-70 text-wrap">
-                          <p>
-                            Rules are evaluated in order (1, 2, 3...). The first
-                            matching rule is applied. If no rules match, the
-                            original model is used.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -871,26 +799,24 @@ export default function OptimizationRulesPage() {
                 </TableRow>
               ) : (
                 <>
-                  {orderedRules
-                    .filter((rule) => rule.enabled)
-                    .map((rule) => (
-                      <OptimizationRuleRow
-                        key={rule.id}
-                        rule={rule}
-                        isEditing={editingRuleId === rule.id}
-                        onEdit={() => setEditingRuleId(rule.id)}
-                        onSave={(data) => handleUpdateRule(rule.id, data)}
-                        onCancel={handleCancelEdit}
-                        onDelete={() => handleDeleteRule(rule.id)}
-                        onToggleEnabled={(enabled) =>
-                          handleToggleEnabled(rule.id, enabled)
-                        }
-                        tokenPrices={tokenPrices}
-                        getEntityName={getEntityName}
-                        teams={teams}
-                        organizationId={organizationDetails?.id || ""}
-                      />
-                    ))}
+                  {orderedRules.map((rule) => (
+                    <OptimizationRuleRow
+                      key={rule.id}
+                      rule={rule}
+                      isEditing={editingRuleId === rule.id}
+                      onEdit={() => setEditingRuleId(rule.id)}
+                      onSave={(data) => handleUpdateRule(rule.id, data)}
+                      onCancel={handleCancelEdit}
+                      onDelete={() => handleDeleteRule(rule.id)}
+                      onToggleEnabled={(enabled) =>
+                        handleToggleEnabled(rule.id, enabled)
+                      }
+                      tokenPrices={tokenPrices}
+                      getEntityName={getEntityName}
+                      teams={teams}
+                      organizationId={organizationDetails?.id || ""}
+                    />
+                  ))}
                   {isAddingRule && (
                     <OptimizationRuleInlineForm
                       initialData={{
@@ -899,7 +825,6 @@ export default function OptimizationRulesPage() {
                         ruleType: "content_length",
                         provider: "anthropic",
                         targetModel: "",
-                        priority: String(nextPriority),
                         enabled: true,
                       }}
                       onSave={handleCreateRule}
@@ -909,26 +834,6 @@ export default function OptimizationRulesPage() {
                       organizationId={organizationDetails?.id || ""}
                     />
                   )}
-                  {orderedRules
-                    .filter((rule) => !rule.enabled)
-                    .map((rule) => (
-                      <OptimizationRuleRow
-                        key={rule.id}
-                        rule={rule}
-                        isEditing={editingRuleId === rule.id}
-                        onEdit={() => setEditingRuleId(rule.id)}
-                        onSave={(data) => handleUpdateRule(rule.id, data)}
-                        onCancel={handleCancelEdit}
-                        onDelete={() => handleDeleteRule(rule.id)}
-                        onToggleEnabled={(enabled) =>
-                          handleToggleEnabled(rule.id, enabled)
-                        }
-                        tokenPrices={tokenPrices}
-                        getEntityName={getEntityName}
-                        teams={teams}
-                        organizationId={organizationDetails?.id || ""}
-                      />
-                    ))}
                 </>
               )}
             </TableBody>

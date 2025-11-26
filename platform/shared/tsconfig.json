@@ -4,6 +4,7 @@
   "include": ["**/*.ts"],
   "compilerOptions": {
     "module": "esnext",
-    "target": "ES2022"
+    "target": "ES2022",
+    "types": ["node"]
   }
 }

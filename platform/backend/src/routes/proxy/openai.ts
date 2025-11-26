@@ -203,28 +203,26 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const baselineModel = body.model;
       let model = baselineModel;
-      // Optimize model selection for cost if enabled using dynamic rules
-      if (resolvedAgent.optimizeCost) {
-        const hasTools = (tools?.length ?? 0) > 0;
-        const optimizedModel = await utils.costOptimization.getOptimizedModel(
-          resolvedAgent,
-          messages,
-          "openai",
-          hasTools,
-        );
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = (tools?.length ?? 0) > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        messages,
+        "openai",
+        hasTools,
+      );
 
-        if (optimizedModel) {
-          model = optimizedModel;
-          fastify.log.info(
-            { resolvedAgentId, optimizedModel },
-            "Optimized model selected",
-          );
-        } else {
-          fastify.log.info(
-            { resolvedAgentId, baselineModel },
-            "No matching optimized model found, proceeding with baseline model",
-          );
-        }
+      if (optimizedModel) {
+        model = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
       }
 
       // Convert to common format and evaluate trusted data policies
@@ -591,16 +589,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenUsage.output,
           );
           // Calculate actual cost (potentially optimized model)
-          if (resolvedAgent.optimizeCost) {
-            costAfterOptimization = await utils.costOptimization.calculateCost(
-              model,
-              tokenUsage.input,
-              tokenUsage.output,
-            );
-          } else {
-            // If no cost optimization, actual cost equals baseline
-            costAfterOptimization = baselineCost;
-          }
+          costAfterOptimization = await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
         }
 
         // Store the complete interaction
@@ -711,28 +704,20 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? utils.adapters.openai.getUsageTokens(response.usage)
           : { input: null, output: null };
 
-        // Always calculate costs for proper TOON compression tracking
-        let costAfterOptimization: number | undefined;
-        let baselineCost: number | undefined;
-
         // Always calculate baseline cost (original requested model)
-        baselineCost = await utils.costOptimization.calculateCost(
+        const baselineCost = await utils.costOptimization.calculateCost(
           body.model,
           tokenUsage.input,
           tokenUsage.output,
         );
 
         // Calculate actual cost (potentially optimized model)
-        if (resolvedAgent.optimizeCost) {
-          costAfterOptimization = await utils.costOptimization.calculateCost(
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
-        } else {
-          // If no cost optimization, actual cost equals baseline
-          costAfterOptimization = baselineCost;
-        }
 
         // Store the complete interaction
         await InteractionModel.create({

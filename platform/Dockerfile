@@ -115,7 +115,7 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 
 # Install production dependencies for both workspaces
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend --filter=@frontend
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
 
 # Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist

@@ -7,10 +7,10 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.js",
+    "build": "tsup",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.js",
-    "dev": "node scripts/dev.js",
-    "dev:debug": "tsc && node --enable-source-maps --inspect-brk dist/server.js",
+    "dev": "tsup --watch --onSuccess \"node --enable-source-maps dist/server.js\"",
+    "dev:debug": "tsup --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.js\"",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",
@@ -86,6 +86,7 @@
     "@types/uuid": "^11.0.0",
     "@types/ws": "^8.18.1",
     "tsc-alias": "^1.8.10",
+    "tsup": "^8.5.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2",
     "vitest": "^4.0.10"

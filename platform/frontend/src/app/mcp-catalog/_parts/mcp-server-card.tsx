@@ -430,7 +430,8 @@ export function McpServerCard({
           {isInstalling ? "Reconnecting..." : "Reconnect Required"}
         </PermissionButton>
       )}
-      {requiresAuth && !isCurrentUserAuthenticated && (
+      {((requiresAuth && !isCurrentUserAuthenticated) ||
+        (!requiresAuth && !installedServer)) && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -447,7 +448,11 @@ export function McpServerCard({
               </PermissionButton>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Provide your credentials to connect this server</p>
+              <p>
+                {requiresAuth
+                  ? "Provide your credentials to connect this server"
+                  : "Install this server to your organization"}
+              </p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

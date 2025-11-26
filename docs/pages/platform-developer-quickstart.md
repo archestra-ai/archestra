@@ -70,7 +70,7 @@ This command will:
 The platform has two security protections:
 
 1. **Install scripts are disabled** - Prevents malicious code execution during install
-2. **3-day minimum release age** - Delays installation of newly published packages
+2. **7-day minimum release age** - Delays installation of newly published packages
 
 If a package requires scripts to work:
 

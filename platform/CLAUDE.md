@@ -198,7 +198,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 **Install Script Protection**: The platform disables automatic execution of install scripts via `ignore-scripts=true` in `.npmrc` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
 
-**Minimum Release Age**: Packages must be published for at least 3 days before installation (`minimum-release-age=4320` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
+**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimum-release-age=10080` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
 
 **Working with Disabled Scripts**: Most packages work without install scripts. When needed, manually rebuild specific packages:
 

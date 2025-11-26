@@ -225,7 +225,6 @@ function Agents() {
     labels: AgentLabel[];
     considerContextUntrusted: boolean;
     useInChat?: boolean;
-    convertToolResultsToToon?: boolean;
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -550,8 +549,6 @@ function CreateAgentDialog({
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
   const [useInChat, setUseInChat] = useState(true);
-  const [convertToolResultsToToon, setConvertToolResultsToToon] =
-    useState(false);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -616,7 +613,6 @@ function CreateAgentDialog({
           labels: updatedLabels,
           considerContextUntrusted,
           useInChat,
-          convertToolResultsToToon,
         });
         if (!agent) {
           throw new Error("Failed to create profile");
@@ -634,7 +630,6 @@ function CreateAgentDialog({
       considerContextUntrusted,
       createAgent,
       useInChat,
-      convertToolResultsToToon,
     ],
   );
 
@@ -646,7 +641,6 @@ function CreateAgentDialog({
     setCreatedAgent(null);
     setConsiderContextUntrusted(false);
     setUseInChat(true);
-    setConvertToolResultsToToon(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -786,27 +780,6 @@ function CreateAgentDialog({
                     </p>
                   </div>
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="convert-tool-results-to-toon"
-                    checked={convertToolResultsToToon}
-                    onCheckedChange={(checked) =>
-                      setConvertToolResultsToToon(checked === true)
-                    }
-                  />
-                  <div className="grid gap-1">
-                    <Label
-                      htmlFor="convert-tool-results-to-toon"
-                      className="text-sm font-medium cursor-pointer"
-                    >
-                      Compress tool results
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Reduces token usage by using TOON format.
-                    </p>
-                  </div>
-                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -856,7 +829,6 @@ function EditAgentDialog({
     labels: AgentLabel[];
     considerContextUntrusted: boolean;
     useInChat?: boolean;
-    convertToolResultsToToon?: boolean;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -870,9 +842,6 @@ function EditAgentDialog({
     agent.considerContextUntrusted,
   );
   const [useInChat, setUseInChat] = useState(agent.useInChat ?? true);
-  const [convertToolResultsToToon, setConvertToolResultsToToon] = useState(
-    agent.convertToolResultsToToon ?? false,
-  );
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -923,7 +892,6 @@ function EditAgentDialog({
             labels: updatedLabels,
             considerContextUntrusted,
             useInChat,
-            convertToolResultsToToon,
           },
         });
         toast.success("Profile updated successfully");
@@ -941,7 +909,6 @@ function EditAgentDialog({
       onOpenChange,
       considerContextUntrusted,
       useInChat,
-      convertToolResultsToToon,
     ],
   );
 
@@ -1086,27 +1053,6 @@ function EditAgentDialog({
                 <p className="text-sm text-muted-foreground">
                   If enabled, this profile will be available for usage in the
                   chat.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="edit-convert-tool-results-to-toon"
-                checked={convertToolResultsToToon}
-                onCheckedChange={(checked) =>
-                  setConvertToolResultsToToon(checked === true)
-                }
-              />
-              <div className="grid gap-1">
-                <Label
-                  htmlFor="edit-convert-tool-results-to-toon"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Compress tool results
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Reduces token usage by using TOON format.
                 </p>
               </div>
             </div>

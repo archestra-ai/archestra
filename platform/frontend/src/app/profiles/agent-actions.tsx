@@ -56,7 +56,6 @@ export function AgentActions({
             createdAt: agent.createdAt,
             updatedAt: agent.updatedAt,
             useInChat: agent.useInChat,
-            convertToolResultsToToon: agent.convertToolResultsToToon,
           });
         }}
       >

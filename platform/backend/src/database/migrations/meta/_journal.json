@@ -463,6 +463,27 @@
       "when": 1764151221623,
       "tag": "0065_keen_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1764162932955,
+      "tag": "0066_tan_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1764162950519,
+      "tag": "0067_many_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1764164315384,
+      "tag": "0068_sour_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

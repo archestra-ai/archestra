@@ -11,7 +11,13 @@ import {
   reportBlockedTools,
   reportLLMTokens,
 } from "@/llm-metrics";
-import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  OrganizationModel,
+  TeamModel,
+} from "@/models";
 import {
   type Agent,
   Anthropic,
@@ -96,7 +102,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: Anthropic.Types.MessagesRequest,
     headers: Anthropic.Types.MessagesHeaders,
     reply: FastifyReply,
-    _organizationId: string,
+    organizationId: string,
     agentId?: string,
   ) => {
     const { tools, stream } = body;
@@ -156,6 +162,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { resolvedAgentId, wasExplicit: !!agentId },
       "Agent resolved",
     );
+
+    // Fetch organization to get TOON compression setting
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization) {
+      return reply.status(404).send({
+        error: {
+          message: `Organization with ID ${organizationId} not found`,
+          type: "error",
+        },
+      });
+    }
 
     const { "x-api-key": anthropicApiKey } = headers;
 
@@ -321,12 +338,24 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
-      // Convert tool results to TOON format if enabled on agent
+      // Determine if TOON compression should be applied
       let toonTokensBefore: number | null = null;
       let toonTokensAfter: number | null = null;
       let toonCostSavings: number | null = null;
+      let shouldApplyToonCompression = false;
 
-      if (resolvedAgent.convertToolResultsToToon) {
+      if (organization.compressionScope === "organization") {
+        shouldApplyToonCompression = organization.convertToolResultsToToon;
+      } else if (organization.compressionScope === "team") {
+        // Team-level: check if ANY of the profile's teams have compression enabled
+        const profileTeams = await TeamModel.getTeamsForAgent(resolvedAgentId);
+        shouldApplyToonCompression = profileTeams.some(
+          (team) => team.convertToolResultsToToon,
+        );
+      }
+      // otherwise, compression is disabled
+
+      if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
           await utils.adapters.anthropic.convertToolResultsToToon(
             filteredMessages,
@@ -344,7 +373,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           originalMessagesCount: body.messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
-          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
+          toonConversionEnabled: shouldApplyToonCompression,
+          compressionScope: organization.compressionScope,
         },
         "Messages filtered after trusted data evaluation",
       );

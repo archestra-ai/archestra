@@ -9,9 +9,6 @@ const agentsTable = pgTable("agents", {
     .notNull()
     .default(false),
   useInChat: boolean("use_in_chat").notNull().default(true),
-  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
-    .notNull()
-    .default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

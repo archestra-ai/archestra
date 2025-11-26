@@ -330,24 +330,12 @@ export async function convertToolResultsToToon(
   if (toolResultCount > 0) {
     const tokensSaved = totalTokensBefore - totalTokensAfter;
     if (tokensSaved > 0) {
-      let tokenPrice = await TokenPriceModel.findByModel(model);
-
-      // If no token price exists, create a default one
-      if (!tokenPrice) {
-        logger.info(
-          { model },
-          "Token price not found for model, creating default price",
-        );
-        tokenPrice = await TokenPriceModel.upsertForModel(model, {
-          pricePerMillionInput: "50.00",
-          pricePerMillionOutput: "50.00",
-        });
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        const outputPricePerToken =
+          Number(tokenPrice.pricePerMillionOutput) / 1000000;
+        toonCostSavings = tokensSaved * outputPricePerToken;
       }
-
-      // TOON compresses tool results (output tokens from previous LLM calls)
-      const outputPricePerToken =
-        Number(tokenPrice.pricePerMillionOutput) / 1000000;
-      toonCostSavings = tokensSaved * outputPricePerToken;
     }
   }
 

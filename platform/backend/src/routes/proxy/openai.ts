@@ -10,13 +10,7 @@ import {
   reportBlockedTools,
   reportLLMTokens,
 } from "@/llm-metrics";
-import {
-  AgentModel,
-  InteractionModel,
-  LimitValidationService,
-  OrganizationModel,
-  TeamModel,
-} from "@/models";
+import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 import {
   type Agent,
   constructResponseSchema,
@@ -104,7 +98,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
-    organizationId: string,
+    _organizationId: string,
     agentId?: string,
   ) => {
     const { messages, tools, stream } = body;
@@ -147,17 +141,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { resolvedAgentId, wasExplicit: !!agentId },
       "Agent resolved",
     );
-
-    // Fetch organization to get TOON compression setting
-    const organization = await OrganizationModel.getById(organizationId);
-    if (!organization) {
-      return reply.status(404).send({
-        error: {
-          message: `Organization with ID ${organizationId} not found`,
-          type: "not_found",
-        },
-      });
-    }
 
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
@@ -312,17 +295,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let toonTokensBefore: number | null = null;
       let toonTokensAfter: number | null = null;
       let toonCostSavings: number | null = null;
-      let shouldApplyToonCompression = false;
-
-      if (organization.compressionScope === "organization") {
-        shouldApplyToonCompression = organization.convertToolResultsToToon;
-      } else if (organization.compressionScope === "team") {
-        // Team-level: check if ANY of the profile's teams have compression enabled
-        const profileTeams = await TeamModel.getTeamsForAgent(resolvedAgentId);
-        shouldApplyToonCompression = profileTeams.some(
-          (team) => team.convertToolResultsToToon,
-        );
-      }
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
       if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
@@ -338,12 +312,20 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       fastify.log.info(
         {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "openai proxy routes: handle chat completions: tool results compression completed",
+      );
+
+      fastify.log.info(
+        {
           resolvedAgentId,
           originalMessagesCount: messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
-          toonConversionEnabled: shouldApplyToonCompression,
-          compressionScope: organization.compressionScope,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -624,6 +606,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenUsage.output,
           );
         }
+
+        fastify.log.info(
+          {
+            baselineCost,
+            costAfterModelOptimization: costAfterOptimization,
+            inputTokens: tokenUsage?.input,
+            outputTokens: tokenUsage?.output,
+          },
+          "openai proxy routes: handle chat completions: costs",
+        );
 
         // Store the complete interaction
         await InteractionModel.create({

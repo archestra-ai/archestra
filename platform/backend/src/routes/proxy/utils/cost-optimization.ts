@@ -54,6 +54,7 @@ export async function getOptimizedModel<
       .limit(1);
 
     if (existingOrgRules.length > 0) {
+      // TODO: this fallback doesn't work if there are multiple organizations.
       organizationId = existingOrgRules[0].entityId;
       logger.info(
         { agentId, organizationId },

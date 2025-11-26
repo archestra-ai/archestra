@@ -72,7 +72,6 @@ type RuleFormData = {
   hasTools?: boolean;
   provider: OptimizationRule["provider"];
   targetModel: string;
-  priority: string;
   enabled: boolean;
 };
 

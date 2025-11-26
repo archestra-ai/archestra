@@ -127,6 +127,7 @@ export const auth = betterAuth({
       teamMember: schema.teamMembersTable,
       twoFactor: schema.twoFactorsTable,
       verification: schema.verificationsTable,
+      ssoProvider: schema.ssoProviderTable,
     },
   }),
 

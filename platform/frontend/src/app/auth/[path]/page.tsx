@@ -4,6 +4,8 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthViewWithErrorHandling } from "@/app/auth/_components/auth-view-with-error-handling";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingSpinner } from "@/components/loading";
+import { SsoSignInButtons } from "@/components/sso-sign-in-buttons";
+import { Separator } from "@/components/ui/separator";
 import {
   Card,
   CardContent,
@@ -73,9 +75,19 @@ export default async function AuthPage({
         <main className="container flex grow flex-col items-center justify-center self-center h-full">
           <div className="space-y-4 w-full max-w-md px-4 md:px-0">
             {path === "sign-in" && (
-              <div className="max-w-sm p-0 m-0 pb-4">
-                <DefaultCredentialsWarning alwaysShow />
-              </div>
+              <>
+                <div className="max-w-sm p-0 m-0 pb-4">
+                  <DefaultCredentialsWarning alwaysShow />
+                </div>
+                <Suspense fallback={null}>
+                  <SsoSignInButtons />
+                </Suspense>
+                <div className="flex items-center gap-2 my-2">
+                  <Separator className="flex-1" />
+                  <span className="text-xs text-muted-foreground">OR</span>
+                  <Separator className="flex-1" />
+                </div>
+              </>
             )}
             <AuthViewWithErrorHandling
               path={path}

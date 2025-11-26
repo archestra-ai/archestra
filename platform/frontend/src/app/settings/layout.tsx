@@ -12,6 +12,10 @@ export default function SettingsLayout({
     organization: ["read"],
   });
 
+  const { data: userCanManageSso } = useHasPermissions({
+    ssoProvider: ["read"],
+  });
+
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
@@ -23,6 +27,9 @@ export default function SettingsLayout({
           { label: "Teams", href: "/settings/teams" },
           { label: "Roles", href: "/settings/roles" },
           { label: "Appearance", href: "/settings/appearance" },
+          ...(userCanManageSso
+            ? [{ label: "SSO Providers", href: "/settings/sso-providers" }]
+            : []),
         ]
       : []),
   ];

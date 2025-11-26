@@ -39,6 +39,7 @@ export const ResourceSchema = z.enum([
   "tokenPrice",
   "chatSettings",
   "prompt",
+  "ssoProvider",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -77,6 +78,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["read", "update"],
   prompt: ["create", "read", "update", "delete"],
+  ssoProvider: ["create", "read", "update", "delete"],
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -112,6 +114,7 @@ export const memberRole = ac.newRole({
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["create", "read", "update", "delete"],
+  ssoProvider: ["read"], // Members can read SSO providers but not manage them
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -332,6 +335,13 @@ export const RouteId = {
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
+
+  // SSO Provider Routes
+  GetSsoProviders: "getSsoProviders",
+  CreateSsoProvider: "createSsoProvider",
+  GetSsoProvider: "getSsoProvider",
+  UpdateSsoProvider: "updateSsoProvider",
+  DeleteSsoProvider: "deleteSsoProvider",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -721,6 +731,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOptimizationRule]: {
     profile: ["delete"],
   },
+  [RouteId.GetSsoProviders]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.CreateSsoProvider]: {
+    ssoProvider: ["create"],
+  },
+  [RouteId.GetSsoProvider]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.UpdateSsoProvider]: {
+    ssoProvider: ["update"],
+  },
+  [RouteId.DeleteSsoProvider]: {
+    ssoProvider: ["delete"],
+  },
 };
 
 /**
@@ -786,6 +811,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/settings/chat": {
     chatSettings: ["read"],
+  },
+  "/settings/sso-providers": {
+    ssoProvider: ["read"],
   },
 
   // Cost & Limits

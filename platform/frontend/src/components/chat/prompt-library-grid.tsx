@@ -357,25 +357,6 @@ function PromptTile({
       </CardHeader>
       <div className="px-4 pb-1.5 mt-auto">
         <div className="flex flex-wrap gap-1">
-          {prompt.systemPrompt && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="secondary"
-                    className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
-                  >
-                    System Prompt
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md max-h-64 overflow-y-auto">
-                  <pre className="text-xs whitespace-pre-wrap">
-                    {prompt.systemPrompt}
-                  </pre>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
           {profileName && (
             <TooltipProvider>
               <Tooltip>

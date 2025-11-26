@@ -2165,7 +2165,6 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
-            optimizeCost: boolean;
             considerContextUntrusted: boolean;
             useInChat: boolean;
             convertToolResultsToToon: boolean;
@@ -2222,7 +2221,6 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
         convertToolResultsToToon?: boolean;
@@ -2307,7 +2305,6 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
         convertToolResultsToToon: boolean;
@@ -2427,7 +2424,6 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
         convertToolResultsToToon: boolean;
@@ -2545,7 +2541,6 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
         convertToolResultsToToon: boolean;
@@ -2744,7 +2739,6 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
         convertToolResultsToToon: boolean;
@@ -2792,7 +2786,6 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
         convertToolResultsToToon?: boolean;
@@ -2879,7 +2872,6 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
         convertToolResultsToToon: boolean;
@@ -11424,7 +11416,6 @@ export type GetOptimizationRulesResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11446,7 +11437,6 @@ export type CreateOptimizationRuleData = {
         };
         provider: SupportedProvidersInput;
         targetModel: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11531,7 +11521,6 @@ export type CreateOptimizationRuleResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11632,7 +11621,6 @@ export type UpdateOptimizationRuleData = {
         };
         provider?: SupportedProvidersInput;
         targetModel?: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11719,7 +11707,6 @@ export type UpdateOptimizationRuleResponses = {
         };
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;

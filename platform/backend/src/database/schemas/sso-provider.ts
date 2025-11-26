@@ -1,11 +1,12 @@
 import { pgTable, text } from "drizzle-orm/pg-core";
+import type { SsoProviderOidcConfig, SsoProviderSamlConfig } from "@/types";
 import usersTable from "./user";
 
 const ssoProvidersTable = pgTable("sso_provider", {
   id: text("id").primaryKey(),
   issuer: text("issuer").notNull(),
-  oidcConfig: text("oidc_config"),
-  samlConfig: text("saml_config"),
+  oidcConfig: text("oidc_config").$type<SsoProviderOidcConfig>(),
+  samlConfig: text("saml_config").$type<SsoProviderSamlConfig>(),
   userId: text("user_id").references(() => usersTable.id, {
     onDelete: "cascade",
   }),

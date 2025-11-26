@@ -25,30 +25,97 @@ export function useSsoProviders() {
   });
 }
 
-// /**
-//  * Update SSO provider
-//  */
-// export function useUpdateSsoProvider() {
-//   const queryClient = useQueryClient();
-//   return useMutation({
-//     mutationFn: async (
-//       data: archestraApiTypes.UpdateSsoProviderData["body"],
-//     ) => {
-//       const { data: updatedSsoProvider } =
-//         await archestraApiSdk.updateSsoProvider({ body: data });
+/**
+ * Get single SSO provider
+ */
+export function useSsoProvider(id: string) {
+  return useQuery({
+    queryKey: [...ssoProviderKeys.details(), id],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getSsoProvider({ path: { id } });
+      return data;
+    },
+    retry: false,
+    throwOnError: false,
+  });
+}
 
-//       if (!updatedSsoProvider) {
-//         throw new Error("Failed to update SSO provider");
-//       }
+/**
+ * Create SSO provider
+ */
+export function useCreateSsoProvider() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.CreateSsoProviderData["body"],
+    ) => {
+      const { data: createdProvider } = await archestraApiSdk.createSsoProvider(
+        {
+          body: data,
+        },
+      );
+      return createdProvider;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ssoProviderKeys.all });
+      toast.success("SSO provider created successfully");
+    },
+    onError: (error) => {
+      toast.error(`Failed to create SSO provider: ${error.message}`);
+    },
+  });
+}
 
-//       return updatedSsoProvider;
-//     },
-//     onSuccess: () => {
-//       queryClient.invalidateQueries({ queryKey: ssoProviderKeys.details() });
-//       toast.success("SSO provider updated successfully");
-//     },
-//     onError: (_error) => {
-//       toast.error("Failed to update SSO provider");
-//     },
-//   });
-// }
+/**
+ * Update SSO provider
+ */
+export function useUpdateSsoProvider() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: archestraApiTypes.UpdateSsoProviderData["body"];
+    }) => {
+      const { data: updatedProvider } = await archestraApiSdk.updateSsoProvider(
+        {
+          path: { id },
+          body: data,
+        },
+      );
+      return updatedProvider;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ssoProviderKeys.all });
+      queryClient.invalidateQueries({ queryKey: ssoProviderKeys.details() });
+      toast.success("SSO provider updated successfully");
+    },
+    onError: (error) => {
+      toast.error(`Failed to update SSO provider: ${error.message}`);
+    },
+  });
+}
+
+/**
+ * Delete SSO provider
+ */
+export function useDeleteSsoProvider() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await archestraApiSdk.deleteSsoProvider({
+        path: { id },
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ssoProviderKeys.all });
+      toast.success("SSO provider deleted successfully");
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete SSO provider: ${error.message}`);
+    },
+  });
+}

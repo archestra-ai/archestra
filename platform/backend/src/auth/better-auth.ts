@@ -103,8 +103,22 @@ export const auth = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
-    // TODO: add this conditionally..
-    sso(),
+    sso({
+      organizationProvisioning: {
+        disabled: false,
+        defaultRole: "member",
+      },
+      defaultOverrideUserInfo: true,
+      disableImplicitSignUp: false,
+      providersLimit: 10,
+      fields: {
+        oidcConfig: "oidc_config",
+        samlConfig: "saml_config",
+        userId: "user_id",
+        providerId: "provider_id",
+        organizationId: "organization_id",
+      },
+    }),
   ],
 
   user: {
@@ -130,6 +144,7 @@ export const auth = betterAuth({
       teamMember: schema.teamMembersTable,
       twoFactor: schema.twoFactorsTable,
       verification: schema.verificationsTable,
+      ssoProvider: schema.ssoProvidersTable,
     },
   }),
 

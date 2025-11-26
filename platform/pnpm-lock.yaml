@@ -195,9 +195,6 @@ importers:
       '@types/pg':
         specifier: ^8.15.6
         version: 8.15.6
-      '@types/uuid':
-        specifier: ^11.0.0
-        version: 11.0.0
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -455,9 +452,6 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.0(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.6))(@types/react@19.2.6)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@types/date-fns':
-        specifier: ^2.6.3
-        version: 2.6.3
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
@@ -482,9 +476,6 @@ importers:
       tailwindcss:
         specifier: ^4
         version: 4.1.17
-      tsx:
-        specifier: ^4.20.6
-        version: 4.20.6
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -3297,10 +3288,6 @@ packages:
   '@types/d3@7.4.3':
     resolution: {integrity: sha512-lZXZ9ckh5R8uiFVt8ogUNf+pIrK4EsWrx2Np75WvF/eTpJ0FMHNhjXk8CKEx/+gpHbNQyJWehbFaTvqmHWB3ww==}
 
-  '@types/date-fns@2.6.3':
-    resolution: {integrity: sha512-Ke1lw2Ni1t/wMUoLtKFmSNCLozcTBd6vmMqFP4hRzXn6qzkNt97bPAX0x5Y/c15DP43kKvwW1ycStD5+43jVQA==}
-    deprecated: This is a stub types definition. date-fns provides its own type definitions, so you do not need this installed.
-
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
 
@@ -3401,10 +3388,6 @@ packages:
 
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
-
-  '@types/uuid@11.0.0':
-    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
-    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -10363,10 +10346,6 @@ snapshots:
       '@types/d3-transition': 3.0.9
       '@types/d3-zoom': 3.0.8
 
-  '@types/date-fns@2.6.3':
-    dependencies:
-      date-fns: 4.1.0
-
   '@types/debug@4.1.12':
     dependencies:
       '@types/ms': 2.1.0
@@ -10478,10 +10457,6 @@ snapshots:
   '@types/unist@3.0.3': {}
 
   '@types/use-sync-external-store@0.0.6': {}
-
-  '@types/uuid@11.0.0':
-    dependencies:
-      uuid: 13.0.0
 
   '@types/ws@8.18.1':
     dependencies:

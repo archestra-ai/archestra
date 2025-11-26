@@ -1,11 +1,11 @@
-import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
+import { and, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
+  ContentLengthConditions,
   InsertOptimizationRule,
   OptimizationRule,
-  ContentLengthConditions,
-  ToolPresenceConditions,
   SupportedProvider,
+  ToolPresenceConditions,
   UpdateOptimizationRule,
 } from "@/types";
 
@@ -115,13 +115,13 @@ class OptimizationRuleModel {
       let match = true;
 
       for (const rule of modelRules) {
-        if (rule.ruleType === 'content_length') {
+        if (rule.ruleType === "content_length") {
           const conditions = rule.conditions as ContentLengthConditions;
           if (context.tokenCount > conditions.maxLength) {
             match = false;
             break;
           }
-        } else if (rule.ruleType === 'tool_presence') {
+        } else if (rule.ruleType === "tool_presence") {
           const conditions = rule.conditions as ToolPresenceConditions;
           if (context.hasTools !== conditions.hasTools) {
             match = false;

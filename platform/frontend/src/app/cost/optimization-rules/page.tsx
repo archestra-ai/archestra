@@ -114,11 +114,6 @@ function formatProviderName(provider: string): string {
   return provider;
 }
 
-// Preserve order as-is - no sorting
-function preserveRuleOrder(rules: OptimizationRule[]): OptimizationRule[] {
-  return [...rules];
-}
-
 // Sort models by total cost (input + output price) ascending
 function sortModelsByPrice(
   tokenPrices: Array<{
@@ -191,7 +186,8 @@ function ModelSelector({
       <div className="px-2 text-sm">
         <span className="text-muted-foreground">
           No pricing configured for {formatProviderName(provider)} models.
-        </span> <Link
+        </span>{" "}
+        <Link
           href="/cost/token-price"
           className="hover:text-foreground hover:underline"
         >

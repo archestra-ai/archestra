@@ -712,11 +712,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Calculate actual cost (potentially optimized model)
-       const costAfterOptimization = await utils.costOptimization.calculateCost(
-          model,
-          tokenUsage.input,
-          tokenUsage.output,
-        );
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
 
         // Store the complete interaction
         await InteractionModel.create({

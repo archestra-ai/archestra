@@ -633,11 +633,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Calculate actual cost after Optimization Rules are applied.
-        const costAfterOptimization = await utils.costOptimization.calculateCost(
-          model,
-          tokenUsage.input,
-          tokenUsage.output,
-        );
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
+            model,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -802,7 +803,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Calculate actual cost (potentially optimized model)
-          const costAfterOptimization = await utils.costOptimization.calculateCost(
+        const costAfterOptimization =
+          await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,

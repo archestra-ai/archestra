@@ -188,11 +188,10 @@ function ModelSelector({
   // If no models available for this provider, show message
   if (modelsWithCurrent.length === 0) {
     return (
-      <div className="px-2 flex gap-2 text-sm whitespace-nowrap">
+      <div className="px-2 text-sm">
         <span className="text-muted-foreground">
           No pricing configured for {formatProviderName(provider)} models.
-        </span>
-        <Link
+        </span> <Link
           href="/cost/token-price"
           className="hover:text-foreground hover:underline"
         >
@@ -757,14 +756,13 @@ export default function OptimizationRulesPage() {
         {rulesLoading ? (
           <LoadingSkeleton count={3} prefix="optimization-rules" />
         ) : (
-          <Table>
+          <Table className="min-w-[1020px]">
             <colgroup>
               <col className="w-20" />
+              <col className="w-40" />
               <col />
-              <col />
-              <col />
-              <col />
-              <col className="w-20" />
+              <col className="w-40" />
+              <col className="w-60" />
               <col className="w-28" />
             </colgroup>
             <TableHeader>
@@ -806,26 +804,24 @@ export default function OptimizationRulesPage() {
                 </TableRow>
               ) : (
                 <>
-                  {orderedRules
-                    .filter((rule) => rule.enabled)
-                    .map((rule) => (
-                      <OptimizationRuleRow
-                        key={rule.id}
-                        rule={rule}
-                        isEditing={editingRuleId === rule.id}
-                        onEdit={() => setEditingRuleId(rule.id)}
-                        onSave={(data) => handleUpdateRule(rule.id, data)}
-                        onCancel={handleCancelEdit}
-                        onDelete={() => handleDeleteRule(rule.id)}
-                        onToggleEnabled={(enabled) =>
-                          handleToggleEnabled(rule.id, enabled)
-                        }
-                        tokenPrices={tokenPrices}
-                        getEntityName={getEntityName}
-                        teams={teams}
-                        organizationId={organizationDetails?.id || ""}
-                      />
-                    ))}
+                  {orderedRules.map((rule) => (
+                    <OptimizationRuleRow
+                      key={rule.id}
+                      rule={rule}
+                      isEditing={editingRuleId === rule.id}
+                      onEdit={() => setEditingRuleId(rule.id)}
+                      onSave={(data) => handleUpdateRule(rule.id, data)}
+                      onCancel={handleCancelEdit}
+                      onDelete={() => handleDeleteRule(rule.id)}
+                      onToggleEnabled={(enabled) =>
+                        handleToggleEnabled(rule.id, enabled)
+                      }
+                      tokenPrices={tokenPrices}
+                      getEntityName={getEntityName}
+                      teams={teams}
+                      organizationId={organizationDetails?.id || ""}
+                    />
+                  ))}
                   {isAddingRule && (
                     <OptimizationRuleInlineForm
                       initialData={{
@@ -843,26 +839,6 @@ export default function OptimizationRulesPage() {
                       organizationId={organizationDetails?.id || ""}
                     />
                   )}
-                  {orderedRules
-                    .filter((rule) => !rule.enabled)
-                    .map((rule) => (
-                      <OptimizationRuleRow
-                        key={rule.id}
-                        rule={rule}
-                        isEditing={editingRuleId === rule.id}
-                        onEdit={() => setEditingRuleId(rule.id)}
-                        onSave={(data) => handleUpdateRule(rule.id, data)}
-                        onCancel={handleCancelEdit}
-                        onDelete={() => handleDeleteRule(rule.id)}
-                        onToggleEnabled={(enabled) =>
-                          handleToggleEnabled(rule.id, enabled)
-                        }
-                        tokenPrices={tokenPrices}
-                        getEntityName={getEntityName}
-                        teams={teams}
-                        organizationId={organizationDetails?.id || ""}
-                      />
-                    ))}
                 </>
               )}
             </TableBody>

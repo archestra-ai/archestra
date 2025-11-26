@@ -646,7 +646,6 @@ function CreateAgentDialog({
     setName("");
     setAssignedTeamIds([]);
     setLabels([]);
-    setOptimizeCost(false);
     setSelectedTeamId("");
     setCreatedAgent(null);
     setConsiderContextUntrusted(false);

@@ -72,9 +72,12 @@ ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 RUN apk add --no-cache \
     postgresql17 \
     postgresql17-contrib \
-    supervisor \
     su-exec \
     && mkdir -p /var/log/supervisor
+
+# Install supervisor from edge repository to address CVE-2023-27482
+# https://nvd.nist.gov/vuln/detail/cve-2023-27482
+RUN apk add --no-cache supervisor=4.3.0-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

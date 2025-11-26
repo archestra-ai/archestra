@@ -79,7 +79,6 @@ describe("OpenAI cost tracking", () => {
     const agent = await AgentModel.create({
       name: "Test Cost Agent",
       teams: [],
-      optimizeCost: true,
     });
 
     const response = await app.inject({

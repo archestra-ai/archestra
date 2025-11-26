@@ -52,7 +52,6 @@ export function AgentActions({
             isDefault: agent.isDefault,
             teams: agent.teams || [],
             labels: agent.labels || [],
-            optimizeCost: agent.optimizeCost,
             considerContextUntrusted: agent.considerContextUntrusted,
             createdAt: agent.createdAt,
             updatedAt: agent.updatedAt,

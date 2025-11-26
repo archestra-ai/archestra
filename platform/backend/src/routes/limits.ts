@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { LimitModel, TokenPriceModel } from "@/models";
+import { LimitModel, OptimizationRuleModel, TokenPriceModel } from "@/models";
 import {
   ApiError,
   CreateLimitSchema,
@@ -43,6 +43,13 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Ensure all models from interactions have pricing records
       await TokenPriceModel.ensureAllModelsHavePricing();
+
+      // Ensure default token prices and optimization rules exist
+      if (organizationId) {
+        await OptimizationRuleModel.ensureDefaultOptimizationRules(
+          organizationId,
+        );
+      }
 
       const limits = await LimitModel.findAll(entityType, entityId, limitType);
 

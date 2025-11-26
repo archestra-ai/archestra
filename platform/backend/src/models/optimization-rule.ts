@@ -1,8 +1,10 @@
 import { and, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import TokenPriceModel from "@/models/token-price";
 import type {
   ContentLengthConditions,
   InsertOptimizationRule,
+  InsertTokenPrice,
   OptimizationRule,
   SupportedProvider,
   ToolPresenceConditions,
@@ -136,6 +138,97 @@ class OptimizationRuleModel {
     }
 
     return null;
+  }
+
+  /**
+   * Ensure default optimization rules and token prices exist for common cheaper models
+   */
+  static async ensureDefaultOptimizationRules(
+    organizationId: string,
+  ): Promise<void> {
+    // First ensure token prices exist for the models used in optimization rules
+    const defaultPrices: InsertTokenPrice[] = [
+      {
+        model: "gpt-4o-mini",
+        pricePerMillionInput: "0.15",
+        pricePerMillionOutput: "0.60",
+      },
+      {
+        model: "claude-3-5-sonnet",
+        pricePerMillionInput: "3.00",
+        pricePerMillionOutput: "15.00",
+      },
+    ];
+
+    await db
+      .insert(schema.tokenPricesTable)
+      .values(defaultPrices)
+      .onConflictDoNothing({
+        target: schema.tokenPricesTable.model,
+      });
+
+    const defaultRules: InsertOptimizationRule[] = [
+      // OpenAI rules
+      {
+        entityType: "organization",
+        entityId: organizationId,
+        ruleType: "tool_presence",
+        conditions: { hasTools: false },
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      },
+      {
+        entityType: "organization",
+        entityId: organizationId,
+        ruleType: "content_length",
+        conditions: { maxLength: 1000 },
+        provider: "openai",
+        targetModel: "gpt-4o-mini",
+        enabled: true,
+      },
+      // Anthropic rules
+      {
+        entityType: "organization",
+        entityId: organizationId,
+        ruleType: "tool_presence",
+        conditions: { hasTools: false },
+        provider: "anthropic",
+        targetModel: "claude-3-5-sonnet",
+        enabled: true,
+      },
+      {
+        entityType: "organization",
+        entityId: organizationId,
+        ruleType: "content_length",
+        conditions: { maxLength: 1000 },
+        provider: "anthropic",
+        targetModel: "claude-3-5-sonnet",
+        enabled: true,
+      },
+    ];
+
+    // Get existing rules for this organization
+    const existingRules =
+      await OptimizationRuleModel.findByOrganizationId(organizationId);
+
+    // Filter out rules that already exist
+    const rulesToCreate = defaultRules.filter((rule) => {
+      return !existingRules.some(
+        (existing) =>
+          existing.entityType === rule.entityType &&
+          existing.entityId === rule.entityId &&
+          existing.provider === rule.provider &&
+          existing.ruleType === rule.ruleType &&
+          JSON.stringify(existing.conditions) ===
+            JSON.stringify(rule.conditions),
+      );
+    });
+
+    // Insert new rules
+    if (rulesToCreate.length > 0) {
+      await db.insert(schema.optimizationRulesTable).values(rulesToCreate);
+    }
   }
 }
 

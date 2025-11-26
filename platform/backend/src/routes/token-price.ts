@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { TokenPriceModel } from "@/models";
+import { OptimizationRuleModel, TokenPriceModel } from "@/models";
 import {
   ApiError,
   CreateTokenPriceSchema,
@@ -23,9 +23,16 @@ const tokenPriceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectTokenPriceSchema)),
       },
     },
-    async (_request, reply) => {
+    async ({ organizationId }, reply) => {
       // Ensure all models from interactions have pricing
       await TokenPriceModel.ensureAllModelsHavePricing();
+
+      // Ensure default token prices and optimization rules exist
+      if (organizationId) {
+        await OptimizationRuleModel.ensureDefaultOptimizationRules(
+          organizationId,
+        );
+      }
 
       return reply.send(await TokenPriceModel.findAll());
     },

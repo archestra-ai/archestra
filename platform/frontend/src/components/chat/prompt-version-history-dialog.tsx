@@ -87,12 +87,14 @@ export function PromptVersionHistoryDialog({
                           Current
                         </Badge>
                       )}
-                      <Badge
-                        variant="secondary"
-                        className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs"
-                      >
-                        {profileName}
-                      </Badge>
+                      {profileName && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs"
+                        >
+                          {profileName}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">

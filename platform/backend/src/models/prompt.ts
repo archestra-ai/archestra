@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertPrompt, Prompt, UpdatePrompt } from "@/types";
 
@@ -50,6 +50,34 @@ class PromptModel {
   }
 
   /**
+   * Find all active prompts for an organization filtered by accessible agent IDs
+   * Returns only prompts assigned to agents the user has access to
+   */
+  static async findByOrganizationIdAndAccessibleAgents(
+    organizationId: string,
+    accessibleAgentIds: string[],
+  ): Promise<Prompt[]> {
+    // Return empty if no accessible agents
+    if (accessibleAgentIds.length === 0) {
+      return [];
+    }
+
+    const prompts = await db
+      .select()
+      .from(schema.promptsTable)
+      .where(
+        and(
+          eq(schema.promptsTable.organizationId, organizationId),
+          eq(schema.promptsTable.isActive, true),
+          inArray(schema.promptsTable.agentId, accessibleAgentIds),
+        ),
+      )
+      .orderBy(desc(schema.promptsTable.createdAt));
+
+    return prompts;
+  }
+
+  /**
    * Find all active prompts for a specific agent (latest versions only)
    */
   static async findByAgentId(agentId: string): Promise<Prompt[]> {
@@ -70,7 +98,10 @@ class PromptModel {
   /**
    * Find a prompt by ID
    */
-  static async findById(id: string): Promise<Prompt | null> {
+  static async findById(id?: string | null): Promise<Prompt | null> {
+    if (!id) {
+      return null;
+    }
     const [prompt] = await db
       .select()
       .from(schema.promptsTable)

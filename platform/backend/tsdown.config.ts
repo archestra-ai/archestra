@@ -1,19 +1,19 @@
-import { defineConfig, type Options } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
 
-export default defineConfig((options: Options) => ({
+export default defineConfig((options: UserConfig) => ({
   // Only bundle the server entry point
   entry: ["src/server.ts"],
 
   // Copy SQL migrations and other assets that need to exist at runtime
-  publicDir: false,
+  copy: ["src/database/migrations"],
 
-  // Copy patterns for files that should be copied as-is
-  loader: {
-    ".sql": "copy",  // Copy SQL files as-is, don't try to bundle them
-  },
+  // Load SQL files as text strings
+  // loader: {
+  //   ".sql": "text" as const,  // Load SQL files as text strings
+  // },
 
   clean: true,
-  format: ["esm"],  // Changed from "cjs" to "esm" since you have "type": "module"
+  format: ["esm" as const],
 
   // Generate source maps for better stack traces
   sourcemap: true,

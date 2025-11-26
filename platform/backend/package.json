@@ -7,10 +7,10 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsup",
+    "build": "node scripts/build.js",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.js",
-    "dev": "tsup --watch --onSuccess \"node --enable-source-maps dist/server.js\"",
-    "dev:debug": "tsup --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.js\"",
+    "dev": "node scripts/dev.js",
+    "dev:debug": "tsc && node --enable-source-maps --inspect-brk dist/server.js",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",
@@ -20,9 +20,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
-    "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
-    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
+    "db:clean": "node --loader ts-node/esm --project tsconfig.ts-node.json src/standalone-scripts/clean-db-on-dev.ts",
+    "db:seed:mock-data": "node --loader ts-node/esm --project tsconfig.ts-node.json src/standalone-scripts/seed-mock-data.ts",
+    "codegen:access-control-docs": "node --loader ts-node/esm --project tsconfig.ts-node.json src/standalone-scripts/codegen-access-control-docs.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.45",
@@ -86,8 +86,7 @@
     "@types/uuid": "^11.0.0",
     "@types/ws": "^8.18.1",
     "tsc-alias": "^1.8.10",
-    "tsup": "^8.5.1",
-    "tsx": "^4.20.6",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
     "vitest": "^4.0.10"
   }

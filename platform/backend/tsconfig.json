@@ -2,7 +2,7 @@
   "compilerOptions": {
     "isolatedModules": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "moduleResolution": "Node",
     "resolvePackageJsonExports": true,
     "esModuleInterop": true,
     "declaration": true,
@@ -29,5 +29,9 @@
   ],
   "exclude": [
     "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/test/**/*",
+    "src/standalone-scripts/**/*"
   ]
 }

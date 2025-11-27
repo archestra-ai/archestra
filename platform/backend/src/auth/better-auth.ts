@@ -310,15 +310,35 @@ export const auth = betterAuth({
           const userId = newSession.user.id;
           const { user, session } = newSession;
 
-          // Check if this is an invitation sign-in (existing user joining new org)
-          const invitationId = body.callbackURL
-            ?.split("invitationId=")[1]
-            ?.split("&")[0];
+          // Auto-accept any pending invitations for this user's email
+          try {
+            const pendingInvitations = await db
+              .select()
+              .from(schema.invitationsTable)
+              .where(
+                eq(schema.invitationsTable.email, user.email.toLowerCase()),
+              );
 
-          if (invitationId) {
-            // Accept invitation for existing user
-            await InvitationModel.accept(session, user, invitationId);
-            return;
+            const pendingInvitation = pendingInvitations.find(
+              (inv) => inv.status === "pending",
+            );
+
+            if (pendingInvitation) {
+              logger.info(
+                `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
+              );
+              await InvitationModel.accept(
+                session,
+                user,
+                pendingInvitation.id,
+              );
+              return;
+            }
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "❌ Failed to auto-accept invitation:",
+            );
           }
 
           try {

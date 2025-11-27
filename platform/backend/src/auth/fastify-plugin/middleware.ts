@@ -43,6 +43,7 @@ export class Authnz {
     }
     if (
       url.startsWith("/api/auth") ||
+      url.startsWith("/api/invitation/") || // Allow invitation check without auth
       url.startsWith("/v1/openai") ||
       url.startsWith("/v1/anthropic") ||
       url.startsWith("/v1/gemini") ||

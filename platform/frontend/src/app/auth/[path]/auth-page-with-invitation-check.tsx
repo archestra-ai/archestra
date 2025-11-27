@@ -19,12 +19,19 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("invitationId");
 
-  const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
+  const {
+    data: invitationData,
+    isLoading,
+    error,
+  } = useInvitationCheck(invitationId);
+
+  // Check if this is a sign-up path (includes "sign-up-with-invitation")
+  const isSignUpPath = path.startsWith("sign-up");
 
   // Redirect existing users from sign-up to sign-in
   useEffect(() => {
     if (
-      path === "sign-up" &&
+      isSignUpPath &&
       invitationId &&
       invitationData &&
       invitationData.userExists
@@ -32,10 +39,10 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
       // User already exists, redirect to sign-in with invitation ID preserved
       router.push(`/auth/sign-in?invitationId=${invitationId}`);
     }
-  }, [path, invitationId, invitationData, router]);
+  }, [isSignUpPath, invitationId, invitationData, router]);
 
   // Show loading while checking invitation
-  if (isLoading && invitationId && path === "sign-up") {
+  if (isLoading && invitationId && isSignUpPath) {
     return (
       <main className="container flex grow flex-col items-center justify-center self-center h-full">
         <LoadingSpinner />
@@ -44,7 +51,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   }
 
   // Block direct sign-up without invitation
-  if (path === "sign-up" && !invitationId) {
+  if (isSignUpPath && !invitationId) {
     return (
       <main className="container flex grow flex-col items-center justify-center self-center p-4 md:p-6 h-full">
         <Card className="max-w-md w-full">
@@ -106,6 +113,11 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
         )}
         <AuthViewWithErrorHandling
           path={path}
+          callbackURL={
+            invitationId
+              ? `${path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"}?invitationId=${invitationId}`
+              : undefined
+          }
           classNames={{
             footer: "hidden",
             form: { forgotPasswordLink: "hidden" },

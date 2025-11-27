@@ -88,7 +88,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       // User is not logged in and not on auth page, redirect to sign-in
       router.push("/auth/sign-in");
     }
-  }, [isAuthInitializing, isAuthPage, isLoggedIn, router]);
+  }, [isAuthInitializing, isAuthRefetching, isAuthPage, isLoggedIn, router]);
 
   // Redirect to home if page is protected and user is not authorized
   useEffect(() => {

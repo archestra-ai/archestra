@@ -434,9 +434,9 @@ export async function convertToolResultsToToon(
     if (tokensSaved > 0) {
       const tokenPrice = await TokenPriceModel.findByModel(model);
       if (tokenPrice) {
-        const outputPricePerToken =
-          Number(tokenPrice.pricePerMillionOutput) / 1000000;
-        toonCostSavings = tokensSaved * outputPricePerToken;
+        const inputPricePerToken =
+          Number(tokenPrice.pricePerMillionInput) / 1000000;
+        toonCostSavings = tokensSaved * inputPricePerToken;
       }
     }
   }

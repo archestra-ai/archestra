@@ -22,7 +22,7 @@ import { InvitationModel, MemberModel, SessionModel } from "@/models";
 const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
-  baseURL,
+  frontendBaseUrl,
   production,
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
@@ -30,17 +30,17 @@ const {
 const isHttps = () => {
   // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
   // to determine if we're using HTTPS
-  if (!baseURL) {
+  if (!frontendBaseUrl) {
     return production;
   }
-  // otherwise, use baseURL to determine if we're using HTTPS
-  // this is useful for envs where NODE_ENV=production but using HTTP localhost
-  return baseURL.startsWith("https://");
+  // otherwise, use frontendBaseUrl to determine if we're using HTTPS
+  // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
+  return frontendBaseUrl.startsWith("https://");
 };
 
 export const auth = betterAuth({
   appName: APP_NAME,
-  baseURL,
+  baseURL: frontendBaseUrl,
   secret,
 
   plugins: [
@@ -317,8 +317,8 @@ export const auth = betterAuth({
         const userId = body.userId;
 
         if (userId) {
+          // Delete all sessions for this user
           try {
-            // Delete all sessions for this user
             await SessionModel.deleteAllByUserId(userId);
             logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
@@ -383,6 +383,34 @@ export const auth = betterAuth({
         if (newSession?.user && newSession?.session) {
           const sessionId = newSession.session.id;
           const userId = newSession.user.id;
+          const { user, session } = newSession;
+
+          // Auto-accept any pending invitations for this user's email
+          try {
+            const pendingInvitations = await db
+              .select()
+              .from(schema.invitationsTable)
+              .where(
+                eq(schema.invitationsTable.email, user.email.toLowerCase()),
+              );
+
+            const pendingInvitation = pendingInvitations.find(
+              (inv) => inv.status === "pending",
+            );
+
+            if (pendingInvitation) {
+              logger.info(
+                `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
+              );
+              await InvitationModel.accept(session, user, pendingInvitation.id);
+              return;
+            }
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "❌ Failed to auto-accept invitation:",
+            );
+          }
 
           try {
             if (!newSession.session.activeOrganizationId) {

@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
+  callbackURL?: string;
 }
 
 export function AuthViewWithErrorHandling({
   path,
+  callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
 
@@ -122,6 +124,7 @@ export function AuthViewWithErrorHandling({
       <div className="space-y-4">
         <AuthView
           path={path}
+          callbackURL={callbackURL}
           classNames={{
             base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
             footer: "hidden",

@@ -24,7 +24,7 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
-const frontendUrl =
+const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 
 /**
@@ -105,11 +105,7 @@ const parseAllowedOrigins = (): string[] => {
     return [];
   }
 
-  if (frontendUrl && frontendUrl !== "") {
-    return [frontendUrl];
-  }
-
-  return [];
+  return [frontendBaseUrl];
 };
 
 /**
@@ -148,7 +144,7 @@ const getTrustedOrigins = (): string[] | undefined => {
 };
 
 export default {
-  baseURL: frontendUrl,
+  frontendBaseUrl,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),

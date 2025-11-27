@@ -9,6 +9,7 @@ export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
+export { default as invitationRoutes } from "./invitation";
 export { default as limitsRoutes } from "./limits";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";

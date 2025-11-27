@@ -1,7 +1,13 @@
 "use client";
 
+import {
+  SSO_PROVIDER_ID,
+  SSO_TRUSTED_PROVIDER_IDS,
+  type SsoProviderId,
+} from "@shared";
+import type { LucideIcon } from "lucide-react";
 import { Github, Globe, Shield } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
@@ -11,15 +17,55 @@ import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
 
+/** Configuration for a predefined SSO provider card */
+interface SsoProviderConfig {
+  /** Internal ID for the config (used as React key) */
+  id: string;
+  /** Canonical provider ID used for registration and callbacks */
+  providerId: string;
+  /** Display name */
+  name: string;
+  /** Short description */
+  description: string;
+  /** Lucide icon component */
+  icon: LucideIcon;
+  /** Tailwind text color class */
+  color: string;
+  /** Tailwind background color class */
+  bgColor: string;
+  /** Hide the provider ID field in the form (for predefined providers) */
+  hideProviderId: boolean;
+  /** Disable PKCE (for providers that don't support it like GitHub) */
+  disablePkce?: boolean;
+  /** Default OIDC configuration values */
+  defaultConfig: {
+    issuer: string;
+    discoveryEndpoint: string;
+    authorizationEndpoint?: string;
+    tokenEndpoint?: string;
+    userInfoEndpoint?: string;
+    scopes: string[];
+    mapping: {
+      id: string;
+      email: string;
+      name: string;
+    };
+  };
+}
+
 // Predefined SSO provider configurations
-const SSO_PROVIDER_CONFIGS = [
+const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
   {
     id: "okta",
+    // Use the canonical provider ID from shared constants
+    providerId: SSO_PROVIDER_ID.OKTA,
     name: "Okta",
     description: "Enterprise identity and access management",
     icon: Shield,
     color: "text-blue-600",
     bgColor: "bg-blue-50",
+    // Hide the provider ID field for predefined providers
+    hideProviderId: true,
     defaultConfig: {
       issuer: "https://your-domain.okta.com",
       discoveryEndpoint:
@@ -34,11 +80,13 @@ const SSO_PROVIDER_CONFIGS = [
   },
   {
     id: "google",
+    providerId: SSO_PROVIDER_ID.GOOGLE,
     name: "Google",
     description: "Sign in with Google OAuth",
     icon: Globe,
     color: "text-red-600",
     bgColor: "bg-red-50",
+    hideProviderId: true,
     defaultConfig: {
       issuer: "https://accounts.google.com",
       discoveryEndpoint:
@@ -53,18 +101,32 @@ const SSO_PROVIDER_CONFIGS = [
   },
   {
     id: "github",
+    providerId: SSO_PROVIDER_ID.GITHUB,
     name: "GitHub",
     description: "Sign in with GitHub OAuth",
     icon: Github,
     color: "text-gray-800",
     bgColor: "bg-gray-50",
+    hideProviderId: true,
+    /**
+     * GitHub doesn't support PKCE
+     * https://github.com/orgs/community/discussions/15752
+     */
+    disablePkce: true,
     defaultConfig: {
       issuer: "https://github.com",
-      discoveryEndpoint:
-        "https://token.actions.githubusercontent.com/.well-known/openid-configuration",
-      scopes: ["openid", "user:email", "read:user"],
+      /**
+       * GitHub OAuth doesn't have a standard OIDC discovery endpoint
+       * https://stackoverflow.com/a/52164558
+       * https://docs.github.com/en/actions/concepts/security/openid-connect
+       */
+      discoveryEndpoint: "",
+      authorizationEndpoint: "https://github.com/login/oauth/authorize",
+      tokenEndpoint: "https://github.com/login/oauth/access_token",
+      userInfoEndpoint: "https://api.github.com/user",
+      scopes: ["read:user", "user:email"],
       mapping: {
-        id: "sub",
+        id: "id",
         email: "email",
         name: "name",
       },
@@ -72,11 +134,15 @@ const SSO_PROVIDER_CONFIGS = [
   },
   {
     id: "generic",
+    // Generic OAuth allows custom provider IDs
+    providerId: "",
     name: "Generic OAuth",
     description: "Configure any OpenID Connect provider",
     icon: Globe,
     color: "text-purple-600",
     bgColor: "bg-purple-50",
+    // Show the provider ID field for generic providers
+    hideProviderId: false,
     defaultConfig: {
       issuer: "",
       discoveryEndpoint: "",
@@ -98,54 +164,47 @@ function SsoProvidersSettingsContent() {
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
-    config: (typeof SSO_PROVIDER_CONFIGS)[0];
+    config: SsoProviderConfig;
   } | null>(null);
   const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(
     null,
   );
 
-  // Find existing providers by matching provider ID patterns
-  const getProviderStatus = (configId: string) => {
-    const provider = ssoProviders.find((p) => {
-      // Match by provider ID patterns
-      if (configId === "okta" && p.providerId.toLowerCase().includes("okta"))
-        return true;
-      if (
-        configId === "google" &&
-        p.providerId.toLowerCase().includes("google")
-      )
-        return true;
-      if (
-        configId === "github" &&
-        p.providerId.toLowerCase().includes("github")
-      )
-        return true;
-      if (
-        configId === "generic" &&
-        !p.providerId.toLowerCase().includes("okta") &&
-        !p.providerId.toLowerCase().includes("google") &&
-        !p.providerId.toLowerCase().includes("github")
-      )
-        return true;
-      return false;
-    });
-    return provider;
-  };
+  // Find existing providers by matching provider ID
+  const getProviderStatus = useCallback(
+    (config: SsoProviderConfig) => {
+      const provider = ssoProviders.find((p) => {
+        // For predefined providers, match exactly by canonical provider ID
+        if (config.providerId) {
+          return p.providerId === config.providerId;
+        }
 
-  const handleProviderClick = (config: (typeof SSO_PROVIDER_CONFIGS)[0]) => {
-    const existingProvider = getProviderStatus(config.id);
-
-    if (existingProvider) {
-      // Edit existing provider
-      setEditingProvider(existingProvider);
-    } else {
-      // Create new provider
-      setCreateConfig({
-        providerId: config.id,
-        config,
+        return !SSO_TRUSTED_PROVIDER_IDS.includes(
+          p.providerId as SsoProviderId,
+        );
       });
-    }
-  };
+      return provider;
+    },
+    [ssoProviders],
+  );
+
+  const handleProviderClick = useCallback(
+    (config: SsoProviderConfig) => {
+      const existingProvider = getProviderStatus(config);
+
+      if (existingProvider) {
+        // Edit existing provider
+        setEditingProvider(existingProvider);
+      } else {
+        // Create new provider
+        setCreateConfig({
+          providerId: config.id,
+          config,
+        });
+      }
+    },
+    [getProviderStatus],
+  );
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -161,7 +220,7 @@ function SsoProvidersSettingsContent() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {SSO_PROVIDER_CONFIGS.map((config) => {
-          const existingProvider = getProviderStatus(config.id);
+          const existingProvider = getProviderStatus(config);
           const Icon = config.icon;
 
           return (
@@ -204,7 +263,8 @@ function SsoProvidersSettingsContent() {
           open={!!createConfig}
           onOpenChange={(open) => !open && setCreateConfig(null)}
           defaultValues={{
-            providerId: createConfig.config.name,
+            // Use canonical provider ID for predefined providers
+            providerId: createConfig.config.providerId || "",
             issuer: createConfig.config.defaultConfig.issuer,
             domain: "", // User needs to fill this
             providerType: "oidc" as const,
@@ -212,11 +272,14 @@ function SsoProvidersSettingsContent() {
               ...createConfig.config.defaultConfig,
               clientId: "",
               clientSecret: "",
-              pkce: true,
+              // GitHub doesn't support PKCE
+              pkce: !createConfig.config.disablePkce,
               overrideUserInfo: true,
             },
           }}
           providerName={createConfig.config.name}
+          hidePkce={createConfig.config.disablePkce}
+          hideProviderId={createConfig.config.hideProviderId}
         />
       )}
 

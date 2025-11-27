@@ -22,6 +22,10 @@ interface CreateSsoProviderDialogProps {
   onOpenChange: (open: boolean) => void;
   defaultValues?: Partial<SsoProviderFormValues>;
   providerName?: string;
+  /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
+  hidePkce?: boolean;
+  /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
+  hideProviderId?: boolean;
 }
 
 export function CreateSsoProviderDialog({
@@ -29,6 +33,8 @@ export function CreateSsoProviderDialog({
   onOpenChange,
   defaultValues,
   providerName,
+  hidePkce,
+  hideProviderId,
 }: CreateSsoProviderDialogProps) {
   const createSsoProvider = useCreateSsoProvider();
 
@@ -89,7 +95,11 @@ export function CreateSsoProviderDialog({
             className="flex flex-col flex-1 overflow-hidden"
           >
             <div className="flex-1 overflow-y-auto py-4">
-              <OidcConfigForm form={form} />
+              <OidcConfigForm
+                form={form}
+                hidePkce={hidePkce}
+                hideProviderId={hideProviderId}
+              />
             </div>
 
             <DialogFooter className="mt-4">

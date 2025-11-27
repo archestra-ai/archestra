@@ -16,20 +16,21 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 
 interface OidcConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
+  /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
+  hidePkce?: boolean;
+  /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
+  hideProviderId?: boolean;
 }
 
-export function OidcConfigForm({ form }: OidcConfigFormProps) {
+export function OidcConfigForm({
+  form,
+  hidePkce,
+  hideProviderId,
+}: OidcConfigFormProps) {
   const [newScope, setNewScope] = useState("");
 
   const scopes = form.watch("oidcConfig.scopes") || [];
@@ -61,22 +62,25 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
       </div>
 
       <div className="grid gap-4">
-        <FormField
-          control={form.control}
-          name="providerId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Provider ID</FormLabel>
-              <FormControl>
-                <Input placeholder="my-company-sso" {...field} />
-              </FormControl>
-              <FormDescription>
-                Unique identifier for this SSO provider. Used in callback URLs.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!hideProviderId && (
+          <FormField
+            control={form.control}
+            name="providerId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provider ID</FormLabel>
+                <FormControl>
+                  <Input placeholder="my-company-sso" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Unique identifier for this SSO provider. Used in callback
+                  URLs.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}
@@ -256,36 +260,6 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
           )}
         />
 
-        {/* NOTE: we probably don't need this and are okay with the default value that better-auth uses? */}
-        {/* <FormField
-          control={form.control}
-          name="oidcConfig.tokenEndpointAuthentication"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Token Endpoint Authentication</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select authentication method" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="client_secret_post">
-                    Client Secret POST
-                  </SelectItem>
-                  <SelectItem value="client_secret_basic">
-                    Client Secret Basic
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                How to authenticate with the token endpoint.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        /> */}
-
         <div className="space-y-3">
           <FormLabel>Scopes</FormLabel>
           <div className="flex gap-2">
@@ -334,26 +308,28 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
           </FormDescription>
         </div>
 
-        <FormField
-          control={form.control}
-          name="oidcConfig.pkce"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>Enable PKCE</FormLabel>
-                <FormDescription>
-                  Use Proof Key for Code Exchange for enhanced security.
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
-        />
+        {!hidePkce && (
+          <FormField
+            control={form.control}
+            name="oidcConfig.pkce"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Enable PKCE</FormLabel>
+                  <FormDescription>
+                    Use Proof Key for Code Exchange for enhanced security.
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}

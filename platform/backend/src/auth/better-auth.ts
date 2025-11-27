@@ -6,6 +6,7 @@ import {
   allAvailableActions,
   MEMBER_ROLE_NAME,
   memberRole,
+  SSO_TRUSTED_PROVIDER_IDS,
 } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -181,14 +182,7 @@ export const auth = betterAuth({
       enabled: true,
       // Trust SSO providers for automatic account linking
       // This allows existing users to sign in with SSO without manual linking
-      trustedProviders: [
-        "Okta",
-        "Google",
-        "GitHub",
-        "okta",
-        "google",
-        "github",
-      ],
+      trustedProviders: SSO_TRUSTED_PROVIDER_IDS,
       allowDifferentEmails: true,
       allowUnlinkingAll: true,
     },

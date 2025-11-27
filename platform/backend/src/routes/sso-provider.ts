@@ -22,7 +22,9 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId }, reply) => {
-      return reply.send(await SsoProviderModel.findAll(organizationId));
+      const providers = await SsoProviderModel.findAll(organizationId);
+      fastify.log.info({ providers }, "SSO providers found");
+      return reply.send(providers);
     },
   );
 

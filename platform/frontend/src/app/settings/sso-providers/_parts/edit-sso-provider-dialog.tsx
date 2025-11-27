@@ -2,9 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,21 +32,14 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  useSsoProviders,
+  type useSsoProviders,
   useUpdateSsoProvider,
 } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
 import { SamlConfigForm } from "./saml-config-form";
 
 interface EditSsoProviderDialogProps {
-  provider: {
-    id: string;
-    providerId: string;
-    issuer: string;
-    domain: string;
-    oidcConfig?: any;
-    samlConfig?: any;
-  };
+  provider: NonNullable<ReturnType<typeof useSsoProviders>["data"]>[number];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -100,37 +92,21 @@ export function EditSsoProviderDialog({
 
   const watchedProviderType = form.watch("providerType");
 
-  const onSubmit = async (data: SsoProviderFormValues) => {
-    try {
-      const payload = {
-        providerId: data.providerId,
-        issuer: data.issuer,
-        domain: data.domain,
-        ...(data.providerType === "oidc" &&
-          data.oidcConfig && {
-            oidcConfig: JSON.stringify(data.oidcConfig),
-          }),
-        ...(data.providerType === "saml" &&
-          data.samlConfig && {
-            samlConfig: JSON.stringify(data.samlConfig),
-          }),
-      };
-
+  const onSubmit = useCallback(
+    async (data: SsoProviderFormValues) => {
       await updateSsoProvider.mutateAsync({
         id: provider.id,
-        data: payload,
+        data,
       });
-      toast.success("SSO provider updated successfully");
       onOpenChange(false);
-    } catch (error) {
-      toast.error("Failed to update SSO provider");
-    }
-  };
+    },
+    [provider.id, updateSsoProvider, onOpenChange],
+  );
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setActiveTab("basic");
     onOpenChange(false);
-  };
+  }, [onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

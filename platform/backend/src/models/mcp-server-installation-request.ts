@@ -26,7 +26,7 @@ function rewriteOAuthRedirectUris(
   }
 
   // Use configured frontend URL or default to localhost:3000 for development
-  const platformBaseUrl = config.baseURL || "http://localhost:3000";
+  const platformBaseUrl = config.frontendBaseURL || "http://localhost:3000";
 
   return {
     ...oauthConfig,

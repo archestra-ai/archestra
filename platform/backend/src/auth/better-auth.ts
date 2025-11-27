@@ -13,7 +13,7 @@ import { InvitationModel, MemberModel, SessionModel } from "@/models";
 const APP_NAME = "Archestra";
 const {
   api: { apiKeyAuthorizationHeaderName },
-  baseURL,
+  frontendBaseURL,
   production,
   auth: { secret, cookieDomain, trustedOrigins },
 } = config;
@@ -21,17 +21,17 @@ const {
 const isHttps = () => {
   // if baseURL (coming from process.env.ARCHESTRA_FRONTEND_URL) is not set, use production (process.env.NODE_ENV=production)
   // to determine if we're using HTTPS
-  if (!baseURL) {
+  if (!frontendBaseURL) {
     return production;
   }
-  // otherwise, use baseURL to determine if we're using HTTPS
-  // this is useful for envs where NODE_ENV=production but using HTTP localhost
-  return baseURL.startsWith("https://");
+  // otherwise, use frontendBaseURL to determine if we're using HTTPS
+  // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
+  return frontendBaseURL.startsWith("https://");
 };
 
 export const auth = betterAuth({
   appName: APP_NAME,
-  baseURL,
+  baseURL: frontendBaseURL,
   secret,
 
   plugins: [

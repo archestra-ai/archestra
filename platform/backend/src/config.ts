@@ -147,7 +147,7 @@ const getTrustedOrigins = (): string[] | undefined => {
 };
 
 export default {
-  baseURL: process.env.ARCHESTRA_FRONTEND_URL,
+  frontendBaseURL: process.env.ARCHESTRA_FRONTEND_URL,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),

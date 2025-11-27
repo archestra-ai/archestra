@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAgents } from "@/lib/agent.query";
 import { useChatAgentMcpTools } from "@/lib/chat.query";
+import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
@@ -128,7 +129,7 @@ export function PromptLibraryGrid({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Free Chat Tile */}
         <Card
-          className="justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
+          className="h-[130px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
           onClick={() => setIsFreeChatDialogOpen(true)}
         >
           <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -310,50 +311,58 @@ function PromptTile({
             </div>
           </div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            asChild
-            onClick={(e) => e.stopPropagation()}
-            className="absolute top-[-2px] right-2"
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className=" mt-2 h-4 w-4 flex-shrink-0"
+        <WithPermissions
+          permissions={{ prompt: ["update"] }}
+          noPermissionHandle="hide"
+        >
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              asChild
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-[-2px] right-2"
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(prompt);
-              }}
+              <Button
+                variant="ghost"
+                size="icon"
+                className=" mt-2 h-4 w-4 flex-shrink-0"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewVersionHistory(prompt);
-              }}
-            >
-              <HistoryIcon className="mr-2 h-4 w-4" />
-              Version History
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(prompt.id);
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(prompt);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewVersionHistory(prompt);
+                }}
+              >
+                <HistoryIcon className="mr-2 h-4 w-4" />
+                Version History
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(prompt.id);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </WithPermissions>
       </CardHeader>
       <div className="px-4 pb-1.5 mt-auto">
         <div className="flex flex-wrap gap-1">

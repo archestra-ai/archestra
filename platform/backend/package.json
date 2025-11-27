@@ -32,7 +32,7 @@
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@better-auth/core": "1.4.0",
     "@fastify/cors": "^11.1.0",
-    "@fastify/http-proxy": "^11.3.0",
+    "@fastify/http-proxy": "fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96",
     "@fastify/otel": "^0.14.0",
     "@fastify/swagger": "^9.6.1",
     "@google/genai": "^1.29.1",

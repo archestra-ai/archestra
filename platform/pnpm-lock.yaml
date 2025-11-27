@@ -47,8 +47,8 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       '@fastify/http-proxy':
-        specifier: ^11.3.0
-        version: 11.3.0
+        specifier: fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96
+        version: https://codeload.github.com/fastify/fastify-http-proxy/tar.gz/bbe97fb55de3f7e3d15f57791142f7d84abf5a96
       '@fastify/otel':
         specifier: ^0.14.0
         version: 0.14.0(@opentelemetry/api@1.9.0)
@@ -1088,8 +1088,9 @@ packages:
   '@fastify/forwarded@3.0.1':
     resolution: {integrity: sha512-JqDochHFqXs3C3Ml3gOY58zM7OqO9ENqPo0UqAjAjH8L01fRZqwX9iLeX34//kiJubF7r2ZQHtBRU36vONbLlw==}
 
-  '@fastify/http-proxy@11.3.0':
-    resolution: {integrity: sha512-FXFxkdTlXqVI11fqlxmHqOPzIo0elBA60o3bfdh2seD44KWOBBzelzCVgs1OelrxuADCyWUQp2ZxA2wp3mqQMg==}
+  '@fastify/http-proxy@https://codeload.github.com/fastify/fastify-http-proxy/tar.gz/bbe97fb55de3f7e3d15f57791142f7d84abf5a96':
+    resolution: {tarball: https://codeload.github.com/fastify/fastify-http-proxy/tar.gz/bbe97fb55de3f7e3d15f57791142f7d84abf5a96}
+    version: 11.3.0
 
   '@fastify/merge-json-schemas@0.2.1':
     resolution: {integrity: sha512-OA3KGBCy6KtIvLf8DINC5880o5iBlDX4SxzLQS8HorJAbqluzLRn80UXU0bxZn7UOFhFgpRJDasfwn9nG4FG4A==}
@@ -2775,24 +2776,28 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.0-beta.51':
     resolution: {integrity: sha512-EQFXTgHxxTzv3t5EmjUP/DfxzFYx9sMndfLsYaAY4DWF6KsK1fXGYsiupif6qPTViPC9eVmRm78q0pZU/kuIPg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rolldown/binding-linux-x64-gnu@1.0.0-beta.51':
     resolution: {integrity: sha512-p5P6Xpa68w3yFaAdSzIZJbj+AfuDnMDqNSeglBXM7UlJT14Q4zwK+rV+8Mhp9MiUb4XFISZtbI/seBprhkQbiQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.0-beta.51':
     resolution: {integrity: sha512-sNVVyLa8HB8wkFipdfz1s6i0YWinwpbMWk5hO5S+XAYH2UH67YzUT13gs6wZTKg2x/3gtgXzYnHyF5wMIqoDAw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.0-beta.51':
     resolution: {integrity: sha512-e/JMTz9Q8+T3g/deEi8DK44sFWZWGKr9AOCW5e8C8SCVWzAXqYXAG7FXBWBNzWEZK0Rcwo9TQHTQ9Q0gXgdCaA==}
@@ -8000,7 +8005,7 @@ snapshots:
 
   '@fastify/forwarded@3.0.1': {}
 
-  '@fastify/http-proxy@11.3.0':
+  '@fastify/http-proxy@https://codeload.github.com/fastify/fastify-http-proxy/tar.gz/bbe97fb55de3f7e3d15f57791142f7d84abf5a96':
     dependencies:
       '@fastify/reply-from': 12.4.0
       fast-querystring: 1.1.2

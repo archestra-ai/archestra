@@ -7,24 +7,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth.query";
+import { permissionsToStrings } from "@/lib/auth.utils";
 
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   tooltip?: string;
 };
-
-/**
- * Convert Permissions object to array of permission strings
- */
-function permissionsToStrings(permissions: Permissions): string[] {
-  const result: string[] = [];
-  for (const [resource, actions] of Object.entries(permissions)) {
-    for (const action of actions) {
-      result.push(`${resource}:${action}`);
-    }
-  }
-  return result;
-}
 
 /**
  * A Button component with built-in permission checking and tooltip.
@@ -73,13 +61,13 @@ export function PermissionButton({
       <TooltipTrigger asChild>
         <span className="cursor-not-allowed">
           <Button
-            disabled={true}
             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
               // Prevent action when disabled
               e.preventDefault();
               e.stopPropagation();
             }}
             {...props}
+            disabled
           >
             {children}
           </Button>
@@ -87,8 +75,7 @@ export function PermissionButton({
       </TooltipTrigger>
       <TooltipContent className="max-w-60">
         <p>
-          This action is disabled. Missing permissions:{" "}
-          {permissionsToStrings(permissions).join(", ")}.
+          Missing permissions: {permissionsToStrings(permissions).join(", ")}.
         </p>
       </TooltipContent>
     </Tooltip>

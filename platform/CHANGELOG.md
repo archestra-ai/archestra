@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.8](https://github.com/archestra-ai/archestra/compare/platform-v0.6.7...platform-v0.6.8) (2025-11-27)
+
+
+### Bug Fixes
+
+* improve tool results compression UI ([#1265](https://github.com/archestra-ai/archestra/issues/1265)) ([84771c0](https://github.com/archestra-ai/archestra/commit/84771c0c178f6e8745d2a4b0588390e9c17b988f))
+
+
+### Dependencies
+
+* address `@fastify/http-proxy` CVE false-positive ([#1274](https://github.com/archestra-ai/archestra/issues/1274)) ([bdce63e](https://github.com/archestra-ai/archestra/commit/bdce63e6057241dbe0a2606804515e7ab282ef4b))
+
 ## [0.6.7](https://github.com/archestra-ai/archestra/compare/platform-v0.6.6...platform-v0.6.7) (2025-11-26)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "scripts": {

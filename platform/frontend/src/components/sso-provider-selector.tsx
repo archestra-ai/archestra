@@ -1,29 +1,14 @@
 "use client";
 
-import { Building2, Github, Globe, Shield } from "lucide-react";
 import { useCallback } from "react";
 import { toast } from "sonner";
+import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 
 export function SsoProviderSelector() {
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
-
-  // Get appropriate icon for provider
-  const getProviderIcon = useCallback((providerId: string) => {
-    const lowerProviderId = providerId.toLowerCase();
-    if (lowerProviderId.includes("google")) {
-      return Globe;
-    }
-    if (lowerProviderId.includes("okta")) {
-      return Shield;
-    }
-    if (lowerProviderId.includes("github")) {
-      return Github;
-    }
-    return Building2;
-  }, []);
 
   const handleSsoSignIn = useCallback(async (providerId: string) => {
     try {
@@ -32,7 +17,7 @@ export function SsoProviderSelector() {
         callbackURL: `${window.location.origin}/`,
         errorCallbackURL: `${window.location.origin}/sign-in`,
       });
-      console.log("SSO sign-in initiated:", result);
+      console.info("SSO sign-in initiated:", result);
     } catch (error) {
       console.error("SSO sign-in error:", error);
       toast.error("Failed to initiate SSO sign-in");
@@ -57,20 +42,20 @@ export function SsoProviderSelector() {
       </div>
 
       <div className="space-y-2">
-        {ssoProviders.map((provider) => {
-          const ProviderIcon = getProviderIcon(provider.providerId);
-          return (
-            <Button
-              key={provider.id}
-              variant="outline"
-              className="w-full"
-              onClick={() => handleSsoSignIn(provider.providerId)}
-            >
-              <ProviderIcon className="mr-2 h-4 w-4" />
-              Sign in with {provider.providerId}
-            </Button>
-          );
-        })}
+        {ssoProviders.map((provider) => (
+          <Button
+            key={provider.id}
+            variant="outline"
+            className="w-full"
+            onClick={() => handleSsoSignIn(provider.providerId)}
+          >
+            <SsoProviderIcon
+              providerId={provider.providerId}
+              className="mr-2"
+            />
+            Sign in with {provider.providerId}
+          </Button>
+        ))}
       </div>
     </div>
   );

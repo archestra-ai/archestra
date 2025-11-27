@@ -5,11 +5,10 @@ import {
   SSO_TRUSTED_PROVIDER_IDS,
   type SsoProviderId,
 } from "@shared";
-import type { LucideIcon } from "lucide-react";
-import { Github, Globe, Shield } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
+import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,11 +26,7 @@ interface SsoProviderConfig {
   name: string;
   /** Short description */
   description: string;
-  /** Lucide icon component */
-  icon: LucideIcon;
-  /** Tailwind text color class */
-  color: string;
-  /** Tailwind background color class */
+  /** Tailwind background color class for the icon container */
   bgColor: string;
   /** Hide the provider ID field in the form (for predefined providers) */
   hideProviderId: boolean;
@@ -46,6 +41,7 @@ interface SsoProviderConfig {
     authorizationEndpoint?: string;
     tokenEndpoint?: string;
     userInfoEndpoint?: string;
+    jwksEndpoint?: string;
     scopes: string[];
     mapping: {
       id: string;
@@ -63,8 +59,6 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     providerId: SSO_PROVIDER_ID.OKTA,
     name: "Okta",
     description: "Enterprise identity and access management",
-    icon: Shield,
-    color: "text-blue-600",
     bgColor: "bg-blue-50",
     // Hide the provider ID field for predefined providers
     hideProviderId: true,
@@ -85,14 +79,16 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     providerId: SSO_PROVIDER_ID.GOOGLE,
     name: "Google",
     description: "Sign in with Google OAuth",
-    icon: Globe,
-    color: "text-red-600",
     bgColor: "bg-red-50",
     hideProviderId: true,
     defaultConfig: {
       issuer: "https://accounts.google.com",
       discoveryEndpoint:
         "https://accounts.google.com/.well-known/openid-configuration",
+      authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+      tokenEndpoint: "https://oauth2.googleapis.com/token",
+      userInfoEndpoint: "https://openidconnect.googleapis.com/v1/userinfo",
+      jwksEndpoint: "https://www.googleapis.com/oauth2/v3/certs",
       scopes: ["openid", "email", "profile"],
       mapping: {
         id: "sub",
@@ -106,8 +102,6 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     providerId: SSO_PROVIDER_ID.GITHUB,
     name: "GitHub",
     description: "Sign in with GitHub OAuth (requires public email)",
-    icon: Github,
-    color: "text-gray-800",
     bgColor: "bg-gray-50",
     hideProviderId: true,
     /**
@@ -148,8 +142,6 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     providerId: "",
     name: "Generic OAuth",
     description: "Configure any OpenID Connect provider",
-    icon: Globe,
-    color: "text-purple-600",
     bgColor: "bg-purple-50",
     // Show the provider ID field for generic providers
     hideProviderId: false,
@@ -231,7 +223,6 @@ function SsoProvidersSettingsContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {SSO_PROVIDER_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config);
-          const Icon = config.icon;
 
           return (
             <Card
@@ -242,7 +233,10 @@ function SsoProvidersSettingsContent() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className={`p-2 rounded-lg ${config.bgColor}`}>
-                    <Icon className={`h-6 w-6 ${config.color}`} />
+                    <SsoProviderIcon
+                      providerId={config.providerId || config.id}
+                      size={24}
+                    />
                   </div>
                   <Badge variant={existingProvider ? "default" : "secondary"}>
                     {existingProvider ? "Enabled" : "Not enabled"}

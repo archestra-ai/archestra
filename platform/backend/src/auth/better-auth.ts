@@ -331,32 +331,8 @@ export const auth = betterAuth({
         }
       }
 
-      // Ensure member is actually deleted from DB when removed from organization
-      if (path === "/organization/remove-member" && method === "POST") {
-        const { memberIdOrUserId, organizationId } = body;
-
-        if (memberIdOrUserId) {
-          try {
-            const deleted = await MemberModel.deleteByMemberOrUserId(
-              memberIdOrUserId,
-              organizationId,
-            );
-
-            if (deleted) {
-              const { id, organizationId } = deleted;
-              logger.info(
-                `✅ Member ${id} deleted from organization ${organizationId}`,
-              );
-            } else {
-              logger.warn(
-                `⚠️ Member ${memberIdOrUserId} not found for deletion`,
-              );
-            }
-          } catch (error) {
-            logger.error({ err: error }, "❌ Failed to delete member:");
-          }
-        }
-      }
+      // NOTE: User deletion on member removal is handled in routes/auth.ts
+      // Better-auth handles member deletion, we just clean up orphaned users
 
       if (path.startsWith("/sign-up")) {
         const { newSession } = context;

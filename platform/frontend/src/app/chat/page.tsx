@@ -419,7 +419,7 @@ export default function ChatPage() {
         description="Start a free chat or select a prompt from your library to start a guided chat"
         actionButton={
           <WithPermissions
-            permissions={{ profile: ["create"] }}
+            permissions={{ prompt: ["create"] }}
             noPermissionHandle="hide"
           >
             <TooltipProvider>

@@ -3,6 +3,7 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -222,19 +223,33 @@ export const auth = betterAuth({
         }
       }
 
-      // Invalidate all sessions when user is deleted
+      // Invalidate all sessions and cleanup account records when user is deleted
       if (path === "/admin/remove-user" && method === "POST") {
         const userId = body.userId;
 
         if (userId) {
+          // Delete all sessions for this user
           try {
-            // Delete all sessions for this user
             await SessionModel.deleteAllByUserId(userId);
             logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
             logger.error(
               { err: error },
               "❌ Failed to invalidate user sessions:",
+            );
+          }
+
+          // Delete account records explicitly to prevent "user already exists" errors
+          // when re-inviting the same email after deletion
+          try {
+            await db
+              .delete(schema.accountsTable)
+              .where(eq(schema.accountsTable.userId, userId));
+            logger.info(`✅ Account records for user ${userId} deleted`);
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "❌ Failed to delete account records:",
             );
           }
         }

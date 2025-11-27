@@ -47,9 +47,7 @@ export function PermissionButton({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-not-allowed">
-            <Button {...props}>{children}</Button>
-          </span>
+          <Button {...props}>{children}</Button>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
       </Tooltip>

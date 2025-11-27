@@ -223,7 +223,7 @@ export const auth = betterAuth({
         }
       }
 
-      // Invalidate all sessions and cleanup account records when user is deleted
+      // Invalidate all sessions when user is deleted
       if (path === "/admin/remove-user" && method === "POST") {
         const userId = body.userId;
 
@@ -236,20 +236,6 @@ export const auth = betterAuth({
             logger.error(
               { err: error },
               "❌ Failed to invalidate user sessions:",
-            );
-          }
-
-          // Delete account records explicitly to prevent "user already exists" errors
-          // when re-inviting the same email after deletion
-          try {
-            await db
-              .delete(schema.accountsTable)
-              .where(eq(schema.accountsTable.userId, userId));
-            logger.info(`✅ Account records for user ${userId} deleted`);
-          } catch (error) {
-            logger.error(
-              { err: error },
-              "❌ Failed to delete account records:",
             );
           }
         }

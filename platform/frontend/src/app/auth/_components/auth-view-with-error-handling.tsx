@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
+  callbackURL?: string;
   classNames?: {
     footer?: string;
     form?: {
@@ -18,6 +19,7 @@ interface AuthViewWithErrorHandlingProps {
 
 export function AuthViewWithErrorHandling({
   path,
+  callbackURL,
   classNames,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
@@ -123,7 +125,7 @@ export function AuthViewWithErrorHandling({
           </AlertDescription>
         </Alert>
       )}
-      <AuthView path={path} classNames={classNames} />
+      <AuthView path={path} callbackURL={callbackURL} classNames={classNames} />
     </>
   );
 }

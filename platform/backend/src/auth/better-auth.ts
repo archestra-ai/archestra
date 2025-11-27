@@ -313,11 +313,7 @@ export const auth = betterAuth({
               logger.info(
                 `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
               );
-              await InvitationModel.accept(
-                session,
-                user,
-                pendingInvitation.id,
-              );
+              await InvitationModel.accept(session, user, pendingInvitation.id);
               return;
             }
           } catch (error) {

@@ -19,11 +19,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("invitationId");
 
-  const {
-    data: invitationData,
-    isLoading,
-    error,
-  } = useInvitationCheck(invitationId);
+  const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");

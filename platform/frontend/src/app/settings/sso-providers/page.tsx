@@ -137,6 +137,59 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     },
   },
   {
+    id: "gitlab",
+    providerId: SSO_PROVIDER_ID.GITLAB,
+    name: "GitLab",
+    description: "Sign in with GitLab OAuth",
+    bgColor: "bg-orange-50",
+    hideProviderId: true,
+    defaultConfig: {
+      issuer: "https://gitlab.com",
+      discoveryEndpoint: "https://gitlab.com/.well-known/openid-configuration",
+      authorizationEndpoint: "https://gitlab.com/oauth/authorize",
+      tokenEndpoint: "https://gitlab.com/oauth/token",
+      userInfoEndpoint: "https://gitlab.com/oauth/userinfo",
+      jwksEndpoint: "https://gitlab.com/oauth/discovery/keys",
+      scopes: ["openid", "email", "profile"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+  {
+    id: "entra",
+    providerId: SSO_PROVIDER_ID.ENTRA_ID,
+    name: "Microsoft Entra ID",
+    description: "Sign in with Microsoft (Azure AD)",
+    bgColor: "bg-sky-50",
+    hideProviderId: true,
+    /**
+     * Microsoft Entra ID (formerly Azure AD) configuration
+     * Users need to replace {tenant-id} with their Azure tenant ID
+     * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/entraid/
+     */
+    defaultConfig: {
+      issuer: "https://login.microsoftonline.com/{tenant-id}/v2.0",
+      discoveryEndpoint:
+        "https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration",
+      authorizationEndpoint:
+        "https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/authorize",
+      tokenEndpoint:
+        "https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token",
+      userInfoEndpoint: "https://graph.microsoft.com/oidc/userinfo",
+      jwksEndpoint:
+        "https://login.microsoftonline.com/{tenant-id}/discovery/v2.0/keys",
+      scopes: ["openid", "email", "profile"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+  {
     id: "generic",
     // Generic OAuth allows custom provider IDs
     providerId: "",

@@ -11,7 +11,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 This document covers SSO configuration for Archestra Platform. Include:
 - Overview of SSO support
-- Provider-specific configuration (Okta, Google, GitHub, Generic OAuth)
+- Provider-specific configuration (Okta, Google, GitHub, GitLab, Microsoft Entra ID, Generic OAuth)
 - Callback URL format
 - Limitations and requirements
 -->
@@ -43,7 +43,7 @@ For local development:
 http://localhost:3000/api/auth/sso/callback/{ProviderId}
 ```
 
-The `{ProviderId}` is case-sensitive and must match exactly what you configure in Archestra (e.g., `Okta`, `Google`, `GitHub`).
+The `{ProviderId}` is case-sensitive and must match exactly what you configure in Archestra (e.g., `Okta`, `Google`, `GitHub`, `GitLab`, `EntraID`).
 
 ## Supported Providers
 
@@ -99,6 +99,47 @@ GitHub OAuth allows users to sign in with their GitHub accounts.
 - To set a public email: Go to [GitHub Profile Settings](https://github.com/settings/profile) and select a public email
 - PKCE is automatically disabled for GitHub (not supported)
 
+### GitLab
+
+GitLab OAuth allows users to sign in with their GitLab accounts (both GitLab.com and self-hosted instances).
+
+1. Go to [GitLab Applications](https://gitlab.com/-/user_settings/applications) (or your self-hosted instance)
+2. Click **Add new application**
+3. Set the **Redirect URI** to: `https://your-domain.com/api/auth/sso/callback/GitLab`
+4. Select scopes: `openid`, `email`, `profile`
+5. Click **Save application**
+6. Copy the **Application ID** (Client ID) and **Secret** (Client Secret)
+7. In Archestra, click **Enable** on the GitLab card
+8. Enter your domain and the credentials
+
+**GitLab-specific notes:**
+
+- For self-hosted GitLab, update the issuer URL to your GitLab instance (e.g., `https://gitlab.yourcompany.com`)
+- GitLab supports OIDC discovery, so endpoints are automatically configured
+- See [GitLab OAuth documentation](https://docs.gitlab.com/ee/integration/openid_connect_provider.html) for more details
+
+### Microsoft Entra ID (Azure AD)
+
+Microsoft Entra ID (formerly Azure AD) allows users to sign in with their Microsoft work or school accounts.
+
+1. Go to [Azure Portal](https://portal.azure.com/) > **Microsoft Entra ID**
+2. Navigate to **App registrations** > **New registration**
+3. Enter a name and select supported account types
+4. Set the **Redirect URI** to: `https://your-domain.com/api/auth/sso/callback/EntraID`
+5. After creation, go to **Certificates & secrets** > **New client secret**
+6. Copy the **Application (client) ID** and **Client Secret**
+7. Note your **Directory (tenant) ID** from the Overview page
+8. In Archestra, click **Enable** on the Microsoft Entra ID card
+9. Replace `{tenant-id}` in all URLs with your actual tenant ID
+10. Enter your domain and the credentials
+
+**Entra ID-specific notes:**
+
+- The tenant ID is required in all endpoint URLs
+- For single-tenant apps, use your specific tenant ID
+- For multi-tenant apps, use `common` or `organizations` instead of the tenant ID
+- See [Microsoft Entra ID documentation](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc) for more details
+
 ### Generic OAuth
 
 For other OIDC-compliant providers not listed above, use the Generic OAuth option.
@@ -135,7 +176,7 @@ Subsequent logins automatically link to the existing account based on email addr
 If a user already has an account (created via email/password), SSO authentication will automatically link to that account when:
 
 - The email addresses match
-- The SSO provider is in the trusted providers list (Okta, Google, GitHub are trusted by default)
+- The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, and Entra ID are trusted by default)
 
 ## Removing an SSO Provider
 

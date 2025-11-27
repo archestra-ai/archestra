@@ -52,6 +52,8 @@ export const SSO_PROVIDER_ID = {
   OKTA: "Okta",
   GOOGLE: "Google",
   GITHUB: "GitHub",
+  GITLAB: "GitLab",
+  ENTRA_ID: "EntraID",
 } as const;
 
 export type SsoProviderId =

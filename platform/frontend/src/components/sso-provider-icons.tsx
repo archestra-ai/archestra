@@ -72,37 +72,40 @@ export function SsoProviderIcon({
     );
   }
 
+  // GitLab - use brand icon
+  if (
+    lowerProviderId === SSO_PROVIDER_ID.GITLAB.toLowerCase() ||
+    lowerProviderId.includes("gitlab")
+  ) {
+    return (
+      <Image
+        src="/icons/gitlab.png"
+        alt="GitLab"
+        width={size}
+        height={size}
+        className={className}
+      />
+    );
+  }
+
+  // Microsoft Entra ID - use brand icon
+  if (
+    lowerProviderId === SSO_PROVIDER_ID.ENTRA_ID.toLowerCase() ||
+    lowerProviderId.includes("microsoft") ||
+    lowerProviderId.includes("entra") ||
+    lowerProviderId.includes("azure")
+  ) {
+    return (
+      <Image
+        src="/icons/microsoft.png"
+        alt="Microsoft"
+        width={size}
+        height={size}
+        className={className}
+      />
+    );
+  }
+
   // Generic OAuth - use Globe icon
   return <Globe size={size} className={className} />;
-}
-
-/**
- * Get the icon component for use in places where we need the component type
- * (e.g., for the SSO provider cards that use LucideIcon type)
- */
-export function getSsoProviderIconComponent(providerId: string) {
-  const lowerProviderId = providerId.toLowerCase();
-
-  if (
-    lowerProviderId === SSO_PROVIDER_ID.GOOGLE.toLowerCase() ||
-    lowerProviderId.includes("google")
-  ) {
-    return "google" as const;
-  }
-
-  if (
-    lowerProviderId === SSO_PROVIDER_ID.OKTA.toLowerCase() ||
-    lowerProviderId.includes("okta")
-  ) {
-    return "okta" as const;
-  }
-
-  if (
-    lowerProviderId === SSO_PROVIDER_ID.GITHUB.toLowerCase() ||
-    lowerProviderId.includes("github")
-  ) {
-    return "github" as const;
-  }
-
-  return "generic" as const;
 }

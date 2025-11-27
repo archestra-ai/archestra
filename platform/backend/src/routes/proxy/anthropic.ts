@@ -11,7 +11,13 @@ import {
   reportBlockedTools,
   reportLLMTokens,
 } from "@/llm-metrics";
-import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
+import { getDefaultPricing } from "@/models/default-prices";
 import {
   type Agent,
   Anthropic,
@@ -243,6 +249,15 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { resolvedAgentId, baselineModel },
           "No matching optimized model found, proceeding with baseline model",
         );
+      }
+
+      // Ensure TokenPrice records exist for both baseline and optimized models
+      const baselinePricing = getDefaultPricing(baselineModel);
+      await TokenPriceModel.createIfNotExists(baselineModel, baselinePricing);
+
+      if (model !== baselineModel) {
+        const optimizedPricing = getDefaultPricing(model);
+        await TokenPriceModel.createIfNotExists(model, optimizedPricing);
       }
 
       // Convert to common format and evaluate trusted data policies

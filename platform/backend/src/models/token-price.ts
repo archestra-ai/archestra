@@ -70,6 +70,21 @@ class TokenPriceModel {
     return tokenPrice;
   }
 
+  static async createIfNotExists(
+    model: string,
+    data: Omit<CreateTokenPrice, "model">,
+  ): Promise<TokenPrice | null> {
+    const result = await db
+      .insert(schema.tokenPricesTable)
+      .values({ model, ...data })
+      .onConflictDoNothing({
+        target: schema.tokenPricesTable.model,
+      })
+      .returning();
+
+    return result[0] || null;
+  }
+
   static async delete(id: string): Promise<boolean> {
     // First check if the token price exists
     const existing = await TokenPriceModel.findById(id);

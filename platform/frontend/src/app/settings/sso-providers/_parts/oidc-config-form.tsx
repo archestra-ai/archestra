@@ -2,7 +2,7 @@
 
 import type { SsoProviderFormValues } from "@shared";
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,30 +34,89 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
 
   const scopes = form.watch("oidcConfig.scopes") || [];
 
-  const addScope = () => {
+  const addScope = useCallback(() => {
     if (newScope.trim() && !scopes.includes(newScope.trim())) {
       form.setValue("oidcConfig.scopes", [...scopes, newScope.trim()]);
       setNewScope("");
     }
-  };
+  }, [newScope, scopes, form]);
 
-  const removeScope = (scopeToRemove: string) => {
-    form.setValue(
-      "oidcConfig.scopes",
-      scopes.filter((scope) => scope !== scopeToRemove),
-    );
-  };
+  const removeScope = useCallback(
+    (scopeToRemove: string) => {
+      form.setValue(
+        "oidcConfig.scopes",
+        scopes.filter((scope) => scope !== scopeToRemove),
+      );
+    },
+    [scopes, form],
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">OIDC Configuration</h3>
+        <h3 className="text-lg font-medium">SSO Provider Configuration</h3>
         <p className="text-sm text-muted-foreground">
           Configure your OpenID Connect provider settings.
         </p>
       </div>
 
       <div className="grid gap-4">
+        <FormField
+          control={form.control}
+          name="providerId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Provider ID</FormLabel>
+              <FormControl>
+                <Input placeholder="my-company-sso" {...field} />
+              </FormControl>
+              <FormDescription>
+                Unique identifier for this SSO provider. Used in callback URLs.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="issuer"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Issuer</FormLabel>
+              <FormControl>
+                <Input placeholder="https://auth.company.com" {...field} />
+              </FormControl>
+              <FormDescription>
+                The issuer URL of your identity provider.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="domain"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Domain</FormLabel>
+              <FormControl>
+                <Input placeholder="company.com" {...field} />
+              </FormControl>
+              <FormDescription>
+                Email domain for automatic provider detection.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Separator />
+
+        <div>
+          <h4 className="text-md font-medium mb-4">OIDC Settings</h4>
+        </div>
         <FormField
           control={form.control}
           name="oidcConfig.clientId"

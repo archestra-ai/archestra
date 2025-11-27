@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,46 +13,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  type useSsoProviders,
-  useUpdateSsoProvider,
-} from "@/lib/sso-provider.query";
+import { Form } from "@/components/ui/form";
+import { useSsoProvider, useUpdateSsoProvider } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
 
 interface EditSsoProviderDialogProps {
-  provider: NonNullable<ReturnType<typeof useSsoProviders>["data"]>[number];
+  ssoProviderId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function EditSsoProviderDialog({
-  provider,
+  ssoProviderId,
   open,
   onOpenChange,
 }: EditSsoProviderDialogProps) {
-  const [activeTab, setActiveTab] = useState("basic");
+  const { data: provider, isLoading } = useSsoProvider(ssoProviderId);
   const updateSsoProvider = useUpdateSsoProvider();
 
-  // Convert backend provider to form values (only support OIDC in UI)
-  const getFormValues = useCallback(
-    (): SsoProviderFormValues => ({
-      providerId: provider.providerId,
-      issuer: provider.issuer,
-      domain: provider.domain,
-      providerType: "oidc" as const,
-      oidcConfig: provider.oidcConfig || {
-        issuer: provider.issuer,
+  const form = useForm<SsoProviderFormValues>({
+    resolver: zodResolver(SsoProviderFormSchema),
+    defaultValues: {
+      providerId: "",
+      issuer: "",
+      domain: "",
+      providerType: "oidc",
+      oidcConfig: {
+        issuer: "",
         pkce: true,
         clientId: "",
         clientSecret: "",
@@ -63,36 +50,55 @@ export function EditSsoProviderDialog({
           email: "email",
           name: "name",
         },
+        overrideUserInfo: true,
       },
-    }),
-    [provider],
-  );
-
-  const form = useForm<SsoProviderFormValues>({
-    resolver: zodResolver(SsoProviderFormSchema),
-    defaultValues: getFormValues(),
+    },
   });
 
-  // Reset form when provider changes
   useEffect(() => {
-    form.reset(getFormValues());
-  }, [form, getFormValues]);
+    if (provider) {
+      form.reset({
+        providerId: provider.providerId,
+        issuer: provider.issuer,
+        domain: provider.domain,
+        providerType: "oidc", // Fixed to OIDC
+        oidcConfig: provider.oidcConfig || {
+          issuer: "",
+          pkce: true,
+          clientId: "",
+          clientSecret: "",
+          discoveryEndpoint: "",
+          scopes: ["openid", "email", "profile"],
+          mapping: {
+            id: "sub",
+            email: "email",
+            name: "name",
+          },
+          overrideUserInfo: true,
+        },
+      });
+    }
+  }, [provider, form]);
 
   const onSubmit = useCallback(
     async (data: SsoProviderFormValues) => {
+      if (!provider) return;
       await updateSsoProvider.mutateAsync({
         id: provider.id,
         data,
       });
       onOpenChange(false);
     },
-    [provider.id, updateSsoProvider, onOpenChange],
+    [provider, updateSsoProvider, onOpenChange],
   );
 
   const handleClose = useCallback(() => {
-    setActiveTab("basic");
     onOpenChange(false);
   }, [onOpenChange]);
+
+  if (isLoading || !provider) {
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -109,91 +115,9 @@ export function EditSsoProviderDialog({
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex flex-col flex-1 overflow-hidden"
           >
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="flex flex-col flex-1 overflow-hidden"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="basic">Basic Configuration</TabsTrigger>
-                <TabsTrigger value="advanced">
-                  Provider Configuration
-                </TabsTrigger>
-              </TabsList>
-
-              <div className="flex-1 overflow-y-auto py-4">
-                <TabsContent value="basic" className="space-y-4 mt-0">
-                  <FormField
-                    control={form.control}
-                    name="providerId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Provider ID</FormLabel>
-                        <FormControl>
-                          <Input placeholder="my-company-sso" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Unique identifier for this SSO provider. Used in
-                          callback URLs.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="issuer"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Issuer</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="https://auth.company.com"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          The issuer URL of your identity provider.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="domain"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Domain</FormLabel>
-                        <FormControl>
-                          <Input placeholder="company.com" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Email domain for automatic provider detection.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="rounded-lg border p-4 bg-muted/50">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="font-medium">OpenID Connect (OIDC)</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Industry standard protocol for secure authentication
-                    </p>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="advanced" className="space-y-4 mt-0">
-                  <OidcConfigForm form={form} />
-                </TabsContent>
-              </div>
-            </Tabs>
+            <div className="flex-1 overflow-y-auto py-4">
+              <OidcConfigForm form={form} />
+            </div>
 
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={handleClose}>

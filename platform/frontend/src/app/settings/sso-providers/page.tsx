@@ -22,7 +22,8 @@ const SSO_PROVIDER_CONFIGS = [
     bgColor: "bg-blue-50",
     defaultConfig: {
       issuer: "https://your-domain.okta.com",
-      discoveryEndpoint: "https://your-domain.okta.com/.well-known/openid-configuration",
+      discoveryEndpoint:
+        "https://your-domain.okta.com/.well-known/openid-configuration",
       scopes: ["openid", "email", "profile"],
       mapping: {
         id: "sub",
@@ -40,7 +41,8 @@ const SSO_PROVIDER_CONFIGS = [
     bgColor: "bg-red-50",
     defaultConfig: {
       issuer: "https://accounts.google.com",
-      discoveryEndpoint: "https://accounts.google.com/.well-known/openid-configuration",
+      discoveryEndpoint:
+        "https://accounts.google.com/.well-known/openid-configuration",
       scopes: ["openid", "email", "profile"],
       mapping: {
         id: "sub",
@@ -58,7 +60,8 @@ const SSO_PROVIDER_CONFIGS = [
     bgColor: "bg-gray-50",
     defaultConfig: {
       issuer: "https://github.com",
-      discoveryEndpoint: "https://token.actions.githubusercontent.com/.well-known/openid-configuration",
+      discoveryEndpoint:
+        "https://token.actions.githubusercontent.com/.well-known/openid-configuration",
       scopes: ["openid", "user:email", "read:user"],
       mapping: {
         id: "sub",
@@ -87,35 +90,51 @@ const SSO_PROVIDER_CONFIGS = [
   },
 ];
 
-type SsoProvider = NonNullable<ReturnType<typeof useSsoProviders>["data"]>[number];
+type SsoProvider = NonNullable<
+  ReturnType<typeof useSsoProviders>["data"]
+>[number];
 
 function SsoProvidersSettingsContent() {
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
-    config: typeof SSO_PROVIDER_CONFIGS[0];
+    config: (typeof SSO_PROVIDER_CONFIGS)[0];
   } | null>(null);
-  const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(null);
+  const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(
+    null,
+  );
 
   // Find existing providers by matching provider ID patterns
   const getProviderStatus = (configId: string) => {
     const provider = ssoProviders.find((p) => {
       // Match by provider ID patterns
-      if (configId === "okta" && p.providerId.toLowerCase().includes("okta")) return true;
-      if (configId === "google" && p.providerId.toLowerCase().includes("google")) return true;
-      if (configId === "github" && p.providerId.toLowerCase().includes("github")) return true;
-      if (configId === "generic" && 
-          !p.providerId.toLowerCase().includes("okta") &&
-          !p.providerId.toLowerCase().includes("google") &&
-          !p.providerId.toLowerCase().includes("github")) return true;
+      if (configId === "okta" && p.providerId.toLowerCase().includes("okta"))
+        return true;
+      if (
+        configId === "google" &&
+        p.providerId.toLowerCase().includes("google")
+      )
+        return true;
+      if (
+        configId === "github" &&
+        p.providerId.toLowerCase().includes("github")
+      )
+        return true;
+      if (
+        configId === "generic" &&
+        !p.providerId.toLowerCase().includes("okta") &&
+        !p.providerId.toLowerCase().includes("google") &&
+        !p.providerId.toLowerCase().includes("github")
+      )
+        return true;
       return false;
     });
     return provider;
   };
 
-  const handleProviderClick = (config: typeof SSO_PROVIDER_CONFIGS[0]) => {
+  const handleProviderClick = (config: (typeof SSO_PROVIDER_CONFIGS)[0]) => {
     const existingProvider = getProviderStatus(config.id);
-    
+
     if (existingProvider) {
       // Edit existing provider
       setEditingProvider(existingProvider);
@@ -135,7 +154,8 @@ function SsoProvidersSettingsContent() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold">SSO Providers</h1>
         <p className="text-muted-foreground mt-2">
-          Manage Single Sign-On (SSO) providers for your organization. Configure OIDC providers to enable seamless authentication.
+          Manage Single Sign-On (SSO) providers for your organization. Configure
+          OIDC providers to enable seamless authentication.
         </p>
       </div>
 
@@ -143,10 +163,10 @@ function SsoProvidersSettingsContent() {
         {SSO_PROVIDER_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config.id);
           const Icon = config.icon;
-          
+
           return (
-            <Card 
-              key={config.id} 
+            <Card
+              key={config.id}
               className="cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => handleProviderClick(config)}
             >
@@ -165,9 +185,9 @@ function SsoProvidersSettingsContent() {
                 <p className="text-sm text-muted-foreground mb-4">
                   {config.description}
                 </p>
-                <Button 
-                  variant={existingProvider ? "outline" : "default"} 
-                  size="sm" 
+                <Button
+                  variant={existingProvider ? "outline" : "default"}
+                  size="sm"
                   className="w-full"
                 >
                   {existingProvider ? "Configure" : "Enable"}
@@ -184,7 +204,7 @@ function SsoProvidersSettingsContent() {
           open={!!createConfig}
           onOpenChange={(open) => !open && setCreateConfig(null)}
           defaultValues={{
-            providerId: `${createConfig.config.name.toLowerCase()}-sso`,
+            providerId: createConfig.config.name,
             issuer: createConfig.config.defaultConfig.issuer,
             domain: "", // User needs to fill this
             providerType: "oidc" as const,

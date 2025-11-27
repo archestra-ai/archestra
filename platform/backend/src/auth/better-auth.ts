@@ -260,6 +260,8 @@ export const auth = betterAuth({
         const { memberIdOrUserId, organizationId } = body;
 
         if (memberIdOrUserId) {
+          let userId: string | undefined;
+
           try {
             const deleted = await MemberModel.deleteByMemberOrUserId(
               memberIdOrUserId,
@@ -268,6 +270,7 @@ export const auth = betterAuth({
 
             if (deleted) {
               const { id, organizationId } = deleted;
+              userId = deleted.userId;
               logger.info(
                 `✅ Member ${id} deleted from organization ${organizationId}`,
               );
@@ -278,6 +281,62 @@ export const auth = betterAuth({
             }
           } catch (error) {
             logger.error({ err: error }, "❌ Failed to delete member:");
+          }
+
+          // If user is not in any other organizations, delete the user completely
+          if (userId) {
+            try {
+              const remainingMemberships =
+                await MemberModel.getByUserId(userId);
+
+              if (!remainingMemberships) {
+                logger.info(
+                  `🗑️ User ${userId} has no remaining memberships, deleting user account`,
+                );
+
+                // Delete all sessions
+                try {
+                  await SessionModel.deleteAllByUserId(userId);
+                  logger.info(`✅ All sessions for user ${userId} invalidated`);
+                } catch (error) {
+                  logger.error(
+                    { err: error },
+                    "❌ Failed to invalidate user sessions:",
+                  );
+                }
+
+                // Delete account records
+                try {
+                  await db
+                    .delete(schema.accountsTable)
+                    .where(eq(schema.accountsTable.userId, userId));
+                  logger.info(`✅ Account records for user ${userId} deleted`);
+                } catch (error) {
+                  logger.error(
+                    { err: error },
+                    "❌ Failed to delete account records:",
+                  );
+                }
+
+                // Delete user record
+                try {
+                  await db
+                    .delete(schema.usersTable)
+                    .where(eq(schema.usersTable.id, userId));
+                  logger.info(`✅ User ${userId} deleted from system`);
+                } catch (error) {
+                  logger.error(
+                    { err: error },
+                    "❌ Failed to delete user record:",
+                  );
+                }
+              }
+            } catch (error) {
+              logger.error(
+                { err: error },
+                "❌ Failed to check remaining memberships:",
+              );
+            }
           }
         }
       }

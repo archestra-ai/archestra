@@ -291,12 +291,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
-      // Convert tool results to TOON format if enabled on agent
+      // Determine if TOON compression should be applied
       let toonTokensBefore: number | null = null;
       let toonTokensAfter: number | null = null;
       let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
-      if (resolvedAgent.convertToolResultsToToon) {
+      if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
           await utils.adapters.openai.convertToolResultsToToon(
             filteredMessages,
@@ -310,11 +312,20 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       fastify.log.info(
         {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "openai proxy routes: handle chat completions: tool results compression completed",
+      );
+
+      fastify.log.info(
+        {
           resolvedAgentId,
           originalMessagesCount: messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
-          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
       );
@@ -595,6 +606,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenUsage.output,
           );
         }
+
+        fastify.log.info(
+          {
+            baselineCost,
+            costAfterModelOptimization: costAfterOptimization,
+            inputTokens: tokenUsage?.input,
+            outputTokens: tokenUsage?.output,
+          },
+          "openai proxy routes: handle chat completions: costs",
+        );
 
         // Store the complete interaction
         await InteractionModel.create({

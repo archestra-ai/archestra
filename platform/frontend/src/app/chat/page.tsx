@@ -28,6 +28,7 @@ import { PromptLibraryGrid } from "@/components/chat/prompt-library-grid";
 import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-history-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -417,30 +418,32 @@ export default function ChatPage() {
         title="New Chat"
         description="Start a free chat or select a prompt from your library to start a guided chat"
         actionButton={
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    onClick={handleCreatePrompt}
-                    size="sm"
-                    disabled={hasNoChatAgents}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Prompt
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {hasNoChatAgents && (
-                <TooltipContent>
-                  <p>
-                    You don't have access to any profile that the prompt can be
-                    assigned to
-                  </p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <WithPermissions
+            permissions={{ prompt: ["create"] }}
+            noPermissionHandle="hide"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      onClick={handleCreatePrompt}
+                      size="sm"
+                      disabled={hasNoChatAgents}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Prompt
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {hasNoChatAgents && (
+                  <TooltipContent>
+                    <p>None of the profiles has chat enabled</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </WithPermissions>
         }
       >
         <PromptLibraryGrid

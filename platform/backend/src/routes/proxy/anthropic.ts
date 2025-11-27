@@ -134,6 +134,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
+
       if (!agent) {
         return reply.status(404).send({
           error: {
@@ -321,12 +322,24 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
-      // Convert tool results to TOON format if enabled on agent
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: body.messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
+      );
+
+      // Determine if TOON compression should be applied
       let toonTokensBefore: number | null = null;
       let toonTokensAfter: number | null = null;
       let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
 
-      if (resolvedAgent.convertToolResultsToToon) {
+      if (shouldApplyToonCompression) {
         const { messages: convertedMessages, stats } =
           await utils.adapters.anthropic.convertToolResultsToToon(
             filteredMessages,
@@ -340,13 +353,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       fastify.log.info(
         {
-          resolvedAgentId,
-          originalMessagesCount: body.messages.length,
-          filteredMessagesCount: filteredMessages.length,
-          toolResultUpdatesCount: toolResultUpdates.length,
-          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
         },
-        "Messages filtered after trusted data evaluation",
+        "anthropic proxy routes: handle messages: tool results compression completed",
       );
 
       if (stream) {
@@ -631,14 +643,25 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tokenUsage.input,
           tokenUsage.output,
         );
-
         // Calculate actual cost after Optimization Rules are applied.
-        const costAfterOptimization =
+        const costAfterModelOptimization =
           await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
+
+        fastify.log.info(
+          {
+            model: model,
+            baselineModel: body.model,
+            baselineCost: baselineCost,
+            costAfterModelOptimization: costAfterModelOptimization,
+            inputTokens: tokenUsage.input,
+            outputTokens: tokenUsage.output,
+          },
+          "anthropic proxy routes: handle messages: costs",
+        );
 
         // Store the complete interaction
         await InteractionModel.create({
@@ -662,7 +685,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost: costAfterOptimization?.toFixed(10) ?? null,
+          cost: costAfterModelOptimization?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
           toonTokensBefore,
           toonTokensAfter,
@@ -684,6 +707,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.raw.write(
           `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
         );
+        1;
 
         // Send message_stop event
         const messageStopEvent = {
@@ -756,8 +780,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               tokenUsage.input,
               tokenUsage.output,
             );
-
-            const costAfterOptimization =
+            const costAfterModelOptimization =
               await utils.costOptimization.calculateCost(
                 model,
                 tokenUsage.input,
@@ -776,7 +799,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
-              cost: costAfterOptimization?.toFixed(10) ?? null,
+              cost: costAfterModelOptimization?.toFixed(10) ?? null,
               baselineCost: baselineCost?.toFixed(10) ?? null,
               toonTokensBefore,
               toonTokensAfter,
@@ -803,7 +826,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Calculate actual cost (potentially optimized model)
-        const costAfterOptimization =
+        const costAfterModelOptimization =
           await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
@@ -822,7 +845,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost: costAfterOptimization?.toFixed(10) ?? null,
+          cost: costAfterModelOptimization?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
           toonTokensBefore,
           toonTokensAfter,

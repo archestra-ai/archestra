@@ -434,7 +434,6 @@ export async function convertToolResultsToToon(
     if (tokensSaved > 0) {
       const tokenPrice = await TokenPriceModel.findByModel(model);
       if (tokenPrice) {
-        // TOON compresses tool results (output tokens from previous LLM calls)
         const outputPricePerToken =
           Number(tokenPrice.pricePerMillionOutput) / 1000000;
         toonCostSavings = tokensSaved * outputPricePerToken;

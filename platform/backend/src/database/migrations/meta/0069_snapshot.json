@@ -1,6 +1,6 @@
 {
-  "id": "3b85e952-7094-4ed1-bc6a-bf86570dbf80",
-  "prevId": "3e340dca-7f9e-44b8-ac21-acec13706550",
+  "id": "0b2762c3-4662-4ad1-bcba-9027dc79d8b3",
+  "prevId": "2c1164ff-2d20-434d-99d3-862699f71037",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -447,13 +447,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "convert_tool_results_to_toon": {
-          "name": "convert_tool_results_to_toon",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -2487,6 +2480,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "compression_scope": {
+          "name": "compression_scope",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'organization'"
         }
       },
       "indexes": {},
@@ -2740,6 +2740,89 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.sso_provider": {
+      "name": "sso_provider",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oidc_config": {
+          "name": "oidc_config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saml_config": {
+          "name": "saml_config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "domain": {
+          "name": "domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sso_provider_user_id_user_id_fk": {
+          "name": "sso_provider_user_id_user_id_fk",
+          "tableFrom": "sso_provider",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sso_provider_provider_id_unique": {
+          "name": "sso_provider_provider_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.team_member": {
       "name": "team_member",
       "schema": "",
@@ -2856,6 +2939,13 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true
+        },
+        "convert_tool_results_to_toon": {
+          "name": "convert_tool_results_to_toon",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},

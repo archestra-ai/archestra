@@ -203,6 +203,27 @@ class TeamModel {
 
     return teamMemberships.map((membership) => membership.teamId);
   }
+
+  /**
+   * Get all teams for an agent with their compression settings
+   */
+  static async getTeamsForAgent(agentId: string): Promise<Team[]> {
+    const agentTeams = await db
+      .select({
+        team: schema.teamsTable,
+      })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId));
+
+    return agentTeams.map((result) => ({
+      ...result.team,
+      members: [], // Members not needed for compression logic
+    }));
+  }
 }
 
 export default TeamModel;

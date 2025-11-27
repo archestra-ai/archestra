@@ -5,6 +5,7 @@ import { hasPermission } from "@/auth";
 import { StatisticsModel } from "@/models";
 import {
   AgentStatisticsSchema,
+  CostSavingsStatisticsSchema,
   constructResponseSchema,
   ModelStatisticsSchema,
   OverviewStatisticsSchema,
@@ -115,6 +116,33 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send(
         await StatisticsModel.getOverviewStatistics(
+          timeframe,
+          user.id,
+          isAgentAdmin,
+        ),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/cost-savings",
+    {
+      schema: {
+        operationId: RouteId.GetCostSavingsStatistics,
+        description: "Get cost savings statistics",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(CostSavingsStatisticsSchema),
+      },
+    },
+    async ({ query: { timeframe }, user, headers }, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        headers,
+      );
+
+      return reply.send(
+        await StatisticsModel.getCostSavingsStatistics(
           timeframe,
           user.id,
           isAgentAdmin,

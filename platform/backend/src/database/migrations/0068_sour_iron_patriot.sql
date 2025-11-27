@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "compression_scope" varchar DEFAULT 'organization' NOT NULL;--> statement-breakpoint
+ALTER TABLE "team" ADD COLUMN "convert_tool_results_to_toon" boolean DEFAULT false NOT NULL;

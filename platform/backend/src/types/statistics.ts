@@ -47,6 +47,23 @@ export const OverviewStatisticsSchema = z.object({
   topModel: z.string(),
 });
 
+export const CostSavingsStatisticsSchema = z.object({
+  totalBaselineCost: z.number(),
+  totalActualCost: z.number(),
+  totalSavings: z.number(),
+  totalOptimizationSavings: z.number(),
+  totalToonSavings: z.number(),
+  timeSeries: z.array(
+    z.object({
+      timestamp: z.string(),
+      baselineCost: z.number(),
+      actualCost: z.number(),
+      optimizationSavings: z.number(),
+      toonSavings: z.number(),
+    }),
+  ),
+});
+
 const BaseTimeSeriesDataSchema = z.object({
   timeBucket: z.string(),
   requests: z.number(),
@@ -85,6 +102,7 @@ export type TeamStatistics = z.infer<typeof TeamStatisticsSchema>;
 export type AgentStatistics = z.infer<typeof AgentStatisticsSchema>;
 export type ModelStatistics = z.infer<typeof ModelStatisticsSchema>;
 export type OverviewStatistics = z.infer<typeof OverviewStatisticsSchema>;
+export type CostSavingsStatistics = z.infer<typeof CostSavingsStatisticsSchema>;
 
 export type StatisticsTeamTimeSeriesData = z.infer<
   typeof StatisticsTeamTimeSeriesDataSchema

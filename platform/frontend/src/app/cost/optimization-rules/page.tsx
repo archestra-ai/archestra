@@ -493,8 +493,17 @@ function OptimizationRuleRow({
     >
       <TableCell>
         <div className={!hasModelPricing ? "opacity-50" : ""}>
-          <WithPermissions permissions={{ limit: ["update"] }}>
-            <Switch checked={rule.enabled} onCheckedChange={onToggleEnabled} />
+          <WithPermissions
+            permissions={{ limit: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ isDisabled }) => (
+              <Switch
+                checked={rule.enabled}
+                onCheckedChange={onToggleEnabled}
+                disabled={isDisabled}
+              />
+            )}
           </WithPermissions>
         </div>
       </TableCell>

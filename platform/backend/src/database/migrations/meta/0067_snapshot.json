@@ -1,6 +1,6 @@
 {
-  "id": "3b85e952-7094-4ed1-bc6a-bf86570dbf80",
-  "prevId": "3e340dca-7f9e-44b8-ac21-acec13706550",
+  "id": "97479d15-aa10-47a3-938e-d1993ef40b75",
+  "prevId": "3b85e952-7094-4ed1-bc6a-bf86570dbf80",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -447,13 +447,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "convert_tool_results_to_toon": {
-          "name": "convert_tool_results_to_toon",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

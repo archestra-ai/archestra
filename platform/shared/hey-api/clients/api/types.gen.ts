@@ -2167,7 +2167,6 @@ export type GetAgentsResponses = {
             isDefault: boolean;
             considerContextUntrusted: boolean;
             useInChat: boolean;
-            convertToolResultsToToon: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2223,7 +2222,6 @@ export type CreateAgentData = {
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
-        convertToolResultsToToon?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2307,7 +2305,6 @@ export type CreateAgentResponses = {
         isDefault: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2426,7 +2423,6 @@ export type GetAllAgentsResponses = {
         isDefault: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2543,7 +2539,6 @@ export type GetDefaultAgentResponses = {
         isDefault: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2741,7 +2736,6 @@ export type GetAgentResponses = {
         isDefault: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2788,7 +2782,6 @@ export type UpdateAgentData = {
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
         useInChat?: boolean;
-        convertToolResultsToToon?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -2874,7 +2867,6 @@ export type UpdateAgentResponses = {
         isDefault: boolean;
         considerContextUntrusted: boolean;
         useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -12243,6 +12235,8 @@ export type GetOrganizationResponses = {
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
     };
 };
 
@@ -12253,8 +12247,10 @@ export type UpdateOrganizationData = {
         theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        compressionScope?: 'organization' | 'team';
         logo?: string | null;
         onboardingComplete?: boolean;
+        convertToolResultsToToon?: boolean;
     };
     path?: never;
     query?: never;
@@ -12335,6 +12331,8 @@ export type UpdateOrganizationResponses = {
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
     };
 };
 
@@ -14347,6 +14345,96 @@ export type GetOverviewStatisticsResponses = {
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
+export type GetCostSavingsStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/cost-savings';
+};
+
+export type GetCostSavingsStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetCostSavingsStatisticsError = GetCostSavingsStatisticsErrors[keyof GetCostSavingsStatisticsErrors];
+
+export type GetCostSavingsStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalBaselineCost: number;
+        totalActualCost: number;
+        totalSavings: number;
+        totalOptimizationSavings: number;
+        totalToonSavings: number;
+        timeSeries: Array<{
+            timestamp: string;
+            baselineCost: number;
+            actualCost: number;
+            optimizationSavings: number;
+            toonSavings: number;
+        }>;
+    };
+};
+
+export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses[keyof GetCostSavingsStatisticsResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;
@@ -14425,6 +14513,7 @@ export type GetTeamsResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -14518,6 +14607,7 @@ export type CreateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -14689,6 +14779,7 @@ export type GetTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -14705,6 +14796,7 @@ export type UpdateTeamData = {
     body?: {
         name?: string;
         description?: string;
+        convertToolResultsToToon?: boolean;
     };
     path: {
         id: string;
@@ -14784,6 +14876,7 @@ export type UpdateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;

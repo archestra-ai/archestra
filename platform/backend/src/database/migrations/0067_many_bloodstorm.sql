@@ -1,0 +1,1 @@
+ALTER TABLE "agents" DROP COLUMN "convert_tool_results_to_toon";

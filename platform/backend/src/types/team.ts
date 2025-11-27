@@ -25,6 +25,7 @@ export const CreateTeamBodySchema = z.object({
 export const UpdateTeamBodySchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
+  convertToolResultsToToon: z.boolean().optional(),
 });
 
 export const AddTeamMemberBodySchema = z.object({

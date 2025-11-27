@@ -113,7 +113,7 @@ export const memberRole = ac.newRole({
   limit: ["read"],
   tokenPrice: ["read"],
   chatSettings: ["read"],
-  prompt: ["create", "read", "update", "delete"],
+  prompt: ["read"],
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -334,6 +334,7 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostSavingsStatistics: "getCostSavingsStatistics",
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
@@ -732,6 +733,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetCostSavingsStatistics]: {
     interaction: ["read"],
   },
   [RouteId.GetOptimizationRules]: {

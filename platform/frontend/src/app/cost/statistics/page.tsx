@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/table";
 import {
   useAgentStatistics,
+  useCostSavingsStatistics,
   useModelStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
@@ -163,6 +164,9 @@ export default function StatisticsPage() {
     timeframe: currentTimeframe,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
+    timeframe: currentTimeframe,
+  });
+  const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe: currentTimeframe,
   });
 
@@ -461,7 +465,7 @@ export default function StatisticsPage() {
           borderWidth: 1,
           cornerRadius: 12,
           padding: 16,
-          displayColors: false,
+          displayColors: true,
           titleFont: {
             size: 14,
             weight: "bold" as const,
@@ -474,7 +478,7 @@ export default function StatisticsPage() {
             "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
           callbacks: {
             label: (context: TooltipItem<"line">) =>
-              `Cost: $${context.parsed.y?.toFixed(2) || "0"}`,
+              `${context.dataset.label}: $${context.parsed.y?.toFixed(2) || "0"}`,
             title: (context: TooltipItem<"line">[]) =>
               `Time: ${context[0].label}`,
           },
@@ -566,6 +570,142 @@ export default function StatisticsPage() {
       ),
     [modelStatistics],
   );
+
+  // Cost savings chart data (baseline vs actual)
+  const costSavingsChartData = useMemo(() => {
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
+      return {
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No data available",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
+    }
+
+    const labels = costSavingsData.timeSeries.map((point) => {
+      const date = new Date(point.timestamp);
+      if (timeframe === "1h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "24h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "7d" || timeframe === "30d") {
+        return format(date, "MMM d");
+      } else {
+        return format(date, "MMM d");
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Non-Optimized Cost",
+          data: costSavingsData.timeSeries.map((point) => point.baselineCost),
+          borderColor: "#ef4444", // red
+          backgroundColor: "rgba(239, 68, 68, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#ef4444",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+        {
+          label: "Actual Cost",
+          data: costSavingsData.timeSeries.map((point) => point.actualCost),
+          borderColor: "#10b981", // green
+          backgroundColor: "rgba(16, 185, 129, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#10b981",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+      ],
+    };
+  }, [costSavingsData, timeframe]);
+
+  // Savings breakdown chart data (optimization rules vs TOON)
+  const savingsBreakdownChartData = useMemo(() => {
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
+      return {
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No data available",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
+    }
+
+    const labels = costSavingsData.timeSeries.map((point) => {
+      const date = new Date(point.timestamp);
+      if (timeframe === "1h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "24h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "7d" || timeframe === "30d") {
+        return format(date, "MMM d");
+      } else {
+        return format(date, "MMM d");
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Optimization Rules Savings",
+          data: costSavingsData.timeSeries.map(
+            (point) => point.optimizationSavings,
+          ),
+          borderColor: "#3b82f6", // blue
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#3b82f6",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+        {
+          label: "Tool Compression Savings",
+          data: costSavingsData.timeSeries.map((point) => point.toonSavings),
+          borderColor: "#8b5cf6", // purple
+          backgroundColor: "rgba(139, 92, 246, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#8b5cf6",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+      ],
+    };
+  }, [costSavingsData, timeframe]);
 
   return (
     <div className="space-y-6">
@@ -704,6 +844,38 @@ export default function StatisticsPage() {
             </DialogContent>
           </Dialog>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cost Savings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <Line
+                key={`cost-savings-${timeframe}`}
+                data={costSavingsChartData}
+                options={chartOptions}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Savings Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <Line
+                key={`savings-breakdown-${timeframe}`}
+                data={savingsBreakdownChartData}
+                options={chartOptions}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>

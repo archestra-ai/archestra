@@ -6,7 +6,10 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { OrganizationLimitCleanupInterval } from "@/types";
+import type {
+  OrganizationCompressionScope,
+  OrganizationLimitCleanupInterval,
+} from "@/types";
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -27,6 +30,13 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCustomFont>()
     .notNull()
     .default("lato"),
+  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
+    .notNull()
+    .default(false),
+  compressionScope: varchar("compression_scope")
+    .$type<OrganizationCompressionScope>()
+    .notNull()
+    .default("organization"),
 });
 
 export default organizationsTable;

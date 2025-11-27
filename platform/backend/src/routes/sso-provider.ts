@@ -48,8 +48,8 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectSsoProviderSchema)),
       },
     },
-    async (_request, reply) => {
-      return reply.send(await SsoProviderModel.findAll());
+    async ({ organizationId }, reply) => {
+      return reply.send(await SsoProviderModel.findAll(organizationId));
     },
   );
 

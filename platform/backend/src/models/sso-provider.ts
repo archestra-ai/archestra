@@ -28,9 +28,13 @@ class SsoProviderModel {
   /**
    * Find all SSO providers with full configuration including secrets.
    * Use this only for authenticated admin endpoints.
+   * Filters by organizationId to enforce multi-tenant isolation.
    */
-  static async findAll(): Promise<SsoProvider[]> {
-    const ssoProviders = await db.select().from(schema.ssoProvidersTable);
+  static async findAll(organizationId: string): Promise<SsoProvider[]> {
+    const ssoProviders = await db
+      .select()
+      .from(schema.ssoProvidersTable)
+      .where(eq(schema.ssoProvidersTable.organizationId, organizationId));
 
     return ssoProviders.map((provider) => ({
       ...provider,
@@ -190,17 +194,18 @@ class SsoProviderModel {
       return false;
     }
 
-    // Delete from database
-    const result = await db
+    // Delete from database using returning() to verify deletion
+    const deleted = await db
       .delete(schema.ssoProvidersTable)
       .where(
         and(
           eq(schema.ssoProvidersTable.id, id),
           eq(schema.ssoProvidersTable.organizationId, organizationId),
         ),
-      );
+      )
+      .returning({ id: schema.ssoProvidersTable.id });
 
-    return (result?.rowCount ?? 0) > 0;
+    return deleted.length > 0;
   }
 }
 

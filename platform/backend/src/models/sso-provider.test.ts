@@ -61,8 +61,11 @@ describe("SsoProviderModel", () => {
   });
 
   describe("findAll", () => {
-    test("returns empty array when no providers exist", async () => {
-      const providers = await SsoProviderModel.findAll();
+    test("returns empty array when no providers exist", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const providers = await SsoProviderModel.findAll(org.id);
       expect(providers).toEqual([]);
     });
 
@@ -87,7 +90,7 @@ describe("SsoProviderModel", () => {
         oidcConfig,
       });
 
-      const providers = await SsoProviderModel.findAll();
+      const providers = await SsoProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].providerId).toBe("Okta");
@@ -115,7 +118,7 @@ describe("SsoProviderModel", () => {
         samlConfig,
       });
 
-      const providers = await SsoProviderModel.findAll();
+      const providers = await SsoProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].samlConfig).toEqual(samlConfig);
@@ -132,11 +135,57 @@ describe("SsoProviderModel", () => {
         providerId: "BasicProvider",
       });
 
-      const providers = await SsoProviderModel.findAll();
+      const providers = await SsoProviderModel.findAll(org.id);
 
       expect(providers).toHaveLength(1);
       expect(providers[0].oidcConfig).toBeUndefined();
       expect(providers[0].samlConfig).toBeUndefined();
+    });
+
+    test("only returns providers for the specified organization (multi-tenant isolation)", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+
+      // Create providers for both organizations
+      await makeSsoProvider(org1.id, {
+        providerId: "Org1-Okta",
+        oidcConfig: {
+          clientId: "org1-client",
+          clientSecret: "ORG1_SECRET",
+          issuer: "https://org1.okta.com",
+          pkce: false,
+          discoveryEndpoint: "https://org1.okta.com/.well-known",
+        },
+      });
+      await makeSsoProvider(org2.id, {
+        providerId: "Org2-Okta",
+        oidcConfig: {
+          clientId: "org2-client",
+          clientSecret: "ORG2_SECRET",
+          issuer: "https://org2.okta.com",
+          pkce: false,
+          discoveryEndpoint: "https://org2.okta.com/.well-known",
+        },
+      });
+
+      // Org1 should only see their own provider
+      const org1Providers = await SsoProviderModel.findAll(org1.id);
+      expect(org1Providers).toHaveLength(1);
+      expect(org1Providers[0].providerId).toBe("Org1-Okta");
+      expect(org1Providers[0].oidcConfig?.clientSecret).toBe("ORG1_SECRET");
+
+      // Org2 should only see their own provider
+      const org2Providers = await SsoProviderModel.findAll(org2.id);
+      expect(org2Providers).toHaveLength(1);
+      expect(org2Providers[0].providerId).toBe("Org2-Okta");
+      expect(org2Providers[0].oidcConfig?.clientSecret).toBe("ORG2_SECRET");
+
+      // Neither should see the other's secrets
+      expect(JSON.stringify(org1Providers)).not.toContain("ORG2_SECRET");
+      expect(JSON.stringify(org2Providers)).not.toContain("ORG1_SECRET");
     });
   });
 
@@ -366,7 +415,7 @@ describe("SsoProviderModel", () => {
       });
 
       const publicProviders = await SsoProviderModel.findAllPublic();
-      const allProviders = await SsoProviderModel.findAll();
+      const allProviders = await SsoProviderModel.findAll(org.id);
 
       // Public endpoint should NOT have any config
       expect(publicProviders[0]).not.toHaveProperty("oidcConfig");

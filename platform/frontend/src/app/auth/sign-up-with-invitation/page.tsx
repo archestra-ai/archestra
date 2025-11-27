@@ -10,8 +10,6 @@ import { useInvitationCheck } from "@/lib/invitation.query";
 import { useAcceptInvitation } from "@/lib/organization.query";
 
 export default function SignUpWithInvitationPage() {
-  console.log("📝 SignUpWithInvitationPage mounted");
-
   const router = useRouter();
   const searchParams = useSearchParams();
   const [hasProcessed, setHasProcessed] = useState(false);
@@ -19,30 +17,14 @@ export default function SignUpWithInvitationPage() {
   const invitationId = searchParams.get("invitationId");
   const email = searchParams.get("email");
 
-  console.log("📝 Invitation params:", { invitationId, email });
-
   const { data: session } = authClient.useSession();
   const acceptMutation = useAcceptInvitation();
   const { data: invitationData, isLoading: isCheckingInvitation } =
     useInvitationCheck(invitationId);
 
-  console.log("📝 Invitation check:", {
-    isCheckingInvitation,
-    invitationData,
-  });
-
   // Redirect existing users to sign-in
   useEffect(() => {
-    console.log("📝 Redirect effect running:", {
-      invitationId,
-      userExists: invitationData?.userExists,
-    });
-
     if (invitationId && invitationData?.userExists) {
-      console.log(
-        "🔄 Existing user detected, redirecting to sign-in with invitationId:",
-        invitationId,
-      );
       router.push(`/auth/sign-in?invitationId=${invitationId}`);
     }
   }, [invitationId, invitationData, router]);

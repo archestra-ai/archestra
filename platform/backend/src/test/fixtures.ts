@@ -27,7 +27,6 @@ import type {
   InsertOrganization,
   InsertOrganizationRole,
   InsertSession,
-  InsertSsoProvider,
   InsertTeam,
   InsertUser,
   OrganizationRole,
@@ -617,17 +616,14 @@ async function makeSecret(
  */
 async function makeSsoProvider(
   organizationId: string,
-  overrides: Partial<
-    Pick<
-      InsertSsoProvider,
-      | "providerId"
-      | "issuer"
-      | "domain"
-      | "oidcConfig"
-      | "samlConfig"
-      | "userId"
-    >
-  > = {},
+  overrides: {
+    providerId?: string;
+    issuer?: string;
+    domain?: string;
+    oidcConfig?: Record<string, unknown>;
+    samlConfig?: Record<string, unknown>;
+    userId?: string | null;
+  } = {},
 ) {
   const id = crypto.randomUUID().replace(/-/g, "").substring(0, 32);
   const providerId =
@@ -643,11 +639,11 @@ async function makeSsoProvider(
       domain: overrides.domain ?? `domain-${id.substring(0, 8)}.example.com`,
       organizationId,
       oidcConfig: overrides.oidcConfig
-        ? JSON.stringify(overrides.oidcConfig)
-        : null,
+        ? (JSON.stringify(overrides.oidcConfig) as unknown as undefined)
+        : undefined,
       samlConfig: overrides.samlConfig
-        ? JSON.stringify(overrides.samlConfig)
-        : null,
+        ? (JSON.stringify(overrides.samlConfig) as unknown as undefined)
+        : undefined,
       userId: overrides.userId ?? null,
     })
     .returning();

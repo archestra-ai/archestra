@@ -1,5 +1,5 @@
+import type { SsoProviderOidcConfig, SsoProviderSamlConfig } from "@shared";
 import { pgTable, text } from "drizzle-orm/pg-core";
-import type { SsoProviderOidcConfig, SsoProviderSamlConfig } from "@/types";
 import usersTable from "./user";
 
 const ssoProvidersTable = pgTable("sso_provider", {

@@ -1,5 +1,12 @@
 import { sso } from "@better-auth/sso";
-import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  ac,
+  adminRole,
+  allAvailableActions,
+  MEMBER_ROLE_NAME,
+  memberRole,
+} from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -103,14 +110,65 @@ export const auth = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
+    /**
+     * TODO: add this conditionally and allow
+     * configuration of some of these provisioning options...
+     */
     sso({
       organizationProvisioning: {
         disabled: false,
-        defaultRole: "member",
+        defaultRole: MEMBER_ROLE_NAME,
+        getRole: async (data) => {
+          // Custom role assignment logic based on user attributes
+          const { userInfo } = data;
+
+          // Look for admin indicators in user attributes
+          const isAdmin =
+            userInfo.role === "admin" ||
+            userInfo.groups?.includes("admin") ||
+            userInfo.department === "IT" ||
+            userInfo.title?.toLowerCase().includes("admin") ||
+            userInfo.title?.toLowerCase().includes("manager");
+
+          return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
+        },
       },
       defaultOverrideUserInfo: true,
       disableImplicitSignUp: false,
       providersLimit: 10,
+      trustEmailVerified: true, // Trust email verification from SSO providers
+      provisionUser: async (data) => {
+        // Custom user provisioning logic
+        const { user, userInfo, provider } = data;
+
+        logger.info({
+          message: "Provisioning SSO user",
+          userId: user.id,
+          email: user.email,
+          providerId: provider.providerId,
+          domain: provider.domain,
+        });
+
+        // Extract additional user attributes from SSO claims
+        const additionalData: Record<string, string | number | boolean> = {};
+
+        // Map common SSO attributes
+        if (userInfo.department)
+          additionalData.department = String(userInfo.department);
+        if (userInfo.title) additionalData.title = String(userInfo.title);
+        if (userInfo.groups) additionalData.groups = String(userInfo.groups);
+        if (userInfo.manager) additionalData.manager = String(userInfo.manager);
+        if (userInfo.employeeId)
+          additionalData.employeeId = String(userInfo.employeeId);
+
+        logger.info({
+          message: "SSO user additional attributes",
+          additionalData,
+        });
+
+        // Note: provisionUser is for side effects only, doesn't return user data
+        // User data modification should be done in hooks if needed
+      },
       fields: {
         oidcConfig: "oidc_config",
         samlConfig: "saml_config",

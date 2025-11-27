@@ -45,7 +45,7 @@ class SsoProviderModel {
   static async create(
     data: Omit<InsertSsoProvider, "id">,
     organizationId: string,
-    headers: Headers,
+    headers: HeadersInit,
   ): Promise<SsoProvider> {
     // Parse JSON configs if they exist
     const parsedData = {
@@ -80,7 +80,7 @@ class SsoProviderModel {
     // Register with Better Auth
     await auth.api.registerSSOProvider({
       body: parsedData,
-      headers,
+      headers: new Headers(headers),
     });
 
     // Better Auth automatically creates the database record, so we need to find it

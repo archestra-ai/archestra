@@ -3,6 +3,7 @@
 import { AuthView } from "@daveyplate/better-auth-ui";
 import { AlertCircle, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SsoProviderSelector } from "@/components/sso-provider-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -123,7 +124,10 @@ export function AuthViewWithErrorHandling({
           </AlertDescription>
         </Alert>
       )}
-      <AuthView path={path} classNames={classNames} />
+      <div className="space-y-4">
+        <AuthView path={path} classNames={classNames} />
+        {path === "sign-in" && <SsoProviderSelector />}
+      </div>
     </>
   );
 }

@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { SsoProviderModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
   InsertSsoProviderSchema,
   SelectSsoProviderSchema,
@@ -10,7 +11,6 @@ import {
 } from "@/types";
 
 const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Get all SSO providers
   fastify.get(
     "/api/sso-providers",
     {
@@ -26,7 +26,6 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Get single SSO provider
   fastify.get(
     "/api/sso-providers/:id",
     {
@@ -46,18 +45,12 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       );
       if (!provider) {
-        return reply.code(404).send({
-          error: {
-            message: "SSO provider not found",
-            type: "api_not_found_error" as const,
-          },
-        });
+        throw new ApiError(404, "SSO provider not found");
       }
       return reply.send(provider);
     },
   );
 
-  // Create SSO provider
   fastify.post(
     "/api/sso-providers",
     {
@@ -65,35 +58,24 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateSsoProvider,
         description: "Create a new SSO provider",
         tags: ["SSO Providers"],
-        body: InsertSsoProviderSchema.omit({ id: true, organizationId: true }),
+        body: InsertSsoProviderSchema,
         response: constructResponseSchema(SelectSsoProviderSchema),
       },
     },
-    async (request, reply) => {
-      const { body, organizationId, user } = request;
-      // Convert Node.js headers to Web API Headers
-      const webHeaders = new Headers();
-      for (const [key, value] of Object.entries(request.headers)) {
-        if (typeof value === "string") {
-          webHeaders.set(key, value);
-        } else if (Array.isArray(value)) {
-          webHeaders.set(key, value.join(", "));
-        }
-      }
-
-      const provider = await SsoProviderModel.create(
-        {
-          ...body,
-          userId: user.id,
-        },
-        organizationId,
-        webHeaders,
+    async ({ body, organizationId, user, headers }, reply) => {
+      return reply.send(
+        await SsoProviderModel.create(
+          {
+            ...body,
+            userId: user.id,
+          },
+          organizationId,
+          headers as HeadersInit,
+        ),
       );
-      return reply.send(provider);
     },
   );
 
-  // Update SSO provider
   fastify.put(
     "/api/sso-providers/:id",
     {
@@ -104,33 +86,19 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string(),
         }),
-        body: UpdateSsoProviderSchema.omit({
-          id: true,
-          organizationId: true,
-          userId: true,
-        }),
+        body: UpdateSsoProviderSchema,
         response: constructResponseSchema(SelectSsoProviderSchema),
       },
     },
-    async ({ params, body, organizationId }, reply) => {
-      const provider = await SsoProviderModel.update(
-        params.id,
-        body,
-        organizationId,
-      );
+    async ({ params: { id }, body, organizationId }, reply) => {
+      const provider = await SsoProviderModel.update(id, body, organizationId);
       if (!provider) {
-        return reply.code(404).send({
-          error: {
-            message: "SSO provider not found",
-            type: "api_not_found_error" as const,
-          },
-        });
+        throw new ApiError(404, "SSO provider not found");
       }
       return reply.send(provider);
     },
   );
 
-  // Delete SSO provider
   fastify.delete(
     "/api/sso-providers/:id",
     {
@@ -147,12 +115,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params, organizationId }, reply) => {
       const success = await SsoProviderModel.delete(params.id, organizationId);
       if (!success) {
-        return reply.code(404).send({
-          error: {
-            message: "SSO provider not found",
-            type: "api_not_found_error" as const,
-          },
-        });
+        throw new ApiError(404, "SSO provider not found");
       }
       return reply.send({ success: true });
     },

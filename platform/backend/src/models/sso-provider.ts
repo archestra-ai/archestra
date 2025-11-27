@@ -16,8 +16,12 @@ class SsoProviderModel {
 
     return ssoProviders.map((provider) => ({
       ...provider,
-      oidcConfig: provider.oidcConfig || undefined,
-      samlConfig: provider.samlConfig || undefined,
+      oidcConfig: provider.oidcConfig
+        ? JSON.parse(provider.oidcConfig as unknown as string)
+        : undefined,
+      samlConfig: provider.samlConfig
+        ? JSON.parse(provider.samlConfig as unknown as string)
+        : undefined,
     }));
   }
 
@@ -35,10 +39,18 @@ class SsoProviderModel {
         ),
       );
 
+    if (!ssoProvider) {
+      return null;
+    }
+
     return {
       ...ssoProvider,
-      oidcConfig: ssoProvider.oidcConfig || undefined,
-      samlConfig: ssoProvider.samlConfig || undefined,
+      oidcConfig: ssoProvider.oidcConfig
+        ? JSON.parse(ssoProvider.oidcConfig as unknown as string)
+        : undefined,
+      samlConfig: ssoProvider.samlConfig
+        ? JSON.parse(ssoProvider.samlConfig as unknown as string)
+        : undefined,
     };
   }
 
@@ -102,8 +114,12 @@ class SsoProviderModel {
 
     return {
       ...provider,
-      oidcConfig: provider.oidcConfig || undefined,
-      samlConfig: provider.samlConfig || undefined,
+      oidcConfig: provider.oidcConfig
+        ? JSON.parse(provider.oidcConfig as unknown as string)
+        : undefined,
+      samlConfig: provider.samlConfig
+        ? JSON.parse(provider.samlConfig as unknown as string)
+        : undefined,
     };
   }
 
@@ -137,8 +153,12 @@ class SsoProviderModel {
 
     return {
       ...updatedProvider,
-      oidcConfig: updatedProvider.oidcConfig || undefined,
-      samlConfig: updatedProvider.samlConfig || undefined,
+      oidcConfig: updatedProvider.oidcConfig
+        ? JSON.parse(updatedProvider.oidcConfig as unknown as string)
+        : undefined,
+      samlConfig: updatedProvider.samlConfig
+        ? JSON.parse(updatedProvider.samlConfig as unknown as string)
+        : undefined,
     };
   }
 

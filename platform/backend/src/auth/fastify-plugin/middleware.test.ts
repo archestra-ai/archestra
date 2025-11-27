@@ -111,6 +111,59 @@ describe("Authnz", () => {
       }
     });
 
+    test("should skip auth for GET requests to SSO providers endpoint", async () => {
+      const ssoProviderUrls = [
+        "/api/sso-providers",
+        "/api/sso-providers/",
+        "/api/sso-providers?param=value",
+      ];
+
+      for (const url of ssoProviderUrls) {
+        const mockRequest = {
+          url,
+          method: "GET",
+          headers: {},
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        await authnz.handle(mockRequest, mockReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+      }
+    });
+
+    test("should NOT skip auth for non-GET requests to SSO providers endpoint", async () => {
+      const nonGetMethods = ["POST", "PUT", "DELETE", "PATCH"];
+
+      for (const method of nonGetMethods) {
+        const mockRequest = {
+          url: "/api/sso-providers",
+          method,
+          headers: {},
+          routeOptions: {
+            schema: {
+              operationId: "SsoProviderOperation",
+            },
+          },
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
+        // Should throw ApiError for unauthenticated non-GET requests
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
+      }
+    });
+
     test("should NOT skip auth for similar but different paths", async () => {
       const protectedPaths = [
         "/.well-known/something-else",

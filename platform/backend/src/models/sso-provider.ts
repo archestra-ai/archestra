@@ -8,11 +8,8 @@ import type {
 } from "@/types";
 
 class SsoProviderModel {
-  static async findAll(organizationId: string): Promise<SsoProvider[]> {
-    const ssoProviders = await db
-      .select()
-      .from(schema.ssoProvidersTable)
-      .where(eq(schema.ssoProvidersTable.organizationId, organizationId));
+  static async findAll(): Promise<SsoProvider[]> {
+    const ssoProviders = await db.select().from(schema.ssoProvidersTable);
 
     return ssoProviders.map((provider) => ({
       ...provider,

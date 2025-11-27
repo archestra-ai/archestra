@@ -21,10 +21,15 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(SelectSsoProviderSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      const providers = await SsoProviderModel.findAll(organizationId);
-      fastify.log.info({ providers }, "SSO providers found");
-      return reply.send(providers);
+    async (_request, reply) => {
+      /**
+       * NOTE: here we fetch ALL SSO providers. If in the future we support multiple
+       * organizations, we will need to refactor this
+       *
+       * In some scenarios, like the user being on the login page, we don't have
+       * an organizationId, so we need to fetch all SSO providers
+       */
+      return reply.send(await SsoProviderModel.findAll());
     },
   );
 

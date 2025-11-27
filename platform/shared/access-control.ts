@@ -686,9 +686,12 @@ export const requiredEndpointPermissionsMap: Partial<
     organization: ["update"],
   },
 
-  [RouteId.GetSsoProviders]: {
-    ssoProvider: ["read"],
-  },
+  /**
+   * Get all SSO providers route
+   * available to all unauthenticated users, since you need to be able to
+   * fetch SSO provider configs to be able to login with SSO
+   */
+  [RouteId.GetSsoProviders]: {},
   [RouteId.GetSsoProvider]: {
     ssoProvider: ["read"],
   },

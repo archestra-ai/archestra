@@ -77,13 +77,7 @@ export default async function AuthPage({
                 <DefaultCredentialsWarning alwaysShow />
               </div>
             )}
-            <AuthViewWithErrorHandling
-              path={path}
-              classNames={{
-                footer: "hidden",
-                form: { forgotPasswordLink: "hidden" },
-              }}
-            />
+            <AuthViewWithErrorHandling path={path} />
           </div>
         </main>
       </Suspense>

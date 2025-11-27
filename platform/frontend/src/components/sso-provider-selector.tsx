@@ -18,12 +18,9 @@ import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 
-interface SsoProviderSelectorProps {
-  className?: string;
-}
-
-export function SsoProviderSelector({ className }: SsoProviderSelectorProps) {
+export function SsoProviderSelector() {
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
+
   const [email, setEmail] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -71,101 +68,99 @@ export function SsoProviderSelector({ className }: SsoProviderSelectorProps) {
   }
 
   return (
-    <div className={className}>
-      <div className="space-y-4">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              Or continue with SSO
-            </span>
-          </div>
+    <div className="space-y-4">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
         </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Or continue with SSO
+          </span>
+        </div>
+      </div>
 
-        <div className="space-y-2">
-          {/* Show up to 3 providers directly */}
-          {ssoProviders.slice(0, 3).map((provider) => (
-            <Button
-              key={provider.id}
-              variant="outline"
-              className="w-full"
-              onClick={() => handleSsoSignIn(provider.providerId)}
-            >
-              <Building2 className="mr-2 h-4 w-4" />
-              Sign in with {provider.domain}
-            </Button>
-          ))}
+      <div className="space-y-2">
+        {/* Show up to 3 providers directly */}
+        {ssoProviders.slice(0, 3).map((provider) => (
+          <Button
+            key={provider.id}
+            variant="outline"
+            className="w-full"
+            onClick={() => handleSsoSignIn(provider.providerId)}
+          >
+            <Building2 className="mr-2 h-4 w-4" />
+            Sign in with {provider.domain}
+          </Button>
+        ))}
 
-          {/* If more than 3 providers, show email domain selector */}
-          {ssoProviders.length > 3 && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="w-full">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Sign in with your organization
+        {/* If more than 3 providers, show email domain selector */}
+        {ssoProviders.length > 3 && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Sign in with your organization
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Sign in with SSO</DialogTitle>
+                <DialogDescription>
+                  Enter your work email to find your organization's SSO
+                  provider.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sso-email">Work Email</Label>
+                  <Input
+                    id="sso-email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleEmailDomainSignIn();
+                      }
+                    }}
+                  />
+                </div>
+
+                <Button onClick={handleEmailDomainSignIn} className="w-full">
+                  Continue with SSO
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Sign in with SSO</DialogTitle>
-                  <DialogDescription>
-                    Enter your work email to find your organization's SSO
-                    provider.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="sso-email">Work Email</Label>
-                    <Input
-                      id="sso-email"
-                      type="email"
-                      placeholder="you@company.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleEmailDomainSignIn();
-                        }
-                      }}
-                    />
-                  </div>
 
-                  <Button onClick={handleEmailDomainSignIn} className="w-full">
-                    Continue with SSO
-                  </Button>
+                <Separator />
 
-                  <Separator />
-
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">
-                      Available Organizations:
-                    </p>
-                    <div className="space-y-1">
-                      {ssoProviders.map((provider) => (
-                        <Button
-                          key={provider.id}
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => {
-                            setIsDialogOpen(false);
-                            handleSsoSignIn(provider.providerId);
-                          }}
-                        >
-                          <Building2 className="mr-2 h-4 w-4" />
-                          {provider.domain}
-                        </Button>
-                      ))}
-                    </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    Available Organizations:
+                  </p>
+                  <div className="space-y-1">
+                    {ssoProviders.map((provider) => (
+                      <Button
+                        key={provider.id}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start"
+                        onClick={() => {
+                          setIsDialogOpen(false);
+                          handleSsoSignIn(provider.providerId);
+                        }}
+                      >
+                        <Building2 className="mr-2 h-4 w-4" />
+                        {provider.domain}
+                      </Button>
+                    ))}
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   );

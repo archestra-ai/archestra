@@ -145,10 +145,28 @@ export const WebPreviewUrl = ({
     onChange?.(event);
   };
 
+  // Utility function for validating URLs
+  const isSafeUrl = (url: string) => {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      return (
+        parsed.protocol === "http:" ||
+        parsed.protocol === "https:"
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       const target = event.target as HTMLInputElement;
-      setUrl(target.value);
+      if (isSafeUrl(target.value)) {
+        setUrl(target.value);
+      } else {
+        // Optionally, show an error or ignore invalid URLs
+        // For now, ignore invalid
+      }
     }
     onKeyDown?.(event);
   };

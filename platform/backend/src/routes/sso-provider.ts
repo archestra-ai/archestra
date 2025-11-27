@@ -6,29 +6,49 @@ import {
   ApiError,
   constructResponseSchema,
   InsertSsoProviderSchema,
+  PublicSsoProviderSchema,
   SelectSsoProviderSchema,
   UpdateSsoProviderSchema,
 } from "@/types";
 
 const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Public endpoint for login page - returns only minimal provider info.
+   * Does NOT expose any sensitive configuration data like client secrets.
+   * Auth is skipped for this endpoint in middleware.
+   */
+  fastify.get(
+    "/api/sso-providers/public",
+    {
+      schema: {
+        operationId: RouteId.GetPublicSsoProviders,
+        description:
+          "Get public SSO provider list for login page (no secrets exposed)",
+        tags: ["SSO Providers"],
+        response: constructResponseSchema(z.array(PublicSsoProviderSchema)),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await SsoProviderModel.findAllPublic());
+    },
+  );
+
+  /**
+   * Admin endpoint - returns full provider config including secrets.
+   * Requires authentication and ssoProvider:read permission.
+   */
   fastify.get(
     "/api/sso-providers",
     {
       schema: {
         operationId: RouteId.GetSsoProviders,
-        description: "Get all SSO providers",
+        description:
+          "Get all SSO providers with full configuration (admin only)",
         tags: ["SSO Providers"],
         response: constructResponseSchema(z.array(SelectSsoProviderSchema)),
       },
     },
     async (_request, reply) => {
-      /**
-       * NOTE: here we fetch ALL SSO providers. If in the future we support multiple
-       * organizations, we will need to refactor this
-       *
-       * In some scenarios, like the user being on the login page, we don't have
-       * an organizationId, so we need to fetch all SSO providers
-       */
       return reply.send(await SsoProviderModel.findAll());
     },
   );

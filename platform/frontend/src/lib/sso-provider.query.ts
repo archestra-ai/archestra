@@ -7,11 +7,29 @@ import { toast } from "sonner";
  */
 export const ssoProviderKeys = {
   all: ["sso-provider"] as const,
+  public: ["sso-provider", "public"] as const,
   details: () => [...ssoProviderKeys.all, "details"] as const,
 };
 
 /**
- * Get SSO providers
+ * Get public SSO providers (minimal info for login page, no secrets)
+ * Use this for unauthenticated contexts like the login page.
+ */
+export function usePublicSsoProviders() {
+  return useQuery({
+    queryKey: ssoProviderKeys.public,
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getPublicSsoProviders();
+      return data;
+    },
+    retry: false, // Don't retry on auth pages to avoid repeated 401 errors
+    throwOnError: false, // Don't throw errors to prevent crashes
+  });
+}
+
+/**
+ * Get SSO providers with full configuration (admin only, requires authentication)
+ * Use this for authenticated admin contexts like the SSO settings page.
  */
 export function useSsoProviders() {
   return useQuery({
@@ -20,8 +38,8 @@ export function useSsoProviders() {
       const { data } = await archestraApiSdk.getSsoProviders();
       return data;
     },
-    retry: false, // Don't retry on auth pages to avoid repeated 401 errors
-    throwOnError: false, // Don't throw errors to prevent crashes
+    retry: false,
+    throwOnError: false,
   });
 }
 

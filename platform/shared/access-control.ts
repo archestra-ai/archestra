@@ -313,6 +313,7 @@ export const RouteId = {
   GetOnboardingStatus: "getOnboardingStatus",
 
   // SSO Provider Routes
+  GetPublicSsoProviders: "getPublicSsoProviders",
   GetSsoProviders: "getSsoProviders",
   GetSsoProvider: "getSsoProvider",
   CreateSsoProvider: "createSsoProvider",
@@ -688,11 +689,18 @@ export const requiredEndpointPermissionsMap: Partial<
   },
 
   /**
-   * Get all SSO providers route
-   * available to all unauthenticated users, since you need to be able to
-   * fetch SSO provider configs to be able to login with SSO
+   * Get public SSO providers route (minimal info for login page)
+   * Available to unauthenticated users - only returns providerId, no secrets
+   * Note: Auth is skipped in middleware for this route
    */
-  [RouteId.GetSsoProviders]: {},
+  [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get all SSO providers with full config (admin only)
+   * Returns sensitive data including client secrets
+   */
+  [RouteId.GetSsoProviders]: {
+    ssoProvider: ["read"],
+  },
   [RouteId.GetSsoProvider]: {
     ssoProvider: ["read"],
   },

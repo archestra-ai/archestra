@@ -20,6 +20,15 @@ export const SelectSsoProviderSchema = createSelectSchema(
   extendedFields,
 );
 
+/**
+ * Minimal SSO provider info for public/unauthenticated endpoints (e.g., login page).
+ * Contains only non-sensitive fields needed to display SSO login buttons.
+ */
+export const PublicSsoProviderSchema = SelectSsoProviderSchema.pick({
+  id: true,
+  providerId: true,
+});
+
 export const InsertSsoProviderSchema = createInsertSchema(
   schema.ssoProvidersTable,
   extendedFields,
@@ -35,5 +44,6 @@ export const UpdateSsoProviderSchema = createUpdateSchema(
 });
 
 export type SsoProvider = z.infer<typeof SelectSsoProviderSchema>;
+export type PublicSsoProvider = z.infer<typeof PublicSsoProviderSchema>;
 export type InsertSsoProvider = z.infer<typeof InsertSsoProviderSchema>;
 export type UpdateSsoProvider = z.infer<typeof UpdateSsoProviderSchema>;

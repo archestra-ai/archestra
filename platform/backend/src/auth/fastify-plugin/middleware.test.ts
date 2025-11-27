@@ -111,11 +111,11 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for GET requests to SSO providers list endpoint only", async () => {
-      const ssoProviderListUrl = "/api/sso-providers";
+    test("should skip auth for GET requests to public SSO providers endpoint only", async () => {
+      const publicSsoProviderUrl = "/api/sso-providers/public";
 
       const mockRequest = {
-        url: ssoProviderListUrl,
+        url: publicSsoProviderUrl,
         method: "GET",
         headers: {},
       } as FastifyRequest;
@@ -129,6 +129,29 @@ describe("Authnz", () => {
 
       expect(mockReply.status).not.toHaveBeenCalled();
       expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    test("should NOT skip auth for GET requests to full SSO providers endpoint (contains secrets)", async () => {
+      const mockRequest = {
+        url: "/api/sso-providers",
+        method: "GET",
+        headers: {},
+        routeOptions: {
+          schema: {
+            operationId: "GetSsoProviders",
+          },
+        },
+      } as FastifyRequest;
+
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      // Should throw ApiError for unauthenticated requests to full providers endpoint
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
     });
 
     test("should NOT skip auth for non-GET requests to SSO providers endpoint", async () => {

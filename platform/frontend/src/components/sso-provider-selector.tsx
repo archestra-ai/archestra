@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useSsoProviders } from "@/lib/sso-provider.query";
+import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
 export function SsoProviderSelector() {
-  const { data: ssoProviders = [], isLoading } = useSsoProviders();
+  const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
 
   const handleSsoSignIn = useCallback(async (providerId: string) => {
     try {

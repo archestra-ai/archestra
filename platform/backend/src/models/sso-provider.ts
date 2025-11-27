@@ -3,11 +3,32 @@ import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import type {
   InsertSsoProvider,
+  PublicSsoProvider,
   SsoProvider,
   UpdateSsoProvider,
 } from "@/types";
 
 class SsoProviderModel {
+  /**
+   * Find all SSO providers with minimal public info only.
+   * Use this for public/unauthenticated endpoints (e.g., login page SSO buttons).
+   * Does NOT expose any sensitive configuration data.
+   */
+  static async findAllPublic(): Promise<PublicSsoProvider[]> {
+    const ssoProviders = await db
+      .select({
+        id: schema.ssoProvidersTable.id,
+        providerId: schema.ssoProvidersTable.providerId,
+      })
+      .from(schema.ssoProvidersTable);
+
+    return ssoProviders;
+  }
+
+  /**
+   * Find all SSO providers with full configuration including secrets.
+   * Use this only for authenticated admin endpoints.
+   */
   static async findAll(): Promise<SsoProvider[]> {
     const ssoProviders = await db.select().from(schema.ssoProvidersTable);
 

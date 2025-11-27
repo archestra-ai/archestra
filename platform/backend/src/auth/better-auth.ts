@@ -113,24 +113,25 @@ export const auth = betterAuth({
       issuer: APP_NAME,
     }),
     /**
-     * TODO: add this conditionally and allow
-     * configuration of some of these provisioning options...
+     * TODO: add this plugin conditionally based on value of ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
      */
     sso({
       organizationProvisioning: {
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
-        getRole: async (data) => {
+        // TODO: allow configuration of these provisioning options dynamically..
+        getRole: async (_data) => {
           // Custom role assignment logic based on user attributes
-          const { userInfo } = data;
+          // const { user, token, provider, userInfo } = data;
 
           // Look for admin indicators in user attributes
-          const isAdmin =
-            userInfo.role === "admin" ||
-            userInfo.groups?.includes("admin") ||
-            userInfo.department === "IT" ||
-            userInfo.title?.toLowerCase().includes("admin") ||
-            userInfo.title?.toLowerCase().includes("manager");
+          // const isAdmin =
+          //   userInfo.role === "admin" ||
+          //   userInfo.groups?.includes("admin") ||
+          //   userInfo.department === "IT" ||
+          //   userInfo.title?.toLowerCase().includes("admin") ||
+          //   userInfo.title?.toLowerCase().includes("manager");
+          const isAdmin = false;
 
           return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
         },

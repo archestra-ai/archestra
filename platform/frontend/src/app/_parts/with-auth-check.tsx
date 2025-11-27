@@ -11,9 +11,18 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
   return (
     pathname?.startsWith("/auth/sign-in") ||
-    pathname?.startsWith("/auth/sign-up") ||
-    pathname?.startsWith("/auth/two-factor")
+    pathname?.startsWith("/auth/sign-up")
   );
+};
+
+/**
+ * Auth pages that can be accessed regardless of login state.
+ * - /auth/two-factor is used for both:
+ *   1. 2FA verification during login (user not fully logged in yet)
+ *   2. 2FA setup after enabling 2FA (user is logged in)
+ */
+const isSpecialAuthPage = (pathname: string) => {
+  return pathname?.startsWith("/auth/two-factor");
 };
 
 export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
@@ -26,17 +35,19 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
+  const isSpecialAuth = isSpecialAuthPage(pathname);
 
   // Get required permissions for current page
   const requiredPermissions = requiredPagePermissionsMap[pathname];
   const { data: hasRequiredPermissions, isPending: isPermissionCheckPending } =
     useHasPermissions(requiredPermissions || {});
 
-  // On auth pages, only wait for auth check (no permission check needed)
+  // On auth pages (including special auth pages like 2FA), only wait for auth check
   // On other pages, wait for both auth and permission checks
-  const loading = isAuthPage
-    ? isAuthCheckPending
-    : isAuthCheckPending || isPermissionCheckPending;
+  const loading =
+    isAuthPage || isSpecialAuth
+      ? isAuthCheckPending
+      : isAuthCheckPending || isPermissionCheckPending;
 
   // Set Sentry user context when user is authenticated
   useEffect(() => {
@@ -65,14 +76,19 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     if (isAuthCheckPending) {
       // If auth check is pending, don't do anything
       return;
+    } else if (isSpecialAuth) {
+      // Special auth pages (like /auth/two-factor) can be accessed regardless of login state
+      // - During login: user needs to complete 2FA verification (not logged in yet)
+      // - During setup: user is setting up 2FA (logged in)
+      return;
     } else if (isAuthPage && isLoggedIn) {
-      // User is logged in but on auth page, redirect to home
+      // User is logged in but on auth page (sign-in/sign-up), redirect to home
       router.push("/");
     } else if (!isAuthPage && !isLoggedIn) {
-      // User is not logged in and not on auth page, redirect to sign-in
+      // User is not logged in and not on any auth page, redirect to sign-in
       router.push("/auth/sign-in");
     }
-  }, [isAuthCheckPending, isAuthPage, isLoggedIn, router]);
+  }, [isAuthCheckPending, isAuthPage, isSpecialAuth, isLoggedIn, router]);
 
   // Redirect to home if page is protected and user is not authorized
   useEffect(() => {
@@ -88,6 +104,9 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Show loading while checking auth/permissions
   if (loading) {
     return null;
+  } else if (isSpecialAuth) {
+    // Special auth pages are always rendered (handles both 2FA verification and setup)
+    return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {
     // During redirects, show nothing to avoid flash
     return null;

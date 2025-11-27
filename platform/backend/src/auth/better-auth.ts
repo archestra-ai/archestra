@@ -308,6 +308,18 @@ export const auth = betterAuth({
         if (newSession?.user && newSession?.session) {
           const sessionId = newSession.session.id;
           const userId = newSession.user.id;
+          const { user, session } = newSession;
+
+          // Check if this is an invitation sign-in (existing user joining new org)
+          const invitationId = body.callbackURL
+            ?.split("invitationId=")[1]
+            ?.split("&")[0];
+
+          if (invitationId) {
+            // Accept invitation for existing user
+            await InvitationModel.accept(session, user, invitationId);
+            return;
+          }
 
           try {
             if (!newSession.session.activeOrganizationId) {

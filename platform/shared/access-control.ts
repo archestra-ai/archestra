@@ -111,7 +111,7 @@ export const memberRole = ac.newRole({
   limit: ["read"],
   tokenPrice: ["read"],
   chatSettings: ["read"],
-  prompt: ["create", "read", "update", "delete"],
+  prompt: ["read"],
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =

@@ -25,14 +25,11 @@ function rewriteOAuthRedirectUris(
     return oauthConfig;
   }
 
-  // Use configured frontend URL or default to localhost:3000 for development
-  const platformBaseUrl = config.frontendBaseURL || "http://localhost:3000";
-
   return {
     ...oauthConfig,
     redirect_uris: oauthConfig.redirect_uris?.map((uri) =>
       uri === "http://localhost:8080/oauth/callback"
-        ? `${platformBaseUrl}/oauth-callback`
+        ? `${config.frontendBaseUrl}/oauth-callback`
         : uri,
     ),
   };

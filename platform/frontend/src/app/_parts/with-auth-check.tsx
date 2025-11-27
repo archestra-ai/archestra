@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { requiredPagePermissionsMap } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
@@ -21,6 +21,8 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
+  const [isMounted, setIsMounted] = useState(false);
+
   const {
     data: session,
     isPending: isAuthPending,
@@ -29,7 +31,17 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
-  const isAuthInitializing = isAuthPending && !isAuthRefetching;
+
+  // Track mount state to avoid hydration errors with isRefetching
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Only use isRefetching after mount to avoid SSR/client hydration mismatch
+  // Before mount, treat as initializing to match SSR behavior
+  const isAuthInitializing = isMounted
+    ? isAuthPending && !isAuthRefetching // After mount: distinguish refetch from initial
+    : isAuthPending; // During SSR/hydration: just check isPending
 
   // Get required permissions for current page
   const requiredPermissions = requiredPagePermissionsMap[pathname];
@@ -66,7 +78,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {
-    if (isAuthInitializing) {
+    if (isAuthInitializing || isAuthRefetching) {
       // If auth check is pending, don't do anything
       return;
     } else if (isAuthPage && isLoggedIn) {

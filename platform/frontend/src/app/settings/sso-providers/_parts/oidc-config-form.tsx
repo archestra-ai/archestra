@@ -256,7 +256,8 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
           )}
         />
 
-        <FormField
+        {/* NOTE: we probably don't need this and are okay with the default value that better-auth uses? */}
+        {/* <FormField
           control={form.control}
           name="oidcConfig.tokenEndpointAuthentication"
           render={({ field }) => (
@@ -283,7 +284,7 @@ export function OidcConfigForm({ form }: OidcConfigFormProps) {
               <FormMessage />
             </FormItem>
           )}
-        />
+        /> */}
 
         <div className="space-y-3">
           <FormLabel>Scopes</FormLabel>

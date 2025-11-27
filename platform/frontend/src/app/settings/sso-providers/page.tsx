@@ -32,8 +32,6 @@ interface SsoProviderConfig {
   hideProviderId: boolean;
   /** Disable PKCE (for providers that don't support it like GitHub) */
   disablePkce?: boolean;
-  /** Warning message to display for this provider */
-  warning?: string;
   /** Default OIDC configuration values */
   defaultConfig: {
     issuer: string;
@@ -98,6 +96,12 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     },
   },
   {
+    /**
+     * GitHub OAuth limitation: Users must have a public email set in their
+     * GitHub profile settings for SSO to work. This is because the SSO plugin
+     * only calls /user endpoint, not /user/emails.
+     * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/github/
+     */
     id: "github",
     providerId: SSO_PROVIDER_ID.GITHUB,
     name: "GitHub",
@@ -109,14 +113,6 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
      * https://github.com/orgs/community/discussions/15752
      */
     disablePkce: true,
-    /**
-     * GitHub OAuth limitation: Users must have a public email set in their
-     * GitHub profile settings for SSO to work. This is because the SSO plugin
-     * only calls /user endpoint, not /user/emails.
-     * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/github/
-     */
-    warning:
-      "Users must have a public email in their GitHub profile for SSO to work.",
     defaultConfig: {
       issuer: "https://github.com",
       /**
@@ -302,11 +298,6 @@ function SsoProvidersSettingsContent() {
                   <p className="text-sm text-muted-foreground">
                     {config.description}
                   </p>
-                  {config.warning && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      ⚠️ {config.warning}
-                    </p>
-                  )}
                 </div>
                 <Button
                   variant={existingProvider ? "outline" : "default"}

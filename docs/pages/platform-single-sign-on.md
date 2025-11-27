@@ -208,4 +208,3 @@ The SSO provider is not in the trusted providers list. Contact your administrato
 ### "invalid_dpop_proof" Error (Okta)
 
 DPoP is enabled in your Okta application. Disable it in Okta Admin Console under the application's security settings.
-

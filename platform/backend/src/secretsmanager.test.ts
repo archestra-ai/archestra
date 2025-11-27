@@ -1,0 +1,333 @@
+import { vi } from "vitest";
+import SecretModel from "@/models/secret";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+
+// Use vi.hoisted to ensure mockVaultClient is available before vi.mock runs
+const mockVaultClient = vi.hoisted(() => ({
+  write: vi.fn(),
+  read: vi.fn(),
+  delete: vi.fn(),
+}));
+
+vi.mock("node-vault", () => {
+  return {
+    __esModule: true,
+    default: () => mockVaultClient,
+  };
+});
+
+import {
+  createSecretManager,
+  DbSecretsManager,
+  getVaultConfigFromEnv,
+  VaultSecretManager,
+} from "./secretsmanager";
+
+describe("createSecretManager", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("should return DbSecretsManager when no vault env vars are set", () => {
+    delete process.env.HASHICORP_VAULT_ADDR;
+    delete process.env.HASHICORP_VAULT_TOKEN;
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
+  });
+
+  test("should return DbSecretsManager when only HASHICORP_VAULT_ADDR is set", () => {
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    delete process.env.HASHICORP_VAULT_TOKEN;
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
+  });
+
+  test("should return DbSecretsManager when only HASHICORP_VAULT_TOKEN is set", () => {
+    delete process.env.HASHICORP_VAULT_ADDR;
+    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
+  });
+
+  test("should return VaultSecretManager when both vault env vars are set", () => {
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(VaultSecretManager);
+  });
+});
+
+describe("getVaultConfigFromEnv", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("should return null when no vault env vars are set", () => {
+    delete process.env.HASHICORP_VAULT_ADDR;
+    delete process.env.HASHICORP_VAULT_TOKEN;
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toBeNull();
+  });
+
+  test("should return null when only address is set", () => {
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    delete process.env.HASHICORP_VAULT_TOKEN;
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toBeNull();
+  });
+
+  test("should return config when both env vars are set", () => {
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      token: "dev-root-token",
+    });
+  });
+});
+
+describe("VaultSecretManager", () => {
+  const vaultConfig = {
+    address: "http://localhost:8200",
+    token: "dev-root-token",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("createSecret", () => {
+    test("should rollback database record if vault write fails", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      // Make vault write fail
+      mockVaultClient.write.mockRejectedValueOnce(
+        new Error("Vault unavailable"),
+      );
+
+      await expect(vaultManager.createSecret(secretValue)).rejects.toThrow(
+        "Vault unavailable",
+      );
+
+      // Verify that no secret remains in the database
+      expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
+    });
+
+    test("should create secret in both database and vault on success", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      const result = await vaultManager.createSecret(secretValue);
+
+      expect(result.secret).toEqual(secretValue);
+      expect(result.isVault).toBe(true);
+      expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
+      expect(mockVaultClient.write).toHaveBeenCalledWith(
+        `secret/data/archestra/${result.id}`,
+        { data: { value: JSON.stringify(secretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+  });
+
+  describe("deleteSecret", () => {
+    test("should not delete database record if vault delete fails", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      // First create a secret successfully
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+
+      // Now make vault delete fail
+      mockVaultClient.delete.mockRejectedValueOnce(
+        new Error("Vault unavailable"),
+      );
+
+      await expect(vaultManager.deleteSecret(created.id)).rejects.toThrow(
+        "Vault unavailable",
+      );
+
+      // Verify the database record still exists
+      const dbRecord = await SecretModel.findById(created.id);
+      expect(dbRecord).not.toBeNull();
+      expect(dbRecord?.isVault).toBe(true);
+
+      // Cleanup - force delete from DB
+      await SecretModel.delete(created.id);
+    });
+
+    test("should delete from both vault and database on success", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      // Create a secret
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+
+      // Verify the secret was created in DB with isVault=true
+      const beforeDelete = await SecretModel.findById(created.id);
+      expect(beforeDelete).not.toBeNull();
+      expect(beforeDelete?.isVault).toBe(true);
+
+      // Delete successfully
+      mockVaultClient.delete.mockResolvedValueOnce({});
+      await vaultManager.deleteSecret(created.id);
+
+      // Verify vault delete was called
+      expect(mockVaultClient.delete).toHaveBeenCalledWith(
+        `secret/data/archestra/${created.id}`,
+      );
+
+      // Verify database record is gone (this is the true test of success)
+      const dbRecord = await SecretModel.findById(created.id);
+      expect(dbRecord).toBeFalsy();
+    });
+  });
+
+  describe("getSecret", () => {
+    test("should throw if vault read fails", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      // Create a secret
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+
+      // Make vault read fail
+      mockVaultClient.read.mockRejectedValueOnce(
+        new Error("Vault unavailable"),
+      );
+
+      await expect(vaultManager.getSecret(created.id)).rejects.toThrow(
+        "Vault unavailable",
+      );
+
+      // Cleanup
+      await SecretModel.delete(created.id);
+    });
+
+    test("should return secret with value from vault on success", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      // Create a secret
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+
+      // Mock vault read response
+      mockVaultClient.read.mockResolvedValueOnce({
+        data: {
+          data: {
+            value: JSON.stringify(secretValue),
+          },
+        },
+      });
+
+      const result = await vaultManager.getSecret(created.id);
+
+      expect(result).not.toBeNull();
+      expect(result?.secret).toEqual(secretValue);
+      expect(result?.isVault).toBe(true);
+
+      // Cleanup
+      await SecretModel.delete(created.id);
+    });
+  });
+
+  describe("updateSecret", () => {
+    test("should not update database record if vault write fails", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+      const newSecretValue = { access_token: "new-token" };
+
+      // Create a secret
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+      const originalUpdatedAt = created.updatedAt;
+
+      // Wait a bit to ensure timestamp would change
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Make vault write fail on update
+      mockVaultClient.write.mockRejectedValueOnce(
+        new Error("Vault unavailable"),
+      );
+
+      await expect(
+        vaultManager.updateSecret(created.id, newSecretValue),
+      ).rejects.toThrow("Vault unavailable");
+
+      // Verify the database record was not updated (updatedAt should be same)
+      const dbRecord = await SecretModel.findById(created.id);
+      expect(dbRecord).not.toBeNull();
+      expect(dbRecord?.updatedAt.getTime()).toBe(originalUpdatedAt.getTime());
+
+      // Cleanup
+      await SecretModel.delete(created.id);
+    });
+
+    test("should update both vault and database on success", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+      const newSecretValue = { access_token: "new-token" };
+
+      // Create a secret
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const created = await vaultManager.createSecret(secretValue);
+
+      // Wait a bit to ensure timestamp would change
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Update successfully
+      mockVaultClient.write.mockResolvedValueOnce({});
+      const result = await vaultManager.updateSecret(
+        created.id,
+        newSecretValue,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.secret).toEqual(newSecretValue);
+      expect(mockVaultClient.write).toHaveBeenLastCalledWith(
+        `secret/data/archestra/${created.id}`,
+        { data: { value: JSON.stringify(newSecretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(created.id);
+    });
+  });
+});

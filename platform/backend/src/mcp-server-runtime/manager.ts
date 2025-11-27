@@ -2,7 +2,8 @@ import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, McpServerModel, SecretModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 import type {
@@ -238,7 +239,7 @@ export class McpServerRuntimeManager {
 
       // If MCP server has a secretId, fetch secret from database and create K8s Secret
       if (mcpServer.secretId) {
-        const secret = await SecretModel.getMcpServerSecret(mcpServer.secretId);
+        const secret = await secretManager.getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};

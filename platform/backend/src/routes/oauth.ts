@@ -4,7 +4,8 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, SecretModel } from "@/models";
+import { InternalMcpCatalogModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -642,15 +643,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create secret entry with the OAuth tokens
-      const secret = await SecretModel.create({
-        secret: {
-          access_token: tokenData.access_token,
-          ...(tokenData.refresh_token && {
-            refresh_token: tokenData.refresh_token,
-          }),
-          ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
-          token_type: "Bearer",
-        },
+      const secret = await secretManager.createSecret({
+        access_token: tokenData.access_token,
+        ...(tokenData.refresh_token && {
+          refresh_token: tokenData.refresh_token,
+        }),
+        ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
+        token_type: "Bearer",
       });
 
       // Clean up used state

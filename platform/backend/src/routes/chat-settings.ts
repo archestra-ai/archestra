@@ -1,7 +1,8 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { ChatSettingsModel, SecretModel } from "@/models";
+import { ChatSettingsModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -52,13 +53,13 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // If API key is provided, create or update secret
         if (secretId) {
           // Update existing secret
-          await SecretModel.update(secretId, {
-            secret: { anthropicApiKey: body.anthropicApiKey },
+          await secretManager.updateSecret(secretId, {
+            anthropicApiKey: body.anthropicApiKey,
           });
         } else {
           // Create new secret
-          const secret = await SecretModel.create({
-            secret: { anthropicApiKey: body.anthropicApiKey },
+          const secret = await secretManager.createSecret({
+            anthropicApiKey: body.anthropicApiKey,
           });
           secretId = secret.id;
         }

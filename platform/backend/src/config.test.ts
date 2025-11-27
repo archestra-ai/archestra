@@ -7,6 +7,8 @@ vi.mock("./logging", () => ({
   __esModule: true,
   default: {
     warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 

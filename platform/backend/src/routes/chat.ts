@@ -12,8 +12,8 @@ import {
   ConversationModel,
   MessageModel,
   PromptModel,
-  SecretModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -102,7 +102,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
 
       if (chatSettings?.anthropicApiKeySecretId) {
-        const secret = await SecretModel.findById(
+        const secret = await secretManager.getSecret(
           chatSettings.anthropicApiKeySecretId,
         );
         if (secret?.secret?.anthropicApiKey) {

@@ -5,9 +5,9 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  SecretModel,
   ToolModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import { beforeEach, describe, expect, test } from "@/test";
 import mcpClient from "./mcp-client";
 
@@ -56,10 +56,8 @@ describe("McpClient", () => {
     agentId = agent.id;
 
     // Create secret with access token
-    const secret = await SecretModel.create({
-      secret: {
-        access_token: "test-github-token-123",
-      },
+    const secret = await secretManager.createSecret({
+      access_token: "test-github-token-123",
     });
 
     // Create catalog entry for the MCP server

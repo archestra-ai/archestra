@@ -23,8 +23,13 @@ Put the screenshot of the main page here as the last step after deployment.
 
    ```bash
    docker pull archestra/platform:latest;
-   docker run -p 9000:9000 -p 3000:3000 archestra/platform
+   docker run -p 9000:9000 -p 3000:3000 \
+     -v archestra-postgres-data:/var/lib/postgresql/data \
+     -v archestra-app-data:/app/data \
+     archestra/platform
    ```
+
+   **Note:** The volume mounts (`-v` flags) ensure that your data (chats, prompts, database) persists across container restarts. Without these volumes, all data will be lost when the container is stopped and removed.
 
 2. Open <http://localhost:3000>
 

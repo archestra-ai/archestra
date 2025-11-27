@@ -169,7 +169,7 @@ export default function CompressionPage() {
               Apply compression to tool results
             </CardTitle>
             <CardDescription>
-              Reduce LLM token usage up to 20% by using TOON (Token-Oriented
+              Reduce LLM token usage up to 60% by using TOON (Token-Oriented
               Object Notation) compression for tool results.
             </CardDescription>
             <Select

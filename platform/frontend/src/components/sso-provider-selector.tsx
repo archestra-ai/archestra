@@ -27,12 +27,12 @@ export function SsoProviderSelector() {
 
   const handleSsoSignIn = useCallback(async (providerId: string) => {
     try {
-      await authClient.signIn.sso({
+      const result = await authClient.signIn.sso({
         providerId,
-        // TODO: add login hint if we have it
-        // loginHint: '',
-        callbackURL: window.location.origin,
+        callbackURL: `${window.location.origin}/`,
+        errorCallbackURL: `${window.location.origin}/sign-in`,
       });
+      console.log("SSO sign-in initiated:", result);
     } catch (error) {
       console.error("SSO sign-in error:", error);
       toast.error("Failed to initiate SSO sign-in");

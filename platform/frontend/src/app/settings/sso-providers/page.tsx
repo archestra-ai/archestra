@@ -167,7 +167,7 @@ function SsoProvidersSettingsContent() {
           return (
             <Card
               key={config.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
               onClick={() => handleProviderClick(config)}
             >
               <CardHeader className="pb-3">
@@ -181,8 +181,8 @@ function SsoProvidersSettingsContent() {
                 </div>
                 <CardTitle className="text-lg">{config.name}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
+              <CardContent className="flex flex-col flex-1">
+                <p className="text-sm text-muted-foreground mb-4 flex-1 min-h-[2.5rem] flex items-end">
                   {config.description}
                 </p>
                 <Button
@@ -223,7 +223,7 @@ function SsoProvidersSettingsContent() {
       {/* Edit Dialog */}
       {editingProvider && (
         <EditSsoProviderDialog
-          provider={editingProvider}
+          ssoProviderId={editingProvider.id}
           open={!!editingProvider}
           onOpenChange={(open) => !open && setEditingProvider(null)}
         />

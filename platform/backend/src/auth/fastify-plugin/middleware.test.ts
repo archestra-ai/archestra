@@ -111,30 +111,24 @@ describe("Authnz", () => {
       }
     });
 
-    test("should skip auth for GET requests to SSO providers endpoint", async () => {
-      const ssoProviderUrls = [
-        "/api/sso-providers",
-        "/api/sso-providers/",
-        "/api/sso-providers?param=value",
-      ];
+    test("should skip auth for GET requests to SSO providers list endpoint only", async () => {
+      const ssoProviderListUrl = "/api/sso-providers";
 
-      for (const url of ssoProviderUrls) {
-        const mockRequest = {
-          url,
-          method: "GET",
-          headers: {},
-        } as FastifyRequest;
+      const mockRequest = {
+        url: ssoProviderListUrl,
+        method: "GET",
+        headers: {},
+      } as FastifyRequest;
 
-        const mockReply = {
-          status: vi.fn().mockReturnThis(),
-          send: vi.fn(),
-        } as unknown as FastifyReply;
+      const mockReply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
 
-        await authnz.handle(mockRequest, mockReply);
+      await authnz.handle(mockRequest, mockReply);
 
-        expect(mockReply.status).not.toHaveBeenCalled();
-        expect(mockReply.send).not.toHaveBeenCalled();
-      }
+      expect(mockReply.status).not.toHaveBeenCalled();
+      expect(mockReply.send).not.toHaveBeenCalled();
     });
 
     test("should NOT skip auth for non-GET requests to SSO providers endpoint", async () => {
@@ -158,6 +152,36 @@ describe("Authnz", () => {
         } as unknown as FastifyReply;
 
         // Should throw ApiError for unauthenticated non-GET requests
+        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+          "Unauthenticated",
+        );
+      }
+    });
+
+    test("should NOT skip auth for GET requests to individual SSO provider endpoints", async () => {
+      const individualProviderUrls = [
+        "/api/sso-providers/some-id",
+        "/api/sso-providers/gB4pGSDirn3hhmRJy3hCVMzRFSOhPtl3",
+        "/api/sso-providers/123",
+      ];
+
+      for (const url of individualProviderUrls) {
+        const mockRequest = {
+          url,
+          method: "GET",
+          headers: {},
+          routeOptions: {
+            schema: {
+              operationId: "GetSsoProvider",
+            },
+          },
+        } as FastifyRequest;
+
+        const mockReply = {
+          status: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+        } as unknown as FastifyReply;
+
         await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
           "Unauthenticated",
         );

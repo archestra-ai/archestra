@@ -52,8 +52,8 @@ export class Authnz {
       url.startsWith(config.mcpGateway.endpoint) ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith("/.well-known/acme-challenge/") ||
-      // Allow fetching SSO providers to be able to login with SSO
-      (method === "GET" && url.startsWith("/api/sso-providers"))
+      // Allow fetching SSO providers list to be able to login with SSO
+      (method === "GET" && url === "/api/sso-providers")
     )
       return true;
     return false;

@@ -11,6 +11,7 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -137,39 +138,6 @@ export const auth = betterAuth({
       disableImplicitSignUp: false,
       providersLimit: 10,
       trustEmailVerified: true, // Trust email verification from SSO providers
-      // TODO:
-      // provisionUser: async (data) => {
-      //   // Custom user provisioning logic
-      //   const { user, userInfo, provider } = data;
-
-      //   logger.info({
-      //     message: "Provisioning SSO user",
-      //     userId: user.id,
-      //     email: user.email,
-      //     providerId: provider.providerId,
-      //     domain: provider.domain,
-      //   });
-
-      //   // Extract additional user attributes from SSO claims
-      //   const additionalData: Record<string, string | number | boolean> = {};
-
-      //   // Map common SSO attributes
-      //   if (userInfo.department)
-      //     additionalData.department = String(userInfo.department);
-      //   if (userInfo.title) additionalData.title = String(userInfo.title);
-      //   if (userInfo.groups) additionalData.groups = String(userInfo.groups);
-      //   if (userInfo.manager) additionalData.manager = String(userInfo.manager);
-      //   if (userInfo.employeeId)
-      //     additionalData.employeeId = String(userInfo.employeeId);
-
-      //   logger.info({
-      //     message: "SSO user additional attributes",
-      //     additionalData,
-      //   });
-
-      //   // Note: provisionUser is for side effects only, doesn't return user data
-      //   // User data modification should be done in hooks if needed
-      // },
     }),
   ],
 
@@ -204,12 +172,70 @@ export const auth = betterAuth({
     enabled: true,
   },
 
+  account: {
+    /**
+     * See better-auth docs here for more information on this:
+     * https://www.better-auth.com/docs/reference/options#accountlinking
+     */
+    accountLinking: {
+      enabled: true,
+      // Trust SSO providers for automatic account linking
+      // This allows existing users to sign in with SSO without manual linking
+      trustedProviders: [
+        "Okta",
+        "Google",
+        "GitHub",
+        "okta",
+        "google",
+        "github",
+      ],
+      allowDifferentEmails: true,
+      allowUnlinkingAll: true,
+    },
+  },
+
   advanced: {
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
       secure: isHttps(), // Use secure cookies when we're using HTTPS
-      sameSite: isHttps() ? "none" : "strict", // "none" for HTTPS (allows cross-domain), "strict" for HTTP (Safari/WebKit compatibility)
+      // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation
+      // "strict" would prevent the state cookie from being sent with the callback request
+      sameSite: isHttps() ? "none" : "lax",
+    },
+  },
+
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          // If activeOrganizationId is not set, find the user's first organization
+          if (!session.activeOrganizationId) {
+            const [membership] = await db
+              .select()
+              .from(schema.membersTable)
+              .where(eq(schema.membersTable.userId, session.userId))
+              .limit(1);
+
+            if (membership) {
+              logger.info(
+                {
+                  userId: session.userId,
+                  organizationId: membership.organizationId,
+                },
+                "Auto-setting active organization for new session",
+              );
+              return {
+                data: {
+                  ...session,
+                  activeOrganizationId: membership.organizationId,
+                },
+              };
+            }
+          }
+          return { data: session };
+        },
+      },
     },
   },
 

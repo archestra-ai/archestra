@@ -24,6 +24,9 @@ const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
+const frontendUrl =
+  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+
 /**
  * Determines OTLP authentication headers based on environment variables
  * Returns undefined if authentication is not properly configured
@@ -102,8 +105,6 @@ const parseAllowedOrigins = (): string[] => {
     return [];
   }
 
-  // ARCHESTRA_FRONTEND_URL if set
-  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
   if (frontendUrl && frontendUrl !== "") {
     return [frontendUrl];
   }
@@ -147,7 +148,7 @@ const getTrustedOrigins = (): string[] | undefined => {
 };
 
 export default {
-  baseURL: process.env.ARCHESTRA_FRONTEND_URL,
+  baseURL: frontendUrl,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),

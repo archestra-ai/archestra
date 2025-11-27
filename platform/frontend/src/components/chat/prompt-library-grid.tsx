@@ -12,7 +12,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +83,13 @@ export function PromptLibraryGrid({
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Preselect first available agent when Free Chat dialog opens
+  useEffect(() => {
+    if (isFreeChatDialogOpen && agents.length > 0) {
+      setSelectedAgentId(agents[0].id);
+    }
+  }, [isFreeChatDialogOpen, agents]);
+
   // Filter prompts based on search query
   const filteredPrompts = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -104,7 +111,6 @@ export function PromptLibraryGrid({
     if (selectedAgentId) {
       onSelectPrompt(selectedAgentId);
       setIsFreeChatDialogOpen(false);
-      setSelectedAgentId("");
     }
   };
 
@@ -189,7 +195,6 @@ export function PromptLibraryGrid({
               variant="outline"
               onClick={() => {
                 setIsFreeChatDialogOpen(false);
-                setSelectedAgentId("");
               }}
             >
               Cancel

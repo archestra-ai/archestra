@@ -57,17 +57,19 @@ export function PromptDialog({
     if (open) {
       if (prompt) {
         setName(prompt.name);
-        setAgentId(prompt.agentId);
+        // Preselect first available agent when editing existing prompt
+        setAgentId(agents.length > 0 ? agents[0].id : "");
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
       } else {
         setName("");
-        setAgentId("");
+        // Preselect first available agent when creating new prompt
+        setAgentId(agents.length > 0 ? agents[0].id : "");
         setUserPrompt("");
         setSystemPrompt("");
       }
     }
-  }, [open, prompt]);
+  }, [open, prompt, agents]);
 
   const handleSave = async () => {
     if (!name || !agentId) {

@@ -1,229 +1,214 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Plus, Trash2 } from "lucide-react";
-import { Suspense, useCallback, useState } from "react";
+import { Github, Globe, Shield } from "lucide-react";
+import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
-import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  useDeleteSsoProvider,
-  useSsoProviders,
-} from "@/lib/sso-provider.query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
 
-type SsoProvider = NonNullable<
-  ReturnType<typeof useSsoProviders>["data"]
->[number];
+// Predefined SSO provider configurations
+const SSO_PROVIDER_CONFIGS = [
+  {
+    id: "okta",
+    name: "Okta",
+    description: "Enterprise identity and access management",
+    icon: Shield,
+    color: "text-blue-600",
+    bgColor: "bg-blue-50",
+    defaultConfig: {
+      issuer: "https://your-domain.okta.com",
+      discoveryEndpoint: "https://your-domain.okta.com/.well-known/openid-configuration",
+      scopes: ["openid", "email", "profile"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+  {
+    id: "google",
+    name: "Google",
+    description: "Sign in with Google OAuth",
+    icon: Globe,
+    color: "text-red-600",
+    bgColor: "bg-red-50",
+    defaultConfig: {
+      issuer: "https://accounts.google.com",
+      discoveryEndpoint: "https://accounts.google.com/.well-known/openid-configuration",
+      scopes: ["openid", "email", "profile"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+  {
+    id: "github",
+    name: "GitHub",
+    description: "Sign in with GitHub OAuth",
+    icon: Github,
+    color: "text-gray-800",
+    bgColor: "bg-gray-50",
+    defaultConfig: {
+      issuer: "https://github.com",
+      discoveryEndpoint: "https://token.actions.githubusercontent.com/.well-known/openid-configuration",
+      scopes: ["openid", "user:email", "read:user"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+  {
+    id: "generic",
+    name: "Generic OAuth",
+    description: "Configure any OpenID Connect provider",
+    icon: Globe,
+    color: "text-purple-600",
+    bgColor: "bg-purple-50",
+    defaultConfig: {
+      issuer: "",
+      discoveryEndpoint: "",
+      scopes: ["openid", "email", "profile"],
+      mapping: {
+        id: "sub",
+        email: "email",
+        name: "name",
+      },
+    },
+  },
+];
+
+type SsoProvider = NonNullable<ReturnType<typeof useSsoProviders>["data"]>[number];
 
 function SsoProvidersSettingsContent() {
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(
-    null,
-  );
-  const [deletingProviderId, setDeletingProviderId] = useState<string | null>(
-    null,
-  );
+  const [createConfig, setCreateConfig] = useState<{
+    providerId: string;
+    config: typeof SSO_PROVIDER_CONFIGS[0];
+  } | null>(null);
+  const [editingProvider, setEditingProvider] = useState<SsoProvider | null>(null);
 
-  const columns: ColumnDef<SsoProvider>[] = [
-    {
-      accessorKey: "providerId",
-      header: "Provider ID",
-      cell: ({ row }) => (
-        <div className="font-medium">{row.original.providerId}</div>
-      ),
-    },
-    {
-      accessorKey: "issuer",
-      header: "Issuer",
-      cell: ({ row }) => (
-        <div className="font-mono text-sm">{row.original.issuer}</div>
-      ),
-    },
-    {
-      accessorKey: "domain",
-      header: "Domain",
-      cell: ({ row }) => (
-        <div className="font-mono text-sm">{row.original.domain}</div>
-      ),
-    },
-    {
-      id: "type",
-      header: "Type",
-      cell: ({ row }) => {
-        const hasOidc = !!row.original.oidcConfig;
-        const hasSaml = !!row.original.samlConfig;
-        return (
-          <div className="flex gap-1">
-            {hasOidc && (
-              <Badge variant="secondary" className="text-xs">
-                OIDC
-              </Badge>
-            )}
-            {hasSaml && (
-              <Badge variant="secondary" className="text-xs">
-                SAML
-              </Badge>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      size: 120,
-      enableHiding: false,
-      cell: ({ row }) => {
-        const provider = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <PermissionButton
-              permissions={{ ssoProvider: ["update"] }}
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setEditingProvider(provider)}
-              tooltip="Edit Provider"
-            >
-              <Edit className="h-4 w-4" />
-            </PermissionButton>
-            <PermissionButton
-              permissions={{ ssoProvider: ["delete"] }}
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setDeletingProviderId(provider.id)}
-              tooltip="Delete Provider"
-            >
-              <Trash2 className="h-4 w-4" />
-            </PermissionButton>
-          </div>
-        );
-      },
-    },
-  ];
+  // Find existing providers by matching provider ID patterns
+  const getProviderStatus = (configId: string) => {
+    const provider = ssoProviders.find((p) => {
+      // Match by provider ID patterns
+      if (configId === "okta" && p.providerId.toLowerCase().includes("okta")) return true;
+      if (configId === "google" && p.providerId.toLowerCase().includes("google")) return true;
+      if (configId === "github" && p.providerId.toLowerCase().includes("github")) return true;
+      if (configId === "generic" && 
+          !p.providerId.toLowerCase().includes("okta") &&
+          !p.providerId.toLowerCase().includes("google") &&
+          !p.providerId.toLowerCase().includes("github")) return true;
+      return false;
+    });
+    return provider;
+  };
+
+  const handleProviderClick = (config: typeof SSO_PROVIDER_CONFIGS[0]) => {
+    const existingProvider = getProviderStatus(config.id);
+    
+    if (existingProvider) {
+      // Edit existing provider
+      setEditingProvider(existingProvider);
+    } else {
+      // Create new provider
+      setCreateConfig({
+        providerId: config.id,
+        config,
+      });
+    }
+  };
 
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <PageLayout
-      title="SSO Providers"
-      description="Manage Single Sign-On (SSO) providers for your organization. Configure OIDC and SAML providers to enable seamless authentication."
-      actionButton={
-        <PermissionButton
-          permissions={{ ssoProvider: ["create"] }}
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add SSO Provider
-        </PermissionButton>
-      }
-    >
-      <div className="w-full h-full">
-        <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
-          {!ssoProviders || ssoProviders.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-muted-foreground">
-                No SSO providers configured yet.
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Add your first SSO provider to enable single sign-on for your
-                organization.
-              </div>
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={ssoProviders}
-              manualSorting={false}
-              manualPagination={false}
-            />
-          )}
-
-          <CreateSsoProviderDialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-          />
-
-          {editingProvider && (
-            <EditSsoProviderDialog
-              provider={editingProvider}
-              open={!!editingProvider}
-              onOpenChange={(open) => !open && setEditingProvider(null)}
-            />
-          )}
-
-          {deletingProviderId && (
-            <DeleteSsoProviderDialog
-              providerId={deletingProviderId}
-              open={!!deletingProviderId}
-              onOpenChange={(open) => !open && setDeletingProviderId(null)}
-            />
-          )}
-        </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">SSO Providers</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage Single Sign-On (SSO) providers for your organization. Configure OIDC providers to enable seamless authentication.
+        </p>
       </div>
-    </PageLayout>
-  );
-}
 
-function DeleteSsoProviderDialog({
-  providerId,
-  open,
-  onOpenChange,
-}: {
-  providerId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const deleteSsoProvider = useDeleteSsoProvider();
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {SSO_PROVIDER_CONFIGS.map((config) => {
+          const existingProvider = getProviderStatus(config.id);
+          const Icon = config.icon;
+          
+          return (
+            <Card 
+              key={config.id} 
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => handleProviderClick(config)}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className={`p-2 rounded-lg ${config.bgColor}`}>
+                    <Icon className={`h-6 w-6 ${config.color}`} />
+                  </div>
+                  <Badge variant={existingProvider ? "default" : "secondary"}>
+                    {existingProvider ? "Enabled" : "Not enabled"}
+                  </Badge>
+                </div>
+                <CardTitle className="text-lg">{config.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {config.description}
+                </p>
+                <Button 
+                  variant={existingProvider ? "outline" : "default"} 
+                  size="sm" 
+                  className="w-full"
+                >
+                  {existingProvider ? "Configure" : "Enable"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
-  const handleDelete = useCallback(async () => {
-    await deleteSsoProvider.mutateAsync(providerId);
-    onOpenChange(false);
-  }, [providerId, deleteSsoProvider, onOpenChange]);
+      {/* Create Dialog */}
+      {createConfig && (
+        <CreateSsoProviderDialog
+          open={!!createConfig}
+          onOpenChange={(open) => !open && setCreateConfig(null)}
+          defaultValues={{
+            providerId: `${createConfig.config.name.toLowerCase()}-sso`,
+            issuer: createConfig.config.defaultConfig.issuer,
+            domain: "", // User needs to fill this
+            providerType: "oidc" as const,
+            oidcConfig: {
+              ...createConfig.config.defaultConfig,
+              clientId: "",
+              clientSecret: "",
+              pkce: true,
+              overrideUserInfo: true,
+            },
+          }}
+          providerName={createConfig.config.name}
+        />
+      )}
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Delete SSO Provider</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this SSO provider? This action
-            cannot be undone and will prevent users from signing in through this
-            provider.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={deleteSsoProvider.isPending}
-          >
-            {deleteSsoProvider.isPending ? "Deleting..." : "Delete Provider"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {/* Edit Dialog */}
+      {editingProvider && (
+        <EditSsoProviderDialog
+          provider={editingProvider}
+          open={!!editingProvider}
+          onOpenChange={(open) => !open && setEditingProvider(null)}
+        />
+      )}
+    </div>
   );
 }
 

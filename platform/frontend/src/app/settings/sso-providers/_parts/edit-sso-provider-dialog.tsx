@@ -23,20 +23,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type useSsoProviders,
   useUpdateSsoProvider,
 } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
-import { SamlConfigForm } from "./saml-config-form";
 
 interface EditSsoProviderDialogProps {
   provider: NonNullable<ReturnType<typeof useSsoProviders>["data"]>[number];
@@ -52,17 +44,15 @@ export function EditSsoProviderDialog({
   const [activeTab, setActiveTab] = useState("basic");
   const updateSsoProvider = useUpdateSsoProvider();
 
-  const providerType = provider.oidcConfig ? "oidc" : "saml";
-
-  const form = useForm<SsoProviderFormValues>({
-    resolver: zodResolver(SsoProviderFormSchema),
-    defaultValues: {
+  // Convert backend provider to form values (only support OIDC in UI)
+  const getFormValues = useCallback(
+    (): SsoProviderFormValues => ({
       providerId: provider.providerId,
       issuer: provider.issuer,
       domain: provider.domain,
-      providerType,
+      providerType: "oidc" as const,
       oidcConfig: provider.oidcConfig || {
-        issuer: "",
+        issuer: provider.issuer,
         pkce: true,
         clientId: "",
         clientSecret: "",
@@ -74,23 +64,19 @@ export function EditSsoProviderDialog({
           name: "name",
         },
       },
-      samlConfig: provider.samlConfig,
-    },
+    }),
+    [provider],
+  );
+
+  const form = useForm<SsoProviderFormValues>({
+    resolver: zodResolver(SsoProviderFormSchema),
+    defaultValues: getFormValues(),
   });
 
   // Reset form when provider changes
   useEffect(() => {
-    form.reset({
-      providerId: provider.providerId,
-      issuer: provider.issuer,
-      domain: provider.domain,
-      providerType,
-      oidcConfig: provider.oidcConfig,
-      samlConfig: provider.samlConfig,
-    });
-  }, [provider, providerType, form]);
-
-  const watchedProviderType = form.watch("providerType");
+    form.reset(getFormValues());
+  }, [form, getFormValues]);
 
   const onSubmit = useCallback(
     async (data: SsoProviderFormValues) => {
@@ -192,45 +178,19 @@ export function EditSsoProviderDialog({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="providerType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Provider Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select provider type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="oidc">
-                              OpenID Connect (OIDC)
-                            </SelectItem>
-                            <SelectItem value="saml">SAML 2.0</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>
-                          Choose the authentication protocol your provider
-                          supports.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="rounded-lg border p-4 bg-muted/50">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="font-medium">OpenID Connect (OIDC)</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Industry standard protocol for secure authentication
+                    </p>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="advanced" className="space-y-4 mt-0">
-                  {watchedProviderType === "oidc" && (
-                    <OidcConfigForm form={form} />
-                  )}
-                  {watchedProviderType === "saml" && (
-                    <SamlConfigForm form={form} />
-                  )}
+                  <OidcConfigForm form={form} />
                 </TabsContent>
               </div>
             </Tabs>

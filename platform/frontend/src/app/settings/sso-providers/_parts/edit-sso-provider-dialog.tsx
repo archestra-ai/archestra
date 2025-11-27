@@ -2,8 +2,18 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
-import { useCallback, useEffect } from "react";
+import { Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +24,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
-import { useSsoProvider, useUpdateSsoProvider } from "@/lib/sso-provider.query";
+import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  useDeleteSsoProvider,
+  useSsoProvider,
+  useUpdateSsoProvider,
+} from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
 
 interface EditSsoProviderDialogProps {
@@ -30,6 +45,8 @@ export function EditSsoProviderDialog({
 }: EditSsoProviderDialogProps) {
   const { data: provider, isLoading } = useSsoProvider(ssoProviderId);
   const updateSsoProvider = useUpdateSsoProvider();
+  const deleteSsoProvider = useDeleteSsoProvider();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const form = useForm<SsoProviderFormValues>({
     resolver: zodResolver(SsoProviderFormSchema),
@@ -96,6 +113,13 @@ export function EditSsoProviderDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  const handleDelete = useCallback(async () => {
+    if (!provider) return;
+    await deleteSsoProvider.mutateAsync(provider.id);
+    setShowDeleteConfirm(false);
+    onOpenChange(false);
+  }, [provider, deleteSsoProvider, onOpenChange]);
+
   if (isLoading || !provider) {
     return null;
   }
@@ -120,18 +144,60 @@ export function EditSsoProviderDialog({
             </div>
 
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={updateSsoProvider.isPending}>
-                {updateSsoProvider.isPending
-                  ? "Updating..."
-                  : "Update Provider"}
-              </Button>
+              <div className="flex w-full justify-between">
+                <PermissionButton
+                  type="button"
+                  variant="destructive"
+                  permissions={{ ssoProvider: ["delete"] }}
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </PermissionButton>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={handleClose}>
+                    Cancel
+                  </Button>
+                  <PermissionButton
+                    type="submit"
+                    permissions={{ ssoProvider: ["update"] }}
+                    disabled={updateSsoProvider.isPending}
+                  >
+                    {updateSsoProvider.isPending
+                      ? "Updating..."
+                      : "Update Provider"}
+                  </PermissionButton>
+                </div>
+              </div>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete SSO Provider</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{provider.providerId}"? This
+              action cannot be undone. Users will no longer be able to sign in
+              using this provider.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <PermissionButton
+              permissions={{ ssoProvider: ["delete"] }}
+              onClick={handleDelete}
+              disabled={deleteSsoProvider.isPending}
+              variant="destructive"
+            >
+              {deleteSsoProvider.isPending ? "Deleting..." : "Delete"}
+            </PermissionButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

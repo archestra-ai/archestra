@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateSsoProvider } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
 
@@ -106,11 +107,15 @@ export function CreateSsoProviderDialog({
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={createSsoProvider.isPending}>
+              <PermissionButton
+                type="submit"
+                permissions={{ ssoProvider: ["create"] }}
+                disabled={createSsoProvider.isPending}
+              >
                 {createSsoProvider.isPending
                   ? "Creating..."
                   : "Create Provider"}
-              </Button>
+              </PermissionButton>
             </DialogFooter>
           </form>
         </Form>

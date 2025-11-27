@@ -37,6 +37,8 @@ interface SsoProviderConfig {
   hideProviderId: boolean;
   /** Disable PKCE (for providers that don't support it like GitHub) */
   disablePkce?: boolean;
+  /** Warning message to display for this provider */
+  warning?: string;
   /** Default OIDC configuration values */
   defaultConfig: {
     issuer: string;
@@ -103,7 +105,7 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     id: "github",
     providerId: SSO_PROVIDER_ID.GITHUB,
     name: "GitHub",
-    description: "Sign in with GitHub OAuth",
+    description: "Sign in with GitHub OAuth (requires public email)",
     icon: Github,
     color: "text-gray-800",
     bgColor: "bg-gray-50",
@@ -113,6 +115,14 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
      * https://github.com/orgs/community/discussions/15752
      */
     disablePkce: true,
+    /**
+     * GitHub OAuth limitation: Users must have a public email set in their
+     * GitHub profile settings for SSO to work. This is because the SSO plugin
+     * only calls /user endpoint, not /user/emails.
+     * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/github/
+     */
+    warning:
+      "Users must have a public email in their GitHub profile for SSO to work.",
     defaultConfig: {
       issuer: "https://github.com",
       /**
@@ -241,9 +251,16 @@ function SsoProvidersSettingsContent() {
                 <CardTitle className="text-lg">{config.name}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col flex-1">
-                <p className="text-sm text-muted-foreground mb-4 flex-1 min-h-[2.5rem] flex items-end">
-                  {config.description}
-                </p>
+                <div className="flex-1 min-h-[2.5rem] flex flex-col justify-end mb-4">
+                  <p className="text-sm text-muted-foreground">
+                    {config.description}
+                  </p>
+                  {config.warning && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠️ {config.warning}
+                    </p>
+                  )}
+                </div>
                 <Button
                   variant={existingProvider ? "outline" : "default"}
                   size="sm"

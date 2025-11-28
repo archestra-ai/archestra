@@ -1,24 +1,24 @@
 ---
 title: "Single Sign-On (SSO)"
 category: Archestra Platform
-description: "Configure SSO providers for seamless authentication using OIDC"
+description: "Configure SSO providers for seamless authentication using OIDC and SAML"
 order: 5
-lastUpdated: 2025-11-27
+lastUpdated: 2025-11-28
 ---
 
 <!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document covers SSO configuration for Archestra Platform. Include:
-- Overview of SSO support
-- Provider-specific configuration (Okta, Google, GitHub, GitLab, Microsoft Entra ID, Generic OAuth)
+- Overview of SSO support (OIDC and SAML)
+- Provider-specific configuration (Okta, Google, GitHub, GitLab, Microsoft Entra ID, Generic OAuth, Generic SAML)
 - Callback URL format
 - Limitations and requirements
 -->
 
 ![SSO Providers Overview](/assets/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
 
-Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OIDC) providers. Once configured, users can authenticate with their existing identity provider credentials instead of managing separate passwords.
+Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OIDC) and SAML 2.0 providers. Once configured, users can authenticate with their existing identity provider credentials instead of managing separate passwords.
 
 ## How SSO Works
 
@@ -29,9 +29,11 @@ Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OID
 
 ![Sign-in with SSO](/assets/automated_screenshots/platform-single-sign-on_sign-in-with-sso.png)
 
-## Callback URL
+## Callback URLs
 
-All SSO providers require a callback URL to be configured. The format is:
+### OIDC Callback URL
+
+All OIDC providers require a callback URL to be configured. The format is:
 
 ```
 https://your-archestra-domain.com/api/auth/sso/callback/{ProviderId}
@@ -44,6 +46,20 @@ http://localhost:3000/api/auth/sso/callback/{ProviderId}
 ```
 
 The `{ProviderId}` is case-sensitive and must match exactly what you configure in Archestra (e.g., `Okta`, `Google`, `GitHub`, `GitLab`, `EntraID`).
+
+### SAML Callback URL (ACS URL)
+
+For SAML providers, the Assertion Consumer Service (ACS) URL format is:
+
+```
+https://your-archestra-domain.com/api/auth/sso/saml2/sp/acs/{ProviderId}
+```
+
+For local development:
+
+```
+http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}
+```
 
 ## Supported Providers
 
@@ -140,7 +156,7 @@ Microsoft Entra ID (formerly Azure AD) allows users to sign in with their Micros
 - For multi-tenant apps, use `common` or `organizations` instead of the tenant ID
 - See [Microsoft Entra ID documentation](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc) for more details
 
-### Generic OAuth
+### Generic OAuth (OIDC)
 
 For other OIDC-compliant providers not listed above, use the Generic OAuth option.
 
@@ -161,6 +177,61 @@ Optional configuration:
 - **Scopes**: Additional OAuth scopes (default: `openid`, `email`, `profile`)
 - **PKCE**: Enable if your provider requires it
 
+#### Using Keycloak as an OIDC Provider
+
+[Keycloak](https://www.keycloak.org/) is an open-source identity and access management solution that can be used as an OIDC provider.
+
+1. In Keycloak Admin Console, create a new **Client** with protocol `openid-connect`
+2. Set **Client authentication** to `On`
+3. Add your callback URL to **Valid redirect URIs**: `https://your-domain.com/api/auth/sso/callback/{ProviderId}`
+4. Copy the **Client ID** and **Client Secret** from the Credentials tab
+5. In Archestra, click **Enable** on the Generic OAuth card
+6. Set the **Provider ID** (e.g., `Keycloak`)
+7. Set the **Issuer** to: `https://your-keycloak-domain/realms/{realm-name}`
+8. Enter the Client ID and Client Secret
+9. Click **Create Provider**
+
+### Generic SAML
+
+Archestra supports SAML 2.0 for enterprise identity providers that don't support OIDC.
+
+Required information:
+
+- **Provider ID**: A unique identifier (e.g., `okta-saml`, `adfs`)
+- **Issuer**: Your organization's identifier
+- **Domain**: Your organization's domain
+- **SAML Issuer / Entity ID**: The identity provider's entity ID (from IdP metadata)
+- **SSO Entry Point URL**: The IdP's Single Sign-On URL
+- **IdP Certificate**: The X.509 certificate from your IdP for signature verification
+
+Optional configuration:
+
+- **IdP Metadata XML**: Full XML metadata document from your IdP (recommended for robust configuration)
+- **Callback URL (ACS URL)**: Automatically generated, but can be overridden
+- **SP Entity ID**: Service Provider entity ID (defaults to your Archestra domain)
+- **SP Metadata XML**: Custom Service Provider metadata
+
+**SAML-specific notes:**
+
+- SAML responses must be signed by the IdP
+- The NameID format should be set to `emailAddress` in your IdP
+- User attributes (email, firstName, lastName) should be included in the SAML assertion
+- See your IdP's documentation for specific configuration steps
+
+#### Using Keycloak as a SAML Provider
+
+1. In Keycloak Admin Console, create a new **Client** with protocol `saml`
+2. Set the **Client ID** to your SP Entity ID (e.g., `https://your-archestra-domain.com`)
+3. Set **Root URL** to your Archestra domain
+4. Add your ACS URL to **Valid redirect URIs**: `https://your-domain.com/api/auth/sso/saml2/sp/acs/{ProviderId}`
+5. Configure **Client Signature Required** to `Off` (unless you're providing SP signing certificates)
+6. Add protocol mappers for `email`, `firstName`, and `lastName` attributes
+7. Download the IdP metadata from: `https://your-keycloak-domain/realms/{realm-name}/protocol/saml/descriptor`
+8. In Archestra, click **Enable** on the Generic SAML card
+9. Set the **Provider ID** (e.g., `KeycloakSAML`)
+10. Paste the IdP metadata XML into the **IdP Metadata XML** field
+11. Click **Create Provider**
+
 ## User Provisioning
 
 When a user authenticates via SSO for the first time:
@@ -176,7 +247,7 @@ Subsequent logins automatically link to the existing account based on email addr
 If a user already has an account (created via email/password), SSO authentication will automatically link to that account when:
 
 - The email addresses match
-- The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, and Entra ID are trusted by default)
+- The SSO provider is in the trusted providers list (Okta, Google, GitHub, GitLab, Entra ID, and all SAML providers are trusted by default)
 
 ## Removing an SSO Provider
 
@@ -208,3 +279,21 @@ The SSO provider is not in the trusted providers list. Contact your administrato
 ### "invalid_dpop_proof" Error (Okta)
 
 DPoP is enabled in your Okta application. Disable it in Okta Admin Console under the application's security settings.
+
+### "account_not_found" Error (SAML)
+
+The SAML assertion didn't contain the required user attributes. Ensure your IdP is configured to send:
+
+- `NameID` in email format (recommended)
+- `email` attribute
+- `firstName` and `lastName` attributes (optional but recommended)
+
+Check your IdP's protocol mapper configuration.
+
+### "signature_validation_failed" Error (SAML)
+
+The SAML response signature couldn't be verified. Ensure:
+
+- The IdP certificate in Archestra matches the current signing certificate from your IdP
+- If using IdP metadata, ensure it's up to date (certificates can expire or rotate)
+- Re-download the IdP metadata and update the configuration

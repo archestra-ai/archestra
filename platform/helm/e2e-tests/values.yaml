@@ -131,7 +131,7 @@ keycloak:
               "saml.server.signature": "true",
               "saml.server.signature.keyinfo.ext": "false",
               "saml.signing.certificate": "",
-              "saml_force_name_id_format": "false",
+              "saml_force_name_id_format": "true",
               "saml.client.signature": "false",
               "saml.authnstatement": "true",
               "saml_name_id_format": "email",
@@ -150,7 +150,7 @@ keycloak:
                 "config": {
                   "user.attribute": "email",
                   "friendly.name": "email",
-                  "attribute.name": "email"
+                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
                 }
               },
               {
@@ -161,7 +161,7 @@ keycloak:
                 "config": {
                   "user.attribute": "firstName",
                   "friendly.name": "firstName",
-                  "attribute.name": "firstName"
+                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname"
                 }
               },
               {
@@ -172,7 +172,18 @@ keycloak:
                 "config": {
                   "user.attribute": "lastName",
                   "friendly.name": "lastName",
-                  "attribute.name": "lastName"
+                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname"
+                }
+              },
+              {
+                "name": "name",
+                "protocol": "saml",
+                "protocolMapper": "saml-user-property-idp-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "username",
+                  "friendly.name": "name",
+                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
                 }
               }
             ]

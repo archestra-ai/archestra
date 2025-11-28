@@ -84,10 +84,26 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (value) headers.append(key, value.toString());
       });
 
+      // Handle body based on content type
+      // SAML callbacks use application/x-www-form-urlencoded
+      let body: string | undefined;
+      if (request.body) {
+        const contentType = request.headers["content-type"] || "";
+        if (contentType.includes("application/x-www-form-urlencoded")) {
+          // Form-urlencoded body (used by SAML callbacks)
+          body = new URLSearchParams(
+            request.body as Record<string, string>,
+          ).toString();
+        } else {
+          // JSON body (default)
+          body = JSON.stringify(request.body);
+        }
+      }
+
       const req = new Request(url.toString(), {
         method: request.method,
         headers,
-        body: request.body ? JSON.stringify(request.body) : undefined,
+        body,
       });
 
       const response = await betterAuth.handler(req);

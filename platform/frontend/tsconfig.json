@@ -41,6 +41,7 @@
   ],
   "exclude": [
     "node_modules",
-    ".next"
+    ".next",
+    ".turbo"
   ]
 }

@@ -10,17 +10,22 @@ const config: KnipConfig = {
     "vitest.config.ts",
   ],
   project: ["src/**/*.ts"],
-  ignore: [
-    "src/**/*.test.ts",
-    "src/database/migrations/**",
-  ],
+  ignore: ["src/**/*.test.ts", "src/database/migrations/**"],
   ignoreDependencies: [
-    // Drizzle migrations are generated
-    "drizzle-kit",
-    // Test dependencies
-    "@electric-sql/pglite",
+    // Workspace dependency - resolved by pnpm
+    "@shared",
+    // Used in logging.ts
+    "pino-pretty",
   ],
+  ignoreBinaries: [
+    // biome is in root package.json
+    "biome",
+  ],
+  rules: {
+    // Types/schemas are exported for API documentation and external client generation
+    exports: "off",
+    types: "off",
+  },
 };
 
 export default config;
-

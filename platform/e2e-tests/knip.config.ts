@@ -9,7 +9,16 @@ const config: KnipConfig = {
   ],
   project: ["**/*.ts"],
   ignore: [],
+  ignoreDependencies: [
+    // Workspace dependency - resolved by pnpm
+    "@shared",
+  ],
+  ignoreBinaries: [
+    // biome is in root package.json
+    "biome",
+    // tsc is in root package.json (typescript)
+    "tsc",
+  ],
 };
 
 export default config;
-

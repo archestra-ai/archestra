@@ -2,7 +2,7 @@
   "name": "@e2e-tests",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "private": true,
   "scripts": {
     "lint": "biome check",
     "lint:fix": "biome check --write",

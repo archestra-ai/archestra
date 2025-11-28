@@ -108,33 +108,36 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
 
     // Now we should have a create dialog
     // Fill in Keycloak OIDC configuration
-    // Use internal URL for issuer/discovery (backend needs to reach these)
-    // The authorization endpoint uses external URL (browser redirects there)
+    // IMPORTANT: Issuer must match the token's "iss" claim, which Keycloak sets based on
+    // the URL the user accessed. Since browser goes to external URL, issuer is external.
+    // But backend endpoints must use internal URL (reachable from within K8s).
     await page.getByLabel("Provider ID").fill(providerName);
+    // Issuer must match token's "iss" claim (external URL since browser accesses that)
     await page
       .getByLabel("Issuer")
-      .fill(`${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
+      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
     await page.getByLabel("Domain").fill("archestra.test");
     await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
     await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
+    // Discovery endpoint - backend fetches this (must be internal URL)
     await page
       .getByLabel("Discovery Endpoint")
       .fill(
         `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
       );
-    // Explicit authorization endpoint using external URL (browser redirect)
+    // Authorization endpoint - browser redirects here (external URL)
     await page
       .getByLabel("Authorization Endpoint")
       .fill(
         `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
       );
-    // Token endpoint using internal URL (backend calls this)
+    // Token endpoint - backend calls this (internal URL)
     await page
       .getByLabel("Token Endpoint")
       .fill(
         `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
       );
-    // JWKS endpoint is required for token validation (backend calls this)
+    // JWKS endpoint - backend validates tokens (internal URL)
     await page
       .getByLabel("JWKS Endpoint")
       .fill(
@@ -173,7 +176,8 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
         .click();
 
       // Wait for redirect to Keycloak (external URL for browser)
-      await ssoPage.waitForURL(/.*keycloak.*|.*localhost:30081.*/, {
+      // Match either localhost:30081 or the Keycloak hostname
+      await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
         timeout: 15000,
       });
 

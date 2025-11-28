@@ -59,6 +59,11 @@ spec:
               value: "8080"
             - name: KC_HEALTH_ENABLED
               value: "true"
+            # Allow Keycloak to be accessed from any hostname
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "false"
           ports:
             - containerPort: 8080
               name: http

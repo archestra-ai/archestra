@@ -1,0 +1,28 @@
+name: Deploy docs on commits to main
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+  # Allow manual triggering of the workflow
+  workflow_dispatch:
+
+concurrency:
+  # Cancel any running workflow when new docs commits are pushed to main.
+  group: deploy-docs-on-commits-to-main
+  cancel-in-progress: true
+
+jobs:
+  trigger-website-deploy:
+    name: Trigger Website Vercel Deploy
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Trigger Vercel Deploy Hook
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          curl -X POST "$VERCEL_DEPLOY_HOOK_URL"

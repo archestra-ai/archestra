@@ -63,11 +63,6 @@ To use a local Kubernetes cluster (like Kind, Minikube, or K3d) for the Archestr
 
    Export the kubeconfig for your local cluster to a file (e.g., `local-kubeconfig.yaml`).
 
-   Then export the kubeconfig (replace `kind` with your cluster name if different):
-   ```bash
-   kubectl config view --raw > local-kubeconfig.yaml
-   ```
-
 2. **Change server address to `host.docker.internal` and skip TLS verification**:
 
    The exported kubeconfig likely uses `127.0.0.1` or `0.0.0.0` for the server address. Since the Archestra container runs in its own network namespace, it cannot reach the host's localhost directly. You need to replace the server address with `host.docker.internal`.

@@ -23,7 +23,6 @@ export default defineConfig((options: UserConfig) => {
     noExternal: ["@shared"],
     tsconfig: "./tsconfig.json",
 
-    // Ignore turbo logs to prevent infinite rebuild loops
     ignoreWatch: [
       ".turbo",
       "**/.turbo/**",

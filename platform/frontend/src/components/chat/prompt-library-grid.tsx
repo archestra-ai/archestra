@@ -134,15 +134,25 @@ export function PromptLibraryGrid({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Free Chat Tile */}
-        <Card
-          className="h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
-          onClick={() => setIsFreeChatDialogOpen(true)}
+        <WithPermissions
+          key="free-chat"
+          permissions={{ conversation: ["create"] }}
+          noPermissionHandle="tooltip"
         >
-          <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
-            <MessageSquarePlus className="h-4 w-4" />
-            Free Chat
-          </CardTitle>
-        </Card>
+          {({ isDisabled }) => {
+            return (
+              <Card
+                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
+                onClick={() => setIsFreeChatDialogOpen(true)}
+              >
+                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Free Chat
+                </CardTitle>
+              </Card>
+            );
+          }}
+        </WithPermissions>
 
         {/* Prompt Tiles */}
         {filteredPrompts.map((prompt) => {
@@ -151,15 +161,26 @@ export function PromptLibraryGrid({
             : null;
 
           return (
-            <PromptTile
+            <WithPermissions
               key={prompt.id}
-              prompt={prompt}
-              profileName={profileName}
-              onPromptClick={handlePromptClick}
-              onEdit={onEdit}
-              onDelete={setPromptToDelete}
-              onViewVersionHistory={onViewVersionHistory}
-            />
+              permissions={{ conversation: ["create"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ isDisabled }) => {
+                return (
+                  <PromptTile
+                    key={prompt.id}
+                    prompt={prompt}
+                    profileName={profileName}
+                    onPromptClick={handlePromptClick}
+                    onEdit={onEdit}
+                    onDelete={setPromptToDelete}
+                    onViewVersionHistory={onViewVersionHistory}
+                    disabled={isDisabled}
+                  />
+                );
+              }}
+            </WithPermissions>
           );
         })}
       </div>
@@ -251,6 +272,7 @@ interface PromptTileProps {
   onEdit: (prompt: Prompt) => void;
   onDelete: (promptId: string) => void;
   onViewVersionHistory: (prompt: Prompt) => void;
+  disabled?: boolean;
 }
 
 function PromptTile({
@@ -260,6 +282,7 @@ function PromptTile({
   onEdit,
   onDelete,
   onViewVersionHistory,
+  disabled = false,
 }: PromptTileProps) {
   const { data: mcpTools = [] } = useChatProfileMcpTools(prompt.agentId);
 
@@ -288,7 +311,7 @@ function PromptTile({
 
   return (
     <Card
-      className="h-[155px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
+      className={`h-[155px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative ${disabled ? "opacity-50 pointer-events-none" : ""}`}
       onClick={handlePromptClick}
     >
       <CardHeader className="px-4 relative">

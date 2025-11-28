@@ -1,15 +1,18 @@
 "use client";
 
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
-import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { Loader2, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
+import { Button } from "../ui/button";
 
 interface McpToolsDisplayProps {
   agentId: string;
@@ -18,6 +21,8 @@ interface McpToolsDisplayProps {
 
 export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
   const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
+  const { data: agent } = useProfile(agentId);
+  const [isAssignToolsDialogOpen, setIsAssignToolsDialogOpen] = useState(false);
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(
@@ -53,7 +58,28 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
   }
 
   if (Object.keys(groupedTools).length === 0) {
-    return null;
+    return (
+      <>
+        {agent && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setIsAssignToolsDialogOpen(true)}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Add tools
+          </Button>
+        )}
+        {agent && (
+          <AssignToolsDialog
+            agent={agent}
+            open={isAssignToolsDialogOpen}
+            onOpenChange={setIsAssignToolsDialogOpen}
+          />
+        )}
+      </>
+    );
   }
 
   return (
@@ -99,8 +125,27 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
               </TooltipContent>
             </Tooltip>
           ))}
+          {agent && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-full inline-flex items-center justify-center"
+              onClick={() => setIsAssignToolsDialogOpen(true)}
+              title="Add more tools"
+            >
+              <Plus className="h-3 w-3" />
+              Assign more tools to profile
+            </Button>
+          )}
         </div>
       </TooltipProvider>
+      {agent && (
+        <AssignToolsDialog
+          agent={agent}
+          open={isAssignToolsDialogOpen}
+          onOpenChange={setIsAssignToolsDialogOpen}
+        />
+      )}
     </div>
   );
 }

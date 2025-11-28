@@ -45,7 +45,6 @@ export function PromptDialog({
   onViewVersionHistory,
 }: PromptDialogProps) {
   const { data: allProfiles = [] } = useProfiles();
-  const agents = allProfiles;
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
 
@@ -82,10 +81,10 @@ export function PromptDialog({
     if (open) {
       // if on create and no agentId, set the first agent
       if (!prompt && !agentId) {
-        setProfileId(agents[0].id);
+        setProfileId(allProfiles[0].id);
       }
     }
-  }, [open, prompt, agents, agentId]);
+  }, [open, prompt, allProfiles, agentId]);
 
   const handleSave = async () => {
     if (!name || !agentId) {
@@ -178,9 +177,9 @@ export function PromptDialog({
                       <SelectValue placeholder="Select a profile" />
                     </SelectTrigger>
                     <SelectContent>
-                      {agents.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          {agent.name}
+                      {allProfiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -188,7 +187,6 @@ export function PromptDialog({
                 );
               }}
             </WithPermissions>
-            <br />
             {agentId && (
               <WithPermissions
                 permissions={{ profile: ["read"] }}

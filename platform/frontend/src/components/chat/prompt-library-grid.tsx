@@ -58,6 +58,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
+import { McpToolsDisplay } from "./mcp-tools-display";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
 
@@ -197,22 +198,35 @@ export function PromptLibraryGrid({
               Select a profile to start a new conversation
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-1">
-            <Select
-              value={selectedProfileId}
-              onValueChange={setSelectedProfileId}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a profile" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-4 py-6">
+            <div className="space-y-2">
+              <Select
+                value={selectedProfileId}
+                onValueChange={setSelectedProfileId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedProfileId && (
+                <WithPermissions
+                  permissions={{ profile: ["read"] }}
+                  noPermissionHandle="hide"
+                >
+                  <McpToolsDisplay
+                    agentId={selectedProfileId}
+                    className="text-xs text-muted-foreground"
+                  />
+                </WithPermissions>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -399,12 +413,12 @@ function PromptTile({
             <DropdownMenuTrigger
               asChild
               onClick={(e) => e.stopPropagation()}
-              className="absolute top-[-2px] right-2"
+              className="absolute top-[-8px] right-2"
             >
               <Button
                 variant="ghost"
                 size="icon"
-                className=" mt-2 h-4 w-4 flex-shrink-0"
+                className="p-4 mt-2 h-6 w-6 flex-shrink-0"
               >
                 <MoreVertical className="h-4 w-4" />
               </Button>

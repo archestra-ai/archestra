@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { groupBy } from "lodash-es";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import {
   AgentModel,
   AgentTeamModel,
@@ -124,6 +125,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (result && result !== "duplicate" && result !== "updated") {
         throw new ApiError(result.status, result.error.message);
       }
+
+      // Clear chat MCP client cache to ensure fresh tools are fetched
+      clearChatMcpClient(agentId);
 
       // Return success for new assignments, duplicates, and updates
       return reply.send({ success: true });
@@ -248,6 +252,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       });
 
+      // Clear chat MCP client cache for all affected agents
+      const affectedAgentIds = new Set([
+        ...succeeded.map((s) => s.agentId),
+        ...duplicates.map((d) => d.agentId),
+      ]);
+      for (const agentId of affectedAgentIds) {
+        clearChatMcpClient(agentId);
+      }
+
       return reply.send({ succeeded, failed, duplicates });
     },
   );
@@ -296,6 +309,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Agent tool not found");
       }
+
+      // Clear chat MCP client cache to ensure fresh tools are fetched
+      clearChatMcpClient(agentId);
 
       return reply.send({ success });
     },
@@ -436,6 +452,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `Agent-tool relationship with ID ${id} not found`,
         );
       }
+
+      // Clear chat MCP client cache to ensure fresh tools are fetched
+      clearChatMcpClient(agentTool.agentId);
 
       return reply.send(agentTool);
     },

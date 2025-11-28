@@ -62,13 +62,13 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
       <>
         {agent && (
           <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground hover:text-foreground"
+            variant="outline"
+            className="inline-flex items-center justify-center"
             onClick={() => setIsAssignToolsDialogOpen(true)}
+            title="Add more tools"
           >
-            <Plus className="mr-1 h-3 w-3" />
-            Add tools
+            <Plus className="h-3 w-3" />
+            Assign tools to profile
           </Button>
         )}
         {agent && (
@@ -129,14 +129,13 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
           ))}
           {agent && (
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 rounded-full inline-flex items-center justify-center"
+              variant="outline"
+              className="inline-flex items-center justify-center"
               onClick={() => setIsAssignToolsDialogOpen(true)}
               title="Add more tools"
             >
               <Plus className="h-3 w-3" />
-              Assign more tools to profile
+              Assign tools to profile
             </Button>
           )}
         </div>

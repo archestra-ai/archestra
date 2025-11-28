@@ -410,6 +410,7 @@ function OptimizationRuleInlineForm({
             disabled={!isValid}
             size="sm"
             variant="ghost"
+            className="text-primary hover:text-primary"
           >
             <Save className="h-4 w-4" />
           </Button>
@@ -426,6 +427,7 @@ function OptimizationRuleInlineForm({
 function OptimizationRuleRow({
   rule,
   isEditing,
+  isAddingRule,
   onEdit,
   onSave,
   onCancel,
@@ -438,6 +440,7 @@ function OptimizationRuleRow({
 }: {
   rule: OptimizationRule;
   isEditing: boolean;
+  isAddingRule: boolean;
   onEdit: () => void;
   onSave: (data: RuleFormData) => void;
   onCancel: () => void;
@@ -501,7 +504,7 @@ function OptimizationRuleRow({
               <Switch
                 checked={rule.enabled}
                 onCheckedChange={onToggleEnabled}
-                disabled={isDisabled}
+                disabled={isDisabled || isAddingRule}
               />
             )}
           </WithPermissions>
@@ -553,6 +556,7 @@ function OptimizationRuleRow({
             variant="ghost"
             size="sm"
             onClick={onEdit}
+            disabled={isAddingRule}
           >
             <Edit className="h-4 w-4" />
           </PermissionButton>
@@ -563,6 +567,7 @@ function OptimizationRuleRow({
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive"
+                disabled={isAddingRule}
               >
                 <Trash2 className="h-4 w-4" />
               </PermissionButton>
@@ -748,7 +753,8 @@ export default function OptimizationRulesPage() {
                 setIsAddingRule(true);
               }}
               size="sm"
-              variant="default"
+              variant={isAddingRule ? "secondary" : "default"}
+              disabled={isAddingRule}
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Rule
@@ -813,6 +819,7 @@ export default function OptimizationRulesPage() {
                       key={rule.id}
                       rule={rule}
                       isEditing={editingRuleId === rule.id}
+                      isAddingRule={isAddingRule}
                       onEdit={() => setEditingRuleId(rule.id)}
                       onSave={(data) => handleUpdateRule(rule.id, data)}
                       onCancel={handleCancelEdit}

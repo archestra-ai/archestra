@@ -1,4 +1,3 @@
-import { Info } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -68,80 +67,69 @@ export function Savings({
       (toonCostSavings !== undefined && toonCostSavings !== null);
 
     return (
-      <div
-        className={`${className || ""} inline-flex items-center gap-1 group`}
-      >
-        <span className={colorClass}>{content}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Info
-              className={`h-4 w-4 text-muted-foreground/50 ${
-                tooltip === "hover"
-                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
-                  : ""
-              }`}
-            />
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
-            {isUnifiedView ? (
-              // UCS (Unified Cost Savings) tooltip format
-              <div className="space-y-0.5 text-sm">
-                {totalSavings === 0 ? (
-                  <div className={colorClass}>No cost savings available</div>
-                ) : (
-                  <>
-                    <div>Baseline Cost: {formatCost(baselineCostNum)}</div>
-                    <div>Actual Cost: {formatCost(actualCost)}</div>
-                    <div className="font-semibold">
-                      Savings: {formatCost(totalSavings)} (-
-                      {savingsPercent}%)
-                    </div>
-
-                    <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
-                      {costOptimizationSavings > 0 && (
-                        <div>
-                          <div>Model cost optimization:</div>
-                          <div>-{formatCost(costOptimizationSavings)}</div>
-                        </div>
-                      )}
-
-                      {toonCostSavingsNum > 0 && toonTokensSaved && (
-                        <div>
-                          <div>Tool result compression:</div>
-                          <div>
-                            -{formatCost(toonCostSavingsNum)} (
-                            {toonTokensSaved.toLocaleString()} tokens saved)
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              // Original simple tooltip format (for Cost Savings column)
-              <div className="space-y-2">
-                {totalSavings === 0 ? (
-                  <div className={colorClass}>
-                    No cost optimization possible
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`${colorClass} ${className || ""} cursor-default`}>
+            {content}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          {isUnifiedView ? (
+            // UCS (Unified Cost Savings) tooltip format
+            <div className="space-y-0.5 text-sm">
+              {totalSavings === 0 ? (
+                <div className={colorClass}>No cost savings available</div>
+              ) : (
+                <>
+                  <div>Baseline Cost: {formatCost(baselineCostNum)}</div>
+                  <div>Actual Cost: {formatCost(actualCost)}</div>
+                  <div className="font-semibold">
+                    Savings: {formatCost(totalSavings)} (-
+                    {savingsPercent}%)
                   </div>
-                ) : (
-                  <>
-                    <div>Baseline: {formatCost(baselineCostNum)}</div>
-                    <div className={colorClass}>
-                      Savings: {formatCost(Math.abs(totalSavings))} (
-                      {totalSavings > 0
-                        ? `-${savingsPercent}%`
-                        : `${savingsPercent}%`}
-                      )
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+
+                  <div className="border-t border-border pt-1 mt-1 space-y-0.5 text-muted-foreground">
+                    {costOptimizationSavings > 0 && (
+                      <div>
+                        <div>Model cost optimization:</div>
+                        <div>-{formatCost(costOptimizationSavings)}</div>
+                      </div>
+                    )}
+
+                    {toonCostSavingsNum > 0 && toonTokensSaved && (
+                      <div>
+                        <div>Tool result compression:</div>
+                        <div>
+                          -{formatCost(toonCostSavingsNum)} (
+                          {toonTokensSaved.toLocaleString()} tokens saved)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            // Original simple tooltip format (for Cost Savings column)
+            <div className="space-y-2">
+              {totalSavings === 0 ? (
+                <div className={colorClass}>No cost optimization possible</div>
+              ) : (
+                <>
+                  <div>Baseline: {formatCost(baselineCostNum)}</div>
+                  <div className={colorClass}>
+                    Savings: {formatCost(Math.abs(totalSavings))} (
+                    {totalSavings > 0
+                      ? `-${savingsPercent}%`
+                      : `${savingsPercent}%`}
+                    )
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 

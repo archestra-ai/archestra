@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Loader2, Search, Server } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { InstallationSelect } from "@/components/installation-select";
@@ -205,9 +206,20 @@ export function AssignToolsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Assign Tools to {agent.name}</DialogTitle>
+          <DialogTitle>Assign tools to {agent.name} profile</DialogTitle>
           <DialogDescription>
             Select which MCP server tools this profile can access.
+            <br />
+            <div className="text-muted-foreground mt-2">
+              Don't see the tool you need? Go to{" "}
+              <Link
+                href="/mcp-catalog/registry"
+                className="text-primary underline"
+              >
+                MCP Registry
+              </Link>{" "}
+              to install an MCP server.
+            </div>
           </DialogDescription>
         </DialogHeader>
 

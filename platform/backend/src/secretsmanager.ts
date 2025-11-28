@@ -64,14 +64,12 @@ export interface VaultConfig {
  */
 export class DbSecretsManager implements SecretManager {
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
-    logger.info("DbSecretsManager.createSecret: creating secret");
     return await SecretModel.create({
       secret: secretValue,
     });
   }
 
   async deleteSecret(secretId: string): Promise<boolean> {
-    logger.info({ secretId }, "DbSecretsManager.deleteSecret: deleting secret");
     return await SecretModel.delete(secretId);
   }
 
@@ -81,7 +79,6 @@ export class DbSecretsManager implements SecretManager {
   }
 
   async getSecret(secretId: string): Promise<SelectSecret | null> {
-    logger.info({ secretId }, "DbSecretsManager.getSecret: retrieving secret");
     return await SecretModel.findById(secretId);
   }
 
@@ -89,7 +86,6 @@ export class DbSecretsManager implements SecretManager {
     secretId: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    logger.info({ secretId }, "DbSecretsManager.updateSecret: updating secret");
     return await SecretModel.update(secretId, { secret: secretValue });
   }
 }

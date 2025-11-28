@@ -206,7 +206,7 @@ export function AssignToolsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Assign Tools to {agent.name}</DialogTitle>
+          <DialogTitle>Assign tools to {agent.name} profile</DialogTitle>
           <DialogDescription>
             Select which MCP server tools this profile can access.
             <br />

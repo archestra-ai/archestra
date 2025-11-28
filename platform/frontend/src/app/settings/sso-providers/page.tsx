@@ -32,8 +32,10 @@ interface SsoProviderConfig {
   hideProviderId: boolean;
   /** Disable PKCE (for providers that don't support it like GitHub) */
   disablePkce?: boolean;
-  /** Default OIDC configuration values */
-  defaultConfig: {
+  /** Provider type: oidc or saml */
+  providerType: "oidc" | "saml";
+  /** Default OIDC configuration values (for OIDC providers) */
+  defaultOidcConfig?: {
     issuer: string;
     discoveryEndpoint: string;
     authorizationEndpoint?: string;
@@ -45,6 +47,20 @@ interface SsoProviderConfig {
       id: string;
       email: string;
       name: string;
+    };
+  };
+  /** Default SAML configuration values (for SAML providers) */
+  defaultSamlConfig?: {
+    issuer: string;
+    entryPoint: string;
+    cert: string;
+    callbackUrl: string;
+    mapping?: {
+      id?: string;
+      email?: string;
+      name?: string;
+      firstName?: string;
+      lastName?: string;
     };
   };
 }
@@ -60,7 +76,8 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     bgColor: "bg-blue-50",
     // Hide the provider ID field for predefined providers
     hideProviderId: true,
-    defaultConfig: {
+    providerType: "oidc",
+    defaultOidcConfig: {
       issuer: "https://your-domain.okta.com",
       discoveryEndpoint:
         "https://your-domain.okta.com/.well-known/openid-configuration",
@@ -79,7 +96,8 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     description: "Sign in with Google OAuth",
     bgColor: "bg-red-50",
     hideProviderId: true,
-    defaultConfig: {
+    providerType: "oidc",
+    defaultOidcConfig: {
       issuer: "https://accounts.google.com",
       discoveryEndpoint:
         "https://accounts.google.com/.well-known/openid-configuration",
@@ -108,12 +126,13 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     description: "Sign in with GitHub OAuth (requires public email)",
     bgColor: "bg-gray-50",
     hideProviderId: true,
+    providerType: "oidc",
     /**
      * GitHub doesn't support PKCE
      * https://github.com/orgs/community/discussions/15752
      */
     disablePkce: true,
-    defaultConfig: {
+    defaultOidcConfig: {
       issuer: "https://github.com",
       /**
        * GitHub OAuth doesn't have a standard OIDC discovery endpoint
@@ -139,7 +158,8 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     description: "Sign in with GitLab OAuth",
     bgColor: "bg-orange-50",
     hideProviderId: true,
-    defaultConfig: {
+    providerType: "oidc",
+    defaultOidcConfig: {
       issuer: "https://gitlab.com",
       discoveryEndpoint: "https://gitlab.com/.well-known/openid-configuration",
       authorizationEndpoint: "https://gitlab.com/oauth/authorize",
@@ -161,12 +181,13 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     description: "Sign in with Microsoft (Azure AD)",
     bgColor: "bg-sky-50",
     hideProviderId: true,
+    providerType: "oidc",
     /**
      * Microsoft Entra ID (formerly Azure AD) configuration
      * Users need to replace {tenant-id} with their Azure tenant ID
      * See: https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/entraid/
      */
-    defaultConfig: {
+    defaultOidcConfig: {
       issuer: "https://login.microsoftonline.com/{tenant-id}/v2.0",
       discoveryEndpoint:
         "https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration",
@@ -186,15 +207,16 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
     },
   },
   {
-    id: "generic",
+    id: "generic-oidc",
     // Generic OAuth allows custom provider IDs
     providerId: "",
-    name: "Generic OAuth",
+    name: "Generic OIDC",
     description: "Configure any OpenID Connect provider",
     bgColor: "bg-purple-50",
     // Show the provider ID field for generic providers
     hideProviderId: false,
-    defaultConfig: {
+    providerType: "oidc",
+    defaultOidcConfig: {
       issuer: "",
       discoveryEndpoint: "",
       scopes: ["openid", "email", "profile"],
@@ -202,6 +224,30 @@ const SSO_PROVIDER_CONFIGS: SsoProviderConfig[] = [
         id: "sub",
         email: "email",
         name: "name",
+      },
+    },
+  },
+  {
+    id: "generic-saml",
+    // Generic SAML allows custom provider IDs
+    providerId: "",
+    name: "Generic SAML",
+    description: "Configure any SAML 2.0 identity provider",
+    bgColor: "bg-indigo-50",
+    // Show the provider ID field for generic providers
+    hideProviderId: false,
+    providerType: "saml",
+    defaultSamlConfig: {
+      issuer: "",
+      entryPoint: "",
+      cert: "",
+      callbackUrl: "",
+      mapping: {
+        id: "nameID",
+        email: "email",
+        name: "name",
+        firstName: "firstName",
+        lastName: "lastName",
       },
     },
   },
@@ -317,24 +363,58 @@ function SsoProvidersSettingsContent() {
         <CreateSsoProviderDialog
           open={!!createConfig}
           onOpenChange={(open) => !open && setCreateConfig(null)}
-          defaultValues={{
-            // Use canonical provider ID for predefined providers
-            providerId: createConfig.config.providerId || "",
-            issuer: createConfig.config.defaultConfig.issuer,
-            domain: "", // User needs to fill this
-            providerType: "oidc" as const,
-            oidcConfig: {
-              ...createConfig.config.defaultConfig,
-              clientId: "",
-              clientSecret: "",
-              // GitHub doesn't support PKCE
-              pkce: !createConfig.config.disablePkce,
-              overrideUserInfo: true,
-            },
-          }}
+          defaultValues={
+            createConfig.config.providerType === "saml"
+              ? {
+                  providerId: createConfig.config.providerId || "",
+                  issuer: createConfig.config.defaultSamlConfig?.issuer || "",
+                  domain: "",
+                  providerType: "saml" as const,
+                  samlConfig: {
+                    issuer: createConfig.config.defaultSamlConfig?.issuer || "",
+                    entryPoint:
+                      createConfig.config.defaultSamlConfig?.entryPoint || "",
+                    cert: createConfig.config.defaultSamlConfig?.cert || "",
+                    callbackUrl:
+                      createConfig.config.defaultSamlConfig?.callbackUrl ||
+                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/callback/saml`,
+                    spMetadata: {},
+                    mapping:
+                      createConfig.config.defaultSamlConfig?.mapping || {},
+                  },
+                }
+              : {
+                  providerId: createConfig.config.providerId || "",
+                  issuer: createConfig.config.defaultOidcConfig?.issuer || "",
+                  domain: "",
+                  providerType: "oidc" as const,
+                  oidcConfig: {
+                    ...createConfig.config.defaultOidcConfig,
+                    issuer: createConfig.config.defaultOidcConfig?.issuer || "",
+                    discoveryEndpoint:
+                      createConfig.config.defaultOidcConfig
+                        ?.discoveryEndpoint || "",
+                    scopes: createConfig.config.defaultOidcConfig?.scopes || [
+                      "openid",
+                      "email",
+                      "profile",
+                    ],
+                    mapping: createConfig.config.defaultOidcConfig?.mapping || {
+                      id: "sub",
+                      email: "email",
+                      name: "name",
+                    },
+                    clientId: "",
+                    clientSecret: "",
+                    pkce: !createConfig.config.disablePkce,
+                    overrideUserInfo: true,
+                  },
+                }
+          }
           providerName={createConfig.config.name}
           hidePkce={createConfig.config.disablePkce}
           hideProviderId={createConfig.config.hideProviderId}
+          providerType={createConfig.config.providerType}
         />
       )}
 

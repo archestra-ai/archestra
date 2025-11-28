@@ -1,6 +1,6 @@
 import { expect, request as playwrightRequest } from "@playwright/test";
-import { UI_BASE_URL } from "../../consts";
 import { test } from "./fixtures";
+import { UI_BASE_URL } from "../../consts";
 
 // Keycloak configuration for e2e tests
 // These match the values in helm/e2e-tests/values.yaml

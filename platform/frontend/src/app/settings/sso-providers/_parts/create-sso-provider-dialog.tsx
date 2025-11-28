@@ -17,6 +17,7 @@ import { Form } from "@/components/ui/form";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useCreateSsoProvider } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
+import { SamlConfigForm } from "./saml-config-form";
 
 interface CreateSsoProviderDialogProps {
   open: boolean;
@@ -27,6 +28,8 @@ interface CreateSsoProviderDialogProps {
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
   hideProviderId?: boolean;
+  /** Provider type: oidc or saml */
+  providerType?: "oidc" | "saml";
 }
 
 export function CreateSsoProviderDialog({
@@ -36,6 +39,7 @@ export function CreateSsoProviderDialog({
   providerName,
   hidePkce,
   hideProviderId,
+  providerType = "oidc",
 }: CreateSsoProviderDialogProps) {
   const createSsoProvider = useCreateSsoProvider();
 
@@ -45,20 +49,32 @@ export function CreateSsoProviderDialog({
       providerId: "",
       issuer: "",
       domain: "",
-      providerType: "oidc",
-      oidcConfig: {
-        issuer: "",
-        pkce: true,
-        clientId: "",
-        clientSecret: "",
-        discoveryEndpoint: "",
-        scopes: ["openid", "email", "profile"],
-        mapping: {
-          id: "sub",
-          email: "email",
-          name: "name",
-        },
-      },
+      providerType: providerType,
+      ...(providerType === "saml"
+        ? {
+            samlConfig: {
+              issuer: "",
+              entryPoint: "",
+              cert: "",
+              callbackUrl: "",
+              spMetadata: {},
+            },
+          }
+        : {
+            oidcConfig: {
+              issuer: "",
+              pkce: true,
+              clientId: "",
+              clientSecret: "",
+              discoveryEndpoint: "",
+              scopes: ["openid", "email", "profile"],
+              mapping: {
+                id: "sub",
+                email: "email",
+                name: "name",
+              },
+            },
+          }),
     },
   });
 
@@ -75,6 +91,8 @@ export function CreateSsoProviderDialog({
     form.reset();
     onOpenChange(false);
   }, [form, onOpenChange]);
+
+  const currentProviderType = form.watch("providerType");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -96,11 +114,15 @@ export function CreateSsoProviderDialog({
             className="flex flex-col flex-1 overflow-hidden"
           >
             <div className="flex-1 overflow-y-auto py-4">
-              <OidcConfigForm
-                form={form}
-                hidePkce={hidePkce}
-                hideProviderId={hideProviderId}
-              />
+              {currentProviderType === "saml" ? (
+                <SamlConfigForm form={form} hideProviderId={hideProviderId} />
+              ) : (
+                <OidcConfigForm
+                  form={form}
+                  hidePkce={hidePkce}
+                  hideProviderId={hideProviderId}
+                />
+              )}
             </div>
 
             <DialogFooter className="mt-4">

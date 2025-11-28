@@ -1,5 +1,5 @@
 import { API_BASE_URL, UI_BASE_URL } from "../../consts";
-import { expect, request as playwrightRequest, test } from "./fixtures";
+import { expect, test } from "./fixtures";
 
 test.describe("SSO Providers API", () => {
   test("should list SSO providers (authenticated)", async ({
@@ -89,47 +89,30 @@ test.describe("SSO Providers API", () => {
   });
 
   test("should require authentication for full SSO providers list", async () => {
-    // Create a fresh request context without any stored authentication
-    const unauthenticatedRequest = await playwrightRequest.newContext({
-      baseURL: API_BASE_URL,
+    // Use native fetch to ensure completely unauthenticated request
+    const response = await fetch(`${API_BASE_URL}/api/sso-providers`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
     });
 
-    try {
-      const response = await unauthenticatedRequest.get("/api/sso-providers", {
-        headers: {
-          "Content-Type": "application/json",
-          Origin: UI_BASE_URL,
-        },
-      });
-
-      // Should return 401 Unauthorized
-      expect(response.status()).toBe(401);
-    } finally {
-      await unauthenticatedRequest.dispose();
-    }
+    // Should return 401 Unauthorized
+    expect(response.status).toBe(401);
   });
 
   test("should require authentication for individual SSO provider", async () => {
-    // Create a fresh request context without any stored authentication
-    const unauthenticatedRequest = await playwrightRequest.newContext({
-      baseURL: API_BASE_URL,
+    // Use native fetch to ensure completely unauthenticated request
+    const response = await fetch(`${API_BASE_URL}/api/sso-providers/some-id`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
     });
 
-    try {
-      const response = await unauthenticatedRequest.get(
-        "/api/sso-providers/some-id",
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Origin: UI_BASE_URL,
-          },
-        },
-      );
-
-      // Should return 401 Unauthorized
-      expect(response.status()).toBe(401);
-    } finally {
-      await unauthenticatedRequest.dispose();
-    }
+    // Should return 401 Unauthorized
+    expect(response.status).toBe(401);
   });
 });

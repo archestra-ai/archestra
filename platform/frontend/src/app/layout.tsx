@@ -20,7 +20,7 @@ import { Version } from "@/components/version";
 import { ChatProvider } from "@/contexts/global-chat-context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
-import { WithPagePermissionCheck } from "./_parts/with-page-permission-check";
+import { WithPagePermissions } from "./_parts/with-page-permissions";
 import { AuthProvider } from "./auth/auth-provider";
 
 // Load fonts for white-labeling
@@ -90,9 +90,9 @@ export default function RootLayout({
                         </header>
                         <div className="flex-1 min-w-0 flex flex-col">
                           <div className="flex-1">
-                            <WithPagePermissionCheck>
+                            <WithPagePermissions>
                               {children}
-                            </WithPagePermissionCheck>
+                            </WithPagePermissions>
                           </div>
                           <Version />
                         </div>

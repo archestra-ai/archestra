@@ -275,16 +275,12 @@ interface PromptTileProps {
   disabled?: boolean;
 }
 
-function PromptTile({
-  prompt,
-  profileName,
-  onPromptClick,
-  onEdit,
-  onDelete,
-  onViewVersionHistory,
-  disabled = false,
-}: PromptTileProps) {
-  const { data: mcpTools = [] } = useChatProfileMcpTools(prompt.agentId);
+interface PromptMcpToolsDisplayProps {
+  agentId: string;
+}
+
+function PromptMcpToolsDisplay({ agentId }: PromptMcpToolsDisplayProps) {
+  const { data: mcpTools = [] } = useChatProfileMcpTools(agentId);
 
   // Group tools by MCP server name (same logic as McpToolsDisplay)
   const groupedTools = useMemo(
@@ -307,6 +303,58 @@ function PromptTile({
     [mcpTools],
   );
 
+  if (Object.keys(groupedTools).length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="text-xs font-medium text-muted-foreground">
+        MCP Tools:
+      </div>
+      {Object.entries(groupedTools).map(([serverName, tools]) => (
+        <div key={serverName} className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-medium">{serverName}</span>
+            <span className="text-muted-foreground">
+              ({tools.length} {tools.length === 1 ? "tool" : "tools"})
+            </span>
+          </div>
+          <div className="space-y-0.5 pl-2">
+            {tools.map((tool) => {
+              const parts = tool.name.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+              const toolName =
+                parts.length > 1 ? parts[parts.length - 1] : tool.name;
+              return (
+                <div
+                  key={tool.name}
+                  className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                >
+                  <div className="font-mono font-medium">{toolName}</div>
+                  {tool.description && (
+                    <div className="text-muted-foreground mt-0.5">
+                      {tool.description}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PromptTile({
+  prompt,
+  profileName,
+  onPromptClick,
+  onEdit,
+  onDelete,
+  onViewVersionHistory,
+  disabled = false,
+}: PromptTileProps) {
   const handlePromptClick = () => onPromptClick(prompt);
 
   return (
@@ -426,54 +474,12 @@ function PromptTile({
                     <div className="font-medium text-sm">
                       Profile: {profileName}
                     </div>
-                    {Object.keys(groupedTools).length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-xs font-medium text-muted-foreground">
-                          MCP Tools:
-                        </div>
-                        {Object.entries(groupedTools).map(
-                          ([serverName, tools]) => (
-                            <div key={serverName} className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <span className="font-medium">
-                                  {serverName}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  ({tools.length}{" "}
-                                  {tools.length === 1 ? "tool" : "tools"})
-                                </span>
-                              </div>
-                              <div className="space-y-0.5 pl-2">
-                                {tools.map((tool) => {
-                                  const parts = tool.name.split(
-                                    MCP_SERVER_TOOL_NAME_SEPARATOR,
-                                  );
-                                  const toolName =
-                                    parts.length > 1
-                                      ? parts[parts.length - 1]
-                                      : tool.name;
-                                  return (
-                                    <div
-                                      key={tool.name}
-                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                    >
-                                      <div className="font-mono font-medium">
-                                        {toolName}
-                                      </div>
-                                      {tool.description && (
-                                        <div className="text-muted-foreground mt-0.5">
-                                          {tool.description}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
+                    <WithPermissions
+                      permissions={{ profile: ["read"] }}
+                      noPermissionHandle="hide"
+                    >
+                      <PromptMcpToolsDisplay agentId={prompt.agentId} />
+                    </WithPermissions>
                   </div>
                 </TooltipContent>
               </Tooltip>

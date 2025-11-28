@@ -5,6 +5,8 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -161,23 +163,50 @@ export function PromptDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="agentId">Profile with tools*</Label>
-            <Select value={agentId} onValueChange={setProfileId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a profile" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <WithPermissions
+              permissions={{ profile: ["read"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ isDisabled }) => {
+                return isDisabled ? (
+                  <Badge variant="outline" className="text-xs">
+                    Unable to show the list of profiles
+                  </Badge>
+                ) : (
+                  <Select value={agentId} onValueChange={setProfileId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              }}
+            </WithPermissions>
+            <br />
             {agentId && (
-              <McpToolsDisplay
-                agentId={agentId}
-                className="text-xs text-muted-foreground"
-              />
+              <WithPermissions
+                permissions={{ profile: ["read"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ isDisabled }) => {
+                  return isDisabled ? (
+                    <Badge variant="outline" className="text-xs">
+                      Unable to show the list of tools
+                    </Badge>
+                  ) : (
+                    <McpToolsDisplay
+                      agentId={agentId}
+                      className="text-xs text-muted-foreground"
+                    />
+                  );
+                }}
+              </WithPermissions>
             )}
           </div>
           <div className="space-y-2">

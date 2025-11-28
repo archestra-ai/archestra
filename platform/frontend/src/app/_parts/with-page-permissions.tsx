@@ -6,7 +6,7 @@ import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { useHasPermissions } from "@/lib/auth.query";
 
-export const WithPagePermissionCheck: React.FC<React.PropsWithChildren> = ({
+export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
   const pathname = usePathname();

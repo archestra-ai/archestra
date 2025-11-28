@@ -15,17 +15,17 @@ export function useConversation(conversationId?: string) {
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       if (!conversationId) return null;
-      const { data } = await getChatConversation({
+      const { data, error } = await getChatConversation({
         path: { id: conversationId },
       });
-      return data ?? null;
+      if (error) throw new Error("Failed to fetch conversation");
+      return data;
     },
     enabled: !!conversationId,
     staleTime: 0, // Always refetch to ensure we have the latest messages
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     retry: false, // Don't retry on error to avoid multiple 404s
-    throwOnError: false,
   });
 }
 
@@ -33,14 +33,13 @@ export function useConversations() {
   return useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      const { data } = await getChatConversations();
-      return data ?? [];
+      const { data, error } = await getChatConversations();
+      if (error) throw new Error("Failed to fetch conversations");
+      return data;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
   });
 }
 
@@ -117,15 +116,14 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
     queryFn: async () => {
       if (!agentId) return [];
-      const { data } = await getChatAgentMcpTools({
+      const { data, error } = await getChatAgentMcpTools({
         path: { agentId },
       });
-      return data ?? [];
+      if (error) throw new Error("Failed to fetch MCP tools");
+      return data;
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
-    retry: false, // Don't retry on error
-    throwOnError: false, // Don't throw errors to prevent crashes
   });
 }

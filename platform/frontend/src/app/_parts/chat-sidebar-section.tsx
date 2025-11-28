@@ -3,7 +3,6 @@
 import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -144,169 +143,160 @@ export function ChatSidebarSection() {
   );
 
   return (
-    <WithPermissions
-      permissions={{ conversation: ["read"] }}
-      noPermissionHandle="hide"
-    >
-      <SidebarGroup className="px-4 py-0">
-        <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
+    <SidebarGroup className="px-4 py-0">
+      <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
 
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {isLoading ? (
-              <SidebarMenuItem>
-                <div className="flex items-center gap-2 px-2 py-1.5">
-                  <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                  <span className="text-xs text-muted-foreground">
-                    Loading chats...
-                  </span>
-                </div>
-              </SidebarMenuItem>
-            ) : conversations.length === 0 ? (
-              <SidebarMenuItem>
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                  No chats yet
-                </div>
-              </SidebarMenuItem>
-            ) : (
-              <>
-                {visibleChats.map((conv) => {
-                  const isCurrentConversation =
-                    currentConversationId === conv.id;
-                  const displayTitle = getConversationDisplayTitle(
-                    conv.title,
-                    conv.messages,
-                  );
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {isLoading ? (
+            <SidebarMenuItem>
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+                <span className="text-xs text-muted-foreground">
+                  Loading chats...
+                </span>
+              </div>
+            </SidebarMenuItem>
+          ) : conversations.length === 0 ? (
+            <SidebarMenuItem>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                No chats yet
+              </div>
+            </SidebarMenuItem>
+          ) : (
+            <>
+              {visibleChats.map((conv) => {
+                const isCurrentConversation = currentConversationId === conv.id;
+                const displayTitle = getConversationDisplayTitle(
+                  conv.title,
+                  conv.messages,
+                );
 
-                  return (
-                    <SidebarMenuItem key={conv.id} className="group/chat-item">
-                      <div className="flex items-center w-full gap-1">
-                        {editingId === conv.id ? (
-                          <Input
-                            ref={inputRef}
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            onBlur={() => handleSaveEdit(conv.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                handleSaveEdit(conv.id);
-                              } else if (e.key === "Escape") {
-                                handleCancelEdit();
-                              }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-7 text-sm flex-1"
-                          />
-                        ) : (
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <SidebarMenuButton
-                                  onClick={() =>
-                                    handleSelectConversation(conv.id)
-                                  }
-                                  isActive={isCurrentConversation}
-                                  className="cursor-pointer flex-1 pr-1 justify-start"
-                                >
-                                  <span
-                                    className="truncate"
-                                    title={displayTitle}
-                                  >
-                                    {displayTitle}
-                                  </span>
-                                </SidebarMenuButton>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                <p>{conv.agent.name}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        {editingId !== conv.id && (
-                          <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
-                            <PermissionButton
-                              permissions={{ conversation: ["update"] }}
-                              type="button"
-                              size="icon-sm"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStartEdit(conv.id, conv.title);
-                              }}
-                              className="hover:bg-muted"
-                              title="Edit chat name"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </PermissionButton>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                  }}
-                                  className="hover:bg-destructive/10"
-                                  title="Delete chat"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    Delete Conversation
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete this
-                                    conversation?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() =>
-                                      handleDeleteConversation(conv.id)
-                                    }
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        )}
-                      </div>
-                    </SidebarMenuItem>
-                  );
-                })}
-
-                {hiddenChatsCount > 0 && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => setShowAllChats(!showAllChats)}
-                      className="cursor-pointer text-xs text-muted-foreground justify-start"
-                    >
-                      {showAllChats ? (
-                        <ChevronDown className="h-3 w-3" />
+                return (
+                  <SidebarMenuItem key={conv.id} className="group/chat-item">
+                    <div className="flex items-center w-full gap-1">
+                      {editingId === conv.id ? (
+                        <Input
+                          ref={inputRef}
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          onBlur={() => handleSaveEdit(conv.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveEdit(conv.id);
+                            } else if (e.key === "Escape") {
+                              handleCancelEdit();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-7 text-sm flex-1"
+                        />
                       ) : (
-                        <ChevronRight className="h-3 w-3" />
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuButton
+                                onClick={() =>
+                                  handleSelectConversation(conv.id)
+                                }
+                                isActive={isCurrentConversation}
+                                className="cursor-pointer flex-1 pr-1 justify-start"
+                              >
+                                <span className="truncate" title={displayTitle}>
+                                  {displayTitle}
+                                </span>
+                              </SidebarMenuButton>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p>{conv.agent.name}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
-                      <span>
-                        {showAllChats
-                          ? "Show less"
-                          : `Show ${hiddenChatsCount} more`}
-                      </span>
-                    </SidebarMenuButton>
+                      {editingId !== conv.id && (
+                        <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
+                          <PermissionButton
+                            permissions={{ conversation: ["update"] }}
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(conv.id, conv.title);
+                            }}
+                            className="hover:bg-muted"
+                            title="Edit chat name"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </PermissionButton>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                className="hover:bg-destructive/10"
+                                title="Delete chat"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Delete Conversation
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this
+                                  conversation?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleDeleteConversation(conv.id)
+                                  }
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
+                    </div>
                   </SidebarMenuItem>
-                )}
-              </>
-            )}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </WithPermissions>
+                );
+              })}
+
+              {hiddenChatsCount > 0 && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setShowAllChats(!showAllChats)}
+                    className="cursor-pointer text-xs text-muted-foreground justify-start"
+                  >
+                    {showAllChats ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <span>
+                      {showAllChats
+                        ? "Show less"
+                        : `Show ${hiddenChatsCount} more`}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </>
+          )}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

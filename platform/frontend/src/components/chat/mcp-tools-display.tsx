@@ -73,6 +73,8 @@ export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
               <TooltipContent
                 side="top"
                 className="max-w-sm max-h-64 overflow-y-auto"
+                onWheel={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
               >
                 <div className="space-y-1">
                   {tools.map((tool) => {

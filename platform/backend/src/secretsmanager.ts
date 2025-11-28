@@ -64,12 +64,14 @@ export interface VaultConfig {
  */
 export class DbSecretsManager implements SecretManager {
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
+    logger.info("DbSecretsManager.createSecret: creating secret");
     return await SecretModel.create({
       secret: secretValue,
     });
   }
 
   async deleteSecret(secretId: string): Promise<boolean> {
+    logger.info({ secretId }, "DbSecretsManager.deleteSecret: deleting secret");
     return await SecretModel.delete(secretId);
   }
 
@@ -79,6 +81,7 @@ export class DbSecretsManager implements SecretManager {
   }
 
   async getSecret(secretId: string): Promise<SelectSecret | null> {
+    logger.info({ secretId }, "DbSecretsManager.getSecret: retrieving secret");
     return await SecretModel.findById(secretId);
   }
 
@@ -86,6 +89,7 @@ export class DbSecretsManager implements SecretManager {
     secretId: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
+    logger.info({ secretId }, "DbSecretsManager.updateSecret: updating secret");
     return await SecretModel.update(secretId, { secret: secretValue });
   }
 }
@@ -245,6 +249,28 @@ export class VaultSecretManager implements SecretManager {
 }
 
 /**
+ * Supported secrets manager types
+ */
+export enum SecretsManagerType {
+  DB = "DB",
+  Vault = "Vault",
+}
+
+/**
+ * Get the secrets manager type from environment variables
+ * @returns SecretsManagerType based on SECRETS_MANAGER env var, defaults to DB
+ */
+export function getSecretsManagerType(): SecretsManagerType {
+  const envValue = process.env.SECRETS_MANAGER?.toUpperCase();
+
+  if (envValue === "VAULT") {
+    return SecretsManagerType.Vault;
+  }
+
+  return SecretsManagerType.DB;
+}
+
+/**
  * Get Vault configuration from environment variables
  */
 export function getVaultConfigFromEnv(): VaultConfig | null {
@@ -260,12 +286,23 @@ export function getVaultConfigFromEnv(): VaultConfig | null {
 
 /**
  * Create a secret manager based on environment configuration
- * Uses Vault if HASHICORP_VAULT_ADDR and HASHICORP_VAULT_TOKEN are set, otherwise falls back to database
+ * Uses SECRETS_MANAGER env var to determine the backend:
+ * - "Vault": Uses VaultSecretManager (requires HASHICORP_VAULT_ADDR and HASHICORP_VAULT_TOKEN)
+ * - "DB" or not set: Uses DbSecretsManager (default)
  */
 export function createSecretManager(): SecretManager {
-  const vaultConfig = getVaultConfigFromEnv();
+  const managerType = getSecretsManagerType();
 
-  if (vaultConfig) {
+  if (managerType === SecretsManagerType.Vault) {
+    const vaultConfig = getVaultConfigFromEnv();
+
+    if (!vaultConfig) {
+      logger.warn(
+        "createSecretManager: SECRETS_MANAGER=Vault but HASHICORP_VAULT_ADDR or HASHICORP_VAULT_TOKEN not set, falling back to DbSecretsManager",
+      );
+      return new DbSecretsManager();
+    }
+
     logger.info(
       { address: vaultConfig.address },
       "createSecretManager: using VaultSecretManager",

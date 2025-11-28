@@ -135,7 +135,7 @@ export function PromptLibraryGrid({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {/* Free Chat Tile */}
         <Card
-          className="h-[130px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
+          className="h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900"
           onClick={() => setIsFreeChatDialogOpen(true)}
         >
           <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -288,10 +288,10 @@ function PromptTile({
 
   return (
     <Card
-      className="h-[130px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
+      className="h-[155px] justify-between px-0 py-1.5 hover:border-primary cursor-pointer transition-colors group relative"
       onClick={handlePromptClick}
     >
-      <CardHeader className="pb-1.5 px-4 relative">
+      <CardHeader className="px-4 relative">
         <div className="flex items-start justify-between gap-2">
           {/* biome-ignore lint/a11y/useSemanticElements: Using div for layout within Card component */}
           <div
@@ -373,6 +373,15 @@ function PromptTile({
           </DropdownMenu>
         </WithPermissions>
       </CardHeader>
+      {prompt.userPrompt && (
+        <div className="px-4 text-xs text-muted-foreground line-clamp-3 flex-1">
+          <TruncatedText
+            message={prompt.userPrompt}
+            className="text-xs"
+            maxLength={75}
+          />
+        </div>
+      )}
       <div className="px-4 pb-1.5 mt-auto">
         <div className="flex flex-wrap gap-1">
           {profileName && (
@@ -443,25 +452,6 @@ function PromptTile({
                       </div>
                     )}
                   </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {prompt.userPrompt && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="secondary"
-                    className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
-                  >
-                    User Prompt
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md max-h-64 overflow-y-auto">
-                  <pre className="text-xs whitespace-pre-wrap">
-                    {prompt.userPrompt}
-                  </pre>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

@@ -29,6 +29,7 @@ import { PromptVersionHistoryDialog } from "@/components/chat/prompt-version-his
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -526,10 +527,23 @@ export default function ChatPage() {
           <div className="sticky bottom-0 bg-background border-t p-4">
             <div className="max-w-3xl mx-auto space-y-3">
               {currentProfileId && (
-                <McpToolsDisplay
-                  agentId={currentProfileId}
-                  className="text-xs text-muted-foreground"
-                />
+                <WithPermissions
+                  permissions={{ profile: ["read"] }}
+                  noPermissionHandle="tooltip"
+                >
+                  {({ isDisabled }) => {
+                    return isDisabled ? (
+                      <Badge variant="outline" className="text-xs my-2">
+                        Unable to show the list of tools
+                      </Badge>
+                    ) : (
+                      <McpToolsDisplay
+                        agentId={currentProfileId}
+                        className="text-xs text-muted-foreground"
+                      />
+                    );
+                  }}
+                </WithPermissions>
               )}
               <PromptInput onSubmit={handleSubmit}>
                 <PromptInputBody>

@@ -118,7 +118,7 @@ keycloak:
             ]
           },
           {
-            "clientId": "archestra-saml",
+            "clientId": "http://localhost:3000",
             "name": "Archestra SAML Client",
             "enabled": true,
             "protocol": "saml",

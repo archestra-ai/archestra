@@ -156,6 +156,29 @@ export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
 
         <FormField
           control={form.control}
+          name="samlConfig.idpMetadata.metadata"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>IdP Metadata XML (Recommended)</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="<?xml version='1.0'?>&#10;<md:EntityDescriptor>...</md:EntityDescriptor>"
+                  className="font-mono text-xs min-h-[150px]"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                The full IdP metadata XML from your Identity Provider. This is
+                the recommended way to configure SAML and includes all necessary
+                endpoints and certificates.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
           name="samlConfig.callbackUrl"
           render={({ field }) => (
             <FormItem>

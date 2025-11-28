@@ -614,51 +614,55 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply;
         } finally {
           // Always record interaction (whether stream completed or was aborted)
-          if (tokenUsage) {
-            // If assistantMessage wasn't built (stream aborted), build it from accumulated data
-            if (!assistantMessage) {
-              fastify.log.info(
-                "Stream was aborted before completion, building partial response",
-              );
+          // If assistantMessage wasn't built (stream aborted), build it from accumulated data
+          if (!assistantMessage) {
+            fastify.log.info(
+              "Stream was aborted before completion, building partial response",
+            );
 
-              // Parse accumulated tool call arguments
-              for (const toolCall of accumulatedToolCalls) {
-                try {
-                  toolCall.function.arguments = JSON.parse(
-                    toolCall.function.arguments,
-                  );
-                } catch {
-                  // If parsing fails, leave as string
-                }
+            // Parse accumulated tool call arguments
+            for (const toolCall of accumulatedToolCalls) {
+              try {
+                toolCall.function.arguments = JSON.parse(
+                  toolCall.function.arguments,
+                );
+              } catch {
+                // If parsing fails, leave as string
               }
-
-              // Build assistant message from what we have so far
-              assistantMessage = {
-                role: "assistant",
-                content: accumulatedContent || null,
-                refusal: accumulatedRefusal || null,
-                tool_calls:
-                  accumulatedToolCalls.length > 0
-                    ? accumulatedToolCalls
-                    : undefined,
-              };
             }
 
-            // Report token usage metrics for streaming
-            reportLLMTokens("openai", resolvedAgent, tokenUsage);
+            // Build assistant message from what we have so far
+            assistantMessage = {
+              role: "assistant",
+              content: accumulatedContent || null,
+              refusal: accumulatedRefusal || null,
+              tool_calls:
+                accumulatedToolCalls.length > 0
+                  ? accumulatedToolCalls
+                  : undefined,
+            };
+          }
 
-            // Calculate costs
-            const baselineCost = await utils.costOptimization.calculateCost(
+          // Report token usage metrics for streaming (only if available)
+          if (tokenUsage) {
+            reportLLMTokens("openai", resolvedAgent, tokenUsage);
+          }
+
+          // Calculate costs (only if we have token usage)
+          let baselineCost: number | null = null;
+          let costAfterOptimization: number | null = null;
+
+          if (tokenUsage) {
+            baselineCost = await utils.costOptimization.calculateCost(
               body.model,
               tokenUsage.input || 0,
               tokenUsage.output || 0,
             );
-            const costAfterOptimization =
-              await utils.costOptimization.calculateCost(
-                model,
-                tokenUsage.input || 0,
-                tokenUsage.output || 0,
-              );
+            costAfterOptimization = await utils.costOptimization.calculateCost(
+              model,
+              tokenUsage.input || 0,
+              tokenUsage.output || 0,
+            );
 
             fastify.log.info(
               {
@@ -669,40 +673,44 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
               "openai proxy routes: handle chat completions: costs",
             );
-
-            // Record the interaction
-            await InteractionModel.create({
-              agentId: resolvedAgentId,
-              type: "openai:chatCompletions",
-              request: body,
-              processedRequest: {
-                ...body,
-                messages: filteredMessages,
-              },
-              response: {
-                id: chunks[0]?.id || "chatcmpl-unknown",
-                object: "chat.completion",
-                created: chunks[0]?.created || Date.now() / 1000,
-                model: model,
-                choices: [
-                  {
-                    index: 0,
-                    message: assistantMessage,
-                    finish_reason: "stop",
-                    logprobs: null,
-                  },
-                ],
-              },
-              model: model,
-              inputTokens: tokenUsage.input || null,
-              outputTokens: tokenUsage.output || null,
-              cost: costAfterOptimization?.toFixed(10) ?? null,
-              baselineCost: baselineCost?.toFixed(10) ?? null,
-              toonTokensBefore,
-              toonTokensAfter,
-              toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
-            });
+          } else {
+            fastify.log.warn(
+              "No token usage available for streaming request - recording interaction without usage data",
+            );
           }
+
+          // Always record the interaction
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            type: "openai:chatCompletions",
+            request: body,
+            processedRequest: {
+              ...body,
+              messages: filteredMessages,
+            },
+            response: {
+              id: chunks[0]?.id || "chatcmpl-unknown",
+              object: "chat.completion",
+              created: chunks[0]?.created || Date.now() / 1000,
+              model: model,
+              choices: [
+                {
+                  index: 0,
+                  message: assistantMessage,
+                  finish_reason: "stop",
+                  logprobs: null,
+                },
+              ],
+            },
+            model: model,
+            inputTokens: tokenUsage?.input || null,
+            outputTokens: tokenUsage?.output || null,
+            cost: costAfterOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+          });
         }
       } else {
         // Non-streaming response with span to measure LLM call duration

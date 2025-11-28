@@ -4028,6 +4028,20 @@ export type GetDefaultCredentialsStatusResponses = {
 
 export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
 
+export type PostApiAuthOrganizationRemoveMemberData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/organization/remove-member';
+};
+
+export type PostApiAuthOrganizationRemoveMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {

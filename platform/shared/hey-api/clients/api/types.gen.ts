@@ -2166,7 +2166,6 @@ export type GetAgentsResponses = {
             isDemo: boolean;
             isDefault: boolean;
             considerContextUntrusted: boolean;
-            useInChat: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2221,7 +2220,6 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        useInChat?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2304,7 +2302,6 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2347,9 +2344,7 @@ export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponse
 export type GetAllAgentsData = {
     body?: never;
     path?: never;
-    query?: {
-        useInChat?: boolean;
-    };
+    query?: never;
     url: '/api/agents/all';
 };
 
@@ -2422,7 +2417,6 @@ export type GetAllAgentsResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2538,7 +2532,6 @@ export type GetDefaultAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2735,7 +2728,6 @@ export type GetAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2781,7 +2773,6 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         considerContextUntrusted?: boolean;
-        useInChat?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -2866,7 +2857,6 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         isDefault: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{

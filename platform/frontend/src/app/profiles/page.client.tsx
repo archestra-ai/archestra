@@ -224,7 +224,6 @@ function Profiles() {
     teams: string[];
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    useInChat: boolean; // Deprecated field - all profiles are enabled for chat by default
   } | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
     null,
@@ -798,7 +797,6 @@ function EditProfileDialog({
     teams: string[];
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    useInChat: boolean; // Deprecated field - all profiles are enabled for chat by default
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;

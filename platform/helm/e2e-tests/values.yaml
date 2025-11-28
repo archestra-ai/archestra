@@ -17,27 +17,22 @@ wiremock:
     - --verbose
 
 # Keycloak configuration for SSO testing
-# Uses Bitnami Keycloak chart: https://artifacthub.io/packages/helm/bitnami/keycloak
 keycloak:
   enabled: true
-  # Use development mode for faster startup
-  production: false
+  image:
+    registry: quay.io
+    repository: keycloak/keycloak
+    tag: "26.0"
+    pullPolicy: IfNotPresent
   # Admin credentials for e2e testing
   auth:
     adminUser: admin
     adminPassword: admin
-  # Disable PostgreSQL - use embedded H2 for simplicity in tests
-  postgresql:
-    enabled: false
   # Service configuration
   service:
     type: NodePort
-    ports:
-      http: 8080
-    nodePorts:
-      http: 30081
-  # Disable extra features for faster startup
-  proxy: edge
+    port: 8080
+    nodePort: 30081
   # Resource limits for CI environment
   resources:
     requests:
@@ -46,165 +41,158 @@ keycloak:
     limits:
       cpu: 1000m
       memory: 1024Mi
-  # Startup probe - Keycloak can take a while to start
-  startupProbe:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    failureThreshold: 30
   # Liveness probe
   livenessProbe:
-    enabled: true
-    initialDelaySeconds: 0
-    periodSeconds: 10
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
   # Readiness probe
   readinessProbe:
-    enabled: true
-    initialDelaySeconds: 0
+    initialDelaySeconds: 30
     periodSeconds: 10
-  # Import realm configuration for e2e testing
-  # This creates a pre-configured realm with test clients
-  keycloakConfigCli:
-    enabled: true
-    configuration:
-      archestra-realm.json: |
-        {
-          "realm": "archestra",
-          "enabled": true,
-          "sslRequired": "none",
-          "registrationAllowed": false,
-          "loginWithEmailAllowed": true,
-          "duplicateEmailsAllowed": false,
-          "resetPasswordAllowed": true,
-          "editUsernameAllowed": false,
-          "bruteForceProtected": false,
-          "clients": [
-            {
-              "clientId": "archestra-oidc",
-              "name": "Archestra OIDC Client",
-              "enabled": true,
-              "clientAuthenticatorType": "client-secret",
-              "secret": "archestra-oidc-secret",
-              "redirectUris": [
-                "http://localhost:3000/*",
-                "http://localhost:9000/*"
-              ],
-              "webOrigins": [
-                "http://localhost:3000",
-                "http://localhost:9000"
-              ],
-              "standardFlowEnabled": true,
-              "directAccessGrantsEnabled": true,
-              "publicClient": false,
-              "protocol": "openid-connect",
-              "attributes": {
-                "pkce.code.challenge.method": "S256"
-              },
-              "protocolMappers": [
-                {
-                  "name": "email",
-                  "protocol": "openid-connect",
-                  "protocolMapper": "oidc-usermodel-property-mapper",
-                  "consentRequired": false,
-                  "config": {
-                    "userinfo.token.claim": "true",
-                    "user.attribute": "email",
-                    "id.token.claim": "true",
-                    "access.token.claim": "true",
-                    "claim.name": "email",
-                    "jsonType.label": "String"
-                  }
-                },
-                {
-                  "name": "name",
-                  "protocol": "openid-connect",
-                  "protocolMapper": "oidc-full-name-mapper",
-                  "consentRequired": false,
-                  "config": {
-                    "id.token.claim": "true",
-                    "access.token.claim": "true",
-                    "claim.name": "name",
-                    "userinfo.token.claim": "true"
-                  }
-                }
-              ]
+    timeoutSeconds: 5
+  # Realm configuration for e2e testing
+  # Set import: true to auto-import the realm on startup
+  realm:
+    import: true
+    config: |
+      {
+        "realm": "archestra",
+        "enabled": true,
+        "sslRequired": "none",
+        "registrationAllowed": false,
+        "loginWithEmailAllowed": true,
+        "duplicateEmailsAllowed": false,
+        "resetPasswordAllowed": true,
+        "editUsernameAllowed": false,
+        "bruteForceProtected": false,
+        "clients": [
+          {
+            "clientId": "archestra-oidc",
+            "name": "Archestra OIDC Client",
+            "enabled": true,
+            "clientAuthenticatorType": "client-secret",
+            "secret": "archestra-oidc-secret",
+            "redirectUris": [
+              "http://localhost:3000/*",
+              "http://localhost:9000/*"
+            ],
+            "webOrigins": [
+              "http://localhost:3000",
+              "http://localhost:9000"
+            ],
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": true,
+            "publicClient": false,
+            "protocol": "openid-connect",
+            "attributes": {
+              "pkce.code.challenge.method": "S256"
             },
-            {
-              "clientId": "archestra-saml",
-              "name": "Archestra SAML Client",
-              "enabled": true,
-              "protocol": "saml",
-              "frontchannelLogout": true,
-              "attributes": {
-                "saml.assertion.signature": "true",
-                "saml.force.post.binding": "true",
-                "saml.multivalued.roles": "false",
-                "saml.encrypt": "false",
-                "saml.server.signature": "true",
-                "saml.server.signature.keyinfo.ext": "false",
-                "saml.signing.certificate": "",
-                "saml_force_name_id_format": "false",
-                "saml.client.signature": "false",
-                "saml.authnstatement": "true",
-                "saml_name_id_format": "email",
-                "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
+            "protocolMappers": [
+              {
+                "name": "email",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-property-mapper",
+                "consentRequired": false,
+                "config": {
+                  "userinfo.token.claim": "true",
+                  "user.attribute": "email",
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "claim.name": "email",
+                  "jsonType.label": "String"
+                }
               },
-              "redirectUris": [
-                "http://localhost:3000/*",
-                "http://localhost:9000/*"
-              ],
-              "protocolMappers": [
-                {
-                  "name": "email",
-                  "protocol": "saml",
-                  "protocolMapper": "saml-user-property-idp-mapper",
-                  "consentRequired": false,
-                  "config": {
-                    "user.attribute": "email",
-                    "friendly.name": "email",
-                    "attribute.name": "email"
-                  }
-                },
-                {
-                  "name": "firstName",
-                  "protocol": "saml",
-                  "protocolMapper": "saml-user-property-idp-mapper",
-                  "consentRequired": false,
-                  "config": {
-                    "user.attribute": "firstName",
-                    "friendly.name": "firstName",
-                    "attribute.name": "firstName"
-                  }
-                },
-                {
-                  "name": "lastName",
-                  "protocol": "saml",
-                  "protocolMapper": "saml-user-property-idp-mapper",
-                  "consentRequired": false,
-                  "config": {
-                    "user.attribute": "lastName",
-                    "friendly.name": "lastName",
-                    "attribute.name": "lastName"
-                  }
+              {
+                "name": "name",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-full-name-mapper",
+                "consentRequired": false,
+                "config": {
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "claim.name": "name",
+                  "userinfo.token.claim": "true"
                 }
-              ]
-            }
-          ],
-          "users": [
-            {
-              "username": "testuser",
-              "email": "testuser@archestra.test",
-              "firstName": "Test",
-              "lastName": "User",
-              "enabled": true,
-              "emailVerified": true,
-              "credentials": [
-                {
-                  "type": "password",
-                  "value": "testpassword",
-                  "temporary": false
+              }
+            ]
+          },
+          {
+            "clientId": "archestra-saml",
+            "name": "Archestra SAML Client",
+            "enabled": true,
+            "protocol": "saml",
+            "frontchannelLogout": true,
+            "attributes": {
+              "saml.assertion.signature": "true",
+              "saml.force.post.binding": "true",
+              "saml.multivalued.roles": "false",
+              "saml.encrypt": "false",
+              "saml.server.signature": "true",
+              "saml.server.signature.keyinfo.ext": "false",
+              "saml.signing.certificate": "",
+              "saml_force_name_id_format": "false",
+              "saml.client.signature": "false",
+              "saml.authnstatement": "true",
+              "saml_name_id_format": "email",
+              "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
+            },
+            "redirectUris": [
+              "http://localhost:3000/*",
+              "http://localhost:9000/*"
+            ],
+            "protocolMappers": [
+              {
+                "name": "email",
+                "protocol": "saml",
+                "protocolMapper": "saml-user-property-idp-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "email",
+                  "friendly.name": "email",
+                  "attribute.name": "email"
                 }
-              ]
-            }
-          ]
-        }
+              },
+              {
+                "name": "firstName",
+                "protocol": "saml",
+                "protocolMapper": "saml-user-property-idp-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "firstName",
+                  "friendly.name": "firstName",
+                  "attribute.name": "firstName"
+                }
+              },
+              {
+                "name": "lastName",
+                "protocol": "saml",
+                "protocolMapper": "saml-user-property-idp-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "lastName",
+                  "friendly.name": "lastName",
+                  "attribute.name": "lastName"
+                }
+              }
+            ]
+          }
+        ],
+        "users": [
+          {
+            "username": "testuser",
+            "email": "testuser@archestra.test",
+            "firstName": "Test",
+            "lastName": "User",
+            "enabled": true,
+            "emailVerified": true,
+            "credentials": [
+              {
+                "type": "password",
+                "value": "testpassword",
+                "temporary": false
+              }
+            ]
+          }
+        ]
+      }

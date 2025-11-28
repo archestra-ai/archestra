@@ -38,18 +38,9 @@ local_resource(
 )
 
 # E2E test dependencies (WireMock, Keycloak)
-# Update helm dependencies first
-local_resource(
-  'e2e-tests-helm-deps',
-  cmd='helm dependency update ../helm/e2e-tests',
-  labels=['test'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
-)
-
 k8s_yaml(helm(
   '../helm/e2e-tests',
-  name='e2e-tests',
+  name='e2e-test-dependencies',
   namespace='default'
 ))
 
@@ -58,8 +49,7 @@ k8s_resource(
   'e2e-tests-wiremock',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-  resource_deps=['e2e-tests-helm-deps']
+  auto_init=False
 )
 
 # Keycloak resource (for SSO testing)
@@ -67,6 +57,5 @@ k8s_resource(
   'e2e-tests-keycloak',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-  resource_deps=['e2e-tests-helm-deps']
+  auto_init=False
 )

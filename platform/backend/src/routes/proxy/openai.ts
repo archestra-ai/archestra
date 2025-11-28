@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
+import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableFetch,
   reportBlockedTools,
@@ -16,7 +17,6 @@ import {
   LimitValidationService,
   TokenPriceModel,
 } from "@/models";
-import { getDefaultPricing } from "@/models/default-prices";
 import {
   type Agent,
   constructResponseSchema,

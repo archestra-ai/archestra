@@ -1,5 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import getDefaultModelPrice from "@/default-model-prices";
 import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
@@ -124,9 +125,6 @@ class TokenPriceModel {
     return [...models];
   }
 
-  /**
-   * Ensure all models from interactions have pricing records with default $50 pricing
-   */
   static async ensureAllModelsHavePricing(): Promise<void> {
     const models = await TokenPriceModel.getAllModelsFromInteractions();
     const existingTokenPrices = await TokenPriceModel.findAll();
@@ -138,8 +136,7 @@ class TokenPriceModel {
     if (missingModels.length > 0) {
       const defaultPrices: InsertTokenPrice[] = missingModels.map((model) => ({
         model,
-        pricePerMillionInput: "50.00", // Default $50 per million tokens
-        pricePerMillionOutput: "50.00", // Default $50 per million tokens
+        ...getDefaultModelPrice(model),
       }));
 
       await db

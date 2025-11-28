@@ -160,7 +160,7 @@ export function PromptDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="agentId">Profile *</Label>
+            <Label htmlFor="agentId">Profile with tools*</Label>
             <Select value={agentId} onValueChange={setProfileId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a profile" />

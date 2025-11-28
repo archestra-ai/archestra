@@ -55,19 +55,35 @@ export function PromptDialog({
   // Reset form when dialog opens/closes or prompt changes
   useEffect(() => {
     if (open) {
+      // edit
       if (prompt) {
         setName(prompt.name);
         setProfileId(prompt.agentId);
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
       } else {
+        // create
         setName("");
-        setProfileId("");
         setUserPrompt("");
         setSystemPrompt("");
       }
+    } else {
+      // reset form
+      setName("");
+      setProfileId("");
+      setUserPrompt("");
+      setSystemPrompt("");
     }
   }, [open, prompt]);
+
+  useEffect(() => {
+    if (open) {
+      // if on create and no agentId, set the first agent
+      if (!prompt && !agentId) {
+        setProfileId(agents[0].id);
+      }
+    }
+  }, [open, prompt, agents, agentId]);
 
   const handleSave = async () => {
     if (!name || !agentId) {

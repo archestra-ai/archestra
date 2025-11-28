@@ -64,12 +64,14 @@ export interface VaultConfig {
  */
 export class DbSecretsManager implements SecretManager {
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
+    logger.info("DbSecretsManager.createSecret: creating secret");
     return await SecretModel.create({
       secret: secretValue,
     });
   }
 
   async deleteSecret(secretId: string): Promise<boolean> {
+    logger.info({ recordId: secretId }, "DbSecretsManager.deleteSecret: deleting secret");
     return await SecretModel.delete(secretId);
   }
 
@@ -79,6 +81,7 @@ export class DbSecretsManager implements SecretManager {
   }
 
   async getSecret(secretId: string): Promise<SelectSecret | null> {
+    logger.info({ recordId: secretId }, "DbSecretsManager.getSecret: retrieving secret");
     return await SecretModel.findById(secretId);
   }
 
@@ -86,6 +89,7 @@ export class DbSecretsManager implements SecretManager {
     secretId: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
+    logger.info({ recordId: secretId }, "DbSecretsManager.updateSecret: updating secret");
     return await SecretModel.update(secretId, { secret: secretValue });
   }
 }
@@ -124,12 +128,12 @@ export class VaultSecretManager implements SecretManager {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { vaultPath },
+        { recordId: dbRecord.id, vaultPath },
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
       logger.error(
-        { vaultPath, error },
+        { recordId: dbRecord.id, vaultPath, error },
         "VaultSecretManager.createSecret: failed, rolling back",
       );
       await SecretModel.delete(dbRecord.id);
@@ -154,12 +158,12 @@ export class VaultSecretManager implements SecretManager {
         // Delete metadata to permanently remove all versions of the secret
         await this.client.delete(metadataPath);
         logger.info(
-          { metadataPath },
+          { recordId: secretId, metadataPath },
           "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
         logger.error(
-          { metadataPath, error },
+          { recordId: secretId, metadataPath, error },
           "VaultSecretManager.deleteSecret: failed",
         );
         throw error;
@@ -190,7 +194,7 @@ export class VaultSecretManager implements SecretManager {
         vaultResponse.data.data.value,
       ) as SecretValue;
       logger.info(
-        { vaultPath },
+        { recordId: secretId, vaultPath },
         "VaultSecretManager.getSecret: secret retrieved",
       );
 
@@ -200,7 +204,7 @@ export class VaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { vaultPath, error },
+        { recordId: secretId, vaultPath, error },
         "VaultSecretManager.getSecret: failed",
       );
       throw error;
@@ -226,12 +230,12 @@ export class VaultSecretManager implements SecretManager {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { vaultPath },
+        { recordId: secretId, vaultPath },
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
       logger.error(
-        { vaultPath, error },
+        { recordId: secretId, vaultPath, error },
         "VaultSecretManager.updateSecret: failed",
       );
       throw error;

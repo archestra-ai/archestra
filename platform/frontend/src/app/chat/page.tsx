@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
   PromptInput,
@@ -112,7 +113,15 @@ export default function ChatPage() {
   );
 
   // Fetch conversation with messages
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation, error: conversationError } =
+    useConversation(conversationId);
+
+  // Show toast on conversation fetch error
+  useEffect(() => {
+    if (conversationError) {
+      toast.error("Failed to load conversation");
+    }
+  }, [conversationError]);
 
   // Find the specific prompt for this conversation (if any)
   const conversationPrompt = conversation?.promptId

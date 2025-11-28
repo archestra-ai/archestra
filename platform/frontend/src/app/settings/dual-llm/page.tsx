@@ -460,7 +460,7 @@ function DualLLMContent({
                 htmlFor="quarantine-prompt"
                 className="text-sm font-semibold"
               >
-                Quarantined Profile Prompt
+                Quarantined Agent Prompt
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
                 This agent has access to potentially malicious data but can only

@@ -5,10 +5,10 @@ import { MermaidDiagram } from "@/components/mermaid-wrapper";
 
 export function ArchestraArchitectureDiagram() {
   const mermaidChart = `flowchart LR
-    subgraph Profiles
+    subgraph Agents
         A1[Developer's Cursor]
         A2[N8N]
-        A3[Support Profile]
+        A3[Support Agent]
     end
 
     subgraph Archestra

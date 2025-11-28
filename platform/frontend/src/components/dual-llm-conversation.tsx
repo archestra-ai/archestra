@@ -49,7 +49,7 @@ export function DualLlmConversation({ result }: { result: DualLlmResult }) {
 
             <div>
               <h4 className="text-sm font-medium mb-2">
-                Q&A Rounds (Main Profile ↔ Quarantined Profile)
+                Q&A Rounds (Main Agent ↔ Quarantined Agent)
               </h4>
               <div className="space-y-3">
                 {conversations.map((message: unknown, idx: number) => {

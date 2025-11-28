@@ -117,11 +117,12 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
 
-      - name: Deploy Archestra Platform (and WireMock) with Helm
+      - name: Deploy Archestra Platform (and E2E test dependencies) with Helm
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # No need to wait for wiremock as we wait in the next step when installing the platform
-          helm install wiremock ./platform/helm/wiremock
+          # Deploy e2e test dependencies (WireMock, Keycloak)
+          # No need to wait as we wait in the next step when installing the platform
+          helm install e2e-tests ./platform/helm/e2e-tests
 
           helm install archestra-platform ./platform/helm/archestra \
             --values .github/values-ci.yaml \
@@ -294,7 +295,10 @@ jobs:
           kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
           echo "=== WireMock Logs ==="
-          kubectl logs -l app=wiremock --tail=200
+          kubectl logs -l app=e2e-tests-wiremock --tail=200
+
+          echo "=== Keycloak Logs ==="
+          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200
 
           echo "=== Describe Archestra Platform Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=archestra-platform

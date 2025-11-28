@@ -200,33 +200,30 @@ export const SsoProviderSamlConfigSchema = z
   );
 
 // Form schemas for UI
-export const SsoProviderFormSchema = z.object({
-  providerId: z.string().min(1, "Provider ID is required"),
-  issuer: z.string().min(1, "Issuer is required"),
-  domain: z.string().min(1, "Domain is required"),
-  providerType: z.literal("oidc"),
-  oidcConfig: SsoProviderOidcConfigSchema,
-  // NOTE: when we add SAML support, uncomment out the following lines..
-  // providerType: z.enum(["oidc", "saml"]),
-  // oidcConfig: SsoProviderOidcConfigSchema.optional(),
-  // samlConfig: SsoProviderSamlConfigSchema.optional(),
-});
-// NOTE: when we add SAML support, uncomment out the following lines..
-// .refine(
-//     (data) => {
-//       if (data.providerType === "oidc") {
-//         return !!data.oidcConfig;
-//       }
-//       if (data.providerType === "saml") {
-//         return !!data.samlConfig;
-//       }
-//       return false;
-//     },
-//     {
-//       message: "Configuration is required for the selected provider type",
-//       path: ["oidcConfig"],
-//     },
-//   );
+export const SsoProviderFormSchema = z
+  .object({
+    providerId: z.string().min(1, "Provider ID is required"),
+    issuer: z.string().min(1, "Issuer is required"),
+    domain: z.string().min(1, "Domain is required"),
+    providerType: z.enum(["oidc", "saml"]),
+    oidcConfig: SsoProviderOidcConfigSchema.optional(),
+    samlConfig: SsoProviderSamlConfigSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.providerType === "oidc") {
+        return !!data.oidcConfig;
+      }
+      if (data.providerType === "saml") {
+        return !!data.samlConfig;
+      }
+      return false;
+    },
+    {
+      message: "Configuration is required for the selected provider type",
+      path: ["oidcConfig"],
+    },
+  );
 
 export type SsoProviderOidcConfig = z.infer<typeof SsoProviderOidcConfigSchema>;
 export type SsoProviderSamlConfig = z.infer<typeof SsoProviderSamlConfigSchema>;

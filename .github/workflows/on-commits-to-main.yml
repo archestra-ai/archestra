@@ -12,9 +12,15 @@ concurrency:
   group: on-commits-to-main
   cancel-in-progress: true
 
+# Set default permissions to empty to enforce least privilege
+# Each job will explicitly declare the permissions it needs
+permissions: {}
+
 jobs:
   paths-filter:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required for actions/checkout
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
     steps:

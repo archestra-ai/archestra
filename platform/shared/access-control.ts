@@ -27,6 +27,7 @@ export const ResourceSchema = z.enum([
   "dualLlmConfig",
   "dualLlmResult",
   "organization",
+  "ssoProvider",
   "member",
   "invitation",
   "internalMcpCatalog",
@@ -65,6 +66,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   dualLlmResult: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
+  ssoProvider: ["create", "read", "update", "delete"],
   member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
@@ -309,6 +311,14 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
+
+  // SSO Provider Routes
+  GetPublicSsoProviders: "getPublicSsoProviders",
+  GetSsoProviders: "getSsoProviders",
+  GetSsoProvider: "getSsoProvider",
+  CreateSsoProvider: "createSsoProvider",
+  UpdateSsoProvider: "updateSsoProvider",
+  DeleteSsoProvider: "deleteSsoProvider",
 
   // User Routes
   GetUserPermissions: "getUserPermissions",
@@ -677,6 +687,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateOrganization]: {
     organization: ["update"],
   },
+
+  /**
+   * Get public SSO providers route (minimal info for login page)
+   * Available to unauthenticated users - only returns providerId, no secrets
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get all SSO providers with full config (admin only)
+   * Returns sensitive data including client secrets
+   */
+  [RouteId.GetSsoProviders]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.GetSsoProvider]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.CreateSsoProvider]: {
+    ssoProvider: ["create"],
+  },
+  [RouteId.UpdateSsoProvider]: {
+    ssoProvider: ["update"],
+  },
+  [RouteId.DeleteSsoProvider]: {
+    ssoProvider: ["delete"],
+  },
+
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetTokenPrices]: {
@@ -786,6 +823,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/settings/chat": {
     chatSettings: ["read"],
+  },
+  "/settings/sso-providers": {
+    ssoProvider: ["read"],
   },
 
   // Cost & Limits

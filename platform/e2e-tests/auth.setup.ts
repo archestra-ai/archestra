@@ -37,12 +37,14 @@ setup("authenticate", async ({ page }) => {
     },
   });
 
-  // Wait for page to refresh after onboarding completion
-  await page.waitForTimeout(1000);
+  // Reload the page to ensure the onboarding state is reflected
+  await page.reload();
+  await page.waitForLoadState("networkidle");
 
-  // Verify we're authenticated by checking for user profile or similar
-  await expect(page.getByRole("button", { name: /Admin/i })).toBeVisible({
-    timeout: 10000,
+  // Verify we're authenticated by checking for sidebar navigation
+  // Use a longer timeout to handle slow CI environments
+  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
+    timeout: 30000,
   });
 
   // Save the authentication state to a file

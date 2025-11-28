@@ -1,0 +1,112 @@
+{{- if .Values.keycloak.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.keycloak.service.type }}
+  ports:
+    - port: {{ .Values.keycloak.service.port }}
+      targetPort: 8080
+      {{- if and (eq .Values.keycloak.service.type "NodePort") .Values.keycloak.service.nodePort }}
+      nodePort: {{ .Values.keycloak.service.nodePort }}
+      {{- end }}
+      name: http
+  selector:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: keycloak
+          image: "{{ .Values.keycloak.image.registry }}/{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ .Values.keycloak.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - start-dev
+            {{- if .Values.keycloak.realm.import }}
+            - --import-realm
+            {{- end }}
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: {{ .Values.keycloak.auth.adminUser | quote }}
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: {{ .Values.keycloak.auth.adminPassword | quote }}
+            - name: KC_HTTP_PORT
+              value: "8080"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            # Allow Keycloak to be accessed from any hostname
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "false"
+          ports:
+            - containerPort: 8080
+              name: http
+          {{- if .Values.keycloak.realm.import }}
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+            initialDelaySeconds: {{ .Values.keycloak.readinessProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.keycloak.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.keycloak.readinessProbe.timeoutSeconds | default 5 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+            initialDelaySeconds: {{ .Values.keycloak.livenessProbe.initialDelaySeconds | default 60 }}
+            periodSeconds: {{ .Values.keycloak.livenessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.keycloak.livenessProbe.timeoutSeconds | default 5 }}
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+      {{- if .Values.keycloak.realm.import }}
+      volumes:
+        - name: realm-config
+          configMap:
+            name: {{ .Release.Name }}-keycloak-realm
+      {{- end }}
+---
+{{- if .Values.keycloak.realm.import }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-keycloak-realm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  archestra-realm.json: |
+{{ .Values.keycloak.realm.config | indent 4 }}
+{{- end }}
+{{- end }}
+

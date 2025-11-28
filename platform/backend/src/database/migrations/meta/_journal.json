@@ -484,6 +484,13 @@
       "when": 1764164315384,
       "tag": "0068_sour_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1764253614214,
+      "tag": "0069_magical_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +82,12 @@ export function PromptLibraryGrid({
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (isFreeChatDialogOpen && !selectedAgentId) {
+      setSelectedAgentId(agents[0].id);
+    }
+  }, [isFreeChatDialogOpen, agents, selectedAgentId]);
 
   // Filter prompts based on search query
   const filteredPrompts = useMemo(() => {

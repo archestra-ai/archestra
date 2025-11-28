@@ -37,14 +37,11 @@ local_resource(
   resource_deps=['pnpm-install', 'pnpm-dev']
 )
 
-k8s_yaml(helm(
-  '../helm/wiremock',
-  name='wiremock',
-  namespace='default'
-))
-
-k8s_resource(
-  'wiremock',
+# E2E test dependencies (WireMock, Keycloak)
+# Use a local_resource to deploy/redeploy the helm chart on demand
+local_resource(
+  'e2e-test-dependencies',
+  cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False

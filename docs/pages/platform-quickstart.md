@@ -23,7 +23,10 @@ Put the screenshot of the main page here as the last step after deployment.
 
    ```bash
    docker pull archestra/platform:latest;
-   docker run -p 9000:9000 -p 3000:3000 archestra/platform
+   docker run -p 9000:9000 -p 3000:3000 \
+      -v archestra-postgres-data:/var/lib/postgresql/data \
+      -v archestra-app-data:/app/data \
+      archestra/platform;
    ```
 
 2. Open <http://localhost:3000>

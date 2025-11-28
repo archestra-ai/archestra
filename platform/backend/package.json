@@ -31,7 +31,9 @@
     "@anthropic-ai/sdk": "^0.70.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@better-auth/core": "1.4.0",
+    "@better-auth/sso": "1.4.0",
     "@fastify/cors": "^11.1.0",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96",
     "@fastify/otel": "^0.14.0",
     "@fastify/swagger": "^9.6.1",
@@ -85,8 +87,8 @@
     "@types/pg": "^8.15.6",
     "@types/ws": "^8.18.1",
     "tsc-alias": "^1.8.10",
-    "tsx": "^4.20.6",
     "tsdown": "^0.16.6",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2",
     "vitest": "^4.0.10"
   }

@@ -68,9 +68,6 @@ export function PromptVersionHistoryDialog({
         ) : (
           <div className="space-y-3">
             {(versions as Prompt[]).map((version) => {
-              const profileName =
-                allAgents.find((a) => a.id === version.agentId)?.name ||
-                "Unknown Profile";
               return (
                 <div
                   key={version.id}
@@ -85,14 +82,6 @@ export function PromptVersionHistoryDialog({
                         <Badge variant="default" className="text-xs">
                           <Check className="h-3 w-3 mr-1" />
                           Current
-                        </Badge>
-                      )}
-                      {profileName && (
-                        <Badge
-                          variant="secondary"
-                          className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-xs"
-                        >
-                          {profileName}
                         </Badge>
                       )}
                     </div>

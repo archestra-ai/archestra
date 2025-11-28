@@ -64,6 +64,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeSsoProvider: typeof makeSsoProvider;
 }
 
 async function _makeUser(
@@ -609,6 +610,47 @@ async function makeSecret(
   return secret;
 }
 
+/**
+ * Creates a test SSO provider in the database.
+ * Bypasses Better Auth API for test simplicity.
+ */
+async function makeSsoProvider(
+  organizationId: string,
+  overrides: {
+    providerId?: string;
+    issuer?: string;
+    domain?: string;
+    oidcConfig?: Record<string, unknown>;
+    samlConfig?: Record<string, unknown>;
+    userId?: string | null;
+  } = {},
+) {
+  const id = crypto.randomUUID().replace(/-/g, "").substring(0, 32);
+  const providerId =
+    overrides.providerId ?? `TestProvider-${id.substring(0, 8)}`;
+
+  const [provider] = await db
+    .insert(schema.ssoProvidersTable)
+    .values({
+      id,
+      providerId,
+      issuer:
+        overrides.issuer ?? `https://issuer-${id.substring(0, 8)}.example.com`,
+      domain: overrides.domain ?? `domain-${id.substring(0, 8)}.example.com`,
+      organizationId,
+      oidcConfig: overrides.oidcConfig
+        ? (JSON.stringify(overrides.oidcConfig) as unknown as undefined)
+        : undefined,
+      samlConfig: overrides.samlConfig
+        ? (JSON.stringify(overrides.samlConfig) as unknown as undefined)
+        : undefined,
+      userId: overrides.userId ?? null,
+    })
+    .returning();
+
+  return provider;
+}
+
 export const beforeEach = baseBeforeEach<TestFixtures>;
 export const test = baseTest.extend<TestFixtures>({
   makeUser: async ({}, use) => {
@@ -670,5 +712,8 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeSsoProvider: async ({}, use) => {
+    await use(makeSsoProvider);
   },
 });

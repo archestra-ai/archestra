@@ -3,22 +3,18 @@
 import { AuthView } from "@daveyplate/better-auth-ui";
 import { AlertCircle, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SsoProviderSelector } from "@/components/sso-provider-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
-  classNames?: {
-    footer?: string;
-    form?: {
-      forgotPasswordLink?: string;
-    };
-  };
+  callbackURL?: string;
 }
 
 export function AuthViewWithErrorHandling({
   path,
-  classNames,
+  callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
 
@@ -70,9 +66,11 @@ export function AuthViewWithErrorHandling({
     };
   }, []);
 
+  const isSignInPage = path === "sign-in";
+
   return (
     <>
-      {serverError && path === "sign-in" && (
+      {serverError && isSignInPage && (
         <Alert className="mb-4 border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 max-w-sm">
           <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
           <AlertTitle className="text-red-900 dark:text-red-100">
@@ -123,7 +121,18 @@ export function AuthViewWithErrorHandling({
           </AlertDescription>
         </Alert>
       )}
-      <AuthView path={path} classNames={classNames} />
+      <div className="space-y-4">
+        <AuthView
+          path={path}
+          callbackURL={callbackURL}
+          classNames={{
+            base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
+            footer: "hidden",
+            form: { forgotPasswordLink: "hidden" },
+          }}
+        />
+        {isSignInPage && <SsoProviderSelector />}
+      </div>
     </>
   );
 }

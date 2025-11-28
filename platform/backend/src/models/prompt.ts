@@ -173,22 +173,29 @@ class PromptModel {
     const oldName = promptById.name;
     const nameChanged = input.name !== undefined && input.name !== oldName;
 
-    // If name is being changed, update all versions to use the new name
-    if (nameChanged) {
+    // Determine the agentId to use (new agentId if provided, otherwise keep current)
+    const newAgentId = input.agentId || promptById.agentId;
+    const oldAgentId = promptById.agentId;
+    const agentChanged =
+      input.agentId !== undefined && input.agentId !== oldAgentId;
+
+    // If name or agentId is being changed, update all versions to use the new values
+    if (nameChanged || agentChanged) {
+      const updateValues: { name?: string; agentId?: string } = {};
+      if (nameChanged) updateValues.name = newName;
+      if (agentChanged) updateValues.agentId = newAgentId;
+
       await db
         .update(schema.promptsTable)
-        .set({ name: newName })
+        .set(updateValues)
         .where(
           and(
             eq(schema.promptsTable.organizationId, promptById.organizationId),
             eq(schema.promptsTable.name, oldName),
-            eq(schema.promptsTable.agentId, promptById.agentId),
+            eq(schema.promptsTable.agentId, oldAgentId),
           ),
         );
     }
-
-    // Determine the agentId to use (new agentId if provided, otherwise keep current)
-    const newAgentId = input.agentId || promptById.agentId;
 
     // Find the MOST RECENT version (highest version number) for this prompt family
     // This ensures we always increment from the latest version number,

@@ -41,3 +41,23 @@ export const ARCHESTRA_MCP_SERVER_NAME = "archestra";
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`;
 
 export const MCP_CATALOG_API_BASE_URL = "https://archestra.ai/mcp-catalog/api";
+
+/**
+ * SSO Provider IDs - these are the canonical provider identifiers used for:
+ * - Account linking (trustedProviders)
+ * - Provider registration
+ * - Callback URLs (e.g., /api/auth/sso/callback/{providerId})
+ */
+export const SSO_PROVIDER_ID = {
+  OKTA: "Okta",
+  GOOGLE: "Google",
+  GITHUB: "GitHub",
+  GITLAB: "GitLab",
+  ENTRA_ID: "EntraID",
+} as const;
+
+export type SsoProviderId =
+  (typeof SSO_PROVIDER_ID)[keyof typeof SSO_PROVIDER_ID];
+
+/** List of all predefined SSO provider IDs for account linking */
+export const SSO_TRUSTED_PROVIDER_IDS = Object.values(SSO_PROVIDER_ID);

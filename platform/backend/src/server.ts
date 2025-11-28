@@ -8,6 +8,7 @@ import "./sentry";
 import "./tracing";
 
 import fastifyCors from "@fastify/cors";
+import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
@@ -312,6 +313,10 @@ const start = async () => {
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
     });
+
+    // Register formbody plugin to parse application/x-www-form-urlencoded bodies
+    // This is required for SAML callbacks which use form POST binding
+    await fastify.register(fastifyFormbody);
 
     /**
      * Register openapi spec

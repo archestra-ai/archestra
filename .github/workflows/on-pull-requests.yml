@@ -50,6 +50,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # From zizmor action docs:
+      # https://github.com/zizmorcore/zizmor-action?tab=readme-ov-file#usage-with-github-advanced-security-recommended
+      #
+      # In this mode, the action will not fail when zizmor produces findings.
+      # This is because Advanced Security encourages workflows to only fail on internal errors.
+      #
+      # To use workflow failure as a blocking signal, you can use GitHub's rulesets feature.
+      # For more information, see:
+      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
       - name: Run zizmor 🌈
         uses: zizmorcore/zizmor-action@e639db99335bc9038abc0e066dfcd72e23d26fb4 # v0.3.0
         with:

@@ -338,6 +338,9 @@ jobs:
 
       # Run docker scout to check for vulnerabilities and recommendations
       # https://github.com/docker/scout-action
+      #
+      # Branch ruleset has been configured to block PRs with critical or high vulnerabilities.
+      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
       - name: Docker Scout
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2

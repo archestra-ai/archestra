@@ -1,11 +1,9 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { requiredPagePermissionsMap } from "@shared";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
@@ -53,17 +51,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     ? isAuthPending && !isAuthRefetching // After mount: distinguish refetch from initial
     : isAuthPending; // During SSR/hydration: just check isPending
 
-  // Get required permissions for current page
-  const requiredPermissions = requiredPagePermissionsMap[pathname];
-  const { data: hasRequiredPermissions, isPending: isPermissionCheckPending } =
-    useHasPermissions(requiredPermissions || {});
-
-  // On auth pages (including special auth pages like 2FA), only wait for auth check
-  // On other pages, wait for both auth and permission checks
-  const inProgress =
-    isAuthPage || isSpecialAuth
-      ? isAuthInitializing
-      : isAuthInitializing || isPermissionCheckPending;
+  const inProgress = isAuthInitializing;
 
   // Set Sentry user context when user is authenticated
   useEffect(() => {
@@ -112,17 +100,6 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     router,
     isSpecialAuth,
   ]);
-
-  // Redirect to home if page is protected and user is not authorized
-  useEffect(() => {
-    if (inProgress) {
-      return;
-    }
-
-    if (requiredPermissions && !hasRequiredPermissions) {
-      router.push("/");
-    }
-  }, [inProgress, requiredPermissions, hasRequiredPermissions, router]);
 
   // Show loading while checking auth/permissions
   if (inProgress) {

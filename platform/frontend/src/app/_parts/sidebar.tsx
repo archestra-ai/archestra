@@ -22,6 +22,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -210,7 +212,24 @@ const MainSideBarSection = ({
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
-      <ChatSidebarSection />
+      <WithPermissions
+        permissions={{ conversation: ["read"] }}
+        noPermissionHandle="tooltip"
+      >
+        {({ isDisabled }) => {
+          return isDisabled ? (
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <Badge variant="outline" className="text-xs mx-4">
+                  Recent chats are not shown
+                </Badge>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : (
+            <ChatSidebarSection />
+          );
+        }}
+      </WithPermissions>
       {!config.enterpriseLicenseActivated && (
         <CommunitySideBarSection starCount={starCount} />
       )}

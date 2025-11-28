@@ -97,6 +97,7 @@ VOLUME /var/lib/postgresql/data /app/data
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
+COPY docker-banner.sh ./
 
 # Install production dependencies for both workspaces
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --filter=@backend --filter=@frontend
@@ -259,11 +260,27 @@ if [ -n "$ARCHESTRA_ANALYTICS" ]; then
   sed -i "s|environment=\(.*\)|environment=\1,NEXT_PUBLIC_ARCHESTRA_ANALYTICS=\"${ARCHESTRA_ANALYTICS}\"|g" /etc/supervisord.conf
 fi
 
+# Add startup banner to supervisord (sleeps 12s to ensure it prints after Next.js logs)
+cat >> /etc/supervisord.conf <<CONF
+
+[program:startup-banner]
+command=/bin/sh -c "sleep 12 && /app/docker-banner.sh"
+autostart=true
+autorestart=false
+startsecs=0
+priority=999
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+CONF
+
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisord.conf
 EOF
 
 RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /app/docker-banner.sh
 
 # Expose ports
 EXPOSE 5432 9000 9050 3000

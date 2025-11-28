@@ -128,12 +128,12 @@ export class VaultSecretManager implements SecretManager {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { secretId: dbRecord.id, vaultPath },
+        { vaultPath },
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
       logger.error(
-        { secretId: dbRecord.id, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.createSecret: failed, rolling back",
       );
       await SecretModel.delete(dbRecord.id);
@@ -158,12 +158,12 @@ export class VaultSecretManager implements SecretManager {
         // Delete metadata to permanently remove all versions of the secret
         await this.client.delete(metadataPath);
         logger.info(
-          { secretId, metadataPath },
+          { metadataPath },
           "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
         logger.error(
-          { secretId, metadataPath, error },
+          { metadataPath, error },
           "VaultSecretManager.deleteSecret: failed",
         );
         throw error;
@@ -194,7 +194,7 @@ export class VaultSecretManager implements SecretManager {
         vaultResponse.data.data.value,
       ) as SecretValue;
       logger.info(
-        { secretId, vaultPath },
+        { vaultPath },
         "VaultSecretManager.getSecret: secret retrieved",
       );
 
@@ -204,7 +204,7 @@ export class VaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { secretId, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.getSecret: failed",
       );
       throw error;
@@ -230,12 +230,12 @@ export class VaultSecretManager implements SecretManager {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { secretId, vaultPath },
+        { vaultPath },
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
       logger.error(
-        { secretId, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.updateSecret: failed",
       );
       throw error;

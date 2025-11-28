@@ -301,9 +301,9 @@ describe("VaultSecretManager", () => {
       mockVaultClient.delete.mockResolvedValueOnce({});
       await vaultManager.deleteSecret(created.id);
 
-      // Verify vault delete was called
+      // Verify vault delete was called with metadata path (permanently removes all versions)
       expect(mockVaultClient.delete).toHaveBeenCalledWith(
-        `secret/data/archestra/${created.id}`,
+        `secret/metadata/archestra/${created.id}`,
       );
 
       // Verify database record is gone (this is the true test of success)

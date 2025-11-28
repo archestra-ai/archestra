@@ -64,33 +64,28 @@ export interface VaultConfig {
  */
 export class DbSecretsManager implements SecretManager {
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
-    logger.info("DbSecretsManager.createSecret: creating secret");
     return await SecretModel.create({
       secret: secretValue,
     });
   }
 
-  async deleteSecret(secretId: string): Promise<boolean> {
-    logger.info({ recordId: secretId }, "DbSecretsManager.deleteSecret: deleting secret");
-    return await SecretModel.delete(secretId);
+  async deleteSecret(secid: string): Promise<boolean> {
+    return await SecretModel.delete(secid);
   }
 
-  async removeSecret(secretId: string): Promise<boolean> {
-    // removeSecret is an alias for deleteSecret
-    return await this.deleteSecret(secretId);
+  async removeSecret(secid: string): Promise<boolean> {
+    return await this.deleteSecret(secid);
   }
 
-  async getSecret(secretId: string): Promise<SelectSecret | null> {
-    logger.info({ recordId: secretId }, "DbSecretsManager.getSecret: retrieving secret");
-    return await SecretModel.findById(secretId);
+  async getSecret(secid: string): Promise<SelectSecret | null> {
+    return await SecretModel.findById(secid);
   }
 
   async updateSecret(
-    secretId: string,
+    secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    logger.info({ recordId: secretId }, "DbSecretsManager.updateSecret: updating secret");
-    return await SecretModel.update(secretId, { secret: secretValue });
+    return await SecretModel.update(secid, { secret: secretValue });
   }
 }
 
@@ -108,12 +103,12 @@ export class VaultSecretManager implements SecretManager {
     });
   }
 
-  private getVaultPath(secretId: string): string {
-    return `secret/data/archestra/${secretId}`;
+  private getVaultPath(secid: string): string {
+    return `secret/data/archestra/${secid}`;
   }
 
-  private getVaultMetadataPath(secretId: string): string {
-    return `secret/metadata/archestra/${secretId}`;
+  private getVaultMetadataPath(secid: string): string {
+    return `secret/metadata/archestra/${secid}`;
   }
 
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
@@ -128,12 +123,12 @@ export class VaultSecretManager implements SecretManager {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { recordId: dbRecord.id, vaultPath },
+        { vaultPath },
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
       logger.error(
-        { recordId: dbRecord.id, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.createSecret: failed, rolling back",
       );
       await SecretModel.delete(dbRecord.id);
@@ -146,39 +141,39 @@ export class VaultSecretManager implements SecretManager {
     };
   }
 
-  async deleteSecret(secretId: string): Promise<boolean> {
-    const dbRecord = await SecretModel.findById(secretId);
+  async deleteSecret(secid: string): Promise<boolean> {
+    const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return false;
     }
 
     if (dbRecord.isVault) {
-      const metadataPath = this.getVaultMetadataPath(secretId);
+      const metadataPath = this.getVaultMetadataPath(secid);
       try {
         // Delete metadata to permanently remove all versions of the secret
         await this.client.delete(metadataPath);
         logger.info(
-          { recordId: secretId, metadataPath },
+          { metadataPath },
           "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
         logger.error(
-          { recordId: secretId, metadataPath, error },
+          { metadataPath, error },
           "VaultSecretManager.deleteSecret: failed",
         );
         throw error;
       }
     }
 
-    return await SecretModel.delete(secretId);
+    return await SecretModel.delete(secid);
   }
 
-  async removeSecret(secretId: string): Promise<boolean> {
-    return await this.deleteSecret(secretId);
+  async removeSecret(secid: string): Promise<boolean> {
+    return await this.deleteSecret(secid);
   }
 
-  async getSecret(secretId: string): Promise<SelectSecret | null> {
-    const dbRecord = await SecretModel.findById(secretId);
+  async getSecret(secid: string): Promise<SelectSecret | null> {
+    const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return null;
     }
@@ -187,14 +182,14 @@ export class VaultSecretManager implements SecretManager {
       return dbRecord;
     }
 
-    const vaultPath = this.getVaultPath(secretId);
+    const vaultPath = this.getVaultPath(secid);
     try {
       const vaultResponse = await this.client.read(vaultPath);
       const secretValue = JSON.parse(
         vaultResponse.data.data.value,
       ) as SecretValue;
       logger.info(
-        { recordId: secretId, vaultPath },
+        { vaultPath },
         "VaultSecretManager.getSecret: secret retrieved",
       );
 
@@ -204,7 +199,7 @@ export class VaultSecretManager implements SecretManager {
       };
     } catch (error) {
       logger.error(
-        { recordId: secretId, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.getSecret: failed",
       );
       throw error;
@@ -212,36 +207,36 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async updateSecret(
-    secretId: string,
+    secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    const dbRecord = await SecretModel.findById(secretId);
+    const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return null;
     }
 
     if (!dbRecord.isVault) {
-      return await SecretModel.update(secretId, { secret: secretValue });
+      return await SecretModel.update(secid, { secret: secretValue });
     }
 
-    const vaultPath = this.getVaultPath(secretId);
+    const vaultPath = this.getVaultPath(secid);
     try {
       await this.client.write(vaultPath, {
         data: { value: JSON.stringify(secretValue) },
       });
       logger.info(
-        { recordId: secretId, vaultPath },
+        { vaultPath },
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
       logger.error(
-        { recordId: secretId, vaultPath, error },
+        { vaultPath, error },
         "VaultSecretManager.updateSecret: failed",
       );
       throw error;
     }
 
-    const updatedRecord = await SecretModel.update(secretId, { secret: {} });
+    const updatedRecord = await SecretModel.update(secid, { secret: {} });
     if (!updatedRecord) {
       return null;
     }

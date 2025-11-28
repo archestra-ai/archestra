@@ -84,10 +84,10 @@ export function PromptLibraryGrid({
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (isFreeChatDialogOpen && !selectedAgentId) {
-      setSelectedAgentId(agents[0].id);
+    if (isFreeChatDialogOpen && !selectedProfileId) {
+      setSelectedProfileId(agents[0].id);
     }
-  }, [isFreeChatDialogOpen, agents, selectedAgentId]);
+  }, [isFreeChatDialogOpen, agents, selectedProfileId]);
 
   // Filter prompts based on search query
   const filteredPrompts = useMemo(() => {

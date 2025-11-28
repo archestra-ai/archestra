@@ -653,16 +653,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           let costAfterOptimization: number | null = null;
 
           if (tokenUsage) {
-            baselineCost = await utils.costOptimization.calculateCost(
-              body.model,
-              tokenUsage.input || 0,
-              tokenUsage.output || 0,
-            );
-            costAfterOptimization = await utils.costOptimization.calculateCost(
-              model,
-              tokenUsage.input || 0,
-              tokenUsage.output || 0,
-            );
+            baselineCost =
+              (await utils.costOptimization.calculateCost(
+                body.model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
+            costAfterOptimization =
+              (await utils.costOptimization.calculateCost(
+                model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
 
             fastify.log.info(
               {

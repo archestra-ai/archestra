@@ -2,26 +2,26 @@ import { E2eTestId } from "@shared";
 import { Pencil, Plug, Trash2 } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
-import type { useAgentsPaginated } from "@/lib/agent.query";
+import type { useProfilesPaginated } from "@/lib/agent.query";
 
-// Infer Agent type from the API response
-type Agent = NonNullable<
-  ReturnType<typeof useAgentsPaginated>["data"]
+// Infer Profile type from the API response
+type Profile = NonNullable<
+  ReturnType<typeof useProfilesPaginated>["data"]
 >["data"][number];
 
-type AgentActionsProps = {
-  agent: Agent;
-  onConnect: (agent: Pick<Agent, "id" | "name">) => void;
-  onEdit: (agent: Omit<Agent, "tools">) => void;
+type ProfileActionsProps = {
+  agent: Profile;
+  onConnect: (agent: Pick<Profile, "id" | "name">) => void;
+  onEdit: (agent: Omit<Profile, "tools">) => void;
   onDelete: (agentId: string) => void;
 };
 
-export function AgentActions({
+export function ProfileActions({
   agent,
   onConnect,
   onEdit,
   onDelete,
-}: AgentActionsProps) {
+}: ProfileActionsProps) {
   return (
     <ButtonGroup>
       <PermissionButton

@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useCreatePrompt, useUpdatePrompt } from "@/lib/prompts.query";
 
 type Prompt = archestraApiTypes.GetPromptsResponses["200"][number];
@@ -42,13 +42,13 @@ export function PromptDialog({
   prompt,
   onViewVersionHistory,
 }: PromptDialogProps) {
-  const { data: allAgents = [] } = useAgents();
-  const agents = allAgents.filter((agent) => agent.useInChat);
+  const { data: allProfiles = [] } = useProfiles();
+  const agents = allProfiles.filter((agent) => agent.useInChat);
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
 
   const [name, setName] = useState("");
-  const [agentId, setAgentId] = useState("");
+  const [agentId, setProfileId] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
 
@@ -57,12 +57,12 @@ export function PromptDialog({
     if (open) {
       if (prompt) {
         setName(prompt.name);
-        setAgentId(prompt.agentId);
+        setProfileId(prompt.agentId);
         setUserPrompt(prompt.userPrompt || "");
         setSystemPrompt(prompt.systemPrompt || "");
       } else {
         setName("");
-        setAgentId("");
+        setProfileId("");
         setUserPrompt("");
         setSystemPrompt("");
       }
@@ -145,7 +145,7 @@ export function PromptDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="agentId">Profile *</Label>
-            <Select value={agentId} onValueChange={setAgentId}>
+            <Select value={agentId} onValueChange={setProfileId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a profile" />
               </SelectTrigger>

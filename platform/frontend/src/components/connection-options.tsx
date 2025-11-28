@@ -25,7 +25,7 @@ export function ConnectionOptions({ agentId }: ConnectionOptionsProps) {
           <div className="flex items-center gap-2 pb-2 border-b">
             <h3 className="font-medium">MCP Gateway</h3>
             <h4 className="text-sm text-muted-foreground">
-              To enable tools for the agent
+              To enable tools for the profile
             </h4>
           </div>
           {agentId && <McpConnectionInstructions agentId={agentId} />}

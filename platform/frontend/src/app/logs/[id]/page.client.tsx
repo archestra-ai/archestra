@@ -108,7 +108,7 @@ function LogDetail({
             <div className="grid grid-cols-2 gap-x-12 gap-y-6">
               <div>
                 <div className="text-sm text-muted-foreground mb-2">
-                  Agent Name
+                  Profile Name
                 </div>
                 <div className="font-medium">{agent?.name ?? "Unknown"}</div>
               </div>

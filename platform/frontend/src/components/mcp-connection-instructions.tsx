@@ -126,7 +126,7 @@ export function McpConnectionInstructions({
           >
             Model Context Protocol (MCP)
           </a>{" "}
-          to access tools assigned to this agent.
+          to access tools assigned to this profile.
         </p>
 
         <p className="text-sm text-muted-foreground">

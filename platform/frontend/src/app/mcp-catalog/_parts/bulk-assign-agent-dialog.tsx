@@ -17,11 +17,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useMcpServers } from "@/lib/mcp-server.query";
 
-interface BulkAssignAgentDialogProps {
+interface BulkAssignProfileDialogProps {
   tools: Array<{
     id: string;
     name: string;
@@ -34,17 +34,17 @@ interface BulkAssignAgentDialogProps {
   catalogId: string;
 }
 
-export function BulkAssignAgentDialog({
+export function BulkAssignProfileDialog({
   tools,
   open,
   onOpenChange,
   catalogId,
-}: BulkAssignAgentDialogProps) {
-  const { data: agents } = useAgents();
+}: BulkAssignProfileDialogProps) {
+  const { data: agents } = useProfiles();
   const bulkAssignMutation = useBulkAssignTools();
   const mcpServers = useMcpServers();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
   const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
@@ -57,7 +57,7 @@ export function BulkAssignAgentDialog({
   );
   const isLocalServer = mcpServer?.serverType === "local";
 
-  const filteredAgents = useMemo(() => {
+  const filteredProfiles = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
 
     const query = searchQuery.toLowerCase();
@@ -65,11 +65,11 @@ export function BulkAssignAgentDialog({
   }, [agents, searchQuery]);
 
   const handleAssign = useCallback(async () => {
-    if (!tools || tools.length === 0 || selectedAgentIds.length === 0) return;
+    if (!tools || tools.length === 0 || selectedProfileIds.length === 0) return;
 
     // Assign each tool to each selected agent
     const assignments = tools.flatMap((tool) =>
-      selectedAgentIds.map((agentId) => ({
+      selectedProfileIds.map((agentId) => ({
         agentId,
         toolId: tool.id,
         credentialSourceMcpServerId: isLocalServer
@@ -117,7 +117,7 @@ export function BulkAssignAgentDialog({
         console.error("Bulk assignment errors:", failed);
       }
 
-      setSelectedAgentIds([]);
+      setSelectedProfileIds([]);
       setSearchQuery("");
       setCredentialSourceMcpServerId(null);
       setExecutionSourceMcpServerId(null);
@@ -128,7 +128,7 @@ export function BulkAssignAgentDialog({
     }
   }, [
     tools,
-    selectedAgentIds,
+    selectedProfileIds,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     isLocalServer,
@@ -137,8 +137,8 @@ export function BulkAssignAgentDialog({
     mcpServer?.id,
   ]);
 
-  const toggleAgent = useCallback((agentId: string) => {
-    setSelectedAgentIds((prev) =>
+  const toggleProfile = useCallback((agentId: string) => {
+    setSelectedProfileIds((prev) =>
       prev.includes(agentId)
         ? prev.filter((id) => id !== agentId)
         : [...prev, agentId],
@@ -151,7 +151,7 @@ export function BulkAssignAgentDialog({
       onOpenChange={(newOpen) => {
         onOpenChange(newOpen);
         if (!newOpen) {
-          setSelectedAgentIds([]);
+          setSelectedProfileIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
           setExecutionSourceMcpServerId(null);
@@ -181,7 +181,7 @@ export function BulkAssignAgentDialog({
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md">
-            {!filteredAgents || filteredAgents.length === 0 ? (
+            {!filteredProfiles || filteredProfiles.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
                   ? "No profiles match your search"
@@ -189,14 +189,14 @@ export function BulkAssignAgentDialog({
               </div>
             ) : (
               <div className="divide-y">
-                {filteredAgents.map((agent) => (
+                {filteredProfiles.map((agent) => (
                   <div
                     key={agent.id}
                     className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 w-full text-left"
                   >
                     <Checkbox
-                      checked={selectedAgentIds.includes(agent.id)}
-                      onCheckedChange={() => toggleAgent(agent.id)}
+                      checked={selectedProfileIds.includes(agent.id)}
+                      onCheckedChange={() => toggleProfile(agent.id)}
                     />
                     <span className="text-sm">{agent.name}</span>
                   </div>
@@ -253,7 +253,7 @@ export function BulkAssignAgentDialog({
           <Button
             variant="outline"
             onClick={() => {
-              setSelectedAgentIds([]);
+              setSelectedProfileIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
               setExecutionSourceMcpServerId(null);
@@ -265,7 +265,7 @@ export function BulkAssignAgentDialog({
           <Button
             onClick={handleAssign}
             disabled={
-              selectedAgentIds.length === 0 ||
+              selectedProfileIds.length === 0 ||
               bulkAssignMutation.isPending ||
               (isLocalServer && !executionSourceMcpServerId) ||
               (!isLocalServer && !credentialSourceMcpServerId)
@@ -273,7 +273,7 @@ export function BulkAssignAgentDialog({
           >
             {bulkAssignMutation.isPending
               ? "Assigning..."
-              : `Assign to ${selectedAgentIds.length} profile${selectedAgentIds.length !== 1 ? "s" : ""}`}
+              : `Assign to ${selectedProfileIds.length} profile${selectedProfileIds.length !== 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

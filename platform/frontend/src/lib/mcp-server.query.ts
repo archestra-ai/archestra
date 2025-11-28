@@ -279,7 +279,7 @@ export function useMcpServerInstallationStatus(
  *
  * @param catalogId - Optional catalog ID to filter tokens. If not provided, returns tokens for all catalog items.
  */
-export function useAgentAvailableTokens(params: { catalogId?: string }) {
+export function useProfileAvailableTokens(params: { catalogId?: string }) {
   const { catalogId } = params;
 
   return useQuery({

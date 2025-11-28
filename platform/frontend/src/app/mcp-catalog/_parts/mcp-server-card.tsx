@@ -13,7 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
+import { AssignProfileDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ import {
   useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
-import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
+import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
 import { ManageLocalInstallationsDialog } from "./manage-local-installations-dialog";
 import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
@@ -679,7 +679,7 @@ export function McpServerCard({
         installs={localInstalls}
       />
 
-      <BulkAssignAgentDialog
+      <BulkAssignProfileDialog
         tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
         open={bulkAssignTools.length > 0}
         onOpenChange={(open) => {
@@ -692,7 +692,7 @@ export function McpServerCard({
         catalogId={item.id}
       />
 
-      <AssignAgentDialog
+      <AssignProfileDialog
         tool={
           selectedToolForAssignment
             ? {

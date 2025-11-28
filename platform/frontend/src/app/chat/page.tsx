@@ -44,7 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useChatSession } from "@/contexts/global-chat-context";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
@@ -83,8 +83,8 @@ export default function ChatPage() {
   const { data: prompts = [] } = usePrompts();
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
-  const { data: allAgents = [] } = useAgents();
-  const chatAgents = allAgents.filter((agent) => agent.useInChat);
+  const { data: allProfiles = [] } = useProfiles();
+  const chatProfiles = allProfiles.filter((agent) => agent.useInChat);
 
   const chatSession = useChatSession(conversationId);
 
@@ -121,13 +121,13 @@ export default function ChatPage() {
     : undefined;
 
   // Get current agent info
-  const currentAgentId = conversation?.agentId;
+  const currentProfileId = conversation?.agentId;
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
     // Only clear sessions if this is a newly created conversation
     if (
-      currentAgentId &&
+      currentProfileId &&
       conversationId &&
       newlyCreatedConversationRef.current === conversationId
     ) {
@@ -135,7 +135,7 @@ export default function ChatPage() {
       fetch("/v1/mcp/sessions", {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${currentAgentId}`,
+          Authorization: `Bearer ${currentProfileId}`,
         },
       })
         .then(async () => {
@@ -145,14 +145,14 @@ export default function ChatPage() {
         .catch((error) => {
           console.error("[Chat] Failed to clear MCP sessions:", {
             conversationId,
-            agentId: currentAgentId,
+            agentId: currentProfileId,
             error,
           });
           // Clear the ref even on error to avoid retry loops
           newlyCreatedConversationRef.current = undefined;
         });
     }
-  }, [conversationId, currentAgentId]);
+  }, [conversationId, currentProfileId]);
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
@@ -367,7 +367,7 @@ export default function ChatPage() {
   }
 
   const profileName = conversationPrompt?.agentId
-    ? allAgents.find((a) => a.id === conversationPrompt.agentId)?.name
+    ? allProfiles.find((a) => a.id === conversationPrompt.agentId)?.name
     : null;
   const promptBadge = (
     <>
@@ -387,7 +387,7 @@ export default function ChatPage() {
                 <div className="space-y-2">
                   {profileName && (
                     <div>
-                      <div className="font-semibold text-xs mb-1">Agent:</div>
+                      <div className="font-semibold text-xs mb-1">Profile:</div>
                       <div className="text-xs">{profileName}</div>
                     </div>
                   )}
@@ -411,7 +411,7 @@ export default function ChatPage() {
   );
 
   if (!conversationId) {
-    const hasNoChatAgents = chatAgents.length === 0;
+    const hasNoChatProfiles = chatProfiles.length === 0;
 
     return (
       <PageLayout
@@ -429,14 +429,14 @@ export default function ChatPage() {
                     <Button
                       onClick={handleCreatePrompt}
                       size="sm"
-                      disabled={hasNoChatAgents}
+                      disabled={hasNoChatProfiles}
                     >
                       <Plus className="mr-2 h-4 w-4" />
                       Add Prompt
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {hasNoChatAgents && (
+                {hasNoChatProfiles && (
                   <TooltipContent>
                     <p>None of the profiles has chat enabled</p>
                   </TooltipContent>
@@ -526,9 +526,9 @@ export default function ChatPage() {
 
           <div className="sticky bottom-0 bg-background border-t p-4">
             <div className="max-w-3xl mx-auto space-y-3">
-              {currentAgentId && (
+              {currentProfileId && (
                 <McpToolsDisplay
-                  agentId={currentAgentId}
+                  agentId={currentProfileId}
                   className="text-xs text-muted-foreground"
                 />
               )}

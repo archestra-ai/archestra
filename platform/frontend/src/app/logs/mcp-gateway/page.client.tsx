@@ -8,7 +8,7 @@ import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
@@ -92,7 +92,7 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents } = useAgents({
+  const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
 
@@ -153,7 +153,7 @@ function McpToolCallsTable({
             className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Agent
+            Profile
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         );

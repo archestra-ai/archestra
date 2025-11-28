@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useInteractions } from "@/lib/interaction.query";
 
 import { DynamicInteraction } from "@/lib/interaction.utils";
@@ -152,7 +152,7 @@ function LogsTable({
     initialData: initialData?.interactions,
   });
 
-  const { data: agents } = useAgents({
+  const { data: agents } = useProfiles({
     initialData: initialData?.agents,
   });
 
@@ -193,7 +193,7 @@ function LogsTable({
             className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Agent
+            Profile
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         );

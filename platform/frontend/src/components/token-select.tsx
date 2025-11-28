@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAgentAvailableTokens } from "@/lib/mcp-server.query";
+import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "./loading";
 
@@ -39,7 +39,7 @@ export function TokenSelect({
   catalogId,
   shouldSetDefaultValue,
 }: TokenSelectProps) {
-  const { data: groupedTokens, isLoading } = useAgentAvailableTokens({
+  const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
     catalogId,
   });
 

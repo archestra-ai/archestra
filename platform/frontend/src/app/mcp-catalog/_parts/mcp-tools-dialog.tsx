@@ -188,7 +188,7 @@ export function McpToolsDialog({
                 </>
               ) : (
                 <span className="text-sm text-muted-foreground">
-                  Select tools to bulk assign to agents
+                  Select tools to bulk assign to profiles
                 </span>
               )}
             </div>
@@ -200,7 +200,7 @@ export function McpToolsDialog({
                 className="gap-2"
               >
                 <Users className="h-4 w-4" />
-                Bulk Assign to Agents
+                Bulk Assign to Profiles
               </Button>
               {hasSelection && (
                 <>
@@ -256,7 +256,9 @@ export function McpToolsDialog({
                   </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead className="text-center">Assigned Agents</TableHead>
+                  <TableHead className="text-center">
+                    Assigned Profiles
+                  </TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -309,7 +311,7 @@ export function McpToolsDialog({
                         variant="ghost"
                         size="sm"
                         onClick={() => onAssignTool(tool)}
-                        title="Assign Tool to Agents"
+                        title="Assign Tool to Profiles"
                       >
                         <UserPlus className="h-4 w-4" />
                       </Button>

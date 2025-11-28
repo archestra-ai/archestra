@@ -10,11 +10,11 @@ const {
   updateAgentTool,
 } = archestraApiSdk;
 
-type GetAllAgentToolsQueryParams = NonNullable<
+type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
 >;
 
-export function useAllAgentTools({
+export function useAllProfileTools({
   initialData,
   pagination,
   sorting,
@@ -26,8 +26,8 @@ export function useAllAgentTools({
     offset?: number;
   };
   sorting?: {
-    sortBy?: NonNullable<GetAllAgentToolsQueryParams["sortBy"]>;
-    sortDirection?: NonNullable<GetAllAgentToolsQueryParams["sortDirection"]>;
+    sortBy?: NonNullable<GetAllProfileToolsQueryParams["sortBy"]>;
+    sortDirection?: NonNullable<GetAllProfileToolsQueryParams["sortDirection"]>;
   };
   filters?: {
     search?: string;
@@ -156,8 +156,8 @@ export function useBulkAssignTools() {
 
       // Invalidate specific agent tools queries for agents that had successful assignments
       const agentIds = result.succeeded.map((a) => a.agentId);
-      const uniqueAgentIds = new Set(agentIds);
-      for (const agentId of uniqueAgentIds) {
+      const uniqueProfileIds = new Set(agentIds);
+      for (const agentId of uniqueProfileIds) {
         queryClient.invalidateQueries({
           queryKey: ["agents", agentId, "tools"],
         });
@@ -219,17 +219,17 @@ export function useUnassignTool() {
   });
 }
 
-export function useAgentToolPatchMutation() {
+export function useProfileToolPatchMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      updatedAgentTool: archestraApiTypes.UpdateAgentToolData["body"] & {
+      updatedProfileTool: archestraApiTypes.UpdateAgentToolData["body"] & {
         id: string;
       },
     ) => {
       const result = await updateAgentTool({
-        body: updatedAgentTool,
-        path: { id: updatedAgentTool.id },
+        body: updatedProfileTool,
+        path: { id: updatedProfileTool.id },
       });
       return result.data ?? null;
     },
@@ -242,7 +242,7 @@ export function useAgentToolPatchMutation() {
   });
 }
 
-export function useBulkUpdateAgentTools() {
+export function useBulkUpdateProfileTools() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (

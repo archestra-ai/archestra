@@ -38,9 +38,10 @@ export function N8nConnectionDialog() {
 
         <div className="space-y-6 mt-4">
           <div className="space-y-3">
-            <h3 className="font-semibold text-sm">1. Create Agent</h3>
+            <h3 className="font-semibold text-sm">1. Create Profile</h3>
             <p className="text-sm text-muted-foreground">
-              Navigate to Agents page and create a new agent for n8n assistance.
+              Navigate to Profiles page and create a new profile for n8n
+              assistance.
             </p>
           </div>
 
@@ -119,11 +120,11 @@ DISABLE_CONSOLE_OUTPUT=true`}
 
           <div className="space-y-3">
             <h3 className="font-semibold text-sm">
-              4. Assign MCP Server Tools to Agent
+              4. Assign MCP Server Tools to Profile
             </h3>
             <p className="text-sm text-muted-foreground">
               Assign all available n8n MCP server tools to your newly created
-              agent.
+              profile.
             </p>
           </div>
 
@@ -141,7 +142,7 @@ DISABLE_CONSOLE_OUTPUT=true`}
                 className="absolute top-2 right-2 h-6 px-2 text-xs"
                 onClick={() =>
                   copyToClipboard(`ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp
-ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <agent token from Step 1>","Accept":"application/json, text/event-stream"}
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <profile token from Step 1>","Accept":"application/json, text/event-stream"}
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`)
                 }
               >
@@ -149,7 +150,7 @@ ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`)
               </Button>
               <pre className="text-xs overflow-x-auto pr-16">
                 {`ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp
-ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <agent token from Step 1>","Accept":"application/json, text/event-stream"}
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer <profile token from Step 1>","Accept":"application/json, text/event-stream"}
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=<your-anthropic-api-key>`}
               </pre>
             </div>

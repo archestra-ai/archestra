@@ -2,10 +2,10 @@
 
 import { ArchestraArchitectureDiagram } from "@/components/archestra-architecture-diagram";
 import { ConnectionOptions } from "@/components/connection-options";
-import { useDefaultAgent } from "@/lib/agent.query";
+import { useDefaultProfile } from "@/lib/agent.query";
 
 export default function GatewaysSettingsPage() {
-  const { data: defaultAgent } = useDefaultAgent();
+  const { data: defaultProfile } = useDefaultProfile();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
@@ -14,7 +14,7 @@ export default function GatewaysSettingsPage() {
 
         <div className="mt-12 space-y-6">
           <div className="border-t pt-6">
-            <ConnectionOptions agentId={defaultAgent?.id} />
+            <ConnectionOptions agentId={defaultProfile?.id} />
           </div>
 
           <div className="border-t pt-6">

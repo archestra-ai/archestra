@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useChatAgentMcpTools } from "@/lib/chat.query";
+import { useChatProfileMcpTools } from "@/lib/chat.query";
 
 interface McpToolsDisplayProps {
   agentId: string;
@@ -17,7 +17,7 @@ interface McpToolsDisplayProps {
 }
 
 export function McpToolsDisplay({ agentId, className }: McpToolsDisplayProps) {
-  const { data: mcpTools = [], isLoading } = useChatAgentMcpTools(agentId);
+  const { data: mcpTools = [], isLoading } = useChatProfileMcpTools(agentId);
 
   // Group tools by MCP server name (everything before the last __)
   const groupedTools = useMemo(

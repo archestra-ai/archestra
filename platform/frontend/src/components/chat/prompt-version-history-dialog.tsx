@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { usePromptVersions, useRollbackPrompt } from "@/lib/prompts.query";
 import { formatDate } from "@/lib/utils";
 import { TruncatedText } from "../truncated-text";
@@ -33,7 +33,7 @@ export function PromptVersionHistoryDialog({
   const { data: versions = [], isLoading } = usePromptVersions(
     prompt?.id || "",
   );
-  const { data: allAgents = [] } = useAgents();
+  const { data: allProfiles = [] } = useProfiles();
   const rollbackMutation = useRollbackPrompt();
 
   const handleRollback = async (versionId: string) => {
@@ -69,7 +69,7 @@ export function PromptVersionHistoryDialog({
           <div className="space-y-3">
             {(versions as Prompt[]).map((version) => {
               const profileName =
-                allAgents.find((a) => a.id === version.agentId)?.name ||
+                allProfiles.find((a) => a.id === version.agentId)?.name ||
                 "Unknown Profile";
               return (
                 <div

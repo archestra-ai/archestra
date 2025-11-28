@@ -54,8 +54,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgents } from "@/lib/agent.query";
-import { useChatAgentMcpTools } from "@/lib/chat.query";
+import { useProfiles } from "@/lib/agent.query";
+import { useChatProfileMcpTools } from "@/lib/chat.query";
 import { WithPermissions } from "../roles/with-permissions";
 import { TruncatedText } from "../truncated-text";
 
@@ -76,10 +76,10 @@ export function PromptLibraryGrid({
   onDelete,
   onViewVersionHistory,
 }: PromptLibraryGridProps) {
-  const { data: allAgents = [] } = useAgents();
-  const agents = allAgents.filter((agent) => agent.useInChat);
+  const { data: allProfiles = [] } = useProfiles();
+  const agents = allProfiles.filter((agent) => agent.useInChat);
   const [isFreeChatDialogOpen, setIsFreeChatDialogOpen] = useState(false);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -92,19 +92,19 @@ export function PromptLibraryGrid({
     const query = searchQuery.toLowerCase();
     return prompts.filter((prompt) => {
       const agentName =
-        allAgents.find((a) => a.id === prompt.agentId)?.name.toLowerCase() ||
+        allProfiles.find((a) => a.id === prompt.agentId)?.name.toLowerCase() ||
         "";
       return (
         prompt.name.toLowerCase().includes(query) || agentName.includes(query)
       );
     });
-  }, [prompts, searchQuery, allAgents]);
+  }, [prompts, searchQuery, allProfiles]);
 
   const handleFreeChatStart = () => {
-    if (selectedAgentId) {
-      onSelectPrompt(selectedAgentId);
+    if (selectedProfileId) {
+      onSelectPrompt(selectedProfileId);
       setIsFreeChatDialogOpen(false);
-      setSelectedAgentId("");
+      setSelectedProfileId("");
     }
   };
 
@@ -141,7 +141,7 @@ export function PromptLibraryGrid({
         {/* Prompt Tiles */}
         {filteredPrompts.map((prompt) => {
           const profileName = prompt.agentId
-            ? allAgents.find((a) => a.id === prompt.agentId)?.name
+            ? allProfiles.find((a) => a.id === prompt.agentId)?.name
             : null;
 
           return (
@@ -158,7 +158,7 @@ export function PromptLibraryGrid({
         })}
       </div>
 
-      {/* Free Chat Agent Selection Dialog */}
+      {/* Free Chat Profile Selection Dialog */}
       <Dialog
         open={isFreeChatDialogOpen}
         onOpenChange={setIsFreeChatDialogOpen}
@@ -171,7 +171,10 @@ export function PromptLibraryGrid({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
-            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <Select
+              value={selectedProfileId}
+              onValueChange={setSelectedProfileId}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select a profile" />
               </SelectTrigger>
@@ -189,12 +192,12 @@ export function PromptLibraryGrid({
               variant="outline"
               onClick={() => {
                 setIsFreeChatDialogOpen(false);
-                setSelectedAgentId("");
+                setSelectedProfileId("");
               }}
             >
               Cancel
             </Button>
-            <Button onClick={handleFreeChatStart} disabled={!selectedAgentId}>
+            <Button onClick={handleFreeChatStart} disabled={!selectedProfileId}>
               Start Chat
             </Button>
           </DialogFooter>
@@ -252,7 +255,7 @@ function PromptTile({
   onDelete,
   onViewVersionHistory,
 }: PromptTileProps) {
-  const { data: mcpTools = [] } = useChatAgentMcpTools(prompt.agentId);
+  const { data: mcpTools = [] } = useChatProfileMcpTools(prompt.agentId);
 
   // Group tools by MCP server name (same logic as McpToolsDisplay)
   const groupedTools = useMemo(

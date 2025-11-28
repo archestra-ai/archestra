@@ -5,10 +5,10 @@ import { MermaidDiagram } from "@/components/mermaid-wrapper";
 
 export function ArchestraArchitectureDiagram() {
   const mermaidChart = `flowchart LR
-    subgraph Agents
+    subgraph Profiles
         A1[Developer's Cursor]
         A2[N8N]
-        A3[Support Agent]
+        A3[Support Profile]
     end
 
     subgraph Archestra
@@ -78,7 +78,7 @@ export function ArchestraArchitectureDiagram() {
         Below are instructions for how to connect to Archestra using a default
         agent. If you'd like to configure a specific agent, you can do so in the{" "}
         <Link href="/agents" className="text-blue-500">
-          Agents
+          Profiles
         </Link>{" "}
         page.
       </p>

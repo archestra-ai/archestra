@@ -52,7 +52,7 @@ const sourceSansFont = Source_Sans_3({
 
 export const metadata: Metadata = {
   title: "Archestra.AI",
-  description: "Enterprise MCP Platform for AI Agents",
+  description: "Enterprise MCP Platform for AI Profiles",
 };
 
 export default function RootLayout({

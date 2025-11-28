@@ -156,7 +156,7 @@ export const ToolOutput = ({
   }
 
   // Render conversations as chat bubbles if provided
-  // Note: In Dual LLM context, "user" = Main Agent (questions), "assistant" = Quarantined Agent (answers)
+  // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
   if (conversations && conversations.length > 0) {
     return (
       <div className={cn("space-y-2 p-4", className)} {...props}>

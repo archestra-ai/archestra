@@ -26,7 +26,7 @@ export function InteractionSummary({
   interaction: InteractionData;
   agent?: archestraApiTypes.GetAllAgentsResponses["200"][number];
 }) {
-  const [agentNameTruncated, _setAgentNameTruncated] = useState(false);
+  const [agentNameTruncated, _setProfileNameTruncated] = useState(false);
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);
 
   // Check if this interaction is about a tool call
@@ -105,7 +105,7 @@ export function InteractionSummary({
       </div>
       <div className="flex justify-between w-full gap-4 mt-4 min-w-0">
         <RawLogDetail
-          label="Agent name"
+          label="Profile name"
           value={<TruncatedText message={agent?.name ?? "Unknown"} />}
           icon={<HatGlassesIcon className={iconClassName} />}
           isTruncated={agentNameTruncated}

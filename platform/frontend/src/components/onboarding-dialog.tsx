@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useDefaultAgent } from "@/lib/agent.query";
+import { useDefaultProfile } from "@/lib/agent.query";
 import {
   useOrganizationOnboardingStatus,
   useUpdateOrganization,
@@ -26,7 +26,7 @@ interface OnboardingDialogProps {
 
 export function OnboardingDialog({ open }: OnboardingDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
-  const { data: defaultAgent } = useDefaultAgent();
+  const { data: defaultProfile } = useDefaultProfile();
   const { data: onboardingStatus } = useOrganizationOnboardingStatus(
     open && step === 2,
   );
@@ -85,7 +85,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
             </div>
           ) : (
             <div className="space-y-6">
-              <ConnectionOptions agentId={defaultAgent?.id} />
+              <ConnectionOptions agentId={defaultProfile?.id} />
             </div>
           )}
         </div>

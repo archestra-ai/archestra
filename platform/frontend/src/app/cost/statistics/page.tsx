@@ -61,22 +61,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  useAgentStatistics,
   useCostSavingsStatistics,
   useModelStatistics,
+  useProfileStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
 // Type aliases for better readability
 type TeamStatisticsData =
   archestraApiTypes.GetTeamStatisticsResponses["200"][number];
-type AgentStatisticsData =
+type ProfileStatisticsData =
   archestraApiTypes.GetAgentStatisticsResponses["200"][number];
 type ModelStatisticsData =
   archestraApiTypes.GetModelStatisticsResponses["200"][number];
 type StatisticsData =
   | TeamStatisticsData
-  | AgentStatisticsData
+  | ProfileStatisticsData
   | ModelStatisticsData;
 
 // Type guards
@@ -84,7 +84,9 @@ function isTeamStatistics(data: StatisticsData): data is TeamStatisticsData {
   return "teamName" in data;
 }
 
-function isAgentStatistics(data: StatisticsData): data is AgentStatisticsData {
+function isProfileStatistics(
+  data: StatisticsData,
+): data is ProfileStatisticsData {
   return "agentName" in data;
 }
 
@@ -152,7 +154,7 @@ export default function StatisticsPage() {
 
   // Track hidden items for each category
   const [hiddenTeams, setHiddenTeams] = useState<Set<string>>(new Set());
-  const [hiddenAgents, setHiddenAgents] = useState<Set<string>>(new Set());
+  const [hiddenProfiles, setHiddenProfiles] = useState<Set<string>>(new Set());
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(new Set());
 
   // Statistics data fetching hooks
@@ -160,7 +162,7 @@ export default function StatisticsPage() {
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe: currentTimeframe,
   });
-  const { data: agentStatistics = [] } = useAgentStatistics({
+  const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe: currentTimeframe,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
@@ -276,7 +278,7 @@ export default function StatisticsPage() {
       statistics: T[],
       labelKey:
         | keyof Pick<TeamStatisticsData, "teamName">
-        | keyof Pick<AgentStatisticsData, "agentName">
+        | keyof Pick<ProfileStatisticsData, "agentName">
         | keyof Pick<ModelStatisticsData, "model">,
       colors: string[],
       hiddenIds: Set<string>,
@@ -301,7 +303,7 @@ export default function StatisticsPage() {
         let label: string;
         if (labelKey === "teamName" && isTeamStatistics(stat)) {
           label = stat.teamName;
-        } else if (labelKey === "agentName" && isAgentStatistics(stat)) {
+        } else if (labelKey === "agentName" && isProfileStatistics(stat)) {
           label = stat.agentName;
         } else if (labelKey === "model" && isModelStatistics(stat)) {
           label = stat.model;
@@ -351,8 +353,8 @@ export default function StatisticsPage() {
   const visibleTeamStatistics = teamStatistics.filter(
     (team) => !hiddenTeams.has(team.teamId),
   );
-  const visibleAgentStatistics = agentStatistics.filter(
-    (agent) => !hiddenAgents.has(agent.agentId),
+  const visibleProfileStatistics = agentStatistics.filter(
+    (agent) => !hiddenProfiles.has(agent.agentId),
   );
   const visibleModelStatistics = modelStatistics.filter(
     (model) => !hiddenModels.has(model.model),
@@ -385,11 +387,11 @@ export default function StatisticsPage() {
 
   const agentChartData =
     agentStatistics.length > 0
-      ? convertStatsToChartData<AgentStatisticsData>(
+      ? convertStatsToChartData<ProfileStatisticsData>(
           agentStatistics,
           "agentName",
           colors,
-          hiddenAgents,
+          hiddenProfiles,
           (stat) => stat.agentId,
         )
       : {
@@ -433,7 +435,7 @@ export default function StatisticsPage() {
 
   // Chart keys to force remount when data changes
   const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;
-  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenAgents.size}`;
+  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenProfiles.size}`;
   const modelChartKey = `model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`;
 
   // Chart options with default legend behavior (strikethrough on click)
@@ -555,7 +557,7 @@ export default function StatisticsPage() {
         "agentVisibilitySync",
         agentStatistics,
         (agent) => agent.agentId,
-        setHiddenAgents,
+        setHiddenProfiles,
       ),
     [agentStatistics],
   );
@@ -973,7 +975,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleAgentStatistics.length === 0 ? (
+                  {visibleProfileStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -983,20 +985,22 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleAgentStatistics.map((agent) => (
-                      <TableRow key={agent.agentId}>
+                    visibleProfileStatistics.map((profile) => (
+                      <TableRow key={profile.agentId}>
                         <TableCell className="font-medium">
-                          {agent.agentName}
+                          {profile.agentName}
                         </TableCell>
-                        <TableCell>{agent.teamName}</TableCell>
-                        <TableCell>{agent.requests.toLocaleString()}</TableCell>
+                        <TableCell>{profile.teamName}</TableCell>
+                        <TableCell>
+                          {profile.requests.toLocaleString()}
+                        </TableCell>
                         <TableCell>
                           {(
-                            agent.inputTokens + agent.outputTokens
+                            profile.inputTokens + profile.outputTokens
                           ).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          ${agent.cost.toFixed(2)}
+                          ${profile.cost.toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))

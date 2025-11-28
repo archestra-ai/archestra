@@ -111,7 +111,7 @@ export function useDeleteConversation() {
   });
 }
 
-export function useChatAgentMcpTools(agentId: string | undefined) {
+export function useChatProfileMcpTools(agentId: string | undefined) {
   return useQuery({
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
     queryFn: async () => {

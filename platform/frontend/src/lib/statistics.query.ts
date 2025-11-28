@@ -35,7 +35,7 @@ export function useTeamStatistics({
   });
 }
 
-export function useAgentStatistics({
+export function useProfileStatistics({
   timeframe = "24h",
   initialData,
 }: {

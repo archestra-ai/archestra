@@ -17,9 +17,9 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
-  type AgentLabel,
-  AgentLabels,
-  type AgentLabelsRef,
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
@@ -55,23 +55,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useAgentsPaginated,
-  useCreateAgent,
-  useDeleteAgent,
+  useCreateProfile,
+  useDeleteProfile,
   useLabelKeys,
-  useUpdateAgent,
+  useProfilesPaginated,
+  useUpdateProfile,
 } from "@/lib/agent.query";
 import { formatDate } from "@/lib/utils";
-import { AgentActions } from "./agent-actions";
+import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
-export default function AgentsPage() {
+export default function ProfilesPage() {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Agents />
+          <Profiles />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -95,7 +95,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function AgentTeamsBadges({
+function ProfileTeamsBadges({
   teamIds,
   teams,
 }: {
@@ -153,7 +153,7 @@ function AgentTeamsBadges({
   );
 }
 
-function Agents() {
+function Profiles() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -181,7 +181,7 @@ function Agents() {
   const sortBy = sortByFromUrl || "createdAt";
   const sortDirection = sortDirectionFromUrl || "desc";
 
-  const { data: agentsResponse } = useAgentsPaginated({
+  const { data: agentsResponse } = useProfilesPaginated({
     limit: pageSize,
     offset,
     sortBy,
@@ -211,24 +211,26 @@ function Agents() {
   }, [sortBy, sortDirection]);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [connectingAgent, setConnectingAgent] = useState<{
+  const [connectingProfile, setConnectingProfile] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const [assigningToolsAgent, setAssigningToolsAgent] = useState<
+  const [assigningToolsProfile, setAssigningToolsProfile] = useState<
     (typeof agents)[number] | null
   >(null);
-  const [editingAgent, setEditingAgent] = useState<{
+  const [editingProfile, setEditingProfile] = useState<{
     id: string;
     name: string;
     teams: string[];
-    labels: AgentLabel[];
+    labels: ProfileLabel[];
     considerContextUntrusted: boolean;
     useInChat?: boolean;
   } | null>(null);
-  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
+    null,
+  );
 
-  type AgentData = (typeof agents)[number];
+  type ProfileData = (typeof agents)[number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(
@@ -278,7 +280,7 @@ function Agents() {
     [searchParams, router, pathname],
   );
 
-  const columns: ColumnDef<AgentData>[] = [
+  const columns: ColumnDef<ProfileData>[] = [
     {
       id: "name",
       accessorKey: "name",
@@ -380,7 +382,7 @@ function Agents() {
               aria-label="Assign Tools"
               variant="outline"
               size="icon-sm"
-              onClick={() => setAssigningToolsAgent(agent)}
+              onClick={() => setAssigningToolsProfile(agent)}
             >
               <Wrench className="h-4 w-4" />
             </PermissionButton>
@@ -401,7 +403,7 @@ function Agents() {
         </Button>
       ),
       cell: ({ row }) => (
-        <AgentTeamsBadges teamIds={row.original.teams || []} teams={teams} />
+        <ProfileTeamsBadges teamIds={row.original.teams || []} teams={teams} />
       ),
     },
     {
@@ -412,11 +414,11 @@ function Agents() {
       cell: ({ row }) => {
         const agent = row.original;
         return (
-          <AgentActions
+          <ProfileActions
             agent={agent}
-            onConnect={setConnectingAgent}
-            onEdit={setEditingAgent}
-            onDelete={setDeletingAgentId}
+            onConnect={setConnectingProfile}
+            onEdit={setEditingProfile}
+            onDelete={setDeletingProfileId}
           />
         );
       },
@@ -492,42 +494,42 @@ function Agents() {
             </div>
           )}
 
-          <CreateAgentDialog
+          <CreateProfileDialog
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
           />
 
-          {connectingAgent && (
-            <ConnectAgentDialog
-              agent={connectingAgent}
-              open={!!connectingAgent}
-              onOpenChange={(open) => !open && setConnectingAgent(null)}
+          {connectingProfile && (
+            <ConnectProfileDialog
+              agent={connectingProfile}
+              open={!!connectingProfile}
+              onOpenChange={(open) => !open && setConnectingProfile(null)}
             />
           )}
 
-          {assigningToolsAgent && (
+          {assigningToolsProfile && (
             <AssignToolsDialog
-              agent={assigningToolsAgent}
-              open={!!assigningToolsAgent}
-              onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
+              agent={assigningToolsProfile}
+              open={!!assigningToolsProfile}
+              onOpenChange={(open) => !open && setAssigningToolsProfile(null)}
             />
           )}
 
           {/* Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library */}
 
-          {editingAgent && (
-            <EditAgentDialog
-              agent={editingAgent}
-              open={!!editingAgent}
-              onOpenChange={(open) => !open && setEditingAgent(null)}
+          {editingProfile && (
+            <EditProfileDialog
+              agent={editingProfile}
+              open={!!editingProfile}
+              onOpenChange={(open) => !open && setEditingProfile(null)}
             />
           )}
 
-          {deletingAgentId && (
-            <DeleteAgentDialog
-              agentId={deletingAgentId}
-              open={!!deletingAgentId}
-              onOpenChange={(open) => !open && setDeletingAgentId(null)}
+          {deletingProfileId && (
+            <DeleteProfileDialog
+              agentId={deletingProfileId}
+              open={!!deletingProfileId}
+              onOpenChange={(open) => !open && setDeletingProfileId(null)}
             />
           )}
         </div>
@@ -536,7 +538,7 @@ function Agents() {
   );
 }
 
-function CreateAgentDialog({
+function CreateProfileDialog({
   open,
   onOpenChange,
 }: {
@@ -545,7 +547,7 @@ function CreateAgentDialog({
 }) {
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
-  const [labels, setLabels] = useState<AgentLabel[]>([]);
+  const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
   const [useInChat, setUseInChat] = useState(true);
@@ -558,12 +560,12 @@ function CreateAgentDialog({
   });
   const { data: availableKeys = [] } = useLabelKeys();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const [createdAgent, setCreatedAgent] = useState<{
+  const [createdProfile, setCreatedProfile] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const createAgent = useCreateAgent();
-  const agentLabelsRef = useRef<AgentLabelsRef>(null);
+  const createProfile = useCreateProfile();
+  const agentLabelsRef = useRef<ProfileLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -607,7 +609,7 @@ function CreateAgentDialog({
         agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
       try {
-        const agent = await createAgent.mutateAsync({
+        const agent = await createProfile.mutateAsync({
           name: name.trim(),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -618,7 +620,7 @@ function CreateAgentDialog({
           throw new Error("Failed to create profile");
         }
         toast.success("Profile created successfully");
-        setCreatedAgent({ id: agent.id, name: agent.name });
+        setCreatedProfile({ id: agent.id, name: agent.name });
       } catch (_error) {
         toast.error("Failed to create profile");
       }
@@ -628,7 +630,7 @@ function CreateAgentDialog({
       assignedTeamIds,
       labels,
       considerContextUntrusted,
-      createAgent,
+      createProfile,
       useInChat,
     ],
   );
@@ -638,7 +640,7 @@ function CreateAgentDialog({
     setAssignedTeamIds([]);
     setLabels([]);
     setSelectedTeamId("");
-    setCreatedAgent(null);
+    setCreatedProfile(null);
     setConsiderContextUntrusted(false);
     setUseInChat(true);
     onOpenChange(false);
@@ -650,7 +652,7 @@ function CreateAgentDialog({
         className="max-w-4xl max-h-[90vh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {!createdAgent ? (
+        {!createdProfile ? (
           <>
             <DialogHeader>
               <DialogTitle>Create new profile</DialogTitle>
@@ -730,7 +732,7 @@ function CreateAgentDialog({
                   )}
                 </div>
 
-                <AgentLabels
+                <ProfileLabels
                   ref={agentLabelsRef}
                   labels={labels}
                   onLabelsChange={setLabels}
@@ -785,8 +787,8 @@ function CreateAgentDialog({
                 <Button type="button" variant="outline" onClick={handleClose}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createAgent.isPending}>
-                  {createAgent.isPending ? "Creating..." : "Create profile"}
+                <Button type="submit" disabled={createProfile.isPending}>
+                  {createProfile.isPending ? "Creating..." : "Create profile"}
                 </Button>
               </DialogFooter>
             </form>
@@ -795,11 +797,11 @@ function CreateAgentDialog({
           <>
             <DialogHeader>
               <DialogTitle>
-                How to connect "{createdAgent.name}" to Archestra
+                How to connect "{createdProfile.name}" to Archestra
               </DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto py-4 flex-1">
-              <AgentConnectionTabs agentId={createdAgent.id} />
+              <ProfileConnectionTabs agentId={createdProfile.id} />
             </div>
             <DialogFooter className="shrink-0">
               <Button
@@ -817,7 +819,7 @@ function CreateAgentDialog({
   );
 }
 
-function EditAgentDialog({
+function EditProfileDialog({
   agent,
   open,
   onOpenChange,
@@ -826,7 +828,7 @@ function EditAgentDialog({
     id: string;
     name: string;
     teams: string[];
-    labels: AgentLabel[];
+    labels: ProfileLabel[];
     considerContextUntrusted: boolean;
     useInChat?: boolean;
   };
@@ -837,7 +839,7 @@ function EditAgentDialog({
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
     agent.teams || [],
   );
-  const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
+  const [labels, setLabels] = useState<ProfileLabel[]>(agent.labels || []);
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
   );
@@ -851,8 +853,8 @@ function EditAgentDialog({
   });
   const { data: availableKeys = [] } = useLabelKeys();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
-  const updateAgent = useUpdateAgent();
-  const agentLabelsRef = useRef<AgentLabelsRef>(null);
+  const updateProfile = useUpdateProfile();
+  const agentLabelsRef = useRef<ProfileLabelsRef>(null);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -884,7 +886,7 @@ function EditAgentDialog({
         agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
       try {
-        await updateAgent.mutateAsync({
+        await updateProfile.mutateAsync({
           id: agent.id,
           data: {
             name: name.trim(),
@@ -905,7 +907,7 @@ function EditAgentDialog({
       name,
       assignedTeamIds,
       labels,
-      updateAgent,
+      updateProfile,
       onOpenChange,
       considerContextUntrusted,
       useInChat,
@@ -1008,7 +1010,7 @@ function EditAgentDialog({
               )}
             </div>
 
-            <AgentLabels
+            <ProfileLabels
               ref={agentLabelsRef}
               labels={labels}
               onLabelsChange={setLabels}
@@ -1065,8 +1067,8 @@ function EditAgentDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={updateAgent.isPending}>
-              {updateAgent.isPending ? "Updating..." : "Update profile"}
+            <Button type="submit" disabled={updateProfile.isPending}>
+              {updateProfile.isPending ? "Updating..." : "Update profile"}
             </Button>
           </DialogFooter>
         </form>
@@ -1075,7 +1077,7 @@ function EditAgentDialog({
   );
 }
 
-function AgentConnectionTabs({ agentId }: { agentId: string }) {
+function ProfileConnectionTabs({ agentId }: { agentId: string }) {
   return (
     <div className="grid grid-cols-2 gap-6">
       <div className="space-y-3">
@@ -1100,7 +1102,7 @@ function AgentConnectionTabs({ agentId }: { agentId: string }) {
   );
 }
 
-function ConnectAgentDialog({
+function ConnectProfileDialog({
   agent,
   open,
   onOpenChange,
@@ -1116,7 +1118,7 @@ function ConnectAgentDialog({
           <DialogTitle>How to connect "{agent.name}" to Archestra</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <AgentConnectionTabs agentId={agent.id} />
+          <ProfileConnectionTabs agentId={agent.id} />
         </div>
         <DialogFooter>
           <Button type="button" onClick={() => onOpenChange(false)}>
@@ -1128,7 +1130,7 @@ function ConnectAgentDialog({
   );
 }
 
-function DeleteAgentDialog({
+function DeleteProfileDialog({
   agentId,
   open,
   onOpenChange,
@@ -1137,17 +1139,17 @@ function DeleteAgentDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const deleteAgent = useDeleteAgent();
+  const deleteProfile = useDeleteProfile();
 
   const handleDelete = useCallback(async () => {
     try {
-      await deleteAgent.mutateAsync(agentId);
+      await deleteProfile.mutateAsync(agentId);
       toast.success("Profile deleted successfully");
       onOpenChange(false);
     } catch (_error) {
       toast.error("Failed to delete profile");
     }
-  }, [agentId, deleteAgent, onOpenChange]);
+  }, [agentId, deleteProfile, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1170,9 +1172,9 @@ function DeleteAgentDialog({
           <Button
             variant="destructive"
             onClick={handleDelete}
-            disabled={deleteAgent.isPending}
+            disabled={deleteProfile.isPending}
           >
-            {deleteAgent.isPending ? "Deleting..." : "Delete profile"}
+            {deleteProfile.isPending ? "Deleting..." : "Delete profile"}
           </Button>
         </DialogFooter>
       </DialogContent>

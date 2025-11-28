@@ -19,9 +19,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  useAgentToolPatchMutation,
-  useAllAgentTools,
+  useAllProfileTools,
   useAssignTool,
+  useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -43,11 +43,11 @@ export function AssignToolsDialog({
   const mcpTools = allTools?.filter((tool) => tool.catalogId !== null) || [];
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
 
-  // Fetch currently assigned tools for this agent (use getAllAgentTools to get credentialSourceMcpServerId)
-  const { data: allAgentTools } = useAllAgentTools({});
+  // Fetch currently assigned tools for this agent (use getAllProfileTools to get credentialSourceMcpServerId)
+  const { data: allProfileTools } = useAllProfileTools({});
   const agentToolRelations = useMemo(
-    () => allAgentTools?.data?.filter((at) => at.agent.id === agent.id) || [],
-    [allAgentTools, agent.id],
+    () => allProfileTools?.data?.filter((at) => at.agent.id === agent.id) || [],
+    [allProfileTools, agent.id],
   );
 
   // Track selected tools with their credentials, execution source, and agent-tool IDs
@@ -87,11 +87,13 @@ export function AssignToolsDialog({
 
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
-  const patchAgentTool = useAgentToolPatchMutation();
+  const patchProfileTool = useProfileToolPatchMutation();
 
   const isLoading = isLoadingAllTools;
   const isSaving =
-    assignTool.isPending || unassignTool.isPending || patchAgentTool.isPending;
+    assignTool.isPending ||
+    unassignTool.isPending ||
+    patchProfileTool.isPending;
 
   const handleToggleTool = useCallback((toolId: string) => {
     setSelectedTools((prev) => {
@@ -175,7 +177,7 @@ export function AssignToolsDialog({
       // Update credentials and execution source for existing tools
       for (const tool of toUpdate) {
         if (tool.agentToolId) {
-          await patchAgentTool.mutateAsync({
+          await patchProfileTool.mutateAsync({
             id: tool.agentToolId,
             credentialSourceMcpServerId: tool.credentialsSourceId || null,
             executionSourceMcpServerId: tool.executionSourceId || null,
@@ -194,7 +196,7 @@ export function AssignToolsDialog({
     agentToolRelations,
     assignTool,
     unassignTool,
-    patchAgentTool,
+    patchProfileTool,
     onOpenChange,
     selectedTools,
   ]);
@@ -205,7 +207,7 @@ export function AssignToolsDialog({
         <DialogHeader>
           <DialogTitle>Assign Tools to {agent.name}</DialogTitle>
           <DialogDescription>
-            Select which MCP server tools this agent can access.
+            Select which MCP server tools this profile can access.
           </DialogDescription>
         </DialogHeader>
 

@@ -18,11 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 
-interface AssignAgentDialogProps {
+interface AssignProfileDialogProps {
   tool:
     | archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number]
     | null;
@@ -30,16 +30,16 @@ interface AssignAgentDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function AssignAgentDialog({
+export function AssignProfileDialog({
   tool,
   open,
   onOpenChange,
-}: AssignAgentDialogProps) {
-  const { data: agents } = useAgents();
+}: AssignProfileDialogProps) {
+  const { data: agents } = useProfiles();
   const assignMutation = useAssignTool();
   const { data: mcpCatalog } = useInternalMcpCatalog();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [credentialSourceMcpServerId, setCredentialSourceMcpServerId] =
     useState<string | null>(null);
   const [executionSourceMcpServerId, setExecutionSourceMcpServerId] = useState<
@@ -55,7 +55,7 @@ export function AssignAgentDialog({
   const catalogId = tool?.tool.catalogId ?? "";
   const isLocalServer = mcpCatalogItem?.serverType === "local";
 
-  const filteredAgents = useMemo(() => {
+  const filteredProfiles = useMemo(() => {
     if (!agents || !searchQuery.trim()) return agents;
 
     const query = searchQuery.toLowerCase();
@@ -63,7 +63,7 @@ export function AssignAgentDialog({
   }, [agents, searchQuery]);
 
   const handleAssign = useCallback(async () => {
-    if (!tool || selectedAgentIds.length === 0) return;
+    if (!tool || selectedProfileIds.length === 0) return;
 
     // Helper function to check if an error is a duplicate key error
     const isDuplicateError = (error: unknown): boolean => {
@@ -77,7 +77,7 @@ export function AssignAgentDialog({
     };
 
     const results = await Promise.allSettled(
-      selectedAgentIds.map((agentId) =>
+      selectedProfileIds.map((agentId) =>
         assignMutation.mutateAsync({
           agentId,
           toolId: tool.tool.id,
@@ -125,14 +125,14 @@ export function AssignAgentDialog({
       console.error("Assignment errors:", results);
     }
 
-    setSelectedAgentIds([]);
+    setSelectedProfileIds([]);
     setSearchQuery("");
     setCredentialSourceMcpServerId(null);
     setExecutionSourceMcpServerId(null);
     onOpenChange(false);
   }, [
     tool,
-    selectedAgentIds,
+    selectedProfileIds,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
     isLocalServer,
@@ -140,8 +140,8 @@ export function AssignAgentDialog({
     onOpenChange,
   ]);
 
-  const toggleAgent = useCallback((agentId: string) => {
-    setSelectedAgentIds((prev) =>
+  const toggleProfile = useCallback((agentId: string) => {
+    setSelectedProfileIds((prev) =>
       prev.includes(agentId)
         ? prev.filter((id) => id !== agentId)
         : [...prev, agentId],
@@ -154,7 +154,7 @@ export function AssignAgentDialog({
       onOpenChange={(newOpen) => {
         onOpenChange(newOpen);
         if (!newOpen) {
-          setSelectedAgentIds([]);
+          setSelectedProfileIds([]);
           setSearchQuery("");
           setCredentialSourceMcpServerId(null);
           setExecutionSourceMcpServerId(null);
@@ -183,7 +183,7 @@ export function AssignAgentDialog({
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md">
-            {!filteredAgents || filteredAgents.length === 0 ? (
+            {!filteredProfiles || filteredProfiles.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                 {searchQuery
                   ? "No profiles match your search"
@@ -191,14 +191,14 @@ export function AssignAgentDialog({
               </div>
             ) : (
               <div className="divide-y">
-                {filteredAgents.map((agent) => (
+                {filteredProfiles.map((agent) => (
                   <div
                     key={agent.id}
                     className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 w-full text-left"
                   >
                     <Checkbox
-                      checked={selectedAgentIds.includes(agent.id)}
-                      onCheckedChange={() => toggleAgent(agent.id)}
+                      checked={selectedProfileIds.includes(agent.id)}
+                      onCheckedChange={() => toggleProfile(agent.id)}
                     />
                     <span className="text-sm">{agent.name}</span>
                   </div>
@@ -208,7 +208,7 @@ export function AssignAgentDialog({
           </div>
         </div>
 
-        {selectedAgentIds.length > 0 && (
+        {selectedProfileIds.length > 0 && (
           <div className="pt-4 border-t">
             {isLocalServer ? (
               <>
@@ -257,7 +257,7 @@ export function AssignAgentDialog({
           <Button
             variant="outline"
             onClick={() => {
-              setSelectedAgentIds([]);
+              setSelectedProfileIds([]);
               setSearchQuery("");
               setCredentialSourceMcpServerId(null);
               setExecutionSourceMcpServerId(null);
@@ -269,19 +269,19 @@ export function AssignAgentDialog({
           <Button
             onClick={handleAssign}
             disabled={
-              selectedAgentIds.length === 0 ||
+              selectedProfileIds.length === 0 ||
               assignMutation.isPending ||
-              (selectedAgentIds.length > 0 &&
+              (selectedProfileIds.length > 0 &&
                 isLocalServer &&
                 !executionSourceMcpServerId) ||
-              (selectedAgentIds.length > 0 &&
+              (selectedProfileIds.length > 0 &&
                 !isLocalServer &&
                 !credentialSourceMcpServerId)
             }
           >
             {assignMutation.isPending
               ? "Assigning..."
-              : `Assign to ${selectedAgentIds.length} profile${selectedAgentIds.length !== 1 ? "s" : ""}`}
+              : `Assign to ${selectedProfileIds.length} profile${selectedProfileIds.length !== 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

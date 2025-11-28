@@ -112,6 +112,10 @@ export class VaultSecretManager implements SecretManager {
     return `secret/data/archestra/${secretId}`;
   }
 
+  private getVaultMetadataPath(secretId: string): string {
+    return `secret/metadata/archestra/${secretId}`;
+  }
+
   async createSecret(secretValue: SecretValue): Promise<SelectSecret> {
     const dbRecord = await SecretModel.create({
       secret: {},
@@ -149,16 +153,17 @@ export class VaultSecretManager implements SecretManager {
     }
 
     if (dbRecord.isVault) {
-      const vaultPath = this.getVaultPath(secretId);
+      const metadataPath = this.getVaultMetadataPath(secretId);
       try {
-        await this.client.delete(vaultPath);
+        // Delete metadata to permanently remove all versions of the secret
+        await this.client.delete(metadataPath);
         logger.info(
-          { secretId, vaultPath },
-          "VaultSecretManager.deleteSecret: secret deleted",
+          { secretId, metadataPath },
+          "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
         logger.error(
-          { secretId, vaultPath, error },
+          { secretId, metadataPath, error },
           "VaultSecretManager.deleteSecret: failed",
         );
         throw error;
@@ -249,6 +254,20 @@ export class VaultSecretManager implements SecretManager {
 }
 
 /**
+ * Get Vault configuration from environment variables
+ */
+export function getVaultConfigFromEnv(): VaultConfig | null {
+  const address = process.env.HASHICORP_VAULT_ADDR;
+  const token = process.env.HASHICORP_VAULT_TOKEN;
+
+  if (!address || !token) {
+    return null;
+  }
+
+  return { address, token };
+}
+
+/**
  * Supported secrets manager types
  */
 export enum SecretsManagerType {
@@ -268,20 +287,6 @@ export function getSecretsManagerType(): SecretsManagerType {
   }
 
   return SecretsManagerType.DB;
-}
-
-/**
- * Get Vault configuration from environment variables
- */
-export function getVaultConfigFromEnv(): VaultConfig | null {
-  const address = process.env.HASHICORP_VAULT_ADDR;
-  const token = process.env.HASHICORP_VAULT_TOKEN;
-
-  if (!address || !token) {
-    return null;
-  }
-
-  return { address, token };
 }
 
 /**

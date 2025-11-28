@@ -1,5 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DATABASE_URL",
+    "ARCHESTRA_DATABASE_URL",
+    "ARCHESTRA_*",
+    "NEXT_PUBLIC_*",
+    "NODE_ENV",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY"
+  ],
   "tasks": {
     "build": {
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]

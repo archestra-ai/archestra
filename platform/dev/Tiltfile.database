@@ -1,30 +1,11 @@
 # Database resources
-load('ext://helm_remote', 'helm_remote')
 
-# PostgreSQL database for local development
-# https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
-helm_remote(
-  'postgresql',
-  repo_url='https://charts.bitnami.com/bitnami',
-  namespace='archestra-dev',
-  create_namespace=True,
-  set=[
-    'auth.database=archestra_dev',
-    'auth.username=archestra',
-    'auth.password=archestra_dev_password',
+# PostgreSQL database via Docker Compose
+# docker-compose.dev.yml is in platform/, .env is also in platform/
+docker_compose('../docker-compose.dev.yml', project_name='archestra-dev')
 
-    # NOTE: Bitnami is archiving their image.. see these github comments for details
-    # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
-    #
-    # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
-    # https://github.com/bitnami/containers/issues/83267
-    'image.repository=bitnamisecure/postgresql',
-    'image.tag=latest',
-    'global.security.allowInsecureImages=true'
-  ]
-)
-
-k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
+# Configure the postgres service
+dc_resource('postgres', labels=['database'])
 
 # Database cleanup button (manual trigger only, for development)
 local_resource(
@@ -38,8 +19,9 @@ local_resource(
 
 local_resource(
   'db-seed-mock-data',
-  cmd='pnpm db:seed:mock-data',
-  resource_deps=['pnpm-install', 'postgresql'],
+  cmd='docker exec archestra-dev sh -c "cd backend && pnpm db:seed:mock-data"',
+  dir='..',
+  resource_deps=['archestra', 'postgres'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
   labels=['database']
@@ -47,15 +29,12 @@ local_resource(
 
 local_resource(
   'db-migrate',
-  # NOTE: we need to cd into the backend directory to run the migrate command
-  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
-  # propogate the required environment variables (ie. DATABASE_URL)
-  # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
+  # Run migrations inside the Docker container
+  # Retry logic: wait for PostgreSQL to be ready before running migrations
   cmd='''
     for i in {1..30}; do
-      if pnpm db:migrate 2>/dev/null; then
+      if docker exec archestra-dev sh -c "cd backend && pnpm db:migrate" 2>/dev/null; then
         echo "✅ Migration completed successfully"
-        tilt trigger pnpm-dev
         exit 0
       fi
       echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
@@ -64,17 +43,17 @@ local_resource(
     echo "❌ Migration failed after 30 attempts"
     exit 1
   ''',
-  dir='../backend',
+  dir='..',
   deps=['../backend/src/database/migrations'],
-  resource_deps=['pnpm-install', 'postgresql'],
+  resource_deps=['archestra', 'postgres'],
   labels=['database']
 )
 
 local_resource(
   'db-generate',
-  cmd='pnpm db:generate',
-  dir='../backend',
-  resource_deps=['postgresql'],
+  cmd='docker exec archestra-dev sh -c "cd backend && pnpm db:generate"',
+  dir='..',
+  resource_deps=['archestra', 'postgres'],
   labels=['database'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
@@ -82,11 +61,9 @@ local_resource(
 
 local_resource(
   'database-gui',
-  # NOTE: we need to cd into the backend directory to run the migrate command
-  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
-  # propogate the required environment variables (ie. DATABASE_URL)
-  serve_cmd='pnpm db:studio',
-  serve_dir='../backend',
+  # Run Drizzle Studio inside the container
+  serve_cmd='docker exec -i archestra-dev sh -c "cd backend && pnpm db:studio"',
+  serve_dir='..',
   labels=['database'],
-  resource_deps=['postgresql']
+  resource_deps=['archestra', 'postgres']
 )

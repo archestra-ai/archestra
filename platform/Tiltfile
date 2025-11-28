@@ -1,5 +1,3 @@
-allow_k8s_contexts(['orbstack', 'docker-desktop'])
-
 load('ext://dotenv', 'dotenv')
 
 is_prod = os.getenv('PROD') == 'true'

@@ -53,46 +53,55 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 
 ```bash
 # Development
-tilt up                                 # Start full development environment
-pnpm dev                                # Start all workspaces
-pnpm lint                               # Lint and auto-fix
-pnpm type-check                         # Check TypeScript types
-pnpm test                               # Run tests
-pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
+tilt up                                 # Start full development environment (uses Docker Compose)
+# OR without Tilt:
+docker compose -f docker-compose.dev.yml up  # Start services directly
 
-# Dependency Management
-pnpm install                            # Install dependencies (scripts disabled for security)
-pnpm rebuild <package-name>             # Run install scripts for specific package when needed
-pnpm rebuild                            # Run install scripts for all packages (rarely needed)
+# Running commands inside containers (via Tilt)
+# All commands are executed inside the archestra container
+tilt trigger lint:fix                # Lint and auto-fix inside container
+tilt trigger codegen:api-client      # Generate API client inside container
+tilt trigger unit-tests              # Run unit tests inside container
+tilt trigger e2e-tests               # Run e2e tests inside container
+
+# Running commands inside containers (via docker exec)
+docker exec archestra-dev pnpm lint
+docker exec archestra-dev pnpm type-check
+docker exec archestra-dev pnpm test
+docker exec archestra-dev pnpm test:e2e
+
+# Dependency Management (inside container)
+docker exec archestra-dev pnpm install
+docker exec archestra-dev pnpm rebuild <package-name>
 
 # Database
-pnpm db:migrate      # Run database migrations
-pnpm db:studio       # Open Drizzle Studio
-pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
-drizzle-kit check    # Check consistency of generated SQL migrations history
+tilt trigger db-migrate              # Run database migrations via Tilt
+tilt trigger db-generate             # Generate new migrations via Tilt
+tilt trigger database-gui            # Open Drizzle Studio via Tilt
+# OR via docker exec:
+docker exec archestra-dev sh -c "cd backend && pnpm db:migrate"
+docker exec archestra-dev sh -c "cd backend && pnpm db:studio"
+docker exec archestra-dev sh -c "cd backend && pnpm db:generate"
 
 # Database Connection
-# PostgreSQL is running in Kubernetes (managed by Tilt)
+# PostgreSQL is running in Docker (managed by Tilt/Docker Compose)
 # Connect to database:
-kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_password psql -U archestra -d archestra_dev
+docker exec archestra-postgres-dev psql -U archestra -d archestra_dev
 
 # Common queries: \dt (list tables), \d table_name (describe table), SELECT COUNT(*) FROM drizzle.__drizzle_migrations;
 
 # Logs
-tilt logs pnpm-dev                   # Get logs for frontend + backend
-tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
+tilt logs archestra                  # Get logs for frontend + backend
+tilt logs postgres                   # Get logs for PostgreSQL
+tilt trigger <archestra|etc>         # Trigger an update for the specified resource
 
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
 # E2E Testing
-pnpm test:e2e                        # Run Playwright tests
-# Local: docker-compose setup (Tiltfile.test)
-# CI: kind cluster + helm deployment
-#   - kind config: .github/kind.yaml
-#   - helm values: .github/values-ci.yaml
-#   - NodePort services: frontend:3000, backend:9000, metrics:9050
-#   - CI checks in e2e job: drizzle-kit check, codegen, db migrations
+tilt trigger e2e-tests               # Run Playwright tests via Tilt
+# OR via Docker Compose:
+docker compose -f docker-compose.dev.yml exec archestra pnpm test:e2e
 
 # Observability
 tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
@@ -154,9 +163,13 @@ ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
 
 ## Architecture
 
-**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
+**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Docker Compose for development
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
+**Development Setup**: Docker Compose manages PostgreSQL and the application services. Tilt provides orchestration UI, labels, and manual triggers. Hot reloading is enabled via volume mounts for `backend/`, `frontend/`, and `shared/` directories.
+
+**Kubernetes for MCP Runtime**: The MCP server runtime (deploying MCP servers as K8s pods) requires Kubernetes. Kubeconfig is mounted from host into the container. See `KUBERNETES_SETUP.md` for setup instructions. Development works without K8s, but MCP server deployment will be disabled.
+
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support (requires Kubernetes cluster with mounted kubeconfig), white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
 
 **Workspaces**:
 

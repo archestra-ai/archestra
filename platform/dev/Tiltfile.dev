@@ -1,41 +1,19 @@
-# Development + pre-requisite resources
+# Development resources
 
 # Define is_prod locally (same logic as main Tiltfile)
 is_prod = os.getenv('PROD') == 'true'
 
-local_resource(
-  'pnpm-install',
-  cmd='CI=true pnpm install',
-  deps=[
-    '../frontend/package.json',
-    '../backend/package.json',
-  ],
-  labels=['dev']
-)
+# Configure the archestra service from docker-compose
+# This includes both frontend and backend
+dc_resource('archestra', labels=['dev'])
 
-if is_prod:
-  # prod bundle
-  local_resource(
-    'pnpm-prod',
-    cmd='rm -rf frontend/.next && pnpm build',
-    serve_cmd='pnpm start',
-    labels=['dev'],
-    resource_deps=['db-migrate']
-  )
-else:
-  # dev bundle
-  local_resource(
-    'pnpm-dev',
-    serve_cmd='pnpm dev',
-    labels=['dev'],
-    resource_deps=['db-migrate']
-  )
-
+# Lint and type-check resource (runs inside container)
 local_resource(
   'lint:fix',
-  cmd='pnpm type-check && pnpm lint:fix',
+  cmd='docker exec archestra-dev pnpm type-check && docker exec archestra-dev pnpm lint:fix',
+  dir='..',
   labels=['dev'],
-  resource_deps=['pnpm-install'],
+  resource_deps=['archestra'],
   deps=[
     "../frontend/src",
     "../backend/src",
@@ -46,18 +24,20 @@ local_resource(
 
 local_resource(
   'lint:fix:unsafe',
-  cmd='pnpm lint:fix:unsafe && tilt trigger lint:fix',
+  cmd='docker exec archestra-dev pnpm lint:fix:unsafe && tilt trigger lint:fix',
+  dir='..',
   labels=['dev'],
-  resource_deps=['pnpm-install'],
+  resource_deps=['archestra'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
 )
 
 local_resource(
   'codegen:api-client',
-  cmd='pnpm codegen:api-client',
+  cmd='docker exec archestra-dev pnpm codegen:api-client',
+  dir='..',
   labels=['dev'],
-  resource_deps=['pnpm-install', 'pnpm-dev'],
+  resource_deps=['archestra'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
 )

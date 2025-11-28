@@ -2,47 +2,30 @@
 
 local_resource(
   'unit-tests',
-  cmd='pnpm test',
+  cmd='docker exec archestra-dev pnpm test',
+  dir='..',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
-)
-
-local_resource(
-  'helm-tests',
-  cmd='helm unittest helm/archestra',
-  dir='../',
-  labels=['test'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
+  resource_deps=['archestra']
 )
 
 local_resource(
   'e2e-tests',
-  cmd='pnpm test:e2e',
+  cmd='docker exec archestra-dev pnpm test:e2e',
+  dir='..',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
+  resource_deps=['archestra']
 )
 
 local_resource(
   'e2e-tests-ui',
-  serve_cmd='pnpm test:e2e:ui',
-  serve_dir='../',
+  serve_cmd='docker exec -i archestra-dev pnpm test:e2e:ui',
+  serve_dir='..',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
-  resource_deps=['pnpm-install', 'pnpm-dev']
-)
-
-# E2E test dependencies (WireMock, Keycloak)
-# Use a local_resource to deploy/redeploy the helm chart on demand
-local_resource(
-  'e2e-test-dependencies',
-  cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait',
-  labels=['test'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False
+  resource_deps=['archestra']
 )

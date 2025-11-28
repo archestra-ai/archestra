@@ -13,12 +13,15 @@ test.skip(
 
 // Keycloak configuration for e2e tests
 // These match the values in helm/e2e-tests/values.yaml
-const KEYCLOAK_BASE_URL = "http://localhost:30081";
+// KEYCLOAK_EXTERNAL_URL is used for browser redirects (accessible from CI host)
+// KEYCLOAK_INTERNAL_URL is used for backend discovery (accessible from within K8s cluster)
+const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
+const KEYCLOAK_INTERNAL_URL = "http://e2e-tests-keycloak:8080";
 const KEYCLOAK_REALM = "archestra";
 const KEYCLOAK_OIDC_CLIENT_ID = "archestra-oidc";
 const KEYCLOAK_OIDC_CLIENT_SECRET = "archestra-oidc-secret";
-const KEYCLOAK_SAML_ENTITY_ID = `${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}`;
-const KEYCLOAK_SAML_SSO_URL = `${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`;
+const KEYCLOAK_SAML_ENTITY_ID = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
+const KEYCLOAK_SAML_SSO_URL = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`;
 const KEYCLOAK_TEST_USER = "testuser";
 const KEYCLOAK_TEST_PASSWORD = "testpassword";
 
@@ -27,10 +30,11 @@ const KEYCLOAK_TEST_PASSWORD = "testpassword";
  * This is necessary because Keycloak regenerates certificates on restart,
  * so we can't use hardcoded certificates in tests.
  * Also modifies WantAuthnRequestsSigned to "false" to avoid signing complexity.
+ * Uses external URL since this runs from the test (CI host), not from inside K8s.
  */
 async function fetchKeycloakSamlMetadata(): Promise<string> {
   const response = await fetch(
-    `${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}/protocol/saml/descriptor`,
+    `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml/descriptor`,
   );
   if (!response.ok) {
     throw new Error(
@@ -104,23 +108,37 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
 
     // Now we should have a create dialog
     // Fill in Keycloak OIDC configuration
+    // Use internal URL for issuer/discovery (backend needs to reach these)
+    // The authorization endpoint uses external URL (browser redirects there)
     await page.getByLabel("Provider ID").fill(providerName);
     await page
       .getByLabel("Issuer")
-      .fill(`${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}`);
+      .fill(`${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
     await page.getByLabel("Domain").fill("archestra.test");
     await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
     await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
     await page
       .getByLabel("Discovery Endpoint")
       .fill(
-        `${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
       );
-    // JWKS endpoint is required for token validation
+    // Explicit authorization endpoint using external URL (browser redirect)
+    await page
+      .getByLabel("Authorization Endpoint")
+      .fill(
+        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+      );
+    // Token endpoint using internal URL (backend calls this)
+    await page
+      .getByLabel("Token Endpoint")
+      .fill(
+        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+      );
+    // JWKS endpoint is required for token validation (backend calls this)
     await page
       .getByLabel("JWKS Endpoint")
       .fill(
-        `${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
       );
 
     // Submit the form
@@ -154,9 +172,9 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
         .getByRole("button", { name: new RegExp(providerName, "i") })
         .click();
 
-      // Wait for redirect to Keycloak
+      // Wait for redirect to Keycloak (external URL for browser)
       await ssoPage.waitForURL(/.*keycloak.*|.*localhost:30081.*/, {
-        timeout: 10000,
+        timeout: 15000,
       });
 
       // Fill in Keycloak login form

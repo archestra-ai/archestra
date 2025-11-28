@@ -1,0 +1,115 @@
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:17-alpine
+    container_name: archestra-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-archestra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archestra_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-archestra_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - archestra_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-archestra}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Archestra Platform (Frontend + Backend)
+  archestra:
+    container_name: archestra-dev
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      target: dev
+
+    # Load all environment variables from .env file (single source of truth)
+    env_file:
+      - .env
+
+    # Override ONLY the database hostname (localhost -> postgres for Docker networking)
+    environment:
+      DATABASE_URL: "postgresql://archestra:archestra_dev_password@postgres:5432/archestra_dev?schema=public"
+      ARCHESTRA_DATABASE_URL: "postgresql://archestra:archestra_dev_password@postgres:5432/archestra_dev?schema=public"
+
+    # Mount source code for hot-reloading
+    volumes:
+      # Workspace directories
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./shared:/app/shared
+      - ./experiments:/app/experiments
+      - ./e2e-tests:/app/e2e-tests
+
+      # Package manager files
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./.npmrc:/app/.npmrc
+
+      # Build and tooling config
+      - ./turbo.json:/app/turbo.json
+      - ./biome.json:/app/biome.json
+      - ./.editorconfig:/app/.editorconfig
+
+      # Prevent node_modules from being overridden (keep on fast Docker filesystem)
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
+      - /app/shared/node_modules
+      - /app/experiments/node_modules
+      - /app/e2e-tests/node_modules
+
+      # Mount kubeconfig for MCP server K8s deployment (optional)
+      # Uncomment one of the following based on your setup:
+      # For Docker Desktop K8s (macOS/Linux):
+      - ${HOME}/.kube/config:/root/.kube/config:ro
+      # For Docker Desktop K8s (Windows):
+      # - ${USERPROFILE}/.kube/config:/root/.kube/config:ro
+      # For OrbStack:
+      # - ${HOME}/.orbstack/config/kube.config:/root/.kube/config:ro
+
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"  # Frontend
+      - "9000:9000"  # Backend API
+      - "9050:9050"  # Backend Metrics
+
+    networks:
+      - archestra_network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Start dev servers (migrations are run via Tilt's db-migrate resource)
+    command: pnpm dev
+
+# Define a network for container communication
+networks:
+  archestra_network:
+    driver: bridge
+
+# Define volumes for data persistence
+volumes:
+  postgres_data:
+
+  # Named volumes for node_modules (much faster than bind mounts on macOS)
+  node_modules:
+  backend_node_modules:
+  frontend_node_modules:
+  experiments_node_modules:
+  e2e_tests_node_modules:
+
+  # Named volumes for build outputs (faster compilation and hot reload)
+  frontend_next:
+  frontend_turbo:
+  backend_dist:
+  backend_turbo:
+  root_turbo:

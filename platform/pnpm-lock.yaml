@@ -13,10 +13,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      node-vault:
-        specifier: ^0.10.9
-        version: 0.10.9
     devDependencies:
       '@biomejs/biome':
         specifier: 2.3.7

@@ -32,11 +32,10 @@ const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // Get accessible agent IDs for this user (chat-enabled agents only)
+      // Get accessible agent IDs for this user
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         user.id,
         isAgentAdmin,
-        true, // chatOnly - filter to agents with useInChat = true
       );
 
       // Filter prompts to only those assigned to accessible agents

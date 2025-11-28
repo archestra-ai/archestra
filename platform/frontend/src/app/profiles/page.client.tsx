@@ -224,7 +224,7 @@ function Profiles() {
     teams: string[];
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    useInChat?: boolean;
+    useInChat: boolean; // Deprecated field - all profiles are enabled for chat by default
   } | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
     null,
@@ -550,7 +550,6 @@ function CreateProfileDialog({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
-  const [useInChat, setUseInChat] = useState(true);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -614,7 +613,6 @@ function CreateProfileDialog({
           teams: assignedTeamIds,
           labels: updatedLabels,
           considerContextUntrusted,
-          useInChat,
         });
         if (!agent) {
           throw new Error("Failed to create profile");
@@ -625,14 +623,7 @@ function CreateProfileDialog({
         toast.error("Failed to create profile");
       }
     },
-    [
-      name,
-      assignedTeamIds,
-      labels,
-      considerContextUntrusted,
-      createProfile,
-      useInChat,
-    ],
+    [name, assignedTeamIds, labels, considerContextUntrusted, createProfile],
   );
 
   const handleClose = useCallback(() => {
@@ -642,7 +633,6 @@ function CreateProfileDialog({
     setSelectedTeamId("");
     setCreatedProfile(null);
     setConsiderContextUntrusted(false);
-    setUseInChat(true);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -760,28 +750,6 @@ function CreateProfileDialog({
                     </p>
                   </div>
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="use-in-chat"
-                    checked={useInChat}
-                    onCheckedChange={(checked) =>
-                      setUseInChat(checked === true)
-                    }
-                  />
-                  <div className="grid gap-1">
-                    <Label
-                      htmlFor="use-in-chat"
-                      className="text-sm font-medium cursor-pointer"
-                    >
-                      Enable for chat
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      If enabled, this profile will be available for usage in
-                      the chat.
-                    </p>
-                  </div>
-                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -830,7 +798,7 @@ function EditProfileDialog({
     teams: string[];
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
-    useInChat?: boolean;
+    useInChat: boolean; // Deprecated field - all profiles are enabled for chat by default
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -843,7 +811,6 @@ function EditProfileDialog({
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
     agent.considerContextUntrusted,
   );
-  const [useInChat, setUseInChat] = useState(agent.useInChat ?? true);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -893,7 +860,6 @@ function EditProfileDialog({
             teams: assignedTeamIds,
             labels: updatedLabels,
             considerContextUntrusted,
-            useInChat,
           },
         });
         toast.success("Profile updated successfully");
@@ -910,7 +876,6 @@ function EditProfileDialog({
       updateProfile,
       onOpenChange,
       considerContextUntrusted,
-      useInChat,
     ],
   );
 
@@ -1035,26 +1000,6 @@ function EditProfileDialog({
                 <p className="text-sm text-muted-foreground">
                   Enable when user prompts may contain untrusted and sensitive
                   data.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="edit-use-in-chat"
-                checked={useInChat}
-                onCheckedChange={(checked) => setUseInChat(checked === true)}
-              />
-              <div className="grid gap-1">
-                <Label
-                  htmlFor="edit-use-in-chat"
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  Enable for chat
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  If enabled, this profile will be available for usage in the
-                  chat.
                 </p>
               </div>
             </div>

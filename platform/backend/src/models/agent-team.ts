@@ -5,22 +5,16 @@ import logger from "@/logging";
 class AgentTeamModel {
   /**
    * Get all agent IDs that a user has access to (through team membership)
-   * @param chatOnly - If true, only return agents with useInChat = true
    */
   static async getUserAccessibleAgentIds(
     userId: string,
     isAgentAdmin: boolean,
-    chatOnly = false,
   ): Promise<string[]> {
     // Agent admins have access to all agents
     if (isAgentAdmin) {
-      const query = db
+      const allAgents = await db
         .select({ id: schema.agentsTable.id })
         .from(schema.agentsTable);
-
-      const allAgents = chatOnly
-        ? await query.where(eq(schema.agentsTable.useInChat, true))
-        : await query;
 
       return allAgents.map((agent) => agent.id);
     }
@@ -52,24 +46,10 @@ class AgentTeamModel {
     }
 
     // Get all agents assigned to these teams
-    const agentTeams = chatOnly
-      ? await db
-          .select({ agentId: schema.agentTeamsTable.agentId })
-          .from(schema.agentTeamsTable)
-          .innerJoin(
-            schema.agentsTable,
-            eq(schema.agentTeamsTable.agentId, schema.agentsTable.id),
-          )
-          .where(
-            and(
-              inArray(schema.agentTeamsTable.teamId, teamIds),
-              eq(schema.agentsTable.useInChat, true),
-            ),
-          )
-      : await db
-          .select({ agentId: schema.agentTeamsTable.agentId })
-          .from(schema.agentTeamsTable)
-          .where(inArray(schema.agentTeamsTable.teamId, teamIds));
+    const agentTeams = await db
+      .select({ agentId: schema.agentTeamsTable.agentId })
+      .from(schema.agentTeamsTable)
+      .where(inArray(schema.agentTeamsTable.teamId, teamIds));
 
     const accessibleAgentIds = agentTeams.map((at) => at.agentId);
 

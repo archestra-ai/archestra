@@ -22,6 +22,7 @@ export const InsertAgentSchema = createInsertSchema(schema.agentsTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    useInChat: true, // Deprecated: all profiles are enabled for chat by default
   });
 
 export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable)
@@ -33,6 +34,7 @@ export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    useInChat: true, // Deprecated: all profiles are enabled for chat by default
   });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

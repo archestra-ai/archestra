@@ -55,7 +55,7 @@ export function ProfileActions({
             considerContextUntrusted: agent.considerContextUntrusted,
             createdAt: agent.createdAt,
             updatedAt: agent.updatedAt,
-            useInChat: agent.useInChat,
+            useInChat: agent.useInChat, // Deprecated field - all profiles are enabled for chat by default
           });
         }}
       >

@@ -77,7 +77,7 @@ export function PromptLibraryGrid({
   onViewVersionHistory,
 }: PromptLibraryGridProps) {
   const { data: allProfiles = [] } = useProfiles();
-  const agents = allProfiles.filter((agent) => agent.useInChat);
+  const agents = allProfiles;
   const [isFreeChatDialogOpen, setIsFreeChatDialogOpen] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [promptToDelete, setPromptToDelete] = useState<string | null>(null);

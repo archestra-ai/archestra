@@ -84,7 +84,6 @@ export default function ChatPage() {
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
   const { data: allProfiles = [] } = useProfiles();
-  const chatProfiles = allProfiles.filter((agent) => agent.useInChat);
 
   const chatSession = useChatSession(conversationId);
 
@@ -411,7 +410,7 @@ export default function ChatPage() {
   );
 
   if (!conversationId) {
-    const hasNoChatProfiles = chatProfiles.length === 0;
+    const hasNoProfiles = allProfiles.length === 0;
 
     return (
       <PageLayout
@@ -429,16 +428,16 @@ export default function ChatPage() {
                     <Button
                       onClick={handleCreatePrompt}
                       size="sm"
-                      disabled={hasNoChatProfiles}
+                      disabled={hasNoProfiles}
                     >
                       <Plus className="mr-2 h-4 w-4" />
                       Add Prompt
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {hasNoChatProfiles && (
+                {hasNoProfiles && (
                   <TooltipContent>
-                    <p>None of the profiles has chat enabled</p>
+                    <p>No profiles available</p>
                   </TooltipContent>
                 )}
               </Tooltip>

@@ -43,7 +43,7 @@ export function PromptDialog({
   onViewVersionHistory,
 }: PromptDialogProps) {
   const { data: allProfiles = [] } = useProfiles();
-  const agents = allProfiles.filter((agent) => agent.useInChat);
+  const agents = allProfiles;
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
 

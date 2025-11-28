@@ -337,12 +337,12 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 - Profile-based conversations: Each conversation is tied to a specific profile
 - Profile selection via dropdown: Users select a profile when creating a new conversation
-- Profile visibility control: Profiles can be hidden from chat via `use_in_chat` field (default: true)
+- All profiles enabled for chat: All profiles are available in chat by default (the `use_in_chat` field is deprecated)
 - MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
 - LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
 - Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
 - Database schema: Conversations table includes `agentId` foreign key to agents table
-- UI components: `AgentSelector` dropdown (filtered by `use_in_chat=true`), `ChatSidebarSection` for conversation navigation in main sidebar
+- UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation navigation in main sidebar
 - Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)
 - Hide tool calls toggle: Located in chat messages header, persisted in localStorage
 - Conversation management: Select, edit (inline rename), delete conversations directly in sidebar sub-navigation

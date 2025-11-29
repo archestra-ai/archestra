@@ -223,20 +223,15 @@ jobs:
           set -e  # Re-enable exit on error
 
           # Check both unstaged and staged changes
+          # If db:generate produced new migration files, it means the PR is missing migrations
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "New migration files were generated - committing changes"
-            echo "db-migration-check=true" >> $GITHUB_OUTPUT
+            echo "::error::Database schema has changed but migrations are missing. Please run 'pnpm db:generate' locally and commit the resulting migration files."
+            git diff --name-only
+            git diff --cached --name-only
+            exit 1
           else
-            echo "No new migration files were generated"
-            echo "db-migration-check=false" >> $GITHUB_OUTPUT
+            echo "✅ No new migration files were generated - schema is in sync with migrations"
           fi
-
-      - name: Fail if PR from a fork has uncommitted migration changes
-        if: steps.db-migration-check.outputs.db-migration-check == 'true' && github.event.pull_request.head.repo.fork == true
-        working-directory: ./platform
-        run: |
-          echo "::error::Database migrations need to be generated. Please run 'pnpm db:generate' locally and commit the changes."
-          exit 1
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

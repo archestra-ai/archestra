@@ -19,7 +19,8 @@ export enum RouteCategory {
  * @param provider - The LLM provider (openai, gemini, or anthropic)
  * @param llmModel - The LLM model being used
  * @param stream - Whether this is a streaming request
- * @param agent - The agent object (optional, if provided will add agent.id, agent.name and agent labels)
+ * @param agent - The agent/profile object (optional, if provided will add both agent.* and profile.* attributes)
+ *                Note: agent.* attributes are deprecated in favor of profile.* attributes
  * @param callback - The callback function to execute within the span context
  * @returns The result of the callback function
  */
@@ -44,15 +45,21 @@ export async function startActiveLlmSpan<T>(
       },
     },
     async (span) => {
-      // Set agent attributes if agent is provided
+      // Set agent/profile attributes if agent is provided
+      // NOTE: profile.* attributes are the preferred attributes going forward.
+      // agent.* attributes are deprecated and will be removed in a future release.
+      // Both are emitted during the transition period to allow dashboards/traces to migrate.
       if (agent) {
         span.setAttribute("agent.id", agent.id);
         span.setAttribute("agent.name", agent.name);
+        span.setAttribute("profile.id", agent.id);
+        span.setAttribute("profile.name", agent.name);
 
-        // Add all agent labels as attributes with agent.<key>=<value> format
+        // Add all labels as attributes with both agent.<key>=<value> and profile.<key>=<value> format
         if (agent.labels && agent.labels.length > 0) {
           for (const label of agent.labels) {
             span.setAttribute(`agent.${label.key}`, label.value);
+            span.setAttribute(`profile.${label.key}`, label.value);
           }
         }
       }

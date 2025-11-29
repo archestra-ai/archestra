@@ -368,7 +368,7 @@
           "expr": "rate(llm_tokens_total{type=\"input\"}[1m])",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{agent_name}} (input)",
+          "legendFormat": "{{profile_name}} (input)",
           "queryType": "range",
           "range": true,
           "refId": "A"
@@ -381,7 +381,7 @@
           "expr": "rate(llm_tokens_total{type=\"output\"}[1m])",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{agent_name}} (output)",
+          "legendFormat": "{{profile_name}} (output)",
           "queryType": "range",
           "range": true,
           "refId": "B"
@@ -482,7 +482,7 @@
           "expr": "rate(llm_blocked_tools_total[1m])",
           "hide": false,
           "instant": false,
-          "legendFormat": "{{agent_name}}",
+          "legendFormat": "{{profile_name}}",
           "queryType": "range",
           "range": true,
           "refId": "A"

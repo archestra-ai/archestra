@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, or } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
 import type {
@@ -47,7 +47,8 @@ class OptimizationRuleModel {
             eq(schema.teamsTable.organizationId, organizationId),
           ),
         ),
-      );
+      )
+      .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
     return rules;
   }
@@ -66,7 +67,8 @@ class OptimizationRuleModel {
           eq(schema.optimizationRulesTable.provider, provider),
           eq(schema.optimizationRulesTable.enabled, true),
         ),
-      );
+      )
+      .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
     return rules;
   }

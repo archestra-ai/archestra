@@ -58,9 +58,10 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         } else {
           // Create new secret
-          const secret = await secretManager.createSecret({
-            anthropicApiKey: body.anthropicApiKey,
-          });
+          const secret = await secretManager.createSecret(
+            { anthropicApiKey: body.anthropicApiKey },
+            "chatapikey",
+          );
           secretId = secret.id;
         }
       }

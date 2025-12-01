@@ -228,9 +228,9 @@ describe("VaultSecretManager", () => {
         new Error("Vault unavailable"),
       );
 
-      await expect(vaultManager.createSecret(secretValue)).rejects.toThrow(
-        "Vault unavailable",
-      );
+      await expect(
+        vaultManager.createSecret(secretValue, "testsecret"),
+      ).rejects.toThrow("Vault unavailable");
 
       // Verify that no secret remains in the database
       expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
@@ -242,13 +242,14 @@ describe("VaultSecretManager", () => {
 
       mockVaultClient.write.mockResolvedValueOnce({});
 
-      const result = await vaultManager.createSecret(secretValue);
+      const result = await vaultManager.createSecret(secretValue, "testsecret");
 
       expect(result.secret).toEqual(secretValue);
       expect(result.isVault).toBe(true);
+      expect(result.name).toBe("testsecret");
       expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
       expect(mockVaultClient.write).toHaveBeenCalledWith(
-        `secret/data/archestra/${result.id}`,
+        `secret/data/archestra/testsecret-${result.id}`,
         { data: { value: JSON.stringify(secretValue) } },
       );
 
@@ -264,7 +265,10 @@ describe("VaultSecretManager", () => {
 
       // First create a secret successfully
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
 
       // Now make vault delete fail
       mockVaultClient.delete.mockRejectedValueOnce(
@@ -290,7 +294,10 @@ describe("VaultSecretManager", () => {
 
       // Create a secret
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
 
       // Verify the secret was created in DB with isVault=true
       const beforeDelete = await SecretModel.findById(created.id);
@@ -303,7 +310,7 @@ describe("VaultSecretManager", () => {
 
       // Verify vault delete was called with metadata path (permanently removes all versions)
       expect(mockVaultClient.delete).toHaveBeenCalledWith(
-        `secret/metadata/archestra/${created.id}`,
+        `secret/metadata/archestra/testsecret-${created.id}`,
       );
 
       // Verify database record is gone (this is the true test of success)
@@ -319,7 +326,10 @@ describe("VaultSecretManager", () => {
 
       // Create a secret
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
 
       // Make vault read fail
       mockVaultClient.read.mockRejectedValueOnce(
@@ -340,7 +350,10 @@ describe("VaultSecretManager", () => {
 
       // Create a secret
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
 
       // Mock vault read response
       mockVaultClient.read.mockResolvedValueOnce({
@@ -356,6 +369,9 @@ describe("VaultSecretManager", () => {
       expect(result).not.toBeNull();
       expect(result?.secret).toEqual(secretValue);
       expect(result?.isVault).toBe(true);
+      expect(mockVaultClient.read).toHaveBeenCalledWith(
+        `secret/data/archestra/testsecret-${created.id}`,
+      );
 
       // Cleanup
       await SecretModel.delete(created.id);
@@ -370,7 +386,10 @@ describe("VaultSecretManager", () => {
 
       // Create a secret
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
       const originalUpdatedAt = created.updatedAt;
 
       // Wait a bit to ensure timestamp would change
@@ -401,7 +420,10 @@ describe("VaultSecretManager", () => {
 
       // Create a secret
       mockVaultClient.write.mockResolvedValueOnce({});
-      const created = await vaultManager.createSecret(secretValue);
+      const created = await vaultManager.createSecret(
+        secretValue,
+        "testsecret",
+      );
 
       // Wait a bit to ensure timestamp would change
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -416,7 +438,7 @@ describe("VaultSecretManager", () => {
       expect(result).not.toBeNull();
       expect(result?.secret).toEqual(newSecretValue);
       expect(mockVaultClient.write).toHaveBeenLastCalledWith(
-        `secret/data/archestra/${created.id}`,
+        `secret/data/archestra/testsecret-${created.id}`,
         { data: { value: JSON.stringify(newSecretValue) } },
       );
 

@@ -596,11 +596,12 @@ async function makeInteraction(
  * Creates a test secret in the database
  */
 async function makeSecret(
-  overrides: Partial<{ secret: Record<string, unknown> }> = {},
+  overrides: Partial<{ name: string; secret: Record<string, unknown> }> = {},
 ) {
   const [secret] = await db
     .insert(schema.secretsTable)
     .values({
+      name: `testsecret`,
       secret: {
         access_token: `test-token-${crypto.randomUUID().substring(0, 8)}`,
       },

@@ -56,9 +56,10 @@ describe("McpClient", () => {
     agentId = agent.id;
 
     // Create secret with access token
-    const secret = await secretManager.createSecret({
-      access_token: "test-github-token-123",
-    });
+    const secret = await secretManager.createSecret(
+      { access_token: "test-github-token-123" },
+      "testmcptoken",
+    );
 
     // Create catalog entry for the MCP server
     const catalogItem = await InternalMcpCatalogModel.create({

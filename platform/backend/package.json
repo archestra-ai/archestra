@@ -66,6 +66,7 @@
     "fastify-type-provider-zod": "^6.0.0",
     "handlebars": "^4.7.8",
     "lodash-es": "^4.17.21",
+    "node-vault": "^0.10.9",
     "openai": "^6.9.1",
     "pg": "^8.16.3",
     "pino": "^10.1.0",

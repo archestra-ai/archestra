@@ -104,7 +104,7 @@ export default function LlmProxyLogsPage({
   };
 }) {
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+    <div>
       <ErrorBoundary>
         <LogsTable initialData={initialData} />
       </ErrorBoundary>

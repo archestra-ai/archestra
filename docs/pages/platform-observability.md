@@ -39,9 +39,11 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 
 ### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, agent_id, agent_name, and status code
-- `llm_tokens_total` - Token consumption by provider, agent_id, agent_name, and type (input/output)
-- `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, agent_id, and agent_name
+- `llm_request_duration_seconds` - LLM API request duration by provider, profile_id, profile_name, and status code
+- `llm_tokens_total` - Token consumption by provider, profile_id, profile_name, and type (input/output)
+- `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, profile_id, and profile_name
+
+> **Note:** The `agent_id` and `agent_name` labels are deprecated and will be removed in a future release. Please migrate your dashboards and alerts to use `profile_id` and `profile_name` instead. During the transition period, both label variants are emitted.
 
 ### Process Metrics
 
@@ -121,9 +123,11 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 - `llm.provider` - Provider name (`openai`, `anthropic`, `gemini`)
 - `llm.model` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
 - `llm.stream` - Whether the request was streaming (`true`/`false`)
-- `agent.id` - The ID of the agent handling the request
-- `agent.name` - The name of the agent handling the request
-- `agent.<label_key>` - Custom agent labels (e.g., `environment=production`, `team=data-science`)
+- `profile.id` - The ID of the profile handling the request
+- `profile.name` - The name of the profile handling the request
+- `profile.<label_key>` - Custom profile labels (e.g., `environment=production`, `team=data-science`)
+
+> **Note:** The `agent.id`, `agent.name`, and `agent.<label_key>` span attributes are deprecated and will be removed in a future release. Please migrate your trace queries to use the `profile.*` attributes instead. During the transition period, both attribute variants are emitted.
 
 **Span Names:**
 
@@ -133,9 +137,9 @@ Each LLM API call includes detailed attributes for filtering and analysis:
 
 These dedicated spans show the exact duration of external LLM API calls, separate from your application's processing time.
 
-### Custom Agent Labels
+### Custom Profile Labels
 
-Labels are key-value pairs that can be configured when creating or updating agents through the Archestra Platform UI. Use them, for example, to logically group agents by environment or application type. Once added, labels automatically appear in:
+Labels are key-value pairs that can be configured when creating or updating profiles through the Archestra Platform UI. Use them, for example, to logically group profiles by environment or application type. Once added, labels automatically appear in:
 
 - **Metrics** - As additional label dimensions on `llm_request_duration_seconds` and `llm_tokens_total`. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
 - **Traces** - As span attributes. Use them to filter traces.
@@ -189,10 +193,10 @@ Here are some PromQL queries for Grafana charts to get you started:
 
 ### LLM Metrics
 
-- LLM requests per second by agent and provider:
+- LLM requests per second by profile and provider:
 
   ```promql
-  sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name, provider)
+  sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name, provider)
   ```
 
 - LLM error rate by provider:
@@ -201,26 +205,28 @@ Here are some PromQL queries for Grafana charts to get you started:
   sum(rate(llm_request_duration_seconds_count{status_code!="200"}[5m])) by (provider) / sum(rate(llm_request_duration_seconds_count[5m])) by (provider) * 100
   ```
 
-- LLM token usage rate (tokens/sec) by agent name:
+- LLM token usage rate (tokens/sec) by profile name:
 
   ```promql
-  sum(rate(llm_tokens_total[5m])) by (provider, agent_name, type)
+  sum(rate(llm_tokens_total[5m])) by (provider, profile_name, type)
   ```
 
-- Total tokens by agent name:
+- Total tokens by profile name:
 
   ```promql
-  sum(rate(llm_tokens_total[5m])) by (agent_name, type)
+  sum(rate(llm_tokens_total[5m])) by (profile_name, type)
   ```
 
-- Request duration by agent name and provider:
+- Request duration by profile name and provider:
 
   ```promql
-  histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (agent_name, provider, le))
+  histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (profile_name, provider, le))
   ```
 
-- Error rate by agent:
+- Error rate by profile:
 
   ```promql
-  sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (agent_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (agent_name)
+  sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (profile_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name)
   ```
+
+> **Note:** The `agent_name` label in PromQL queries is deprecated. Please migrate to `profile_name` for new dashboards and alerts.

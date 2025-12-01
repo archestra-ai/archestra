@@ -10,6 +10,7 @@ import type {
   ToolResultUpdates,
 } from "@/types";
 import type { CompressionStats } from "../toon-conversion";
+import { unwrapToolContent } from "../unwrap-tool-content";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -255,9 +256,11 @@ export async function convertToolResultsToToon(
       // Only convert string content
       if (typeof message.content === "string") {
         try {
+          // Unwrap any extra text block wrapping from clients
+          const unwrapped = unwrapToolContent(message.content);
           // Parse JSON to validate it's actually JSON
-          const parsed = JSON.parse(message.content);
-          const noncompressed = message.content;
+          const parsed = JSON.parse(unwrapped);
+          const noncompressed = unwrapped;
           const compressed = toonEncode(parsed);
 
           // Count tokens for before and after

@@ -42,7 +42,7 @@ export async function getOptimizedModel<
       organizationId = teams[0].organizationId;
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: resolved organizationId from team",
+        "[CostOptimization] resolved organizationId from team",
       );
     }
   } else {
@@ -58,7 +58,7 @@ export async function getOptimizedModel<
       organizationId = existingOrgRules[0].entityId;
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: agent has no teams - using fallback organization",
+        "[CostOptimization] agent has no teams - using fallback organization",
       );
     }
   }
@@ -66,7 +66,7 @@ export async function getOptimizedModel<
   if (!organizationId) {
     logger.warn(
       { agentId },
-      "Cost optimization: could not resolve organizationId",
+      "[CostOptimization] could not resolve organizationId",
     );
     return null;
   }
@@ -81,7 +81,7 @@ export async function getOptimizedModel<
   if (rules.length === 0) {
     logger.info(
       { agentId, organizationId, provider },
-      "Cost optimization: no optimization rules configured",
+      "[CostOptimization] no optimization rules configured",
     );
     return null;
   }
@@ -92,7 +92,7 @@ export async function getOptimizedModel<
 
   logger.info(
     { tokenCount, hasTools },
-    "Cost optimization: LLM request evaluated",
+    "[CostOptimization] LLM request evaluated",
   );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
@@ -104,10 +104,10 @@ export async function getOptimizedModel<
   if (optimizedModel) {
     logger.info(
       { agentId, optimizedModel },
-      "Cost optimization: optimization rule matched",
+      "[CostOptimization] optimization rule matched",
     );
   } else {
-    logger.info({ agentId }, "Cost optimization: no optimization rule matched");
+    logger.info({ agentId }, "[CostOptimization] no optimization rule matched");
   }
 
   return optimizedModel;

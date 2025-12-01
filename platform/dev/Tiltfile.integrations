@@ -36,3 +36,11 @@ local_resource(
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
 )
+
+local_resource(
+  'vault',
+  serve_cmd='docker run --rm -p 8200:8200 -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 --cap-add=IPC_LOCK hashicorp/vault:1.15',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)

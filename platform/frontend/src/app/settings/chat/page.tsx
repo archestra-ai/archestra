@@ -109,7 +109,7 @@ function ChatSettingsContent() {
   }, [updateChatSettings]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full space-y-6">
+    <div>
       <Card>
         <CardHeader>
           <CardTitle>Anthropic API Key</CardTitle>

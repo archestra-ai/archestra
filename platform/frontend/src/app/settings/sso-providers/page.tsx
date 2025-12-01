@@ -306,7 +306,7 @@ function SsoProvidersSettingsContent() {
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+    <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold">SSO Providers</h1>
         <p className="text-muted-foreground mt-2">

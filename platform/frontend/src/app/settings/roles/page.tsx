@@ -6,11 +6,7 @@ import { LoadingSpinner } from "@/components/loading";
 import { RolesList } from "@/components/roles/roles-list";
 
 function RolesSettingsContent() {
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
-      <RolesList />
-    </div>
-  );
+  return <RolesList />;
 }
 
 export default function RolesSettingsPage() {

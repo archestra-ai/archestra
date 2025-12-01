@@ -113,6 +113,244 @@ describe("OpenAI cost tracking", () => {
   });
 });
 
+describe("OpenAI streaming mode", () => {
+  test("streaming mode completes normally and records interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(openAiProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "gpt-4o",
+      pricePerMillionInput: "2.50",
+      pricePerMillionOutput: "10.00",
+    });
+
+    // Create a test agent
+    const agent = await AgentModel.create({
+      name: "Test Streaming Agent",
+      teams: [],
+    });
+
+    const { InteractionModel } = await import("@/models");
+
+    // Get initial interaction count
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForAgent(agent.id);
+    const initialCount = initialInteractions.length;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Verify the response contains SSE events
+    const body = response.body;
+    expect(body).toContain("data: ");
+    expect(body).toContain('"finish_reason":"stop"');
+
+    // Wait a bit for async interaction recording
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Find the created interaction
+    const interactions = await InteractionModel.getAllInteractionsForAgent(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialCount + 1);
+
+    const interaction = interactions[interactions.length - 1];
+
+    // Verify interaction was recorded with proper fields
+    expect(interaction.type).toBe("openai:chatCompletions");
+    expect(interaction.model).toBe("gpt-4o");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
+  });
+
+  test(
+    "streaming mode interrupted still records interaction",
+    { timeout: 10000 },
+    async () => {
+      const app = Fastify().withTypeProvider<ZodTypeProvider>();
+      app.setValidatorCompiler(validatorCompiler);
+      app.setSerializerCompiler(serializerCompiler);
+
+      // Enable mock mode
+      config.benchmark.mockMode = true;
+
+      // Configure mock to interrupt at chunk 4 (after usage chunk but before stream completes)
+      // Chunks: 0=role, 1=content1, 2=content2, 3=finish+usage, 4=[DONE] would come next
+      const { MockOpenAIClient } = await import("./mock-openai-client");
+      MockOpenAIClient.setStreamOptions({ interruptAtChunk: 4 });
+
+      try {
+        await app.register(openAiProxyRoutes);
+
+        // Create token pricing for the model
+        await TokenPriceModel.create({
+          model: "gpt-4o",
+          pricePerMillionInput: "2.50",
+          pricePerMillionOutput: "10.00",
+        });
+
+        // Create a test agent
+        const agent = await AgentModel.create({
+          name: "Test Interrupted Streaming Agent",
+          teams: [],
+        });
+
+        const { InteractionModel } = await import("@/models");
+
+        // Get initial interaction count
+        const initialInteractions =
+          await InteractionModel.getAllInteractionsForAgent(agent.id);
+        const initialCount = initialInteractions.length;
+
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/chat/completions`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            "user-agent": "test-client",
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello!" }],
+            stream: true,
+          },
+        });
+
+        // Stream ends early but request should complete successfully
+        expect(response.statusCode).toBe(200);
+
+        // Wait for async interaction recording (longer timeout for error handling)
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Verify interaction was still recorded despite interruption
+        const interactions = await InteractionModel.getAllInteractionsForAgent(
+          agent.id,
+        );
+        expect(interactions.length).toBe(initialCount + 1);
+
+        const interaction = interactions[interactions.length - 1];
+
+        // Verify interaction was recorded even though stream was interrupted
+        expect(interaction.type).toBe("openai:chatCompletions");
+        expect(interaction.model).toBe("gpt-4o");
+        expect(interaction.inputTokens).toBe(12);
+        expect(interaction.outputTokens).toBe(10);
+        expect(interaction.cost).toBeTruthy();
+        expect(interaction.baselineCost).toBeTruthy();
+      } finally {
+        // Reset mock options for other tests
+        MockOpenAIClient.resetStreamOptions();
+      }
+    },
+  );
+
+  test(
+    "streaming mode interrupted before usage still records interaction",
+    { timeout: 10000 },
+    async () => {
+      const app = Fastify().withTypeProvider<ZodTypeProvider>();
+      app.setValidatorCompiler(validatorCompiler);
+      app.setSerializerCompiler(serializerCompiler);
+
+      // Enable mock mode
+      config.benchmark.mockMode = true;
+
+      // Configure mock to interrupt at chunk 2 (before usage chunk)
+      // Chunks: 0=role, 1=content1, 2=content2 (interrupt here), 3=finish+usage (never received)
+      const { MockOpenAIClient } = await import("./mock-openai-client");
+      MockOpenAIClient.setStreamOptions({ interruptAtChunk: 2 });
+
+      try {
+        await app.register(openAiProxyRoutes);
+
+        // Create token pricing for the model
+        await TokenPriceModel.create({
+          model: "gpt-4o",
+          pricePerMillionInput: "2.50",
+          pricePerMillionOutput: "10.00",
+        });
+
+        // Create a test agent
+        const agent = await AgentModel.create({
+          name: "Test Interrupted Before Usage Agent",
+          teams: [],
+        });
+
+        const { InteractionModel } = await import("@/models");
+
+        // Get initial interaction count
+        const initialInteractions =
+          await InteractionModel.getAllInteractionsForAgent(agent.id);
+        const initialCount = initialInteractions.length;
+
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/chat/completions`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            "user-agent": "test-client",
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello!" }],
+            stream: true,
+          },
+        });
+
+        // Stream ends early but request should complete successfully
+        expect(response.statusCode).toBe(200);
+
+        // Wait for async interaction recording
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Verify interaction was recorded even without usage data
+        const interactions = await InteractionModel.getAllInteractionsForAgent(
+          agent.id,
+        );
+        expect(interactions.length).toBe(initialCount + 1);
+
+        const interaction = interactions[interactions.length - 1];
+
+        // Verify interaction was recorded without usage/cost data
+        expect(interaction.type).toBe("openai:chatCompletions");
+        expect(interaction.model).toBe("gpt-4o");
+        expect(interaction.inputTokens).toBeNull();
+        expect(interaction.outputTokens).toBeNull();
+        expect(interaction.cost).toBeNull();
+        expect(interaction.baselineCost).toBeNull();
+      } finally {
+        // Reset mock options for other tests
+        MockOpenAIClient.resetStreamOptions();
+      }
+    },
+  );
+});
+
 describe("OpenAI proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;

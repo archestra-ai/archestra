@@ -11405,12 +11405,11 @@ export type GetOptimizationRulesResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11426,12 +11425,11 @@ export type CreateOptimizationRuleData = {
         id?: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProvidersInput;
         targetModel: string;
         enabled?: boolean;
@@ -11510,12 +11508,11 @@ export type CreateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11610,12 +11607,11 @@ export type UpdateOptimizationRuleData = {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
-        ruleType?: 'content_length' | 'tool_presence';
-        conditions?: {
+        conditions?: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider?: SupportedProvidersInput;
         targetModel?: string;
         enabled?: boolean;
@@ -11696,12 +11692,11 @@ export type UpdateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;

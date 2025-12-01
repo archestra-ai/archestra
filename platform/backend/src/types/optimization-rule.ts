@@ -19,15 +19,9 @@ export const ToolPresenceConditionsSchema = z.object({
   hasTools: z.boolean(),
 });
 
-export const OptimizationRuleConditionsSchema = z.union([
-  ContentLengthConditionsSchema,
-  ToolPresenceConditionsSchema,
-]);
-
-export const OptimizationRuleTypeSchema = z.enum([
-  "content_length",
-  "tool_presence",
-]);
+export const OptimizationRuleConditionsSchema = z
+  .union([ContentLengthConditionsSchema, ToolPresenceConditionsSchema])
+  .array();
 
 export const OptimizationRuleEntityTypeSchema = z.enum([
   "organization",
@@ -37,7 +31,6 @@ export const OptimizationRuleEntityTypeSchema = z.enum([
 
 const extendedFields = {
   entityType: OptimizationRuleEntityTypeSchema,
-  ruleType: OptimizationRuleTypeSchema,
   conditions: OptimizationRuleConditionsSchema,
   provider: SupportedProvidersSchema,
 };
@@ -65,7 +58,6 @@ export type ToolPresenceConditions = z.infer<
 export type OptimizationRuleConditions = z.infer<
   typeof OptimizationRuleConditionsSchema
 >;
-export type OptimizationRuleType = z.infer<typeof OptimizationRuleTypeSchema>;
 export type OptimizationRuleEntityType = z.infer<
   typeof OptimizationRuleEntityTypeSchema
 >;

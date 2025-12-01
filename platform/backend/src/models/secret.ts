@@ -1,11 +1,6 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  InsertSecret,
-  SecretValue,
-  SelectSecret,
-  UpdateSecret,
-} from "@/types";
+import type { InsertSecret, SelectSecret, UpdateSecret } from "@/types";
 
 class SecretModel {
   /**
@@ -38,7 +33,7 @@ class SecretModel {
   static async update(
     id: string,
     input: UpdateSecret,
-  ): Promise<UpdateSecret | null> {
+  ): Promise<SelectSecret | null> {
     const [updatedSecret] = await db
       .update(schema.secretsTable)
       .set(input)
@@ -57,33 +52,6 @@ class SecretModel {
       .where(eq(schema.secretsTable.id, id));
 
     return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  /**
-   * Create a secret for MCP server environment variables
-   */
-  static async createMcpServerSecret(
-    envVars: SecretValue,
-  ): Promise<SelectSecret> {
-    return await SecretModel.create({
-      secret: envVars,
-    });
-  }
-
-  /**
-   * Get MCP server environment variable secrets
-   */
-  static async getMcpServerSecret(
-    secretId: string,
-  ): Promise<SelectSecret | null> {
-    return await SecretModel.findById(secretId);
-  }
-
-  /**
-   * Delete MCP server environment variable secrets
-   */
-  static async deleteMcpServerSecret(secretId: string): Promise<boolean> {
-    return await SecretModel.delete(secretId);
   }
 }
 

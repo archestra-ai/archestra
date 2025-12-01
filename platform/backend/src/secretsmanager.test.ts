@@ -36,40 +36,40 @@ describe("getSecretsManagerType", () => {
     process.env = originalEnv;
   });
 
-  test("should return DB when SECRETS_MANAGER is not set", () => {
-    delete process.env.SECRETS_MANAGER;
+  test("should return DB when ARCHESTRA_SECRETS_MANAGER is not set", () => {
+    delete process.env.ARCHESTRA_SECRETS_MANAGER;
 
     const type = getSecretsManagerType();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
 
-  test("should return DB when SECRETS_MANAGER is 'DB'", () => {
-    process.env.SECRETS_MANAGER = "DB";
+  test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
 
     const type = getSecretsManagerType();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
 
-  test("should return DB when SECRETS_MANAGER is 'db' (case insensitive)", () => {
-    process.env.SECRETS_MANAGER = "db";
+  test("should return DB when ARCHESTRA_SECRETS_MANAGER is 'db' (case insensitive)", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "db";
 
     const type = getSecretsManagerType();
 
     expect(type).toBe(SecretsManagerType.DB);
   });
 
-  test("should return Vault when SECRETS_MANAGER is 'Vault'", () => {
-    process.env.SECRETS_MANAGER = "Vault";
+  test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'Vault'", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
 
     const type = getSecretsManagerType();
 
     expect(type).toBe(SecretsManagerType.Vault);
   });
 
-  test("should return Vault when SECRETS_MANAGER is 'vault' (case insensitive)", () => {
-    process.env.SECRETS_MANAGER = "vault";
+  test("should return Vault when ARCHESTRA_SECRETS_MANAGER is 'vault' (case insensitive)", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "vault";
 
     const type = getSecretsManagerType();
 
@@ -77,7 +77,7 @@ describe("getSecretsManagerType", () => {
   });
 
   test("should return DB for unknown values", () => {
-    process.env.SECRETS_MANAGER = "unknown";
+    process.env.ARCHESTRA_SECRETS_MANAGER = "unknown";
 
     const type = getSecretsManagerType();
 
@@ -97,8 +97,8 @@ describe("createSecretManager", () => {
     process.env = originalEnv;
   });
 
-  test("should return DbSecretsManager when SECRETS_MANAGER is not set", () => {
-    delete process.env.SECRETS_MANAGER;
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", () => {
+    delete process.env.ARCHESTRA_SECRETS_MANAGER;
     delete process.env.HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -107,16 +107,16 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when SECRETS_MANAGER is 'DB'", () => {
-    process.env.SECRETS_MANAGER = "DB";
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
 
     const manager = createSecretManager();
 
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when SECRETS_MANAGER is 'Vault' but vault env vars are missing", () => {
-    process.env.SECRETS_MANAGER = "Vault";
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but vault env vars are missing", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     delete process.env.HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -125,8 +125,8 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_ADDR is set", () => {
-    process.env.SECRETS_MANAGER = "Vault";
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_ADDR is set", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -135,8 +135,8 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_TOKEN is set", () => {
-    process.env.SECRETS_MANAGER = "Vault";
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_TOKEN is set", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     delete process.env.HASHICORP_VAULT_ADDR;
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
 
@@ -145,8 +145,8 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return VaultSecretManager when SECRETS_MANAGER is 'Vault' and vault env vars are set", () => {
-    process.env.SECRETS_MANAGER = "Vault";
+  test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
 
@@ -155,8 +155,8 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(VaultSecretManager);
   });
 
-  test("should return DbSecretsManager even when vault env vars are set if SECRETS_MANAGER is 'DB'", () => {
-    process.env.SECRETS_MANAGER = "DB";
+  test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
 

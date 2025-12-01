@@ -272,10 +272,10 @@ export enum SecretsManagerType {
 
 /**
  * Get the secrets manager type from environment variables
- * @returns SecretsManagerType based on SECRETS_MANAGER env var, defaults to DB
+ * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
  */
 export function getSecretsManagerType(): SecretsManagerType {
-  const envValue = process.env.SECRETS_MANAGER?.toUpperCase();
+  const envValue = process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase();
 
   if (envValue === "VAULT") {
     return SecretsManagerType.Vault;
@@ -286,7 +286,7 @@ export function getSecretsManagerType(): SecretsManagerType {
 
 /**
  * Create a secret manager based on environment configuration
- * Uses SECRETS_MANAGER env var to determine the backend:
+ * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
  * - "Vault": Uses VaultSecretManager (requires HASHICORP_VAULT_ADDR and HASHICORP_VAULT_TOKEN)
  * - "DB" or not set: Uses DbSecretsManager (default)
  */
@@ -298,7 +298,7 @@ export function createSecretManager(): SecretManager {
 
     if (!vaultConfig) {
       logger.warn(
-        "createSecretManager: SECRETS_MANAGER=Vault but HASHICORP_VAULT_ADDR or HASHICORP_VAULT_TOKEN not set, falling back to DbSecretsManager",
+        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault but HASHICORP_VAULT_ADDR or HASHICORP_VAULT_TOKEN not set, falling back to DbSecretsManager",
       );
       return new DbSecretsManager();
     }

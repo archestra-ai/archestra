@@ -446,7 +446,7 @@ export function Rule({
         onChange={onEntityChange}
         editable={editable}
       />
-      for{" "}
+      with{" "}
       <ProviderSelect
         provider={formData.provider}
         providers={["anthropic", "openai"]}

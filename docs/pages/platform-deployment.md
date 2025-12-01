@@ -398,3 +398,6 @@ The following environment variables can be used to configure Archestra Platform:
 - **`HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
+  - Please reach out to sales@archestra.ai to learn more about the license.

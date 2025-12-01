@@ -250,7 +250,7 @@ function TokenPriceRow({
 
   return (
     <tr className="border-b hover:bg-muted/30">
-      <td className="p-4 capitalize">{tokenPrice.provider}</td>
+      <td className="p-4 capitalize">{providerDictionary[tokenPrice.provider]}</td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
         ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}

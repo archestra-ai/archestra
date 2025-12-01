@@ -436,25 +436,24 @@ export function Rule({
         checked={enabled}
         onCheckedChange={onToggle}
         disabled={switchDisabled}
+        className="mr-4"
       />
-      <div className="min-w-40 flex flex-row gap-2 items-center justify-end">
-        For{" "}
-        <ProviderSelect
-          provider={formData.provider}
-          providers={["anthropic", "openai"]}
-          onChange={onProviderChange}
-          editable={editable}
-        />
-        if{" "}
-      </div>
-      <Condition
-        ruleType={formData.ruleType}
-        maxLength={formData.maxLength}
-        hasTools={formData.hasTools}
-        onChange={onConditionChange}
+      In{" "}
+      <EntitySelect
+        entityType={formData.entityType}
+        entityId={formData.entityId}
+        teams={teams}
+        onChange={onEntityChange}
         editable={editable}
       />
-      then use{" "}
+      for{" "}
+      <ProviderSelect
+        provider={formData.provider}
+        providers={["anthropic", "openai"]}
+        onChange={onProviderChange}
+        editable={editable}
+      />
+      use{" "}
       <ModelSelect
         model={formData.targetModel}
         models={models}
@@ -462,12 +461,12 @@ export function Rule({
         onChange={onModelChange}
         editable={editable}
       />
-      in{" "}
-      <EntitySelect
-        entityType={formData.entityType}
-        entityId={formData.entityId}
-        teams={teams}
-        onChange={onEntityChange}
+      if{" "}
+      <Condition
+        ruleType={formData.ruleType}
+        maxLength={formData.maxLength}
+        hasTools={formData.hasTools}
+        onChange={onConditionChange}
         editable={editable}
       />
     </div>

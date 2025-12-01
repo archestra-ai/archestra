@@ -254,8 +254,9 @@ jobs:
             -v "${{ github.workspace }}:/work" \
             -w /work/platform \
             -e CI=true \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             mcr.microsoft.com/playwright:v${{ env.PLAYWRIGHT_VERSION }}-noble \
-            /bin/bash -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm test:e2e"
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
 
       - name: Upload Playwright report
         if: failure()

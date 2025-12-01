@@ -18,1645 +18,1087 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
     meta?: Record<string, unknown>;
 };
 
-export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetHealthResponses, unknown, ThrowOnError>({
-        url: '/health',
-        ...options
-    });
-};
+export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, unknown, ThrowOnError>({ url: '/health', ...options });
 
 /**
  * Get all agents with pagination, sorting, and filtering
  */
-export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({
-        url: '/api/agents',
-        ...options
-    });
-};
+export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({ url: '/api/agents', ...options });
 
 /**
  * Create a new agent
  */
-export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
-        url: '/api/agents',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
+    url: '/api/agents',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all agents without pagination
  */
-export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAllAgentsResponses, GetAllAgentsErrors, ThrowOnError>({
-        url: '/api/agents/all',
-        ...options
-    });
-};
+export const getAllAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentsData, ThrowOnError>) => (options?.client ?? client).get<GetAllAgentsResponses, GetAllAgentsErrors, ThrowOnError>({ url: '/api/agents/all', ...options });
 
 /**
  * Get or create default agent
  */
-export const getDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultAgentData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetDefaultAgentResponses, GetDefaultAgentErrors, ThrowOnError>({
-        url: '/api/agents/default',
-        ...options
-    });
-};
+export const getDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultAgentResponses, GetDefaultAgentErrors, ThrowOnError>({ url: '/api/agents/default', ...options });
 
 /**
  * Delete an agent
  */
-export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options
-    });
-};
+export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Get agent by ID
  */
-export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options
-    });
-};
+export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/api/agents/{id}', ...options });
 
 /**
  * Update an agent
  */
-export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
+    url: '/api/agents/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all available label keys
  */
-export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({
-        url: '/api/agents/labels/keys',
-        ...options
-    });
-};
+export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({ url: '/api/agents/labels/keys', ...options });
 
 /**
  * Get all available label values
  */
-export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({
-        url: '/api/agents/labels/values',
-        ...options
-    });
-};
+export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({ url: '/api/agents/labels/values', ...options });
 
 /**
  * Get all agent-tool relationships with pagination, sorting, and filtering
  */
-export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAllAgentToolsResponses, GetAllAgentToolsErrors, ThrowOnError>({
-        url: '/api/agent-tools',
-        ...options
-    });
-};
+export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => (options?.client ?? client).get<GetAllAgentToolsResponses, GetAllAgentToolsErrors, ThrowOnError>({ url: '/api/agent-tools', ...options });
 
 /**
  * Unassign a tool from an agent
  */
-export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options
-    });
-};
+export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools/{toolId}', ...options });
 
 /**
  * Assign a tool to an agent
  */
-export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
+    url: '/api/agents/{agentId}/tools/{toolId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Assign multiple tools to multiple agents in bulk
  */
-export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: Options<BulkAssignToolsData, ThrowOnError>) => {
-    return (options.client ?? client).post<BulkAssignToolsResponses, BulkAssignToolsErrors, ThrowOnError>({
-        url: '/api/agents/tools/bulk-assign',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: Options<BulkAssignToolsData, ThrowOnError>) => (options.client ?? client).post<BulkAssignToolsResponses, BulkAssignToolsErrors, ThrowOnError>({
+    url: '/api/agents/tools/bulk-assign',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Update multiple agent tools with the same value in bulk
  */
-export const bulkUpdateAgentTools = <ThrowOnError extends boolean = false>(options: Options<BulkUpdateAgentToolsData, ThrowOnError>) => {
-    return (options.client ?? client).post<BulkUpdateAgentToolsResponses, BulkUpdateAgentToolsErrors, ThrowOnError>({
-        url: '/api/agent-tools/bulk-update',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const bulkUpdateAgentTools = <ThrowOnError extends boolean = false>(options: Options<BulkUpdateAgentToolsData, ThrowOnError>) => (options.client ?? client).post<BulkUpdateAgentToolsResponses, BulkUpdateAgentToolsErrors, ThrowOnError>({
+    url: '/api/agent-tools/bulk-update',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all tools for an agent (both proxy-sniffed and MCP tools)
  */
-export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools',
-        ...options
-    });
-};
+export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({ url: '/api/agents/{agentId}/tools', ...options });
 
 /**
  * Update an agent-tool relationship
  */
-export const updateAgentTool = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentToolData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdateAgentToolResponses, UpdateAgentToolErrors, ThrowOnError>({
-        url: '/api/agent-tools/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateAgentTool = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentToolData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentToolResponses, UpdateAgentToolErrors, ThrowOnError>({
+    url: '/api/agent-tools/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get MCP servers that can be used as credential sources for the specified agents' tools, grouped by catalogId
  */
-export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAvailableTokensData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({
-        url: '/api/agents/available-tokens',
-        ...options
-    });
-};
+export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAvailableTokensData, ThrowOnError>) => (options?.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({ url: '/api/agents/available-tokens', ...options });
 
 /**
  * Send a message to Anthropic using the default agent
  */
-export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AnthropicMessagesWithDefaultAgentResponses, AnthropicMessagesWithDefaultAgentErrors, ThrowOnError>({
-        url: '/v1/anthropic/v1/messages',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithDefaultAgentResponses, AnthropicMessagesWithDefaultAgentErrors, ThrowOnError>({
+    url: '/v1/anthropic/v1/messages',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Send a message to Anthropic using a specific agent (n8n URL format)
  */
-export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
-        url: '/v1/anthropic/{agentId}/v1/messages',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
+    url: '/v1/anthropic/{agentId}/v1/messages',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get default credentials status
  */
-export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({
-        url: '/api/auth/default-credentials-status',
-        ...options
-    });
-};
+export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({ url: '/api/auth/default-credentials-status', ...options });
 
-export const postApiAuthOrganizationRemoveMember = <ThrowOnError extends boolean = false>(options?: Options<PostApiAuthOrganizationRemoveMemberData, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostApiAuthOrganizationRemoveMemberResponses, unknown, ThrowOnError>({
-        url: '/api/auth/organization/remove-member',
-        ...options
-    });
-};
+export const postApiAuthOrganizationRemoveMember = <ThrowOnError extends boolean = false>(options?: Options<PostApiAuthOrganizationRemoveMemberData, ThrowOnError>) => (options?.client ?? client).post<PostApiAuthOrganizationRemoveMemberResponses, unknown, ThrowOnError>({ url: '/api/auth/organization/remove-member', ...options });
 
-export const getApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiAuthBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetApiAuthBy__Responses, unknown, ThrowOnError>({
-        url: '/api/auth/{*}',
-        ...options
-    });
-};
+export const getApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiAuthBy__Data, ThrowOnError>) => (options.client ?? client).get<GetApiAuthBy__Responses, unknown, ThrowOnError>({ url: '/api/auth/{*}', ...options });
 
-export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<PostApiAuthBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostApiAuthBy__Responses, unknown, ThrowOnError>({
-        url: '/api/auth/{*}',
-        ...options
-    });
-};
+export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<PostApiAuthBy__Data, ThrowOnError>) => (options.client ?? client).post<PostApiAuthBy__Responses, unknown, ThrowOnError>({ url: '/api/auth/{*}', ...options });
 
 /**
  * Get all supported policy operators
  */
-export const getOperators = <ThrowOnError extends boolean = false>(options?: Options<GetOperatorsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetOperatorsResponses, GetOperatorsErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/operators',
-        ...options
-    });
-};
+export const getOperators = <ThrowOnError extends boolean = false>(options?: Options<GetOperatorsData, ThrowOnError>) => (options?.client ?? client).get<GetOperatorsResponses, GetOperatorsErrors, ThrowOnError>({ url: '/api/autonomy-policies/operators', ...options });
 
 /**
  * Get all tool invocation policies
  */
-export const getToolInvocationPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetToolInvocationPoliciesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetToolInvocationPoliciesResponses, GetToolInvocationPoliciesErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/tool-invocation',
-        ...options
-    });
-};
+export const getToolInvocationPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetToolInvocationPoliciesData, ThrowOnError>) => (options?.client ?? client).get<GetToolInvocationPoliciesResponses, GetToolInvocationPoliciesErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation', ...options });
 
 /**
  * Create a new tool invocation policy
  */
-export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateToolInvocationPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateToolInvocationPolicyResponses, CreateToolInvocationPolicyErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/tool-invocation',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).post<CreateToolInvocationPolicyResponses, CreateToolInvocationPolicyErrors, ThrowOnError>({
+    url: '/api/autonomy-policies/tool-invocation',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a tool invocation policy
  */
-export const deleteToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteToolInvocationPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteToolInvocationPolicyResponses, DeleteToolInvocationPolicyErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/tool-invocation/{id}',
-        ...options
-    });
-};
+export const deleteToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).delete<DeleteToolInvocationPolicyResponses, DeleteToolInvocationPolicyErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation/{id}', ...options });
 
 /**
  * Get tool invocation policy by ID
  */
-export const getToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<GetToolInvocationPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetToolInvocationPolicyResponses, GetToolInvocationPolicyErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/tool-invocation/{id}',
-        ...options
-    });
-};
+export const getToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<GetToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).get<GetToolInvocationPolicyResponses, GetToolInvocationPolicyErrors, ThrowOnError>({ url: '/api/autonomy-policies/tool-invocation/{id}', ...options });
 
 /**
  * Update a tool invocation policy
  */
-export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateToolInvocationPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateToolInvocationPolicyResponses, UpdateToolInvocationPolicyErrors, ThrowOnError>({
-        url: '/api/autonomy-policies/tool-invocation/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateToolInvocationPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateToolInvocationPolicyResponses, UpdateToolInvocationPolicyErrors, ThrowOnError>({
+    url: '/api/autonomy-policies/tool-invocation/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all trusted data policies
  */
-export const getTrustedDataPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetTrustedDataPoliciesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetTrustedDataPoliciesResponses, GetTrustedDataPoliciesErrors, ThrowOnError>({
-        url: '/api/trusted-data-policies',
-        ...options
-    });
-};
+export const getTrustedDataPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetTrustedDataPoliciesData, ThrowOnError>) => (options?.client ?? client).get<GetTrustedDataPoliciesResponses, GetTrustedDataPoliciesErrors, ThrowOnError>({ url: '/api/trusted-data-policies', ...options });
 
 /**
  * Create a new trusted data policy
  */
-export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateTrustedDataPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateTrustedDataPolicyResponses, CreateTrustedDataPolicyErrors, ThrowOnError>({
-        url: '/api/trusted-data-policies',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).post<CreateTrustedDataPolicyResponses, CreateTrustedDataPolicyErrors, ThrowOnError>({
+    url: '/api/trusted-data-policies',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a trusted data policy
  */
-export const deleteTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteTrustedDataPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteTrustedDataPolicyResponses, DeleteTrustedDataPolicyErrors, ThrowOnError>({
-        url: '/api/trusted-data-policies/{id}',
-        ...options
-    });
-};
+export const deleteTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).delete<DeleteTrustedDataPolicyResponses, DeleteTrustedDataPolicyErrors, ThrowOnError>({ url: '/api/trusted-data-policies/{id}', ...options });
 
 /**
  * Get trusted data policy by ID
  */
-export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<GetTrustedDataPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetTrustedDataPolicyResponses, GetTrustedDataPolicyErrors, ThrowOnError>({
-        url: '/api/trusted-data-policies/{id}',
-        ...options
-    });
-};
+export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<GetTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).get<GetTrustedDataPolicyResponses, GetTrustedDataPolicyErrors, ThrowOnError>({ url: '/api/trusted-data-policies/{id}', ...options });
 
 /**
  * Update a trusted data policy
  */
-export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateTrustedDataPolicyData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateTrustedDataPolicyResponses, UpdateTrustedDataPolicyErrors, ThrowOnError>({
-        url: '/api/trusted-data-policies/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateTrustedDataPolicyData, ThrowOnError>) => (options.client ?? client).put<UpdateTrustedDataPolicyResponses, UpdateTrustedDataPolicyErrors, ThrowOnError>({
+    url: '/api/trusted-data-policies/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Stream chat response with MCP tools (useChat format)
  */
-export const streamChat = <ThrowOnError extends boolean = false>(options: Options<StreamChatData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, StreamChatErrors, ThrowOnError>({
-        url: '/api/chat',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const streamChat = <ThrowOnError extends boolean = false>(options: Options<StreamChatData, ThrowOnError>) => (options.client ?? client).post<unknown, StreamChatErrors, ThrowOnError>({
+    url: '/api/chat',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List all conversations for current user with agent details
  */
-export const getChatConversations = <ThrowOnError extends boolean = false>(options?: Options<GetChatConversationsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetChatConversationsResponses, GetChatConversationsErrors, ThrowOnError>({
-        url: '/api/chat/conversations',
-        ...options
-    });
-};
+export const getChatConversations = <ThrowOnError extends boolean = false>(options?: Options<GetChatConversationsData, ThrowOnError>) => (options?.client ?? client).get<GetChatConversationsResponses, GetChatConversationsErrors, ThrowOnError>({ url: '/api/chat/conversations', ...options });
 
 /**
  * Create a new conversation with an agent
  */
-export const createChatConversation = <ThrowOnError extends boolean = false>(options: Options<CreateChatConversationData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateChatConversationResponses, CreateChatConversationErrors, ThrowOnError>({
-        url: '/api/chat/conversations',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createChatConversation = <ThrowOnError extends boolean = false>(options: Options<CreateChatConversationData, ThrowOnError>) => (options.client ?? client).post<CreateChatConversationResponses, CreateChatConversationErrors, ThrowOnError>({
+    url: '/api/chat/conversations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a conversation
  */
-export const deleteChatConversation = <ThrowOnError extends boolean = false>(options: Options<DeleteChatConversationData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteChatConversationResponses, DeleteChatConversationErrors, ThrowOnError>({
-        url: '/api/chat/conversations/{id}',
-        ...options
-    });
-};
+export const deleteChatConversation = <ThrowOnError extends boolean = false>(options: Options<DeleteChatConversationData, ThrowOnError>) => (options.client ?? client).delete<DeleteChatConversationResponses, DeleteChatConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}', ...options });
 
 /**
  * Get conversation with messages
  */
-export const getChatConversation = <ThrowOnError extends boolean = false>(options: Options<GetChatConversationData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetChatConversationResponses, GetChatConversationErrors, ThrowOnError>({
-        url: '/api/chat/conversations/{id}',
-        ...options
-    });
-};
+export const getChatConversation = <ThrowOnError extends boolean = false>(options: Options<GetChatConversationData, ThrowOnError>) => (options.client ?? client).get<GetChatConversationResponses, GetChatConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}', ...options });
 
 /**
  * Update conversation title or model
  */
-export const updateChatConversation = <ThrowOnError extends boolean = false>(options: Options<UpdateChatConversationData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdateChatConversationResponses, UpdateChatConversationErrors, ThrowOnError>({
-        url: '/api/chat/conversations/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateChatConversation = <ThrowOnError extends boolean = false>(options: Options<UpdateChatConversationData, ThrowOnError>) => (options.client ?? client).patch<UpdateChatConversationResponses, UpdateChatConversationErrors, ThrowOnError>({
+    url: '/api/chat/conversations/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get MCP tools available for an agent via MCP Gateway
  */
-export const getChatAgentMcpTools = <ThrowOnError extends boolean = false>(options: Options<GetChatAgentMcpToolsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetChatAgentMcpToolsResponses, GetChatAgentMcpToolsErrors, ThrowOnError>({
-        url: '/api/chat/agents/{agentId}/mcp-tools',
-        ...options
-    });
-};
+export const getChatAgentMcpTools = <ThrowOnError extends boolean = false>(options: Options<GetChatAgentMcpToolsData, ThrowOnError>) => (options.client ?? client).get<GetChatAgentMcpToolsResponses, GetChatAgentMcpToolsErrors, ThrowOnError>({ url: '/api/chat/agents/{agentId}/mcp-tools', ...options });
 
 /**
  * Generate a title for the conversation based on the first user message and assistant response
  */
-export const generateChatConversationTitle = <ThrowOnError extends boolean = false>(options: Options<GenerateChatConversationTitleData, ThrowOnError>) => {
-    return (options.client ?? client).post<GenerateChatConversationTitleResponses, GenerateChatConversationTitleErrors, ThrowOnError>({
-        url: '/api/chat/conversations/{id}/generate-title',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const generateChatConversationTitle = <ThrowOnError extends boolean = false>(options: Options<GenerateChatConversationTitleData, ThrowOnError>) => (options.client ?? client).post<GenerateChatConversationTitleResponses, GenerateChatConversationTitleErrors, ThrowOnError>({
+    url: '/api/chat/conversations/{id}/generate-title',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get chat settings for the organization
  */
-export const getChatSettings = <ThrowOnError extends boolean = false>(options?: Options<GetChatSettingsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetChatSettingsResponses, GetChatSettingsErrors, ThrowOnError>({
-        url: '/api/chat-settings',
-        ...options
-    });
-};
+export const getChatSettings = <ThrowOnError extends boolean = false>(options?: Options<GetChatSettingsData, ThrowOnError>) => (options?.client ?? client).get<GetChatSettingsResponses, GetChatSettingsErrors, ThrowOnError>({ url: '/api/chat-settings', ...options });
 
 /**
  * Update chat settings (Anthropic API key) for the organization
  */
-export const updateChatSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateChatSettingsData, ThrowOnError>) => {
-    return (options?.client ?? client).patch<UpdateChatSettingsResponses, UpdateChatSettingsErrors, ThrowOnError>({
-        url: '/api/chat-settings',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers
-        }
-    });
-};
+export const updateChatSettings = <ThrowOnError extends boolean = false>(options?: Options<UpdateChatSettingsData, ThrowOnError>) => (options?.client ?? client).patch<UpdateChatSettingsResponses, UpdateChatSettingsErrors, ThrowOnError>({
+    url: '/api/chat-settings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
 
 /**
  * Get default dual LLM configuration
  */
-export const getDefaultDualLlmConfig = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultDualLlmConfigData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetDefaultDualLlmConfigResponses, GetDefaultDualLlmConfigErrors, ThrowOnError>({
-        url: '/api/dual-llm-config/default',
-        ...options
-    });
-};
+export const getDefaultDualLlmConfig = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultDualLlmConfigData, ThrowOnError>) => (options?.client ?? client).get<GetDefaultDualLlmConfigResponses, GetDefaultDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/default', ...options });
 
 /**
  * Get all dual LLM configurations
  */
-export const getDualLlmConfigs = <ThrowOnError extends boolean = false>(options?: Options<GetDualLlmConfigsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetDualLlmConfigsResponses, GetDualLlmConfigsErrors, ThrowOnError>({
-        url: '/api/dual-llm-config',
-        ...options
-    });
-};
+export const getDualLlmConfigs = <ThrowOnError extends boolean = false>(options?: Options<GetDualLlmConfigsData, ThrowOnError>) => (options?.client ?? client).get<GetDualLlmConfigsResponses, GetDualLlmConfigsErrors, ThrowOnError>({ url: '/api/dual-llm-config', ...options });
 
 /**
  * Create a new dual LLM configuration
  */
-export const createDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<CreateDualLlmConfigData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateDualLlmConfigResponses, CreateDualLlmConfigErrors, ThrowOnError>({
-        url: '/api/dual-llm-config',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<CreateDualLlmConfigData, ThrowOnError>) => (options.client ?? client).post<CreateDualLlmConfigResponses, CreateDualLlmConfigErrors, ThrowOnError>({
+    url: '/api/dual-llm-config',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a dual LLM configuration
  */
-export const deleteDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<DeleteDualLlmConfigData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteDualLlmConfigResponses, DeleteDualLlmConfigErrors, ThrowOnError>({
-        url: '/api/dual-llm-config/{id}',
-        ...options
-    });
-};
+export const deleteDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<DeleteDualLlmConfigData, ThrowOnError>) => (options.client ?? client).delete<DeleteDualLlmConfigResponses, DeleteDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/{id}', ...options });
 
 /**
  * Get dual LLM configuration by ID
  */
-export const getDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmConfigData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetDualLlmConfigResponses, GetDualLlmConfigErrors, ThrowOnError>({
-        url: '/api/dual-llm-config/{id}',
-        ...options
-    });
-};
+export const getDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmConfigData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmConfigResponses, GetDualLlmConfigErrors, ThrowOnError>({ url: '/api/dual-llm-config/{id}', ...options });
 
 /**
  * Update a dual LLM configuration
  */
-export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateDualLlmConfigData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateDualLlmConfigResponses, UpdateDualLlmConfigErrors, ThrowOnError>({
-        url: '/api/dual-llm-config/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateDualLlmConfigData, ThrowOnError>) => (options.client ?? client).put<UpdateDualLlmConfigResponses, UpdateDualLlmConfigErrors, ThrowOnError>({
+    url: '/api/dual-llm-config/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get dual LLM result by tool call ID
  */
-export const getDualLlmResultByToolCallId = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultByToolCallIdData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetDualLlmResultByToolCallIdResponses, GetDualLlmResultByToolCallIdErrors, ThrowOnError>({
-        url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}',
-        ...options
-    });
-};
+export const getDualLlmResultByToolCallId = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultByToolCallIdData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmResultByToolCallIdResponses, GetDualLlmResultByToolCallIdErrors, ThrowOnError>({ url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}', ...options });
 
 /**
  * Get all dual LLM results for an interaction
  */
-export const getDualLlmResultsByInteraction = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultsByInteractionData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetDualLlmResultsByInteractionResponses, GetDualLlmResultsByInteractionErrors, ThrowOnError>({
-        url: '/api/dual-llm-results/by-interaction/{interactionId}',
-        ...options
-    });
-};
+export const getDualLlmResultsByInteraction = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmResultsByInteractionData, ThrowOnError>) => (options.client ?? client).get<GetDualLlmResultsByInteractionResponses, GetDualLlmResultsByInteractionErrors, ThrowOnError>({ url: '/api/dual-llm-results/by-interaction/{interactionId}', ...options });
 
 /**
  * Get feature flags
  */
-export const getFeatures = <ThrowOnError extends boolean = false>(options?: Options<GetFeaturesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetFeaturesResponses, unknown, ThrowOnError>({
-        url: '/api/features',
-        ...options
-    });
-};
+export const getFeatures = <ThrowOnError extends boolean = false>(options?: Options<GetFeaturesData, ThrowOnError>) => (options?.client ?? client).get<GetFeaturesResponses, unknown, ThrowOnError>({ url: '/api/features', ...options });
 
 /**
  * Generate content using Gemini
  *
  * Generate content using Gemini (default agent)
  */
-export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:generateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelGenerateContentErrors, ThrowOnError>({
+    url: '/v1/gemini/models/{model}:generateContent',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Stream generated content using Gemini
  *
  * Stream generated content using Gemini (default agent)
  */
-export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:streamGenerateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+    url: '/v1/gemini/models/{model}:streamGenerateContent',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Generate content using Gemini (specific agent)
  *
  * Generate content using Gemini with specific agent
  */
-export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:generateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, ThrowOnError>({
+    url: '/v1/gemini/{agentId}/models/{model}:generateContent',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Stream generated content using Gemini (specific agent)
  *
  * Stream generated content using Gemini with specific agent
  */
-export const postV1GeminiByAgentIdModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const postV1GeminiByAgentIdModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all interactions with pagination and sorting
  */
-export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({
-        url: '/api/interactions',
-        ...options
-    });
-};
+export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({ url: '/api/interactions', ...options });
 
 /**
  * Get interaction by ID
  */
-export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({
-        url: '/api/interactions/{interactionId}',
-        ...options
-    });
-};
+export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({ url: '/api/interactions/{interactionId}', ...options });
 
 /**
  * Get all Internal MCP catalog items
  */
-export const getInternalMcpCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetInternalMcpCatalogResponses, GetInternalMcpCatalogErrors, ThrowOnError>({
-        url: '/api/internal_mcp_catalog',
-        ...options
-    });
-};
+export const getInternalMcpCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetInternalMcpCatalogData, ThrowOnError>) => (options?.client ?? client).get<GetInternalMcpCatalogResponses, GetInternalMcpCatalogErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog', ...options });
 
 /**
  * Create a new Internal MCP catalog item
  */
-export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<CreateInternalMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateInternalMcpCatalogItemResponses, CreateInternalMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/internal_mcp_catalog',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<CreateInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<CreateInternalMcpCatalogItemResponses, CreateInternalMcpCatalogItemErrors, ThrowOnError>({
+    url: '/api/internal_mcp_catalog',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete an Internal MCP catalog item
  */
-export const deleteInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<DeleteInternalMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteInternalMcpCatalogItemResponses, DeleteInternalMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/internal_mcp_catalog/{id}',
-        ...options
-    });
-};
+export const deleteInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<DeleteInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).delete<DeleteInternalMcpCatalogItemResponses, DeleteInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}', ...options });
 
 /**
  * Get Internal MCP catalog item by ID
  */
-export const getInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<GetInternalMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/internal_mcp_catalog/{id}',
-        ...options
-    });
-};
+export const getInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<GetInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).get<GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}', ...options });
 
 /**
  * Update an Internal MCP catalog item
  */
-export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateInternalMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateInternalMcpCatalogItemResponses, UpdateInternalMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/internal_mcp_catalog/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).put<UpdateInternalMcpCatalogItemResponses, UpdateInternalMcpCatalogItemErrors, ThrowOnError>({
+    url: '/api/internal_mcp_catalog/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all limits with optional filtering and per-model usage breakdown
  */
-export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({
-        url: '/api/limits',
-        ...options
-    });
-};
+export const getLimits = <ThrowOnError extends boolean = false>(options?: Options<GetLimitsData, ThrowOnError>) => (options?.client ?? client).get<GetLimitsResponses, GetLimitsErrors, ThrowOnError>({ url: '/api/limits', ...options });
 
 /**
  * Create a new limit
  */
-export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
-        url: '/api/limits',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createLimit = <ThrowOnError extends boolean = false>(options: Options<CreateLimitData, ThrowOnError>) => (options.client ?? client).post<CreateLimitResponses, CreateLimitErrors, ThrowOnError>({
+    url: '/api/limits',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a limit
  */
-export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({
-        url: '/api/limits/{id}',
-        ...options
-    });
-};
+export const deleteLimit = <ThrowOnError extends boolean = false>(options: Options<DeleteLimitData, ThrowOnError>) => (options.client ?? client).delete<DeleteLimitResponses, DeleteLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
 /**
  * Get a limit by ID
  */
-export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({
-        url: '/api/limits/{id}',
-        ...options
-    });
-};
+export const getLimit = <ThrowOnError extends boolean = false>(options: Options<GetLimitData, ThrowOnError>) => (options.client ?? client).get<GetLimitResponses, GetLimitErrors, ThrowOnError>({ url: '/api/limits/{id}', ...options });
 
 /**
  * Update a limit
  */
-export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
-        url: '/api/limits/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateLimit = <ThrowOnError extends boolean = false>(options: Options<UpdateLimitData, ThrowOnError>) => (options.client ?? client).patch<UpdateLimitResponses, UpdateLimitErrors, ThrowOnError>({
+    url: '/api/limits/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
-export const getV1Mcp = <ThrowOnError extends boolean = false>(options?: Options<GetV1McpData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetV1McpResponses, GetV1McpErrors, ThrowOnError>({
-        url: '/v1/mcp',
-        ...options
-    });
-};
+export const getV1Mcp = <ThrowOnError extends boolean = false>(options?: Options<GetV1McpData, ThrowOnError>) => (options?.client ?? client).get<GetV1McpResponses, GetV1McpErrors, ThrowOnError>({ url: '/v1/mcp', ...options });
 
-export const postV1Mcp = <ThrowOnError extends boolean = false>(options?: Options<PostV1McpData, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostV1McpResponses, unknown, ThrowOnError>({
-        url: '/v1/mcp',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers
-        }
-    });
-};
+export const postV1Mcp = <ThrowOnError extends boolean = false>(options?: Options<PostV1McpData, ThrowOnError>) => (options?.client ?? client).post<PostV1McpResponses, unknown, ThrowOnError>({
+    url: '/v1/mcp',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
 
-export const deleteV1McpSessions = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1McpSessionsData, ThrowOnError>) => {
-    return (options?.client ?? client).delete<DeleteV1McpSessionsResponses, DeleteV1McpSessionsErrors, ThrowOnError>({
-        url: '/v1/mcp/sessions',
-        ...options
-    });
-};
+export const deleteV1McpSessions = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1McpSessionsData, ThrowOnError>) => (options?.client ?? client).delete<DeleteV1McpSessionsResponses, DeleteV1McpSessionsErrors, ThrowOnError>({ url: '/v1/mcp/sessions', ...options });
 
 /**
  * Get all MCP server installation requests
  */
-export const getMcpServerInstallationRequests = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerInstallationRequestsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationRequestsErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests',
-        ...options
-    });
-};
+export const getMcpServerInstallationRequests = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerInstallationRequestsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationRequestsErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests', ...options });
 
 /**
  * Create a new MCP server installation request
  */
-export const createMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<CreateMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateMcpServerInstallationRequestResponses, CreateMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<CreateMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<CreateMcpServerInstallationRequestResponses, CreateMcpServerInstallationRequestErrors, ThrowOnError>({
+    url: '/api/mcp_server_installation_requests',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete an MCP server installation request
  */
-export const deleteMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteMcpServerInstallationRequestResponses, DeleteMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}',
-        ...options
-    });
-};
+export const deleteMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerInstallationRequestResponses, DeleteMcpServerInstallationRequestErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests/{id}', ...options });
 
 /**
  * Get an MCP server installation request by ID
  */
-export const getMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}',
-        ...options
-    });
-};
+export const getMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestErrors, ThrowOnError>({ url: '/api/mcp_server_installation_requests/{id}', ...options });
 
 /**
  * Update an MCP server installation request
  */
-export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdateMcpServerInstallationRequestResponses, UpdateMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).patch<UpdateMcpServerInstallationRequestResponses, UpdateMcpServerInstallationRequestErrors, ThrowOnError>({
+    url: '/api/mcp_server_installation_requests/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Approve an MCP server installation request
  */
-export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<ApproveMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).post<ApproveMcpServerInstallationRequestResponses, ApproveMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}/approve',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<ApproveMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<ApproveMcpServerInstallationRequestResponses, ApproveMcpServerInstallationRequestErrors, ThrowOnError>({
+    url: '/api/mcp_server_installation_requests/{id}/approve',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Decline an MCP server installation request
  */
-export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeclineMcpServerInstallationRequestData, ThrowOnError>) => {
-    return (options.client ?? client).post<DeclineMcpServerInstallationRequestResponses, DeclineMcpServerInstallationRequestErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}/decline',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeclineMcpServerInstallationRequestData, ThrowOnError>) => (options.client ?? client).post<DeclineMcpServerInstallationRequestResponses, DeclineMcpServerInstallationRequestErrors, ThrowOnError>({
+    url: '/api/mcp_server_installation_requests/{id}/decline',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Add a note to an MCP server installation request
  */
-export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean = false>(options: Options<AddMcpServerInstallationRequestNoteData, ThrowOnError>) => {
-    return (options.client ?? client).post<AddMcpServerInstallationRequestNoteResponses, AddMcpServerInstallationRequestNoteErrors, ThrowOnError>({
-        url: '/api/mcp_server_installation_requests/{id}/notes',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean = false>(options: Options<AddMcpServerInstallationRequestNoteData, ThrowOnError>) => (options.client ?? client).post<AddMcpServerInstallationRequestNoteResponses, AddMcpServerInstallationRequestNoteErrors, ThrowOnError>({
+    url: '/api/mcp_server_installation_requests/{id}/notes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all installed MCP servers
  */
-export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServersData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpServersResponses, GetMcpServersErrors, ThrowOnError>({
-        url: '/api/mcp_server',
-        ...options
-    });
-};
+export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServersData, ThrowOnError>) => (options?.client ?? client).get<GetMcpServersResponses, GetMcpServersErrors, ThrowOnError>({ url: '/api/mcp_server', ...options });
 
 /**
  * Install an MCP server (from catalog or custom)
  */
-export const installMcpServer = <ThrowOnError extends boolean = false>(options: Options<InstallMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const installMcpServer = <ThrowOnError extends boolean = false>(options: Options<InstallMcpServerData, ThrowOnError>) => (options.client ?? client).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
+    url: '/api/mcp_server',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete/uninstall an MCP server
  */
-export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}',
-        ...options
-    });
-};
+export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
 /**
  * Get MCP server by ID
  */
-export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}',
-        ...options
-    });
-};
+export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}', ...options });
 
 /**
  * Get the installation status of an MCP server (for polling during local server installation)
  */
-export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationStatusData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerInstallationStatusResponses, GetMcpServerInstallationStatusErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}/installation-status',
-        ...options
-    });
-};
+export const getMcpServerInstallationStatus = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationStatusData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerInstallationStatusResponses, GetMcpServerInstallationStatusErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/installation-status', ...options });
 
 /**
  * Get all tools for an MCP server
  */
-export const getMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerToolsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerToolsResponses, GetMcpServerToolsErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}/tools',
-        ...options
-    });
-};
+export const getMcpServerTools = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerToolsData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerToolsResponses, GetMcpServerToolsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/tools', ...options });
 
 /**
  * Get logs for a specific MCP server pod
  */
-export const getMcpServerLogs = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerLogsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerLogsResponses, GetMcpServerLogsErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}/logs',
-        ...options
-    });
-};
+export const getMcpServerLogs = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerLogsData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerLogsResponses, GetMcpServerLogsErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/logs', ...options });
 
 /**
  * Restart a single MCP server pod
  */
-export const restartMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestartMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).post<RestartMcpServerResponses, RestartMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}/restart',
-        ...options
-    });
-};
+export const restartMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestartMcpServerData, ThrowOnError>) => (options.client ?? client).post<RestartMcpServerResponses, RestartMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/restart', ...options });
 
 /**
  * Revoke a user's personal access to an MCP server by finding their personal-auth installation
  */
-export const revokeUserMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeUserMcpServerAccessData, ThrowOnError>) => {
-    return (options.client ?? client).delete<RevokeUserMcpServerAccessResponses, RevokeUserMcpServerAccessErrors, ThrowOnError>({
-        url: '/api/mcp_server/catalog/{catalogId}/user/{userId}',
-        ...options
-    });
-};
+export const revokeUserMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeUserMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeUserMcpServerAccessResponses, RevokeUserMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/user/{userId}', ...options });
 
 /**
  * Revoke all team access to an MCP server by deleting the team-auth installation
  */
-export const revokeAllTeamsMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeAllTeamsMcpServerAccessData, ThrowOnError>) => {
-    return (options.client ?? client).delete<RevokeAllTeamsMcpServerAccessResponses, RevokeAllTeamsMcpServerAccessErrors, ThrowOnError>({
-        url: '/api/mcp_server/catalog/{catalogId}/teams',
-        ...options
-    });
-};
+export const revokeAllTeamsMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeAllTeamsMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeAllTeamsMcpServerAccessResponses, RevokeAllTeamsMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/teams', ...options });
 
 /**
  * Grant team(s) access to an MCP server using current user's team-auth token (admin only)
  */
-export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<GrantTeamMcpServerAccessData, ThrowOnError>) => {
-    return (options.client ?? client).post<GrantTeamMcpServerAccessResponses, GrantTeamMcpServerAccessErrors, ThrowOnError>({
-        url: '/api/mcp_server/catalog/{catalogId}/teams',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<GrantTeamMcpServerAccessData, ThrowOnError>) => (options.client ?? client).post<GrantTeamMcpServerAccessResponses, GrantTeamMcpServerAccessErrors, ThrowOnError>({
+    url: '/api/mcp_server/catalog/{catalogId}/teams',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Revoke a team's access to an MCP server (admin only)
  */
-export const revokeTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeTeamMcpServerAccessData, ThrowOnError>) => {
-    return (options.client ?? client).delete<RevokeTeamMcpServerAccessResponses, RevokeTeamMcpServerAccessErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}/team/{teamId}',
-        ...options
-    });
-};
+export const revokeTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeTeamMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeTeamMcpServerAccessResponses, RevokeTeamMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/team/{teamId}', ...options });
 
 /**
  * Get all MCP tool calls with pagination and sorting
  */
-export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({
-        url: '/api/mcp-tool-calls',
-        ...options
-    });
-};
+export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({ url: '/api/mcp-tool-calls', ...options });
 
 /**
  * Get MCP tool call by ID
  */
-export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({
-        url: '/api/mcp-tool-calls/{mcpToolCallId}',
-        ...options
-    });
-};
+export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({ url: '/api/mcp-tool-calls/{mcpToolCallId}', ...options });
 
 /**
  * Initiate OAuth flow for MCP server installation
  */
-export const initiateOAuth = <ThrowOnError extends boolean = false>(options: Options<InitiateOAuthData, ThrowOnError>) => {
-    return (options.client ?? client).post<InitiateOAuthResponses, InitiateOAuthErrors, ThrowOnError>({
-        url: '/api/oauth/initiate',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const initiateOAuth = <ThrowOnError extends boolean = false>(options: Options<InitiateOAuthData, ThrowOnError>) => (options.client ?? client).post<InitiateOAuthResponses, InitiateOAuthErrors, ThrowOnError>({
+    url: '/api/oauth/initiate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Handle OAuth callback and exchange code for tokens
  */
-export const handleOAuthCallback = <ThrowOnError extends boolean = false>(options: Options<HandleOAuthCallbackData, ThrowOnError>) => {
-    return (options.client ?? client).post<HandleOAuthCallbackResponses, HandleOAuthCallbackErrors, ThrowOnError>({
-        url: '/api/oauth/callback',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const handleOAuthCallback = <ThrowOnError extends boolean = false>(options: Options<HandleOAuthCallbackData, ThrowOnError>) => (options.client ?? client).post<HandleOAuthCallbackResponses, HandleOAuthCallbackErrors, ThrowOnError>({
+    url: '/api/oauth/callback',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Create a chat completion with OpenAI (uses default agent)
  */
-export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
-        url: '/v1/openai/chat/completions',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+    url: '/v1/openai/chat/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Create a chat completion with OpenAI for a specific agent
  */
-export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
-        url: '/v1/openai/{agentId}/chat/completions',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
+    url: '/v1/openai/{agentId}/chat/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all optimization rules for the organization
  */
-export const getOptimizationRules = <ThrowOnError extends boolean = false>(options?: Options<GetOptimizationRulesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetOptimizationRulesResponses, GetOptimizationRulesErrors, ThrowOnError>({
-        url: '/api/optimization-rules',
-        ...options
-    });
-};
+export const getOptimizationRules = <ThrowOnError extends boolean = false>(options?: Options<GetOptimizationRulesData, ThrowOnError>) => (options?.client ?? client).get<GetOptimizationRulesResponses, GetOptimizationRulesErrors, ThrowOnError>({ url: '/api/optimization-rules', ...options });
 
 /**
  * Create a new optimization rule for the organization
  */
-export const createOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<CreateOptimizationRuleData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateOptimizationRuleResponses, CreateOptimizationRuleErrors, ThrowOnError>({
-        url: '/api/optimization-rules',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<CreateOptimizationRuleData, ThrowOnError>) => (options.client ?? client).post<CreateOptimizationRuleResponses, CreateOptimizationRuleErrors, ThrowOnError>({
+    url: '/api/optimization-rules',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete an optimization rule
  */
-export const deleteOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<DeleteOptimizationRuleData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteOptimizationRuleResponses, DeleteOptimizationRuleErrors, ThrowOnError>({
-        url: '/api/optimization-rules/{id}',
-        ...options
-    });
-};
+export const deleteOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<DeleteOptimizationRuleData, ThrowOnError>) => (options.client ?? client).delete<DeleteOptimizationRuleResponses, DeleteOptimizationRuleErrors, ThrowOnError>({ url: '/api/optimization-rules/{id}', ...options });
 
 /**
  * Update an optimization rule
  */
-export const updateOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<UpdateOptimizationRuleData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateOptimizationRuleResponses, UpdateOptimizationRuleErrors, ThrowOnError>({
-        url: '/api/optimization-rules/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateOptimizationRule = <ThrowOnError extends boolean = false>(options: Options<UpdateOptimizationRuleData, ThrowOnError>) => (options.client ?? client).put<UpdateOptimizationRuleResponses, UpdateOptimizationRuleErrors, ThrowOnError>({
+    url: '/api/optimization-rules/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all roles in the organization
  */
-export const getRoles = <ThrowOnError extends boolean = false>(options?: Options<GetRolesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetRolesResponses, GetRolesErrors, ThrowOnError>({
-        url: '/api/roles',
-        ...options
-    });
-};
+export const getRoles = <ThrowOnError extends boolean = false>(options?: Options<GetRolesData, ThrowOnError>) => (options?.client ?? client).get<GetRolesResponses, GetRolesErrors, ThrowOnError>({ url: '/api/roles', ...options });
 
 /**
  * Create a new custom role
  */
-export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
-        url: '/api/roles',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
+    url: '/api/roles',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a custom role
  */
-export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({
-        url: '/api/roles/{roleId}',
-        ...options
-    });
-};
+export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
 
 /**
  * Get a specific role by ID
  */
-export const getRole = <ThrowOnError extends boolean = false>(options: Options<GetRoleData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetRoleResponses, GetRoleErrors, ThrowOnError>({
-        url: '/api/roles/{roleId}',
-        ...options
-    });
-};
+export const getRole = <ThrowOnError extends boolean = false>(options: Options<GetRoleData, ThrowOnError>) => (options.client ?? client).get<GetRoleResponses, GetRoleErrors, ThrowOnError>({ url: '/api/roles/{roleId}', ...options });
 
 /**
  * Update a custom role
  */
-export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
-        url: '/api/roles/{roleId}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).put<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
+    url: '/api/roles/{roleId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get organization details
  */
-export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({
-        url: '/api/organization',
-        ...options
-    });
-};
+export const getOrganization = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationResponses, GetOrganizationErrors, ThrowOnError>({ url: '/api/organization', ...options });
 
 /**
  * Update organization details
  */
-export const updateOrganization = <ThrowOnError extends boolean = false>(options?: Options<UpdateOrganizationData, ThrowOnError>) => {
-    return (options?.client ?? client).patch<UpdateOrganizationResponses, UpdateOrganizationErrors, ThrowOnError>({
-        url: '/api/organization',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers
-        }
-    });
-};
+export const updateOrganization = <ThrowOnError extends boolean = false>(options?: Options<UpdateOrganizationData, ThrowOnError>) => (options?.client ?? client).patch<UpdateOrganizationResponses, UpdateOrganizationErrors, ThrowOnError>({
+    url: '/api/organization',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+    }
+});
 
 /**
  * Check if organization onboarding is complete
  */
-export const getOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingStatusData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetOnboardingStatusResponses, GetOnboardingStatusErrors, ThrowOnError>({
-        url: '/api/organization/onboarding-status',
-        ...options
-    });
-};
+export const getOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetOnboardingStatusData, ThrowOnError>) => (options?.client ?? client).get<GetOnboardingStatusResponses, GetOnboardingStatusErrors, ThrowOnError>({ url: '/api/organization/onboarding-status', ...options });
 
 /**
  * Get all prompts for the organization filtered by user's accessible agents
  */
-export const getPrompts = <ThrowOnError extends boolean = false>(options?: Options<GetPromptsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetPromptsResponses, GetPromptsErrors, ThrowOnError>({
-        url: '/api/prompts',
-        ...options
-    });
-};
+export const getPrompts = <ThrowOnError extends boolean = false>(options?: Options<GetPromptsData, ThrowOnError>) => (options?.client ?? client).get<GetPromptsResponses, GetPromptsErrors, ThrowOnError>({ url: '/api/prompts', ...options });
 
 /**
  * Create a new prompt
  */
-export const createPrompt = <ThrowOnError extends boolean = false>(options: Options<CreatePromptData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreatePromptResponses, CreatePromptErrors, ThrowOnError>({
-        url: '/api/prompts',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createPrompt = <ThrowOnError extends boolean = false>(options: Options<CreatePromptData, ThrowOnError>) => (options.client ?? client).post<CreatePromptResponses, CreatePromptErrors, ThrowOnError>({
+    url: '/api/prompts',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a prompt and all its versions
  */
-export const deletePrompt = <ThrowOnError extends boolean = false>(options: Options<DeletePromptData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeletePromptResponses, DeletePromptErrors, ThrowOnError>({
-        url: '/api/prompts/{id}',
-        ...options
-    });
-};
+export const deletePrompt = <ThrowOnError extends boolean = false>(options: Options<DeletePromptData, ThrowOnError>) => (options.client ?? client).delete<DeletePromptResponses, DeletePromptErrors, ThrowOnError>({ url: '/api/prompts/{id}', ...options });
 
 /**
  * Get a specific prompt by ID
  */
-export const getPrompt = <ThrowOnError extends boolean = false>(options: Options<GetPromptData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetPromptResponses, GetPromptErrors, ThrowOnError>({
-        url: '/api/prompts/{id}',
-        ...options
-    });
-};
+export const getPrompt = <ThrowOnError extends boolean = false>(options: Options<GetPromptData, ThrowOnError>) => (options.client ?? client).get<GetPromptResponses, GetPromptErrors, ThrowOnError>({ url: '/api/prompts/{id}', ...options });
 
 /**
  * Update a prompt
  */
-export const updatePrompt = <ThrowOnError extends boolean = false>(options: Options<UpdatePromptData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdatePromptResponses, UpdatePromptErrors, ThrowOnError>({
-        url: '/api/prompts/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updatePrompt = <ThrowOnError extends boolean = false>(options: Options<UpdatePromptData, ThrowOnError>) => (options.client ?? client).patch<UpdatePromptResponses, UpdatePromptErrors, ThrowOnError>({
+    url: '/api/prompts/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all versions of a prompt
  */
-export const getPromptVersions = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetPromptVersionsResponses, GetPromptVersionsErrors, ThrowOnError>({
-        url: '/api/prompts/{id}/versions',
-        ...options
-    });
-};
+export const getPromptVersions = <ThrowOnError extends boolean = false>(options: Options<GetPromptVersionsData, ThrowOnError>) => (options.client ?? client).get<GetPromptVersionsResponses, GetPromptVersionsErrors, ThrowOnError>({ url: '/api/prompts/{id}/versions', ...options });
 
 /**
  * Rollback to a specific version of a prompt
  */
-export const rollbackPrompt = <ThrowOnError extends boolean = false>(options: Options<RollbackPromptData, ThrowOnError>) => {
-    return (options.client ?? client).post<RollbackPromptResponses, RollbackPromptErrors, ThrowOnError>({
-        url: '/api/prompts/{id}/rollback',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const rollbackPrompt = <ThrowOnError extends boolean = false>(options: Options<RollbackPromptData, ThrowOnError>) => (options.client ?? client).post<RollbackPromptResponses, RollbackPromptErrors, ThrowOnError>({
+    url: '/api/prompts/{id}/rollback',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get public SSO provider list for login page (no secrets exposed)
  */
-export const getPublicSsoProviders = <ThrowOnError extends boolean = false>(options?: Options<GetPublicSsoProvidersData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetPublicSsoProvidersResponses, GetPublicSsoProvidersErrors, ThrowOnError>({
-        url: '/api/sso-providers/public',
-        ...options
-    });
-};
+export const getPublicSsoProviders = <ThrowOnError extends boolean = false>(options?: Options<GetPublicSsoProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetPublicSsoProvidersResponses, GetPublicSsoProvidersErrors, ThrowOnError>({ url: '/api/sso-providers/public', ...options });
 
 /**
  * Get all SSO providers with full configuration (admin only)
  */
-export const getSsoProviders = <ThrowOnError extends boolean = false>(options?: Options<GetSsoProvidersData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetSsoProvidersResponses, GetSsoProvidersErrors, ThrowOnError>({
-        url: '/api/sso-providers',
-        ...options
-    });
-};
+export const getSsoProviders = <ThrowOnError extends boolean = false>(options?: Options<GetSsoProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetSsoProvidersResponses, GetSsoProvidersErrors, ThrowOnError>({ url: '/api/sso-providers', ...options });
 
 /**
  * Create a new SSO provider
  */
-export const createSsoProvider = <ThrowOnError extends boolean = false>(options: Options<CreateSsoProviderData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateSsoProviderResponses, CreateSsoProviderErrors, ThrowOnError>({
-        url: '/api/sso-providers',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createSsoProvider = <ThrowOnError extends boolean = false>(options: Options<CreateSsoProviderData, ThrowOnError>) => (options.client ?? client).post<CreateSsoProviderResponses, CreateSsoProviderErrors, ThrowOnError>({
+    url: '/api/sso-providers',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete SSO provider
  */
-export const deleteSsoProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteSsoProviderData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteSsoProviderResponses, DeleteSsoProviderErrors, ThrowOnError>({
-        url: '/api/sso-providers/{id}',
-        ...options
-    });
-};
+export const deleteSsoProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteSsoProviderData, ThrowOnError>) => (options.client ?? client).delete<DeleteSsoProviderResponses, DeleteSsoProviderErrors, ThrowOnError>({ url: '/api/sso-providers/{id}', ...options });
 
 /**
  * Get SSO provider by ID
  */
-export const getSsoProvider = <ThrowOnError extends boolean = false>(options: Options<GetSsoProviderData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetSsoProviderResponses, GetSsoProviderErrors, ThrowOnError>({
-        url: '/api/sso-providers/{id}',
-        ...options
-    });
-};
+export const getSsoProvider = <ThrowOnError extends boolean = false>(options: Options<GetSsoProviderData, ThrowOnError>) => (options.client ?? client).get<GetSsoProviderResponses, GetSsoProviderErrors, ThrowOnError>({ url: '/api/sso-providers/{id}', ...options });
 
 /**
  * Update SSO provider
  */
-export const updateSsoProvider = <ThrowOnError extends boolean = false>(options: Options<UpdateSsoProviderData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateSsoProviderResponses, UpdateSsoProviderErrors, ThrowOnError>({
-        url: '/api/sso-providers/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateSsoProvider = <ThrowOnError extends boolean = false>(options: Options<UpdateSsoProviderData, ThrowOnError>) => (options.client ?? client).put<UpdateSsoProviderResponses, UpdateSsoProviderErrors, ThrowOnError>({
+    url: '/api/sso-providers/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get team statistics
  */
-export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({
-        url: '/api/statistics/teams',
-        ...options
-    });
-};
+export const getTeamStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetTeamStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamStatisticsResponses, GetTeamStatisticsErrors, ThrowOnError>({ url: '/api/statistics/teams', ...options });
 
 /**
  * Get agent statistics
  */
-export const getAgentStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetAgentStatisticsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAgentStatisticsResponses, GetAgentStatisticsErrors, ThrowOnError>({
-        url: '/api/statistics/agents',
-        ...options
-    });
-};
+export const getAgentStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetAgentStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetAgentStatisticsResponses, GetAgentStatisticsErrors, ThrowOnError>({ url: '/api/statistics/agents', ...options });
 
 /**
  * Get model statistics
  */
-export const getModelStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetModelStatisticsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetModelStatisticsResponses, GetModelStatisticsErrors, ThrowOnError>({
-        url: '/api/statistics/models',
-        ...options
-    });
-};
+export const getModelStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetModelStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetModelStatisticsResponses, GetModelStatisticsErrors, ThrowOnError>({ url: '/api/statistics/models', ...options });
 
 /**
  * Get overview statistics
  */
-export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({
-        url: '/api/statistics/overview',
-        ...options
-    });
-};
+export const getOverviewStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetOverviewStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetOverviewStatisticsResponses, GetOverviewStatisticsErrors, ThrowOnError>({ url: '/api/statistics/overview', ...options });
 
 /**
  * Get cost savings statistics
  */
-export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetCostSavingsStatisticsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetCostSavingsStatisticsResponses, GetCostSavingsStatisticsErrors, ThrowOnError>({
-        url: '/api/statistics/cost-savings',
-        ...options
-    });
-};
+export const getCostSavingsStatistics = <ThrowOnError extends boolean = false>(options?: Options<GetCostSavingsStatisticsData, ThrowOnError>) => (options?.client ?? client).get<GetCostSavingsStatisticsResponses, GetCostSavingsStatisticsErrors, ThrowOnError>({ url: '/api/statistics/cost-savings', ...options });
 
 /**
  * Get all teams in the organization
  */
-export const getTeams = <ThrowOnError extends boolean = false>(options?: Options<GetTeamsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetTeamsResponses, GetTeamsErrors, ThrowOnError>({
-        url: '/api/teams',
-        ...options
-    });
-};
+export const getTeams = <ThrowOnError extends boolean = false>(options?: Options<GetTeamsData, ThrowOnError>) => (options?.client ?? client).get<GetTeamsResponses, GetTeamsErrors, ThrowOnError>({ url: '/api/teams', ...options });
 
 /**
  * Create a new team
  */
-export const createTeam = <ThrowOnError extends boolean = false>(options: Options<CreateTeamData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateTeamResponses, CreateTeamErrors, ThrowOnError>({
-        url: '/api/teams',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createTeam = <ThrowOnError extends boolean = false>(options: Options<CreateTeamData, ThrowOnError>) => (options.client ?? client).post<CreateTeamResponses, CreateTeamErrors, ThrowOnError>({
+    url: '/api/teams',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a team
  */
-export const deleteTeam = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteTeamResponses, DeleteTeamErrors, ThrowOnError>({
-        url: '/api/teams/{id}',
-        ...options
-    });
-};
+export const deleteTeam = <ThrowOnError extends boolean = false>(options: Options<DeleteTeamData, ThrowOnError>) => (options.client ?? client).delete<DeleteTeamResponses, DeleteTeamErrors, ThrowOnError>({ url: '/api/teams/{id}', ...options });
 
 /**
  * Get a team by ID
  */
-export const getTeam = <ThrowOnError extends boolean = false>(options: Options<GetTeamData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetTeamResponses, GetTeamErrors, ThrowOnError>({
-        url: '/api/teams/{id}',
-        ...options
-    });
-};
+export const getTeam = <ThrowOnError extends boolean = false>(options: Options<GetTeamData, ThrowOnError>) => (options.client ?? client).get<GetTeamResponses, GetTeamErrors, ThrowOnError>({ url: '/api/teams/{id}', ...options });
 
 /**
  * Update a team
  */
-export const updateTeam = <ThrowOnError extends boolean = false>(options: Options<UpdateTeamData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateTeamResponses, UpdateTeamErrors, ThrowOnError>({
-        url: '/api/teams/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateTeam = <ThrowOnError extends boolean = false>(options: Options<UpdateTeamData, ThrowOnError>) => (options.client ?? client).put<UpdateTeamResponses, UpdateTeamErrors, ThrowOnError>({
+    url: '/api/teams/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all members of a team
  */
-export const getTeamMembers = <ThrowOnError extends boolean = false>(options: Options<GetTeamMembersData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetTeamMembersResponses, GetTeamMembersErrors, ThrowOnError>({
-        url: '/api/teams/{id}/members',
-        ...options
-    });
-};
+export const getTeamMembers = <ThrowOnError extends boolean = false>(options: Options<GetTeamMembersData, ThrowOnError>) => (options.client ?? client).get<GetTeamMembersResponses, GetTeamMembersErrors, ThrowOnError>({ url: '/api/teams/{id}/members', ...options });
 
 /**
  * Add a member to a team
  */
-export const addTeamMember = <ThrowOnError extends boolean = false>(options: Options<AddTeamMemberData, ThrowOnError>) => {
-    return (options.client ?? client).post<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError>({
-        url: '/api/teams/{id}/members',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const addTeamMember = <ThrowOnError extends boolean = false>(options: Options<AddTeamMemberData, ThrowOnError>) => (options.client ?? client).post<AddTeamMemberResponses, AddTeamMemberErrors, ThrowOnError>({
+    url: '/api/teams/{id}/members',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Remove a member from a team
  */
-export const removeTeamMember = <ThrowOnError extends boolean = false>(options: Options<RemoveTeamMemberData, ThrowOnError>) => {
-    return (options.client ?? client).delete<RemoveTeamMemberResponses, RemoveTeamMemberErrors, ThrowOnError>({
-        url: '/api/teams/{id}/members/{userId}',
-        ...options
-    });
-};
+export const removeTeamMember = <ThrowOnError extends boolean = false>(options: Options<RemoveTeamMemberData, ThrowOnError>) => (options.client ?? client).delete<RemoveTeamMemberResponses, RemoveTeamMemberErrors, ThrowOnError>({ url: '/api/teams/{id}/members/{userId}', ...options });
 
 /**
  * Get all token prices
  */
-export const getTokenPrices = <ThrowOnError extends boolean = false>(options?: Options<GetTokenPricesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetTokenPricesResponses, GetTokenPricesErrors, ThrowOnError>({
-        url: '/api/token-prices',
-        ...options
-    });
-};
+export const getTokenPrices = <ThrowOnError extends boolean = false>(options?: Options<GetTokenPricesData, ThrowOnError>) => (options?.client ?? client).get<GetTokenPricesResponses, GetTokenPricesErrors, ThrowOnError>({ url: '/api/token-prices', ...options });
 
 /**
  * Create a new token price
  */
-export const createTokenPrice = <ThrowOnError extends boolean = false>(options: Options<CreateTokenPriceData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateTokenPriceResponses, CreateTokenPriceErrors, ThrowOnError>({
-        url: '/api/token-prices',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const createTokenPrice = <ThrowOnError extends boolean = false>(options: Options<CreateTokenPriceData, ThrowOnError>) => (options.client ?? client).post<CreateTokenPriceResponses, CreateTokenPriceErrors, ThrowOnError>({
+    url: '/api/token-prices',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a token price
  */
-export const deleteTokenPrice = <ThrowOnError extends boolean = false>(options: Options<DeleteTokenPriceData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteTokenPriceResponses, DeleteTokenPriceErrors, ThrowOnError>({
-        url: '/api/token-prices/{id}',
-        ...options
-    });
-};
+export const deleteTokenPrice = <ThrowOnError extends boolean = false>(options: Options<DeleteTokenPriceData, ThrowOnError>) => (options.client ?? client).delete<DeleteTokenPriceResponses, DeleteTokenPriceErrors, ThrowOnError>({ url: '/api/token-prices/{id}', ...options });
 
 /**
  * Get a token price by ID
  */
-export const getTokenPrice = <ThrowOnError extends boolean = false>(options: Options<GetTokenPriceData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetTokenPriceResponses, GetTokenPriceErrors, ThrowOnError>({
-        url: '/api/token-prices/{id}',
-        ...options
-    });
-};
+export const getTokenPrice = <ThrowOnError extends boolean = false>(options: Options<GetTokenPriceData, ThrowOnError>) => (options.client ?? client).get<GetTokenPriceResponses, GetTokenPriceErrors, ThrowOnError>({ url: '/api/token-prices/{id}', ...options });
 
 /**
  * Update a token price
  */
-export const updateTokenPrice = <ThrowOnError extends boolean = false>(options: Options<UpdateTokenPriceData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateTokenPriceResponses, UpdateTokenPriceErrors, ThrowOnError>({
-        url: '/api/token-prices/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
+export const updateTokenPrice = <ThrowOnError extends boolean = false>(options: Options<UpdateTokenPriceData, ThrowOnError>) => (options.client ?? client).put<UpdateTokenPriceResponses, UpdateTokenPriceErrors, ThrowOnError>({
+    url: '/api/token-prices/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get all tools
  */
-export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({
-        url: '/api/tools',
-        ...options
-    });
-};
+export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({ url: '/api/tools', ...options });
 
 /**
  * Get current user's permissions
  */
-export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({
-        url: '/api/user/permissions',
-        ...options
-    });
-};
+export const getUserPermissions = <ThrowOnError extends boolean = false>(options?: Options<GetUserPermissionsData, ThrowOnError>) => (options?.client ?? client).get<GetUserPermissionsResponses, GetUserPermissionsErrors, ThrowOnError>({ url: '/api/user/permissions', ...options });

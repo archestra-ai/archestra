@@ -181,7 +181,7 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            conditions: [{ maxLength: 1000 }, { hasTools: false }],
+            conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -191,7 +191,8 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            conditions: [{ maxLength: 1000 }, { hasTools: false }],
+            // Adding a hasTools: false will not work with chat because it has tools
+            conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,

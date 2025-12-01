@@ -66,7 +66,7 @@ export function Condition({
       </span>
     );
   } else {
-    trigger = <>tool calls</>;
+    trigger = <>tools</>;
   }
 
   if (!editable) {
@@ -83,7 +83,7 @@ export function Condition({
     } else {
       return (
         <ConditionBlock>
-          tool calls{" "}
+          tools{" "}
           <Badge variant="outline" className="text-sm bg-background">
             {hasTools ? "present" : "absent"}
           </Badge>
@@ -142,7 +142,7 @@ export function Condition({
             <DropdownMenuItem
               onClick={() => onConditionChange({ hasTools: false })}
             >
-              with or without tool calls
+              with or without tools
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

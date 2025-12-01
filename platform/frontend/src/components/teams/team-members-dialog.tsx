@@ -104,10 +104,8 @@ export function TeamMembersDialog({
     },
   });
 
-  const handleAddMember = () => {
-    if (selectedUserId) {
-      addMutation.mutate(selectedUserId);
-    }
+  const handleAddMember = (userId: string) => {
+    addMutation.mutate(userId);
   };
 
   return (
@@ -125,27 +123,22 @@ export function TeamMembersDialog({
             <div className="space-y-2">
               <Label>Add Member</Label>
               <div className="flex gap-2">
-                <Select
-                  value={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                >
+                <Select value={selectedUserId} onValueChange={handleAddMember}>
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select a member" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableMembers.map((member) => (
-                      <SelectItem key={member.id} value={member.userId}>
+                      <SelectItem
+                        key={member.id}
+                        value={member.userId}
+                        className="cursor-pointer"
+                      >
                         {member.user.email || member.userId}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={handleAddMember}
-                  disabled={!selectedUserId || addMutation.isPending}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           )}

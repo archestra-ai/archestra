@@ -35,8 +35,7 @@ import type {
  */
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-// const ARCHESTRA_API_BASE_PROXY_URL = "http://localhost:9000/v1";
-const ARCHESTRA_API_BASE_PROXY_URL = "https://backend.archestra.dev/v1";
+const ARCHESTRA_API_BASE_PROXY_URL = "http://localhost:9000/v1";
 const USER_AGENT = "Archestra CLI Chat";
 const SYSTEM_PROMPT = `If the user asks you to read a directory, or file, it should be relative to ~.
 

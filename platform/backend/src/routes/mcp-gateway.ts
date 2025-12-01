@@ -50,6 +50,12 @@ const activeSessions = new Map<string, SessionData>();
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
+ * Ping timeout for session health checks (5 seconds)
+ * This prevents long delays when checking stale sessions
+ */
+const SESSION_PING_TIMEOUT_MS = 5 * 1000;
+
+/**
  * Clean up expired sessions periodically
  */
 function cleanupExpiredSessions(): void {
@@ -450,8 +456,17 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Health check: ping the server to verify connection is still alive
+          // Use a short timeout to prevent long delays on stale sessions
           try {
-            await sessionData.server.ping();
+            await Promise.race([
+              sessionData.server.ping(),
+              new Promise((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("Ping timeout")),
+                  SESSION_PING_TIMEOUT_MS,
+                ),
+              ),
+            ]);
             fastify.log.info(
               {
                 agentId,

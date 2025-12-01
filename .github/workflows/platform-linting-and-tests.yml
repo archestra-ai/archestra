@@ -51,46 +51,9 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
 
-  # Resolve Playwright version to use for the e2e tests container
-  # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
-  resolve-playwright-version:
-    name: Resolve Playwright Version
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      version: ${{ steps.resolve.outputs.version || steps.skip.outputs.version }}
-    steps:
-      - name: Checkout repository
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-          sparse-checkout: platform/e2e-tests/package.json
-          sparse-checkout-cone-mode: false
-
-      - name: Resolve Playwright version
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        id: resolve
-        run: |
-          # Extract version from package.json, removing any ^ or ~ prefix
-          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
-          echo "Resolved Playwright version: $VERSION"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Output dummy version for skip mode
-        if: ${{ inputs.should-skip-running-and-always-succeed == true }}
-        id: skip
-        run: echo "version=1.56.1" >> $GITHUB_OUTPUT
-
   platform-e2e-tests:
     name: Platform e2e Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    needs: resolve-playwright-version
-    # Use official Playwright container which has all browsers and dependencies pre-installed
-    # This eliminates the need for manual Playwright installation and caching
-    container:
-      image: mcr.microsoft.com/playwright:v${{ needs.resolve-playwright-version.outputs.version }}-noble
     permissions:
       contents: read
     steps:
@@ -270,10 +233,29 @@ jobs:
             echo "✅ No new migration files were generated - schema is in sync with migrations"
           fi
 
+      # Resolve Playwright version for the container used to run e2e tests
+      - name: Resolve Playwright version
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: |
+          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
+          echo "Resolved Playwright version: $VERSION"
+          echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
+
+      # Run E2E tests inside the official Playwright container
+      # This eliminates the need for manual Playwright browser installation and caching
+      # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: pnpm test:e2e
+        run: |
+          docker run --rm \
+            --network host \
+            --ipc=host \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/platform \
+            -e CI=true \
+            mcr.microsoft.com/playwright:v${{ env.PLAYWRIGHT_VERSION }}-noble \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm test:e2e"
 
       - name: Upload Playwright report
         if: failure()

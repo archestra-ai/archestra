@@ -62,7 +62,7 @@ export function TypingText({
       {showCursor && !isTypingComplete && (
         <span
           className={cn(
-            "ml-0.5 inline-block w-[2px] h-[1em] bg-current animate-cursor-blink",
+            "ml-0.5 inline-block w-[2px] h-[1em] bg-current",
             cursorClassName,
           )}
         />

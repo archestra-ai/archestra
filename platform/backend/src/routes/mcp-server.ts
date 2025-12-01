@@ -243,7 +243,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (Object.keys(secretEnvVars).length > 0) {
             const secret = await secretManager.createSecret(
               secretEnvVars,
-              `${serverData.name}env`,
+              `mcp-server-${serverData.name}-env`,
             );
             secretId = secret.id;
             createdSecretId = secret.id;

@@ -95,6 +95,31 @@ export class DbSecretsManager implements SecretManager {
 }
 
 /**
+ * Sanitize a name to conform to Vault secret naming rules:
+ * - Must be between 1 and 64 characters
+ * - Must start with ASCII letter or '_'
+ * - Must only contain ASCII letters, digits, or '_'
+ */
+function sanitizeVaultSecretName(name: string): string {
+  if (!name || name.trim().length === 0) {
+    return "secret";
+  }
+
+  // Replace any non-alphanumeric character (except underscore) with underscore
+  let sanitized = name.replace(/[^a-zA-Z0-9_]/g, "_");
+
+  // Ensure it starts with a letter or underscore
+  if (!/^[a-zA-Z_]/.test(sanitized)) {
+    sanitized = `_${sanitized}`;
+  }
+
+  // Trim to 64 characters
+  sanitized = sanitized.slice(0, 64);
+
+  return sanitized;
+}
+
+/**
  * Vault-backed implementation of SecretManager
  * Stores secret metadata in PostgreSQL with isVault=true, actual secrets in HashiCorp Vault
  */
@@ -120,11 +145,11 @@ export class VaultSecretManager implements SecretManager {
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
-    // Trim name to 64 chars to avoid Vault path length limits
-    const trimmedName = name.slice(0, 64);
+    // Sanitize name to conform to Vault naming rules
+    const sanitizedName = sanitizeVaultSecretName(name);
 
     const dbRecord = await SecretModel.create({
-      name: trimmedName,
+      name: sanitizedName,
       secret: {},
       isVault: true,
     });

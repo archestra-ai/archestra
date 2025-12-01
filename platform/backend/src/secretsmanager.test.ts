@@ -256,6 +256,124 @@ describe("VaultSecretManager", () => {
       // Cleanup
       await SecretModel.delete(result.id);
     });
+
+    test("should sanitize names with invalid characters", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      // Name with spaces, hyphens, and special characters
+      const result = await vaultManager.createSecret(
+        secretValue,
+        "my-secret name@2024!",
+      );
+
+      // Should replace invalid chars with underscores
+      expect(result.name).toBe("my_secret_name_2024_");
+      expect(mockVaultClient.write).toHaveBeenCalledWith(
+        `secret/data/archestra/my_secret_name_2024_-${result.id}`,
+        { data: { value: JSON.stringify(secretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+
+    test("should prepend underscore if name starts with digit", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      const result = await vaultManager.createSecret(secretValue, "123secret");
+
+      // Should prepend underscore since it starts with a digit
+      expect(result.name).toBe("_123secret");
+      expect(mockVaultClient.write).toHaveBeenCalledWith(
+        `secret/data/archestra/_123secret-${result.id}`,
+        { data: { value: JSON.stringify(secretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+
+    test("should trim name to 64 characters", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      // Create a 100 character name
+      const longName = "a".repeat(100);
+      const result = await vaultManager.createSecret(secretValue, longName);
+
+      // Should be trimmed to 64 chars
+      expect(result.name).toBe("a".repeat(64));
+      expect(result.name.length).toBe(64);
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+
+    test("should handle empty or whitespace names", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      const result = await vaultManager.createSecret(secretValue, "   ");
+
+      // Should use default name "secret"
+      expect(result.name).toBe("secret");
+      expect(mockVaultClient.write).toHaveBeenCalledWith(
+        `secret/data/archestra/secret-${result.id}`,
+        { data: { value: JSON.stringify(secretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+
+    test("should handle names with only invalid characters", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      const result = await vaultManager.createSecret(secretValue, "!@#$%^&*()");
+
+      // Should convert all to underscores (10 chars -> 10 underscores)
+      // No need to prepend another underscore since it already starts with one
+      expect(result.name).toBe("__________");
+      expect(result.name.length).toBe(10);
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
+
+    test("should preserve valid characters and underscores", async () => {
+      const vaultManager = new VaultSecretManager(vaultConfig);
+      const secretValue = { access_token: "test-token" };
+
+      mockVaultClient.write.mockResolvedValueOnce({});
+
+      const result = await vaultManager.createSecret(
+        secretValue,
+        "Valid_Name_123",
+      );
+
+      // Should remain unchanged
+      expect(result.name).toBe("Valid_Name_123");
+      expect(mockVaultClient.write).toHaveBeenCalledWith(
+        `secret/data/archestra/Valid_Name_123-${result.id}`,
+        { data: { value: JSON.stringify(secretValue) } },
+      );
+
+      // Cleanup
+      await SecretModel.delete(result.id);
+    });
   });
 
   describe("deleteSecret", () => {

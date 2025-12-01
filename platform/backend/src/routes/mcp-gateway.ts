@@ -50,12 +50,6 @@ const activeSessions = new Map<string, SessionData>();
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
- * Ping timeout for session health checks (5 seconds)
- * This prevents long delays when checking stale sessions
- */
-const SESSION_PING_TIMEOUT_MS = 5 * 1000;
-
-/**
  * Clean up expired sessions periodically
  */
 function cleanupExpiredSessions(): void {
@@ -449,84 +443,39 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let transport: StreamableHTTPServerTransport | undefined;
 
         // Check if we have an existing session
+        // Note: We don't ping the server because server.ping() doesn't work with HTTP transport
+        // (HTTP is request-response, the server can't initiate messages to the client)
+        // Instead, we trust the session if it exists - stale sessions are cleaned up by:
+        // 1. transport.onclose handler when the client disconnects
+        // 2. SESSION_TIMEOUT_MS periodic cleanup (30 min)
         if (sessionId && activeSessions.has(sessionId)) {
           const sessionData = activeSessions.get(sessionId);
           if (!sessionData) {
             throw new Error("Session data not found");
           }
 
-          // Health check: ping the server to verify connection is still alive
-          // Use a short timeout to prevent long delays on stale sessions
-          try {
-            await Promise.race([
-              sessionData.server.ping(),
-              new Promise((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("Ping timeout")),
-                  SESSION_PING_TIMEOUT_MS,
-                ),
-              ),
-            ]);
-            fastify.log.info(
-              {
-                agentId,
-                sessionId,
-              },
-              "Session ping successful, reusing existing session",
-            );
+          fastify.log.info(
+            {
+              agentId,
+              sessionId,
+            },
+            "Reusing existing session",
+          );
 
-            transport = sessionData.transport;
-            server = sessionData.server;
-            // Update last access time
-            sessionData.lastAccess = Date.now();
+          transport = sessionData.transport;
+          server = sessionData.server;
+          // Update last access time
+          sessionData.lastAccess = Date.now();
 
-            // If this is a re-initialize request on an existing session,
-            // we can just reuse the existing server/transport
-            if (isInitialize) {
-              fastify.log.info(
-                { agentId, sessionId },
-                "Re-initialize on existing session - will reuse existing server",
-              );
-            }
-          } catch (error) {
-            // Session ping failed - clean up and create new session
-            fastify.log.warn(
-              {
-                agentId,
-                sessionId,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "Session ping failed, cleaning up stale session",
-            );
-            activeSessions.delete(sessionId);
-
-            // If this is not an initialize request, we can't recover
-            if (!isInitialize) {
-              fastify.log.error(
-                { agentId, sessionId, method: request.body?.method },
-                "Non-initialize request with failed session - cannot recover",
-              );
-              reply.status(400);
-              return {
-                jsonrpc: "2.0",
-                error: {
-                  code: -32000,
-                  message: "Bad Request: Invalid or expired session",
-                },
-                id: null,
-              };
-            }
-
-            // Fall through to create new session for initialize requests
+          // If this is a re-initialize request on an existing session,
+          // we can just reuse the existing server/transport
+          if (isInitialize) {
             fastify.log.info(
               { agentId, sessionId },
-              "Initialize request with failed session - will create new session",
+              "Re-initialize on existing session - will reuse existing server",
             );
           }
-        }
-
-        // Create new session if needed (for initialize requests without valid session)
-        if (isInitialize && (!sessionId || !activeSessions.has(sessionId))) {
+        } else if (isInitialize) {
           // Initialize request - create new session
           // Generate session ID upfront if not provided by client
           // This prevents race condition where notifications/initialized arrives

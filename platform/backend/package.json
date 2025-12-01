@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && sh scripts/upload-sentry-sourcemaps.sh",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
     "dev": "tsdown --watch --onSuccess \"node --enable-source-maps dist/server.mjs\"",
     "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.mjs\"",
@@ -78,6 +78,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
+    "@sentry/cli": "^2.47.0",
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.6",

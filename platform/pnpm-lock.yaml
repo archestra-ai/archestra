@@ -177,6 +177,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.3.14
         version: 0.3.14
+      '@sentry/cli':
+        specifier: ^2.47.0
+        version: 2.58.2
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12

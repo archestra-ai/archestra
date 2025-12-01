@@ -22,6 +22,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# Version arg for Sentry release tracking
+ARG VERSION=dev
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
@@ -37,11 +40,16 @@ COPY shared ./shared
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# VERSION is exported as env var for child processes (used by Sentry source map upload)
+ENV VERSION=${VERSION}
+
 # Use Docker secrets to securely pass various sensitive environment variables during build
 # These environment variables are NOT persisted in the final image
 #
 # TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
 # https://turborepo.com/docs/guides/tools/docker#example
+#
+# SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target

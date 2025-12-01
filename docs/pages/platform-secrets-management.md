@@ -1,5 +1,5 @@
 ---
-title: "Secrets management"
+title: "Secrets Management"
 category: Archestra Platform
 description: "Configure external secrets storage for sensitive data"
 order: 6
@@ -22,6 +22,8 @@ Archestra supports external secrets storage. When enabled, sensitive data like c
 
 ## HashiCorp Vault
 
+> **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
+
 To enable Vault secrets management, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` and configure Vault address and auth token:
 
 | Variable | Value |
@@ -29,6 +31,7 @@ To enable Vault secrets management, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` a
 | `ARCHESTRA_SECRETS_MANAGER` | `VAULT` |
 | `HASHICORP_VAULT_ADDR` | `<Your Vault server address>`|
 | `HASHICORP_VAULT_TOKEN` | `<Your Vault Authentication token>` |
+| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | `set to the value according to your license` |
 
 > **Note:**If `ARCHESTRA_SECRETS_MANAGER` is set to `Vault` but the required environment variables are missing, the system automatically falls back to database storage.
 

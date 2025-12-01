@@ -46,42 +46,13 @@ import {
   useTokenPrices,
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
+import type { SupportedProviders } from '@shared/hey-api/clients/api';
 
-type SupportedProvider = "openai" | "gemini" | "anthropic";
+type Providers = Extract<SupportedProviders, 'openai' | 'anthropic'>;
 
-const PROVIDERS: { value: SupportedProvider; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "gemini", label: "Gemini" },
-];
-
-const MODELS_BY_PROVIDER: Record<SupportedProvider, string[]> = {
-  openai: [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
-    "gpt-4",
-    "gpt-3.5-turbo",
-    "o1",
-    "o1-mini",
-    "o3-mini",
-  ],
-  anthropic: [
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-3-haiku-20240307",
-  ],
-  gemini: [
-    "gemini-2.0-flash-exp",
-    "gemini-exp-1206",
-    "gemini-2.0-flash-thinking-exp-01-21",
-    "gemini-1.5-pro",
-    "gemini-1.5-flash",
-  ],
+const providerDictionary: Record<Providers, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
 };
 
 // Type aliases for better readability
@@ -115,7 +86,7 @@ function TokenPriceInlineForm({
 }) {
   const [formData, setFormData] = useState({
     provider:
-      (initialData?.provider as SupportedProvider) || ("openai" as const),
+      (initialData?.provider as Providers) || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
@@ -148,27 +119,20 @@ function TokenPriceInlineForm({
             </Label>
             <Select
               value={formData.provider}
-              onValueChange={(value) => {
-                const newProvider = value as SupportedProvider;
-                // Reset model if it's not available for the new provider
-                const models = MODELS_BY_PROVIDER[newProvider];
-                const newModel = models.includes(formData.model)
-                  ? formData.model
-                  : "";
+              onValueChange={(value) =>
                 setFormData({
                   ...formData,
-                  provider: newProvider,
-                  model: newModel,
-                });
-              }}
+                  provider: value as Providers,
+                })
+              }
             >
               <SelectTrigger id="provider" className="w-40">
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDERS.map((provider) => (
-                  <SelectItem key={provider.value} value={provider.value}>
-                    {provider.label}
+                {Object.keys(providerDictionary).map((provider) => (
+                  <SelectItem key={provider} value={provider}>
+                    {providerDictionary[provider]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -179,23 +143,17 @@ function TokenPriceInlineForm({
             <Label htmlFor="model" className="text-sm whitespace-nowrap">
               Model
             </Label>
-            <Select
+            <Input
+              id="model"
+              type="text"
               value={formData.model}
-              onValueChange={(value) =>
-                setFormData({ ...formData, model: value })
+              onChange={(e) =>
+                setFormData({ ...formData, model: e.target.value })
               }
-            >
-              <SelectTrigger id="model" className="w-64">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {MODELS_BY_PROVIDER[formData.provider].map((model) => (
-                  <SelectItem key={model} value={model}>
-                    {model}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="e.g. gpt-4"
+              required
+              className="w-48"
+            />
           </div>
 
           <div className="flex items-center gap-2">

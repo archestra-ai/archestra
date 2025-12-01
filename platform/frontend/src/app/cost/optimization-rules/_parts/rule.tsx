@@ -33,11 +33,13 @@ type TokenPrices = Array<{
   pricePerMillionOutput: string;
 }>;
 
+type Providers = Extract<SupportedProviders, 'openai' | 'anthropic'>;
+
+// FIXME Provider is now in token prices, use it
 // Helper to infer provider from model name
-function getProviderFromModel(model: string): SupportedProviders | null {
+function getProviderFromModel(model: string): Providers | null {
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gpt-") || model.startsWith("o1-")) return "openai";
-  if (model.startsWith("gemini-")) return "gemini";
   return null;
 }
 
@@ -52,10 +54,9 @@ function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
   });
 }
 
-const providerDictionary: Record<SupportedProviders, string> = {
+const providerDictionary: Record<Providers, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
-  gemini: "Gemini",
 };
 
 // Helper to get entity display name
@@ -77,9 +78,9 @@ export function ProviderSelect({
   onChange,
   editable,
 }: {
-  provider: SupportedProviders;
-  providers: SupportedProviders[];
-  onChange: (provider: SupportedProviders) => void;
+  provider: Providers;
+  providers: Providers[];
+  onChange: (provider: Providers) => void;
   editable?: boolean;
 }) {
   if (!editable) {
@@ -401,7 +402,7 @@ export function Rule({
     onChange?.(updated);
   };
 
-  const onProviderChange = (provider: SupportedProviders) =>
+  const onProviderChange = (provider: Providers) =>
     updateFormData({
       provider,
       targetModel: "",

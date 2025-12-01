@@ -157,7 +157,7 @@ class TokenPriceModel {
 
       await db
         .insert(schema.tokenPricesTable)
-        .values(defaultPrices as any)
+        .values(defaultPrices)
         .onConflictDoNothing({
           target: schema.tokenPricesTable.model,
         });

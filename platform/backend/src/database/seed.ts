@@ -2,10 +2,12 @@ import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   DualLlmConfigModel,
   MemberModel,
   OrganizationModel,
   PromptModel,
+  TeamModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -396,11 +398,55 @@ async function seedArchestraTools(): Promise<void> {
   }
 }
 
+/**
+ * Seeds default team and assigns it to the default profile and user
+ */
+async function seedDefaultTeam(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+  if (!user) {
+    logger.error(
+      "Failed to get or create default admin user, skipping default team seeding",
+    );
+    return;
+  }
+
+  // Check if default team already exists
+  const existingTeams = await TeamModel.findByOrganization(org.id);
+  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+
+  if (!defaultTeam) {
+    defaultTeam = await TeamModel.create({
+      name: "Default Team",
+      description: "Default team for all users",
+      organizationId: org.id,
+      createdBy: user.id,
+    });
+    logger.info("✓ Seeded default team");
+  } else {
+    logger.info("✓ Default team already exists, skipping creation");
+  }
+
+  // Add default user to team (if not already a member)
+  const isUserInTeam = await TeamModel.isUserInTeam(defaultTeam.id, user.id);
+  if (!isUserInTeam) {
+    await TeamModel.addMember(defaultTeam.id, user.id);
+    logger.info("✓ Added default user to default team");
+  }
+
+  // Assign team to default profile (idempotent)
+  await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [defaultTeam.id]);
+  logger.info("✓ Assigned default team to default profile");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
   // Create default agent before seeding prompts (prompts need agentId)
   await AgentModel.getAgentOrCreateDefault();
+  await seedDefaultTeam();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await seedArchestraTools();

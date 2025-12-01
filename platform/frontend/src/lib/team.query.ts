@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 
 const { getTeams } = archestraApiSdk;
 
-export function useTeams(params?: {
-  initialData?: archestraApiTypes.GetTeamsResponses["200"];
-}) {
+type Teams = archestraApiTypes.GetTeamsResponses["200"];
+export type Team = Teams[number];
+
+export function useTeams(params?: { initialData?: Teams }) {
   return useQuery({
     queryKey: ["teams"],
     queryFn: async () => (await getTeams()).data ?? [],

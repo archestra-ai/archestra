@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Edit2,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
@@ -15,10 +21,19 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { TypingText } from "@/components/ui/typing-text";
 import { WithInlineConfirm } from "@/components/ui/with-inline-confirm";
+import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
+  useGenerateConversationTitle,
   useUpdateConversation,
 } from "@/lib/chat.query";
 
@@ -56,11 +71,16 @@ export function ChatSidebarSection() {
   const { data: conversations = [], isLoading } = useConversations();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
+  const generateTitleMutation = useGenerateConversationTitle();
 
   const [showAllChats, setShowAllChats] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Track conversations with recently auto-generated titles for animation
+  const { recentlyGeneratedTitles, triggerAnimation } =
+    useRecentlyGeneratedTitles(conversations);
 
   const currentConversationId = pathname.startsWith("/chat")
     ? searchParams.get(CONVERSATION_QUERY_PARAM)
@@ -115,7 +135,15 @@ export function ChatSidebarSection() {
     await deleteConversationMutation.mutateAsync(id);
   };
 
-  console.log(visibleChats);
+  const handleRegenerateTitle = async (id: string) => {
+    // Trigger animation before the API call completes
+    triggerAnimation(id);
+    // Close edit mode
+    setEditingId(null);
+    setEditingTitle("");
+    // Regenerate the title
+    await generateTitleMutation.mutateAsync({ id, regenerate: true });
+  };
 
   return (
     <SidebarGroup className="px-4 py-0">
@@ -145,6 +173,9 @@ export function ChatSidebarSection() {
                 const displayTitle = getConversationDisplayTitle(
                   conv.title,
                   conv.messages,
+                );
+                const hasRecentlyGeneratedTitle = recentlyGeneratedTitles.has(
+                  conv.id,
                 );
                 const buttons =
                   editingId !== conv.id ? (
@@ -186,21 +217,51 @@ export function ChatSidebarSection() {
                   <SidebarMenuItem key={conv.id}>
                     <div className="flex items-center justify-between w-full gap-1">
                       {editingId === conv.id ? (
-                        <Input
-                          ref={inputRef}
-                          value={editingTitle}
-                          onChange={(e) => setEditingTitle(e.target.value)}
-                          onBlur={() => handleSaveEdit(conv.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleSaveEdit(conv.id);
-                            } else if (e.key === "Escape") {
-                              handleCancelEdit();
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-7 text-sm flex-1"
-                        />
+                        <div className="flex items-center gap-1 flex-1">
+                          <Input
+                            ref={inputRef}
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={() => handleSaveEdit(conv.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSaveEdit(conv.id);
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit();
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-7 text-sm flex-1"
+                          />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRegenerateTitle(conv.id);
+                                  }}
+                                  disabled={generateTitleMutation.isPending}
+                                  className="h-7 w-7 shrink-0"
+                                >
+                                  <Sparkles
+                                    className={`h-4 w-4 text-yellow-400 ${
+                                      generateTitleMutation.isPending
+                                        ? "animate-[spin_800ms_ease_200ms_infinite]"
+                                        : ""
+                                    }`}
+                                  />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                Regenerate title with AI
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       ) : (
                         <>
                           <SidebarMenuButton
@@ -208,17 +269,38 @@ export function ChatSidebarSection() {
                             isActive={isCurrentConversation}
                             className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
                           >
-                            <TruncatedText
-                              message={displayTitle}
-                              maxLength={20}
-                              className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
-                              tooltipContentProps={{
-                                side: "right",
-                                className:
-                                  "relative left-20 pointer-events-none",
-                                noArrow: true,
-                              }}
-                            />
+                            {hasRecentlyGeneratedTitle && (
+                              <Sparkles
+                                className="h-4 w-4 text-yellow-400 animate-[spin_800ms_ease_200ms_infinite]"
+                                aria-label="AI generated"
+                              />
+                            )}
+                            {hasRecentlyGeneratedTitle ? (
+                              <span className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all overflow-hidden">
+                                <TypingText
+                                  text={
+                                    displayTitle.length > 17
+                                      ? `${displayTitle.slice(0, 17)}...`
+                                      : displayTitle
+                                  }
+                                  typingSpeed={35}
+                                  showCursor
+                                  cursorClassName="bg-yellow-400"
+                                />
+                              </span>
+                            ) : (
+                              <TruncatedText
+                                message={displayTitle}
+                                maxLength={20}
+                                className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
+                                tooltipContentProps={{
+                                  side: "right",
+                                  className:
+                                    "relative left-20 pointer-events-none",
+                                  noArrow: true,
+                                }}
+                              />
+                            )}
                           </SidebarMenuButton>
                           {buttons}
                         </>

@@ -8,6 +8,7 @@ const {
   createChatConversation,
   updateChatConversation,
   deleteChatConversation,
+  generateChatConversationTitle,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -107,6 +108,33 @@ export function useDeleteConversation() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+    },
+  });
+}
+
+export function useGenerateConversationTitle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      regenerate = false,
+    }: {
+      id: string;
+      regenerate?: boolean;
+    }) => {
+      const { data, error } = await generateChatConversationTitle({
+        path: { id },
+        body: { regenerate },
+      });
+      if (error) throw new Error("Failed to generate conversation title");
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }

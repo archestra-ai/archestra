@@ -5620,6 +5620,103 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
+export type GenerateChatConversationTitleData = {
+    body?: {
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/generate-title';
+};
+
+export type GenerateChatConversationTitleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
+
+export type GenerateChatConversationTitleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
+    };
+};
+
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
+
 export type GetChatSettingsData = {
     body?: never;
     path?: never;

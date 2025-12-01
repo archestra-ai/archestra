@@ -26,8 +26,8 @@
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.45",
-    "@anthropic-ai/sdk": "^0.70.1",
+    "@ai-sdk/anthropic": "^2.0.47",
+    "@anthropic-ai/sdk": "^0.71.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@better-auth/core": "1.4.1",
     "@better-auth/sso": "1.4.1",
@@ -53,7 +53,7 @@
     "@sentry/opentelemetry": "^10.27.0",
     "@sentry/profiling-node": "^10.27.0",
     "@shared": "workspace:*",
-    "@toon-format/toon": "^1.0.0",
+    "@toon-format/toon": "^2.0.0",
     "ai": "^5.0.101",
     "better-auth": "1.4.1",
     "dotenv": "^17.2.2",

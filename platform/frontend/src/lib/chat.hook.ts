@@ -10,20 +10,22 @@ interface UseRecentlyGeneratedTitlesOptions {
 }
 
 interface UseRecentlyGeneratedTitlesReturn {
-  /** Set of conversation IDs that have recently generated titles */
+  /** Set of conversation IDs that have recently generated titles (show typing animation) */
   recentlyGeneratedTitles: Set<string>;
-  /** Manually trigger animation for a conversation (used for regeneration) */
-  triggerAnimation: (conversationId: string) => void;
+  /** Set of conversation IDs that are waiting for regeneration (show loading state) */
+  regeneratingTitles: Set<string>;
+  /** Mark a conversation as regenerating (waits for new title before showing animation) */
+  triggerRegeneration: (conversationId: string) => void;
 }
 
 /**
  * Hook to track conversations that have recently had their titles auto-generated.
  * Detects when a title changes from null to non-null and tracks it for animation purposes.
- * Also provides a function to manually trigger animation for regenerated titles.
+ * Also provides a function to mark conversations as regenerating (shows loading state until new title arrives).
  *
  * @param conversations - Array of conversations with id and title
  * @param options - Configuration options
- * @returns Object with recentlyGeneratedTitles Set and triggerAnimation function
+ * @returns Object with recentlyGeneratedTitles Set, regeneratingTitles Set, and triggerRegeneration function
  */
 export function useRecentlyGeneratedTitles(
   conversations: ConversationWithTitle[],
@@ -34,17 +36,25 @@ export function useRecentlyGeneratedTitles(
   const [recentlyGeneratedTitles, setRecentlyGeneratedTitles] = useState<
     Set<string>
   >(new Set());
+  const [regeneratingTitles, setRegeneratingTitles] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Track previous titles to detect changes
   const previousTitlesRef = useRef<Map<string, string | null>>(new Map());
   // Store individual timeouts per conversation to avoid canceling each other
   const animationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  // Track conversations that are being regenerated (to detect title changes)
-  const regeneratingRef = useRef<Set<string>>(new Set());
 
   // Helper to start animation for a conversation
   const startAnimation = useCallback(
     (conversationId: string) => {
+      // Remove from regenerating state
+      setRegeneratingTitles((prev) => {
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+
       // Add to recently generated set
       setRecentlyGeneratedTitles((prev) => new Set(prev).add(conversationId));
 
@@ -69,26 +79,20 @@ export function useRecentlyGeneratedTitles(
     [animationDuration],
   );
 
-  // Manually trigger animation (for regeneration)
-  const triggerAnimation = useCallback(
-    (conversationId: string) => {
-      // Mark as regenerating so we detect the title change
-      regeneratingRef.current.add(conversationId);
-      // Start animation immediately (don't wait for API response)
-      startAnimation(conversationId);
-    },
-    [startAnimation],
-  );
+  // Mark a conversation as regenerating (don't show animation until new title arrives)
+  const triggerRegeneration = useCallback((conversationId: string) => {
+    setRegeneratingTitles((prev) => new Set(prev).add(conversationId));
+  }, []);
 
   // Detect when a title changes
   useEffect(() => {
     for (const conv of conversations) {
       const previousTitle = previousTitlesRef.current.get(conv.id);
-      const isRegenerating = regeneratingRef.current.has(conv.id);
+      const isRegenerating = regeneratingTitles.has(conv.id);
 
       // Title was null before and now has a value -> auto-generated
-      // OR title changed while regenerating -> regenerated
       const titleGenerated = previousTitle === null && conv.title !== null;
+      // Title changed while regenerating -> regenerated
       const titleRegenerated =
         isRegenerating &&
         previousTitle !== undefined &&
@@ -97,17 +101,12 @@ export function useRecentlyGeneratedTitles(
 
       if (titleGenerated || titleRegenerated) {
         startAnimation(conv.id);
-
-        // Clear regenerating flag
-        if (isRegenerating) {
-          regeneratingRef.current.delete(conv.id);
-        }
       }
 
       // Update the previous title ref
       previousTitlesRef.current.set(conv.id, conv.title);
     }
-  }, [conversations, startAnimation]);
+  }, [conversations, regeneratingTitles, startAnimation]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -120,5 +119,5 @@ export function useRecentlyGeneratedTitles(
     };
   }, []);
 
-  return { recentlyGeneratedTitles, triggerAnimation };
+  return { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration };
 }

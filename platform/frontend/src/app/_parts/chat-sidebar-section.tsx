@@ -79,7 +79,7 @@ export function ChatSidebarSection() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Track conversations with recently auto-generated titles for animation
-  const { recentlyGeneratedTitles, triggerAnimation } =
+  const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
     useRecentlyGeneratedTitles(conversations);
 
   const currentConversationId = pathname.startsWith("/chat")
@@ -136,8 +136,8 @@ export function ChatSidebarSection() {
   };
 
   const handleRegenerateTitle = async (id: string) => {
-    // Trigger animation before the API call completes
-    triggerAnimation(id);
+    // Mark as regenerating (shows loading state until new title arrives)
+    triggerRegeneration(id);
     // Close edit mode
     setEditingId(null);
     setEditingTitle("");
@@ -177,6 +177,7 @@ export function ChatSidebarSection() {
                 const hasRecentlyGeneratedTitle = recentlyGeneratedTitles.has(
                   conv.id,
                 );
+                const isRegenerating = regeneratingTitles.has(conv.id);
                 const buttons =
                   editingId !== conv.id ? (
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
@@ -240,6 +241,10 @@ export function ChatSidebarSection() {
                                   type="button"
                                   size="icon-sm"
                                   variant="ghost"
+                                  onMouseDown={(e) => {
+                                    // Prevent input blur from triggering handleSaveEdit
+                                    e.preventDefault();
+                                  }}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRegenerateTitle(conv.id);
@@ -269,13 +274,17 @@ export function ChatSidebarSection() {
                             isActive={isCurrentConversation}
                             className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
                           >
-                            {hasRecentlyGeneratedTitle && (
+                            {(hasRecentlyGeneratedTitle || isRegenerating) && (
                               <Sparkles
                                 className="h-4 w-4 text-yellow-400 animate-[spin_800ms_ease_200ms_infinite]"
                                 aria-label="AI generated"
                               />
                             )}
-                            {hasRecentlyGeneratedTitle ? (
+                            {isRegenerating ? (
+                              <span className="flex-1 pr-0 text-muted-foreground text-sm">
+                                Generating...
+                              </span>
+                            ) : hasRecentlyGeneratedTitle ? (
                               <span className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all overflow-hidden">
                                 <TypingText
                                   text={

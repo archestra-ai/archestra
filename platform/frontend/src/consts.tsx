@@ -5,7 +5,6 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
       href="https://archestra.ai/docs/platform-orchestrator"
       target="_blank"
       rel="noopener noreferrer"
-      // className="text-blue-500 underline"
       className="text-primary hover:underline inline-flex items-center gap-1"
     >
       MCP Orchestrator documentation

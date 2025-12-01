@@ -538,20 +538,39 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Set up transport close handler to clean up session immediately
           // This ensures stale sessions are removed when the client disconnects
+          // Capture transport reference to prevent race condition where old transport's
+          // onclose handler deletes a newly created session with the same ID
+          const thisTransport = transport;
           transport.onclose = () => {
             fastify.log.info(
               { agentId, sessionId: effectiveSessionId },
-              "Transport closed - cleaning up session",
+              "Transport closed - checking if session should be cleaned up",
             );
-            activeSessions.delete(effectiveSessionId);
-            fastify.log.info(
-              {
-                agentId,
-                sessionId: effectiveSessionId,
-                remainingSessions: activeSessions.size,
-              },
-              "Session cleaned up after transport close",
-            );
+            // Only delete if this session still has the same transport
+            // This prevents race condition where old transport's onclose fires after
+            // a new session was created with the same sessionId
+            const currentSession = activeSessions.get(effectiveSessionId);
+            if (currentSession && currentSession.transport === thisTransport) {
+              activeSessions.delete(effectiveSessionId);
+              fastify.log.info(
+                {
+                  agentId,
+                  sessionId: effectiveSessionId,
+                  remainingSessions: activeSessions.size,
+                },
+                "Session cleaned up after transport close",
+              );
+            } else {
+              fastify.log.info(
+                {
+                  agentId,
+                  sessionId: effectiveSessionId,
+                  sessionExists: !!currentSession,
+                  transportMatches: currentSession?.transport === thisTransport,
+                },
+                "Transport close ignored - session already replaced or removed",
+              );
+            }
           };
 
           // Connect server to transport (this also starts the transport)

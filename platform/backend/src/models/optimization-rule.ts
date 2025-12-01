@@ -1,13 +1,12 @@
 import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
+import logger from "@/logging";
 import type {
-  ContentLengthConditions,
   InsertOptimizationRule,
   InsertTokenPrice,
   OptimizationRule,
   SupportedProvider,
-  ToolPresenceConditions,
   UpdateOptimizationRule,
 } from "@/types";
 
@@ -106,15 +105,18 @@ class OptimizationRuleModel {
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
+      logger.info(
+        { conditions: rule.conditions, context },
+        "[CostOptimization] matching rule conditions with context",
+      );
+
       // Check if all conditions in the array match
       const allConditionsMatch = rule.conditions.every((condition) => {
-        if (rule.ruleType === "content_length") {
-          const contentCondition = condition as ContentLengthConditions;
-          return context.tokenCount <= contentCondition.maxLength;
+        if ("maxLength" in condition) {
+          return context.tokenCount <= condition.maxLength;
         }
-        if (rule.ruleType === "tool_presence") {
-          const toolCondition = condition as ToolPresenceConditions;
-          return context.hasTools === toolCondition.hasTools;
+        if ("hasTools" in condition) {
+          return context.hasTools === condition.hasTools;
         }
         return false;
       });
@@ -179,7 +181,6 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
             conditions: [{ hasTools: false }],
             provider: "openai",
             targetModel: "gpt-5-mini",
@@ -188,7 +189,6 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "content_length",
             conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
@@ -199,7 +199,6 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
             conditions: [{ hasTools: false }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
@@ -208,7 +207,6 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "content_length",
             conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",

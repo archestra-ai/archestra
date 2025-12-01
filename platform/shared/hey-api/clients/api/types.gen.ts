@@ -11405,7 +11405,6 @@ export type GetOptimizationRulesResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
         conditions: Array<{
             maxLength: number;
         } | {
@@ -11426,7 +11425,6 @@ export type CreateOptimizationRuleData = {
         id?: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
         conditions: Array<{
             maxLength: number;
         } | {
@@ -11510,7 +11508,6 @@ export type CreateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
         conditions: Array<{
             maxLength: number;
         } | {
@@ -11610,7 +11607,6 @@ export type UpdateOptimizationRuleData = {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
-        ruleType?: 'content_length' | 'tool_presence';
         conditions?: Array<{
             maxLength: number;
         } | {
@@ -11696,7 +11692,6 @@ export type UpdateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
         conditions: Array<{
             maxLength: number;
         } | {

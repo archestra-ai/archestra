@@ -151,6 +151,7 @@ export function Condition({
       {controls}
       {removable && (
         <Button
+          type="button"
           variant="ghost"
           size="sm"
           className="w-6 h-6 mr-[-6px] bg-primary/20"

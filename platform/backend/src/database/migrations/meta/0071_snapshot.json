@@ -1,5 +1,5 @@
 {
-  "id": "b1e9c426-727b-422f-82e2-bf28da62df7c",
+  "id": "90d85f6c-8e8d-4ab5-8aaf-26aeef7f8bf8",
   "prevId": "091fc983-4197-47db-9598-0851be5780e2",
   "version": "7",
   "dialect": "postgresql",
@@ -2240,12 +2240,6 @@
         },
         "entity_id": {
           "name": "entity_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "rule_type": {
-          "name": "rule_type",
           "type": "text",
           "primaryKey": false,
           "notNull": true

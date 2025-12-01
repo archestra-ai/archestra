@@ -26,7 +26,6 @@ import type { Team } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
 
 type EntityType = OptimizationRule["entityType"];
-type RuleType = OptimizationRule["ruleType"];
 type Conditions = OptimizationRule["conditions"];
 type TokenPrices = Array<{
   model: string;
@@ -310,6 +309,7 @@ function AddCondition({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            type="button"
             variant="secondary"
             size="sm"
             onClick={onClick}
@@ -343,7 +343,6 @@ export function Rule({
   enabled,
   entityType,
   entityId,
-  ruleType,
   conditions,
   provider,
   targetModel,
@@ -358,7 +357,6 @@ export function Rule({
   type FormData = {
     entityType: EntityType;
     entityId: string;
-    ruleType: RuleType;
     conditions: Conditions;
     provider: OptimizationRule["provider"];
     targetModel: string;
@@ -369,7 +367,6 @@ export function Rule({
     enabled,
     entityType,
     entityId,
-    ruleType,
     conditions,
     provider,
     targetModel,
@@ -382,7 +379,6 @@ export function Rule({
         enabled,
         entityType,
         entityId,
-        ruleType,
         conditions,
         provider,
         targetModel,
@@ -393,7 +389,6 @@ export function Rule({
     enabled,
     entityType,
     entityId,
-    ruleType,
     conditions,
     provider,
     targetModel,

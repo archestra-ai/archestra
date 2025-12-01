@@ -126,6 +126,7 @@ export default function OptimizationRulesPage() {
   const [newRuleData, setNewRuleData] = useState<RuleFormData | null>(null);
   const [ruleOrder, setRuleOrder] = useState<string[]>([]);
   const hasInitialized = useRef(false);
+  const editedRuleDataRef = useRef<Partial<RuleFormData> | null>(null);
 
   const { data: allRules = [], isLoading: rulesLoading } =
     useOptimizationRules();
@@ -227,21 +228,29 @@ export default function OptimizationRulesPage() {
     [updateRule],
   );
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    editedRuleDataRef.current = editedRuleData;
+  }, [editedRuleData]);
+
   const handleSaveEdit = useCallback(async () => {
-    if (!editingRuleId || !editedRuleData) return;
+    // Use ref to get the latest data, avoiding stale state from batched updates
+    const dataToSave = editedRuleDataRef.current;
+    if (!editingRuleId || !dataToSave) return;
 
     try {
       const entityId =
-        editedRuleData.entityType === "organization"
+        dataToSave.entityType === "organization"
           ? (organization?.id ?? "")
-          : editedRuleData.entityId;
+          : dataToSave.entityId;
       await updateRule.mutateAsync({
-        ...editedRuleData,
+        ...dataToSave,
         id: editingRuleId,
         entityId,
       });
       setEditingRuleId(null);
       setEditedRuleData(null);
+      editedRuleDataRef.current = null;
       toast.success("Optimization rule updated");
     } catch (error) {
       console.error("Failed to update optimization rule:", error);
@@ -251,11 +260,12 @@ export default function OptimizationRulesPage() {
           : "Failed to update optimization rule";
       toast.error(message);
     }
-  }, [editingRuleId, editedRuleData, updateRule, organization?.id]);
+  }, [editingRuleId, updateRule, organization?.id]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingRuleId(null);
     setEditedRuleData(null);
+    editedRuleDataRef.current = null;
   }, []);
 
   return (
@@ -279,7 +289,6 @@ export default function OptimizationRulesPage() {
                 setNewRuleData({
                   entityType: "organization",
                   entityId: "",
-                  ruleType: "content_length",
                   conditions: [{ maxLength: 1000 }],
                   provider: "openai",
                   targetModel: "",
@@ -431,7 +440,6 @@ export default function OptimizationRulesPage() {
                               setEditedRuleData({
                                 entityType: rule.entityType,
                                 entityId: rule.entityId,
-                                ruleType: rule.ruleType,
                                 conditions: rule.conditions,
                                 provider: rule.provider,
                                 targetModel: rule.targetModel,

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import {
   AgentModel,
   ChatSettingsModel,
@@ -88,7 +89,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         systemPrompt = allParts.join("\n\n");
       }
 
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           agentId: conversation.agentId,
@@ -112,10 +113,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (secret?.secret?.anthropicApiKey) {
           anthropicApiKey = secret.secret.anthropicApiKey as string;
-          fastify.log.info("Using Anthropic API key from database");
+          logger.info("Using Anthropic API key from database");
         }
       } else {
-        fastify.log.info("Using Anthropic API key from environment variable");
+        logger.info("Using Anthropic API key from environment variable");
       }
 
       if (!anthropicApiKey) {
@@ -140,7 +141,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tools: mcpTools,
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
-          fastify.log.info(
+          logger.info(
             {
               conversationId,
               usage,
@@ -160,7 +161,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          fastify.log.error(
+          logger.error(
             { error, conversationId, agentId: conversation.agentId },
             "Chat stream error occurred",
           );
@@ -168,7 +169,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Return full error as JSON string for debugging
           try {
             const fullError = JSON.stringify(error, null, 2);
-            fastify.log.info(
+            logger.info(
               { fullError, willBeSentToFrontend: true },
               "Returning full error to frontend via stream",
             );
@@ -177,7 +178,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // If stringify fails (circular reference), fall back to error message
             const fallbackMessage =
               error instanceof Error ? error.message : String(error);
-            fastify.log.info(
+            logger.info(
               { fallbackMessage, stringifyError },
               "Failed to stringify error, using fallback",
             );
@@ -218,7 +219,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               await MessageModel.bulkCreate(messageData);
 
-              fastify.log.info(
+              logger.info(
                 `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
               );
             }
@@ -227,7 +228,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Log response headers for debugging
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           headers: Object.fromEntries(response.headers.entries()),
@@ -483,7 +484,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Skip if title is already set (unless regenerating)
       if (conversation.title && !regenerate) {
-        fastify.log.info(
+        logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
         );
@@ -521,7 +522,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Need at least user message to generate title
       if (!firstUserMessage) {
-        fastify.log.info(
+        logger.info(
           { conversationId: id },
           "Skipping title generation - no user message found",
         );
@@ -573,7 +574,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
 
         const generatedTitle = result.text.trim();
 
-        fastify.log.info(
+        logger.info(
           { conversationId: id, generatedTitle },
           "Generated conversation title",
         );
@@ -592,7 +593,7 @@ The title should capture the main topic or theme of the conversation. Respond wi
 
         return reply.send(updatedConversation);
       } catch (error) {
-        fastify.log.error(
+        logger.error(
           { conversationId: id, error },
           "Failed to generate conversation title",
         );

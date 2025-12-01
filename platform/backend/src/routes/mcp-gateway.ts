@@ -439,8 +439,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       try {
-        let server: Server;
-        let transport: StreamableHTTPServerTransport;
+        let server: Server | undefined;
+        let transport: StreamableHTTPServerTransport | undefined;
 
         // Check if we have an existing session
         if (sessionId && activeSessions.has(sessionId)) {
@@ -576,8 +576,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Session stored before handleRequest",
           );
-        } else {
-          // Non-initialize request without a valid session
+        } else if (!server || !transport) {
+          // Non-initialize request without a valid session (server/transport not assigned)
           fastify.log.error(
             { agentId, sessionId, method: request.body?.method },
             "Request received without valid session",

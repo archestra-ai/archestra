@@ -8,6 +8,7 @@ const {
   createChatConversation,
   updateChatConversation,
   deleteChatConversation,
+  generateChatConversationTitle,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -47,9 +48,15 @@ export function useCreateConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (agentId: string) => {
+    mutationFn: async ({
+      agentId,
+      promptId,
+    }: {
+      agentId: string;
+      promptId?: string;
+    }) => {
       const { data, error } = await createChatConversation({
-        body: { agentId },
+        body: { agentId, promptId },
       });
       if (error) throw new Error("Failed to create conversation");
       return data;
@@ -105,7 +112,34 @@ export function useDeleteConversation() {
   });
 }
 
-export function useChatAgentMcpTools(agentId: string | undefined) {
+export function useGenerateConversationTitle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      regenerate = false,
+    }: {
+      id: string;
+      regenerate?: boolean;
+    }) => {
+      const { data, error } = await generateChatConversationTitle({
+        path: { id },
+        body: { regenerate },
+      });
+      if (error) throw new Error("Failed to generate conversation title");
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
+    },
+  });
+}
+
+export function useChatProfileMcpTools(agentId: string | undefined) {
   return useQuery({
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
     queryFn: async () => {

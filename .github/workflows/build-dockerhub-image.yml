@@ -51,9 +51,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -81,9 +78,9 @@ jobs:
           platforms: ${{ matrix.os_and_arch }}
           build-args: |
             VERSION=${{ inputs.version }}
-            TURBO_TEAM=${{ env.TURBO_TEAM }}
-            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
           secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
             sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
 

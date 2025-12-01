@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ComponentProps, useState } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -10,10 +10,14 @@ export function TruncatedText({
   message,
   maxLength = 50,
   className,
+  tooltipContentProps,
+  tooltipProps,
 }: {
   message: string | undefined;
   maxLength?: number;
   className?: string;
+  tooltipProps?: ComponentProps<typeof Tooltip>;
+  tooltipContentProps?: ComponentProps<typeof TooltipContent>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -40,11 +44,18 @@ export function TruncatedText({
     >
       {!isTruncated && <span>{displayText}</span>}
       {isTruncated && (
-        <Tooltip open={isOpen} onOpenChange={handleOpenChange}>
+        <Tooltip
+          open={isOpen}
+          onOpenChange={handleOpenChange}
+          {...tooltipProps}
+        >
           <TooltipTrigger asChild>
             <span>{displayText}</span>
           </TooltipTrigger>
-          <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
+          <TooltipContent
+            {...tooltipContentProps}
+            className={cn("max-w-sm", tooltipContentProps?.className)}
+          >
             {message}
           </TooltipContent>
         </Tooltip>

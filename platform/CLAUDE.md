@@ -60,6 +60,11 @@ pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
 pnpm test:e2e                           # Run e2e tests with Playwright (chromium, webkit, firefox)
 
+# Dependency Management
+pnpm install                            # Install dependencies (scripts disabled for security)
+pnpm rebuild <package-name>             # Run install scripts for specific package when needed
+pnpm rebuild                            # Run install scripts for all packages (rarely needed)
+
 # Database
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
@@ -142,6 +147,11 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 # Logging
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
+# Secrets Manager Configuration
+ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
+HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+HASHICORP_VAULT_TOKEN=dev-root-token  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN
 ARCHESTRA_SENTRY_FRONTEND_DSN=  # Frontend error tracking DSN
@@ -188,6 +198,20 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 **Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name`, `agent_id` and dynamic profile labels as dimensions. Metrics are reinitialized on startup with current label keys from database.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
+
+## Dependency Security
+
+**Install Script Protection**: The platform disables automatic execution of install scripts via `ignore-scripts=true` in `.npmrc` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
+
+**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimum-release-age=10080` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
+
+**Working with Disabled Scripts**: Most packages work without install scripts. When needed, manually rebuild specific packages:
+
+```bash
+pnpm rebuild <package-name>  # Enable scripts for specific package
+```
+
+**Dependency Updates**: Before updating dependencies, review what scripts will run (`npm view <package> scripts`), check release dates, and wait 7 days for new releases of critical packages to allow community security review. Always review `pnpm-lock.yaml` changes in PRs.
 
 ## Coding Conventions
 
@@ -318,12 +342,12 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 - Profile-based conversations: Each conversation is tied to a specific profile
 - Profile selection via dropdown: Users select a profile when creating a new conversation
-- Profile visibility control: Profiles can be hidden from chat via `use_in_chat` field (default: true)
+- All profiles enabled for chat: All profiles are available in chat by default (the `use_in_chat` field is deprecated)
 - MCP tool integration: Chat automatically uses the profile's assigned MCP tools via MCP Gateway
 - LLM Proxy integration: Chat routes through LLM Proxy (`/v1/anthropic/${agentId}`) for security policies, dual LLM, and observability
 - Profile authentication: Connects to internal MCP Gateway using `Authorization: Bearer ${agentId}`
 - Database schema: Conversations table includes `agentId` foreign key to agents table
-- UI components: `AgentSelector` dropdown (filtered by `use_in_chat=true`), `ChatSidebarSection` for conversation navigation in main sidebar
+- UI components: `AgentSelector` dropdown, `ChatSidebarSection` for conversation navigation in main sidebar
 - Conversation navigation: Recent chats shown as sub-items under "Chat" menu in main sidebar (ChatSidebarSection component)
 - Hide tool calls toggle: Located in chat messages header, persisted in localStorage
 - Conversation management: Select, edit (inline rename), delete conversations directly in sidebar sub-navigation

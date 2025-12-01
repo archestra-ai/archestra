@@ -34,7 +34,7 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 
 ## 👩‍💻 ChatGPT-like chat with MCPs
 
-+ private prompt registry.
+🎁 with private company-wide prompt registry!
 
 <div align="center">
 <img src="docs/assets/chat.png" alt="ChatGPT-like chat" />
@@ -44,13 +44,17 @@ Simplify AI usage in your company, providing user-friendly MCP toolbox, observab
 
 Add MCPs to your private registry to share them with your team: self-hosted and remote, self-built and third-party.
 
+[Learn more about Private MCP Registry →](https://archestra.ai/docs/platform-private-registry)
+
 <div align="center">
 <img src="docs/assets/mcp-registry.png" alt="MCP Registry" />
 </div>
 
 ## ☁️ Kubernetes-native MCP orchestrator
 
-Runn MCP servers in kubernetes, managing their state, API keys, OAuth.
+Run MCP servers in kubernetes, managing their state, API keys, OAuth.
+
+[Learn more about MCP Orchestrator →](https://archestra.ai/docs/platform-orchestrator)
 
 <div align="center">
 <img src="docs/assets/orchestrator.png" alt="MCP Orchestrator" />
@@ -60,14 +64,18 @@ Runn MCP servers in kubernetes, managing their state, API keys, OAuth.
 
 Isolating dangerous tool responses from the main agent to prevent prompt injections.
 
+[Learn more about Dual LLM →](https://archestra.ai/docs/platform-dual-llm)
+
 <div align="center">
 <img src="docs/assets/dual-llm.png" alt="Dual-LLM sub-agent" />
 </div>
 
 
-## 🚫 Dynamic tool call blocking to prevent data exfiltration
+## 🚫 Non-probabalistic security to prevent data exfiltration
 
-Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration. 
+Models could consume prompt injections via MCP uncontrollably (read your inbox, read your GitHub issues, read your customer's inquiries) and follow them resulting in data exfiltration.
+
+[Learn more about Dynamic Tools →](https://archestra.ai/docs/platform-dynamic-tools) | [The Lethal Trifecta →](https://archestra.ai/docs/platform-lethal-trifecta) 
 
 Live demo of archestra security engine preventing data leak from the private GitHub repo to the public repo:
 [![Archestra Demo](https://img.youtube.com/vi/SkmluS-xzmM/0.jpg)](https://www.youtube.com/watch?v=SkmluS-xzmM&t=2155s)
@@ -80,7 +88,9 @@ Examples of hacks:
 
 ## 💰 Cost monitoring, limits and dynamic optimization
 
-Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimizer allows to reduce cost up to 96% by simply switching to cheaper models automatically for simpler tasks. 
+Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimizer allows to reduce cost up to 96% by simply switching to cheaper models automatically for simpler tasks.
+
+[Learn more about Costs & Limits →](https://archestra.ai/docs/platform-costs-and-limits) 
 
 <div align="center">
 <img src="docs/assets/cost.png" alt="Cost & Limits" />
@@ -90,24 +100,31 @@ Per-team, per-agent or per-org cost monitoring and limitations. Dynamic optimize
 
 Metrics, traces and logs allowing to come to a conclusion about per-org, per-agent and per-team token and tool usage, and performance.
 
+[Learn more about Observability →](https://archestra.ai/docs/platform-observability)
+
 <div align="center">
 <img src="docs/assets/observability.png" alt="Observability" />
 </div>
 
 ## 👍 Ready for production
 
-1. ✅ Lightning fast, 45ms at 95p: ([benchmarks](https://archestra.ai/docs/platform-performance-benchmarks))
+1. ✅ Lightning fast, 45ms at 95p: [Performance & Latency benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
 2. ✅ [Terraform provider](https://github.com/archestra-ai/terraform-provider-archestra)
-3. ✅ [Helm Chart](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
+3. ✅ [Helm Chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
 
 ## 🚀 Quickstart
 
+[Full Quickstart Guide →](https://archestra.ai/docs/platform-quickstart)
+
 1. Start with Docker
 
-   ```bash
-   docker pull archestra/platform:latest;
-   docker run -p 9000:9000 -p 3000:3000 archestra/platform
-   ```
+```
+docker pull archestra/platform:latest;
+docker run -p 9000:9000 -p 3000:3000 \
+  -v archestra-postgres-data:/var/lib/postgresql/data \
+  -v archestra-app-data:/app/data \
+  archestra/platform;
+```
 
 2. Open <http://localhost:3000>
 
@@ -115,12 +132,22 @@ Metrics, traces and logs allowing to come to a conclusion about per-org, per-age
    - Web UI at <http://localhost:3000>
    - Proxy at <http://localhost:9000>
 
-- [Development docs ->](https://www.archestra.ai/docs/platform-developer-quickstart)
-- [Production deployment docs ->](https://www.archestra.ai/docs/platform-deployment)
+**Examples & Integrations:**
+- [LangChain Integration →](https://archestra.ai/docs/platform-langchain-example)
+- [Mastra.ai Integration →](https://archestra.ai/docs/platform-mastra-example)
+- [N8N Integration →](https://archestra.ai/docs/platform-n8n-example)
+- [OpenWebUI Integration →](https://archestra.ai/docs/platform-openwebui-example)
+- [Pydantic AI Integration →](https://archestra.ai/docs/platform-pydantic-example)
+- [Vercel AI Integration →](https://archestra.ai/docs/platform-vercel-ai-example)
+
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! [Contribution guideline](https://www.archestra.ai/docs/contributing).
+We welcome contributions from the community! 
+
+- [Contribution Guidelines →](https://archestra.ai/docs/contributing)
+- [Developer Quickstart →](https://archestra.ai/docs/platform-developer-quickstart)
+- [Security & Bug Bounty →](https://archestra.ai/docs/security)
 
 Thank you for contributing and continuously making <b>Archestra</b> better, <b>you're awesome</b> 🫶
 

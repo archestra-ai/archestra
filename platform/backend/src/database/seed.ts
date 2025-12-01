@@ -2,10 +2,12 @@ import { ADMIN_ROLE_NAME, type PredefinedRoleName } from "@shared";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentTeamModel,
   DualLlmConfigModel,
   MemberModel,
   OrganizationModel,
   PromptModel,
+  TeamModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -132,12 +134,14 @@ async function seedN8NSystemPrompt(): Promise<void> {
     return;
   }
 
-  // Check if N8N system prompt already exists
-  const existingPrompts = await PromptModel.findByOrganizationId(
-    org.id,
-    "system",
+  // Get or create default agent first
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+  // Check if N8N system prompt already exists for the default agent
+  const existingPrompts = await PromptModel.findByOrganizationId(org.id);
+  const n8nPrompt = existingPrompts.find(
+    (p) => p.name === "n8n Expert" && p.agentId === defaultAgent.id,
   );
-  const n8nPrompt = existingPrompts.find((p) => p.name === "n8n Expert");
 
   if (!n8nPrompt) {
     const n8nSystemPromptContent = `You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
@@ -318,10 +322,10 @@ return $input.all().map(item => ({
 
 **Note:** LangChain nodes use the \`@n8n/n8n-nodes-langchain.\` prefix, core nodes use \`n8n-nodes-base.\``;
 
-    await PromptModel.create(org.id, user.id, {
+    await PromptModel.create(org.id, {
       name: "n8n Expert",
-      type: "system",
-      content: n8nSystemPromptContent,
+      agentId: defaultAgent.id,
+      systemPrompt: n8nSystemPromptContent,
     });
     logger.info("✓ Seeded n8n Expert system prompt");
   } else {
@@ -342,31 +346,33 @@ async function seedDefaultRegularPrompts(): Promise<void> {
     return;
   }
 
+  // Get or create default agent first
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
   const defaultPrompts = [
     {
       name: "Check n8n Connectivity",
-      content: "Check n8n connectivity by running healthcheck tool",
+      userPrompt: "Check n8n connectivity by running healthcheck tool",
     },
     {
       name: "Create Demo AI Agent Workflow",
-      content:
+      userPrompt:
         "Create an n8n workflow that includes the default AI Agent node. It should be a simple default node. Use node names instead of IDs in the connections. Use n8n mcp to create flow",
     },
   ];
 
-  // Check existing regular prompts
-  const existingPrompts = await PromptModel.findByOrganizationId(
-    org.id,
-    "regular",
-  );
+  // Check existing regular prompts for the default agent
+  const existingPrompts = await PromptModel.findByOrganizationId(org.id);
 
   for (const promptData of defaultPrompts) {
-    const exists = existingPrompts.find((p) => p.name === promptData.name);
+    const exists = existingPrompts.find(
+      (p) => p.name === promptData.name && p.agentId === defaultAgent.id,
+    );
     if (!exists) {
-      await PromptModel.create(org.id, user.id, {
+      await PromptModel.create(org.id, {
         name: promptData.name,
-        type: "regular",
-        content: promptData.content,
+        agentId: defaultAgent.id,
+        userPrompt: promptData.userPrompt,
       });
       logger.info(`✓ Seeded regular prompt: ${promptData.name}`);
     } else {
@@ -392,11 +398,56 @@ async function seedArchestraTools(): Promise<void> {
   }
 }
 
+/**
+ * Seeds default team and assigns it to the default profile and user
+ */
+async function seedDefaultTeam(): Promise<void> {
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  const user = await UserModel.createOrGetExistingDefaultAdminUser();
+  const defaultAgent = await AgentModel.getAgentOrCreateDefault();
+
+  if (!user) {
+    logger.error(
+      "Failed to get or create default admin user, skipping default team seeding",
+    );
+    return;
+  }
+
+  // Check if default team already exists
+  const existingTeams = await TeamModel.findByOrganization(org.id);
+  let defaultTeam = existingTeams.find((t) => t.name === "Default Team");
+
+  if (!defaultTeam) {
+    defaultTeam = await TeamModel.create({
+      name: "Default Team",
+      description: "Default team for all users",
+      organizationId: org.id,
+      createdBy: user.id,
+    });
+    logger.info("✓ Seeded default team");
+  } else {
+    logger.info("✓ Default team already exists, skipping creation");
+  }
+
+  // Add default user to team (if not already a member)
+  const isUserInTeam = await TeamModel.isUserInTeam(defaultTeam.id, user.id);
+  if (!isUserInTeam) {
+    await TeamModel.addMember(defaultTeam.id, user.id);
+    logger.info("✓ Added default user to default team");
+  }
+
+  // Assign team to default profile (idempotent)
+  await AgentTeamModel.assignTeamsToAgent(defaultAgent.id, [defaultTeam.id]);
+  logger.info("✓ Assigned default team to default profile");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
+  // Create default agent before seeding prompts (prompts need agentId)
+  await AgentModel.getAgentOrCreateDefault();
+  await seedDefaultTeam();
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
-  await AgentModel.getAgentOrCreateDefault();
   await seedArchestraTools();
 }

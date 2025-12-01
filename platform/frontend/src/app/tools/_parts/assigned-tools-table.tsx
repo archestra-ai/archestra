@@ -36,11 +36,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgents } from "@/lib/agent.query";
+import { useProfiles } from "@/lib/agent.query";
 import {
-  useAgentToolPatchMutation,
-  useAllAgentTools,
-  useBulkUpdateAgentTools,
+  useAllProfileTools,
+  useBulkUpdateProfileTools,
+  useProfileToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -51,22 +51,22 @@ import {
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
 
-type GetAllAgentToolsQueryParams = NonNullable<
+type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
 >;
-type AgentToolsSortByValues = NonNullable<
-  GetAllAgentToolsQueryParams["sortBy"]
+type ProfileToolsSortByValues = NonNullable<
+  GetAllProfileToolsQueryParams["sortBy"]
 > | null;
-type AgentToolsSortDirectionValues = NonNullable<
-  GetAllAgentToolsQueryParams["sortDirection"]
+type ProfileToolsSortDirectionValues = NonNullable<
+  GetAllProfileToolsQueryParams["sortDirection"]
 > | null;
 
-type AgentToolData =
+type ProfileToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
-type ToolResultTreatment = AgentToolData["toolResultTreatment"];
+type ToolResultTreatment = ProfileToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
-  onToolClick: (tool: AgentToolData) => void;
+  onToolClick: (tool: ProfileToolData) => void;
 }
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -84,13 +84,13 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 }
 
 export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
-  const agentToolPatchMutation = useAgentToolPatchMutation();
-  const bulkUpdateMutation = useBulkUpdateAgentTools();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
+  const bulkUpdateMutation = useBulkUpdateProfileTools();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-  const { data: agents } = useAgents();
+  const { data: agents } = useProfiles();
   const { data: mcpServers } = useMcpServers();
 
   const searchParams = useSearchParams();
@@ -104,17 +104,17 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const agentIdFromUrl = searchParams.get("agentId");
   const originFromUrl = searchParams.get("origin");
   const credentialFromUrl = searchParams.get("credential");
-  const sortByFromUrl = searchParams.get("sortBy") as AgentToolsSortByValues;
+  const sortByFromUrl = searchParams.get("sortBy") as ProfileToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
-  ) as AgentToolsSortDirectionValues;
+  ) as ProfileToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || "50");
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
-  const [agentFilter, setAgentFilter] = useState(agentIdFromUrl || "all");
+  const [agentFilter, setProfileFilter] = useState(agentIdFromUrl || "all");
   const [originFilter, setOriginFilter] = useState(originFromUrl || "all");
   const [credentialFilter, setCredentialFilter] = useState(
     credentialFromUrl || "all",
@@ -126,20 +126,20 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
+  const [selectedTools, setSelectedTools] = useState<ProfileToolData[]>([]);
   const [updatingRows, setUpdatingRows] = useState<
     Set<{ id: string; field: string }>
   >(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
-  const { data: agentToolsData, isLoading } = useAllAgentTools({
+  const { data: agentToolsData, isLoading } = useAllProfileTools({
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
     },
     sorting: {
-      sortBy: (sorting[0]?.id as AgentToolsSortByValues) || "createdAt",
+      sortBy: (sorting[0]?.id as ProfileToolsSortByValues) || "createdAt",
       sortDirection: sorting[0]?.desc ? "desc" : "asc",
     },
     filters: {
@@ -208,9 +208,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     [updateUrlParams],
   );
 
-  const handleAgentFilterChange = useCallback(
+  const handleProfileFilterChange = useCallback(
     (value: string) => {
-      setAgentFilter(value);
+      setProfileFilter(value);
       updateUrlParams({
         agentId: value === "all" ? null : value,
         page: "1", // Reset to first page
@@ -272,13 +272,13 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
         .filter((tool) => {
           if (field === "allowUsageWhenUntrustedDataIsPresent") {
             const hasCustomInvocationPolicy =
-              invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
+              invocationPolicies?.byProfileToolId[tool.id]?.length > 0;
             return !hasCustomInvocationPolicy;
           }
 
           if (field === "toolResultTreatment") {
             const hasCustomResultPolicy =
-              resultPolicies?.byAgentToolId[tool.id]?.length > 0;
+              resultPolicies?.byProfileToolId[tool.id]?.length > 0;
             return !hasCustomResultPolicy;
           }
 
@@ -324,7 +324,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   );
 
   const handleSingleRowUpdate = useCallback(
-    async (id: string, field: string, updates: Partial<AgentToolData>) => {
+    async (id: string, field: string, updates: Partial<ProfileToolData>) => {
       setUpdatingRows((prev) => new Set(prev).add({ id, field }));
       try {
         await agentToolPatchMutation.mutateAsync({ id, ...updates });
@@ -346,7 +346,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
     [agentToolPatchMutation],
   );
 
-  const columns: ColumnDef<AgentToolData>[] = useMemo(
+  const columns: ColumnDef<ProfileToolData>[] = useMemo(
     () => [
       {
         id: "select",
@@ -402,19 +402,19 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Agent
+            Profile
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
         cell: ({ row }) => {
           const agentName = row.original.agent?.name || "-";
 
-          const TruncatedAgentName = (
+          const TruncatedProfileName = (
             <TruncatedText message={agentName} maxLength={30} />
           );
 
           if (!isMcpTool(row.original.tool)) {
-            return TruncatedAgentName;
+            return TruncatedProfileName;
           }
 
           const handleUnassign = async (e: React.MouseEvent) => {
@@ -434,12 +434,12 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
           return (
             <div className="flex items-center gap-2">
-              {TruncatedAgentName}
+              {TruncatedProfileName}
               <PermissionButton
                 permissions={{ tool: ["delete"] }}
                 variant="ghost"
                 size="icon-sm"
-                tooltip="Unassign from agent"
+                tooltip="Unassign from profile"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleUnassign(e);
@@ -582,7 +582,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
         ),
         cell: ({ row }) => {
           const hasCustomPolicy =
-            invocationPolicies?.byAgentToolId[row.original.id]?.length > 0;
+            invocationPolicies?.byProfileToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -630,7 +630,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
         header: "Results are",
         cell: ({ row }) => {
           const hasCustomPolicy =
-            resultPolicies?.byAgentToolId[row.original.id]?.length > 0;
+            resultPolicies?.byProfileToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -744,7 +744,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
 
         <SearchableSelect
           value={agentFilter}
-          onValueChange={handleAgentFilterChange}
+          onValueChange={handleProfileFilterChange}
           placeholder="Filter by Profile"
           items={[
             { value: "all", label: "All Profiles" },
@@ -927,7 +927,7 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
               variant="outline"
               onClick={() => {
                 handleSearchChange("");
-                handleAgentFilterChange("all");
+                handleProfileFilterChange("all");
                 handleOriginFilterChange("all");
                 handleCredentialFilterChange("all");
               }}

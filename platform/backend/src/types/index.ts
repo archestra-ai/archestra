@@ -1,6 +1,5 @@
 export * from "./account";
 export * from "./agent";
-export * from "./agent-prompt";
 export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
@@ -26,6 +25,7 @@ export * from "./prompt";
 export * from "./role";
 export * from "./secret";
 export * from "./session";
+export * from "./sso-provider";
 export * from "./statistics";
 export * from "./team";
 export * from "./token-price";

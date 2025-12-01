@@ -12,6 +12,10 @@ on:
         required: true
       TURBOREPO_REMOTE_CACHING_TEAM:
         required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
 
 jobs:
   platform-linting-and-tests:
@@ -52,9 +56,6 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     permissions:
       contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -106,9 +107,9 @@ jobs:
           context: ./platform
           file: ./platform/Dockerfile
           push: false
-          build-args: |
-            TURBO_TEAM=${{ env.TURBO_TEAM }}
-            TURBO_TOKEN=${{ env.TURBO_TOKEN }}
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           load: true
           tags: archestra/platform:ci-test
 
@@ -116,11 +117,12 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: kind load docker-image archestra/platform:ci-test --name archestra-ci-cluster
 
-      - name: Deploy Archestra Platform (and WireMock) with Helm
+      - name: Deploy Archestra Platform (and E2E test dependencies) with Helm
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          # No need to wait for wiremock as we wait in the next step when installing the platform
-          helm install wiremock ./platform/helm/wiremock
+          # Deploy e2e test dependencies (WireMock, Keycloak)
+          # No need to wait as we wait in the next step when installing the platform
+          helm install e2e-tests ./platform/helm/e2e-tests
 
           helm install archestra-platform ./platform/helm/archestra \
             --values .github/values-ci.yaml \
@@ -221,20 +223,15 @@ jobs:
           set -e  # Re-enable exit on error
 
           # Check both unstaged and staged changes
+          # If db:generate produced new migration files, it means the PR is missing migrations
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "New migration files were generated - committing changes"
-            echo "db-migration-check=true" >> $GITHUB_OUTPUT
+            echo "::error::Database schema has changed but migrations are missing. Please run 'pnpm db:generate' locally and commit the resulting migration files."
+            git diff --name-only
+            git diff --cached --name-only
+            exit 1
           else
-            echo "No new migration files were generated"
-            echo "db-migration-check=false" >> $GITHUB_OUTPUT
+            echo "✅ No new migration files were generated - schema is in sync with migrations"
           fi
-
-      - name: Fail if PR from a fork has uncommitted migration changes
-        if: steps.db-migration-check.outputs.db-migration-check == 'true' && github.event.pull_request.head.repo.fork == true
-        working-directory: ./platform
-        run: |
-          echo "::error::Database migrations need to be generated. Please run 'pnpm db:generate' locally and commit the changes."
-          exit 1
 
       - name: Get Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -293,13 +290,74 @@ jobs:
           kubectl logs -l app.kubernetes.io/name=postgresql --tail=200
 
           echo "=== WireMock Logs ==="
-          kubectl logs -l app=wiremock --tail=200
+          kubectl logs -l app=e2e-tests-wiremock --tail=200
+
+          echo "=== Keycloak Logs ==="
+          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200
 
           echo "=== Describe Archestra Platform Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=archestra-platform
 
           echo "=== Describe PostgreSQL Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=postgresql
+
+  platform-docker-image-scanning:
+    name: Platform Docker Image Scanning
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      - name: Setup Blacksmith Builder
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+      - name: Build Docker image
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ./platform
+          file: ./platform/Dockerfile
+          push: false
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          load: true
+          tags: archestra/platform:ci-test
+
+      # Run docker scout to check for vulnerabilities and recommendations
+      # https://github.com/docker/scout-action
+      #
+      # Branch ruleset has been configured to block PRs with critical or high vulnerabilities.
+      # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
+      - name: Docker Scout
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+        with:
+          command: cves,recommendations,compare
+          image: archestra/platform:ci-test
+          to: docker.io/archestra/platform:latest
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          ignore-unchanged: true
+          only-severities: critical,high
+          write-comment: true
+          github-token: ${{ secrets.GITHUB_TOKEN }} # to be able to write the comment
+          sarif-file: sarif.output.json
+
+      # Upload SARIF result to GitHub Code Scanning
+      # https://github.com/docker/scout-action?tab=readme-ov-file#analyze-vulnerabilities-and-upload-report-to-github-code-scanning
+      - name: Upload SARIF result
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          sarif_file: sarif.output.json
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

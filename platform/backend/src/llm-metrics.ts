@@ -71,7 +71,16 @@ export function initializeMetrics(labelKeys: string[]): void {
   }
 
   // Create new metrics with updated label names
-  const baseLabelNames = ["provider", "agent_id", "agent_name"];
+  // NOTE: profile_id and profile_name are the preferred labels going forward.
+  // agent_id and agent_name are deprecated and will be removed in a future release.
+  // Both are emitted during the transition period to allow dashboards/alerts to migrate.
+  const baseLabelNames = [
+    "provider",
+    "agent_id",
+    "agent_name",
+    "profile_id",
+    "profile_name",
+  ];
 
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
@@ -105,9 +114,13 @@ function buildMetricLabels(
   agent: Agent,
   additionalLabels: Record<string, string>,
 ): Record<string, string> {
+  // NOTE: profile_id and profile_name are the preferred labels going forward.
+  // agent_id and agent_name are deprecated and will be removed in a future release.
   const labels: Record<string, string> = {
     agent_id: agent.id,
     agent_name: agent.name,
+    profile_id: agent.id,
+    profile_name: agent.name,
     ...additionalLabels,
   };
 

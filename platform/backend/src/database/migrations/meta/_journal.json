@@ -435,6 +435,83 @@
       "when": 1764015866435,
       "tag": "0061_toon_compressor",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1764080634529,
+      "tag": "0062_burly_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1764094252623,
+      "tag": "0063_glorious_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1764098743958,
+      "tag": "0064_interactions_add_toon_cost_savings",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1764151221623,
+      "tag": "0065_keen_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1764162932955,
+      "tag": "0066_tan_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1764162950519,
+      "tag": "0067_many_bloodstorm",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1764164315384,
+      "tag": "0068_sour_iron_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1764253614214,
+      "tag": "0069_magical_king_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1764347798818,
+      "tag": "0070_vault secrets manager",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1764588841370,
+      "tag": "0071_mixed_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1764595314504,
+      "tag": "0072_add secret name",
+      "breakpoints": true
     }
   ]
 }

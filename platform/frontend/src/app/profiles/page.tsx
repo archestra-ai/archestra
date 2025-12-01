@@ -1,7 +1,7 @@
-import AgentsPage from "./page.client";
+import ProfilesPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-export default async function AgentsPageServer() {
-  return <AgentsPage />;
+export default async function ProfilesPageServer() {
+  return <ProfilesPage />;
 }

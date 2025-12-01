@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -16,6 +16,9 @@ export const team = pgTable("team", {
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  convertToolResultsToToon: boolean("convert_tool_results_to_toon")
+    .notNull()
+    .default(false),
 });
 
 export const teamMember = pgTable("team_member", {

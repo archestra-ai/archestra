@@ -27,12 +27,6 @@ export async function getOptimizedModel<
   hasTools: boolean,
 ): Promise<string | null> {
   const agentId = agent.id;
-  if (!agent.optimizeCost) {
-    logger.info({ agentId }, "Cost optimization: disabled for profile");
-    return null;
-  }
-
-  logger.info({ agentId }, "Cost optimization: enabled for profile");
 
   // Get organizationId the same way limits do: from agent's teams OR fallback
   let organizationId: string | null = null;
@@ -48,7 +42,7 @@ export async function getOptimizedModel<
       organizationId = teams[0].organizationId;
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: resolved organizationId from team",
+        "[CostOptimization] resolved organizationId from team",
       );
     }
   } else {
@@ -60,10 +54,11 @@ export async function getOptimizedModel<
       .limit(1);
 
     if (existingOrgRules.length > 0) {
+      // TODO: this fallback doesn't work if there are multiple organizations.
       organizationId = existingOrgRules[0].entityId;
       logger.info(
         { agentId, organizationId },
-        "Cost optimization: agent has no teams - using fallback organization",
+        "[CostOptimization] agent has no teams - using fallback organization",
       );
     }
   }
@@ -71,7 +66,7 @@ export async function getOptimizedModel<
   if (!organizationId) {
     logger.warn(
       { agentId },
-      "Cost optimization: could not resolve organizationId",
+      "[CostOptimization] could not resolve organizationId",
     );
     return null;
   }
@@ -86,7 +81,7 @@ export async function getOptimizedModel<
   if (rules.length === 0) {
     logger.info(
       { agentId, organizationId, provider },
-      "Cost optimization: no optimization rules configured",
+      "[CostOptimization] no optimization rules configured",
     );
     return null;
   }
@@ -97,11 +92,11 @@ export async function getOptimizedModel<
 
   logger.info(
     { tokenCount, hasTools },
-    "Cost optimization: LLM request evaluated",
+    "[CostOptimization] LLM request evaluated",
   );
 
   // Evaluate rules and return optimized model (or null if no rule matches)
-  const optimizedModel = OptimizationRuleModel.evaluateRules(rules, {
+  const optimizedModel = OptimizationRuleModel.matchByRules(rules, {
     tokenCount,
     hasTools,
   });
@@ -109,10 +104,10 @@ export async function getOptimizedModel<
   if (optimizedModel) {
     logger.info(
       { agentId, optimizedModel },
-      "Cost optimization: optimization rule matched",
+      "[CostOptimization] optimization rule matched",
     );
   } else {
-    logger.info({ agentId }, "Cost optimization: no optimization rule matched");
+    logger.info({ agentId }, "[CostOptimization] no optimization rule matched");
   }
 
   return optimizedModel;

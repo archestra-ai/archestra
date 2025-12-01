@@ -1,0 +1,61 @@
+{{- if .Values.wiremock.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-wiremock-mappings
+data:
+{{- range $path, $_ := .Files.Glob "mappings/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-wiremock
+spec:
+  type: {{ .Values.wiremock.service.type }}
+  ports:
+    - port: {{ .Values.wiremock.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+      {{- if and (eq .Values.wiremock.service.type "NodePort") .Values.wiremock.service.nodePort }}
+      nodePort: {{ .Values.wiremock.service.nodePort }}
+      {{- end }}
+  selector:
+    app: {{ .Release.Name }}-wiremock
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-wiremock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-wiremock
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-wiremock
+    spec:
+      containers:
+        - name: wiremock
+          image: "{{ .Values.wiremock.image.repository }}:{{ .Values.wiremock.image.tag }}"
+          imagePullPolicy: {{ .Values.wiremock.image.pullPolicy }}
+          args:
+{{- range .Values.wiremock.args }}
+            - {{ . }}
+{{- end }}
+          ports:
+            - containerPort: {{ .Values.wiremock.service.port }}
+              name: http
+          volumeMounts:
+            - name: mappings
+              mountPath: /home/wiremock/mappings
+      volumes:
+        - name: mappings
+          configMap:
+            name: {{ .Release.Name }}-wiremock-mappings
+{{- end }}

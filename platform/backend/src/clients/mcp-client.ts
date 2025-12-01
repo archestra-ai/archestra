@@ -8,9 +8,9 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   McpToolCallModel,
-  SecretModel,
   ToolModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -257,7 +257,7 @@ class McpClient {
         tool.credentialSourceMcpServerId,
       );
       if (credentialSourceServer?.secretId) {
-        const secret = await SecretModel.findById(
+        const secret = await secretManager.getSecret(
           credentialSourceServer.secretId,
         );
         if (secret?.secret) {

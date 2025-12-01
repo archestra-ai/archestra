@@ -2,7 +2,8 @@ import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
 import logger from "@/logging";
-import { InternalMcpCatalogModel, McpServerModel, SecretModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 import type {
@@ -207,38 +208,13 @@ export class McpServerRuntimeManager {
         environmentValues,
       );
 
-      // Check for and clean up any stale pod with the same name
-      const potentialPodName = k8sPod.k8sPodName;
-      try {
-        const existingPod = await this.k8sApi.readNamespacedPod({
-          name: potentialPodName,
-          namespace: this.namespace,
-        });
-
-        if (existingPod) {
-          logger.warn(
-            `Found stale pod ${potentialPodName}, deleting before creating new one`,
-          );
-          // Reuse the stopPod method which handles deletion and termination wait
-          await k8sPod.stopPod();
-        }
-      } catch (error: unknown) {
-        // 404 error means pod doesn't exist, which is fine
-        if (!(error instanceof Error && error.message.includes("404"))) {
-          logger.error(
-            { err: error },
-            `Error checking for stale pod ${potentialPodName}:`,
-          );
-        }
-      }
-
       // Register the pod BEFORE starting it
       this.mcpServerIdToPodMap.set(id, k8sPod);
       logger.info(`Registered MCP server pod ${id} in map`);
 
       // If MCP server has a secretId, fetch secret from database and create K8s Secret
       if (mcpServer.secretId) {
-        const secret = await SecretModel.getMcpServerSecret(mcpServer.secretId);
+        const secret = await secretManager.getSecret(mcpServer.secretId);
 
         if (secret?.secret && typeof secret.secret === "object") {
           const secretData: Record<string, string> = {};

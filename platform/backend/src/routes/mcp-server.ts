@@ -9,9 +9,9 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   McpServerTeamModel,
-  SecretModel,
   ToolModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -141,11 +141,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // If accessToken is provided (PAT flow), create a secret for it
       if (accessToken && !secretId) {
-        const secret = await SecretModel.create({
-          secret: {
-            access_token: accessToken,
-          },
-        });
+        const secret = await secretManager.createSecret(
+          { access_token: accessToken },
+          `${serverData.name}-token`,
+        );
         secretId = secret.id;
         createdSecretId = secret.id;
       }
@@ -161,7 +160,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!isValid) {
           // Clean up the secret we just created if validation fails
           if (createdSecretId) {
-            await SecretModel.delete(createdSecretId);
+            await secretManager.deleteSecret(createdSecretId);
           }
 
           throw new ApiError(
@@ -242,8 +241,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Create secret in database if there are any secret env vars
           if (Object.keys(secretEnvVars).length > 0) {
-            const secret =
-              await SecretModel.createMcpServerSecret(secretEnvVars);
+            const secret = await secretManager.createSecret(
+              secretEnvVars,
+              `mcp-server-${serverData.name}-env`,
+            );
             secretId = secret.id;
             createdSecretId = secret.id;
             logger.info(
@@ -451,7 +452,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
-          await SecretModel.delete(createdSecretId);
+          await secretManager.deleteSecret(createdSecretId);
         }
 
         throw new ApiError(
@@ -504,7 +505,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // (don't delete OAuth tokens for remote servers)
       if (mcpServer.secretId && mcpServer.serverType === "local") {
         try {
-          await SecretModel.deleteMcpServerSecret(mcpServer.secretId);
+          await secretManager.deleteSecret(mcpServer.secretId);
           logger.info(
             { secretId: mcpServer.secretId, mcpServerId },
             "Deleted database secret for local MCP server",

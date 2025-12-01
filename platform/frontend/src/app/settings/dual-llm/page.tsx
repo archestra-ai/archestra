@@ -22,10 +22,10 @@ function DualLLMContent({
   const { data: config } = useDualLlmConfig({ initialData });
   const updateConfig = useUpdateDualLlmConfig();
 
-  const [mainAgentPrompt, setMainAgentPrompt] = useState(
+  const [mainProfilePrompt, setMainProfilePrompt] = useState(
     config?.mainAgentPrompt || "",
   );
-  const [quarantinedAgentPrompt, setQuarantinedAgentPrompt] = useState(
+  const [quarantinedProfilePrompt, setQuarantinedProfilePrompt] = useState(
     config?.quarantinedAgentPrompt || "",
   );
   const [summaryPrompt, setSummaryPrompt] = useState(
@@ -177,8 +177,8 @@ function DualLLMContent({
       id: config.id,
       data: {
         enabled: true, // Always keep enabled
-        mainAgentPrompt,
-        quarantinedAgentPrompt,
+        mainProfilePrompt,
+        quarantinedProfilePrompt,
         summaryPrompt,
         maxRounds,
       },
@@ -186,7 +186,7 @@ function DualLLMContent({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div>
       <div className="space-y-6">
         <div className="bg-card rounded-lg p-8 shadow-sm">
           <h2 className="text-lg font-semibold mb-2">How it works</h2>
@@ -420,7 +420,7 @@ function DualLLMContent({
           <div className="flex items-start justify-between mb-3">
             <div>
               <Label htmlFor="main-prompt" className="text-sm font-semibold">
-                Main Agent Prompt
+                Main Profile Prompt
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
                 All instructions for the main agent in a single user message.
@@ -433,7 +433,7 @@ function DualLLMContent({
                 for user request.
               </p>
             </div>
-            {mainAgentPrompt !== config?.mainAgentPrompt && (
+            {mainProfilePrompt !== config?.mainAgentPrompt && (
               <PermissionButton
                 permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
@@ -447,8 +447,8 @@ function DualLLMContent({
           <Textarea
             id="main-prompt"
             rows={20}
-            value={mainAgentPrompt}
-            onChange={(e) => setMainAgentPrompt(e.target.value)}
+            value={mainProfilePrompt}
+            onChange={(e) => setMainProfilePrompt(e.target.value)}
             className="font-mono text-xs"
           />
         </div>
@@ -486,7 +486,7 @@ function DualLLMContent({
                 </CodeText>
               </p>
             </div>
-            {quarantinedAgentPrompt !== config?.quarantinedAgentPrompt && (
+            {quarantinedProfilePrompt !== config?.quarantinedAgentPrompt && (
               <PermissionButton
                 permissions={{ dualLlmConfig: ["update"] }}
                 size="sm"
@@ -500,8 +500,8 @@ function DualLLMContent({
           <Textarea
             id="quarantine-prompt"
             rows={10}
-            value={quarantinedAgentPrompt}
-            onChange={(e) => setQuarantinedAgentPrompt(e.target.value)}
+            value={quarantinedProfilePrompt}
+            onChange={(e) => setQuarantinedProfilePrompt(e.target.value)}
             className="font-mono text-xs"
           />
         </div>

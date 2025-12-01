@@ -13,7 +13,7 @@ import { ErrorBoundary } from "../_parts/error-boundary";
 import { AssignedToolsTable } from "./_parts/assigned-tools-table";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
-type AgentToolData =
+type ProfileToolData =
   archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
 
 export function ToolsClient() {
@@ -40,7 +40,7 @@ export function ToolsClient() {
 function ToolsList() {
   const queryClient = useQueryClient();
   const [selectedToolForDialog, setSelectedToolForDialog] =
-    useState<AgentToolData | null>(null);
+    useState<ProfileToolData | null>(null);
 
   // Sync selected tool with cache updates
   useEffect(() => {
@@ -69,7 +69,7 @@ function ToolsList() {
   }, [queryClient, selectedToolForDialog]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div>
       <AssignedToolsTable onToolClick={setSelectedToolForDialog} />
 
       <ToolDetailsDialog

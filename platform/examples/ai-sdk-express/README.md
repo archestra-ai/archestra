@@ -10,7 +10,10 @@ It demonstrates how to use AI SDK in an [Express.js](https://expressjs.com/) ser
 
     ```sh
     docker pull archestra/platform:latest;
-    docker run -p 9000:9000 -p 3000:3000 archestra/platform
+    docker run -p 9000:9000 -p 3000:3000 \
+      -v archestra-postgres-data:/var/lib/postgresql/data \
+      -v archestra-app-data:/app/data \
+      archestra/platform;
     ```
 
 2. Create .env file with the following content:

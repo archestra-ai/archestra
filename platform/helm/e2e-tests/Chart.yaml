@@ -1,0 +1,6 @@
+apiVersion: v2
+name: e2e-tests
+description: External dependencies for Archestra e2e testing (WireMock, Keycloak)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

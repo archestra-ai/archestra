@@ -1,5 +1,7 @@
 import { encode as toonEncode } from "@toon-format/toon";
 import logger from "@/logging";
+import { TokenPriceModel } from "@/models";
+import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMessage,
   CommonToolCall,
@@ -7,6 +9,8 @@ import type {
   OpenAi,
   ToolResultUpdates,
 } from "@/types";
+import type { CompressionStats } from "../toon-conversion";
+import { unwrapToolContent } from "../unwrap-tool-content";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -223,69 +227,93 @@ export function toolResultsToMessages(
 
 /**
  * Convert tool results in messages to TOON format
- * Returns both the converted messages and compression statistics
+ * Returns both the converted messages and compression stats (tokens and cost savings)
  */
-export function convertToolResultsToToon(messages: OpenAiMessages): {
+export async function convertToolResultsToToon(
+  messages: OpenAiMessages,
+  model: string,
+): Promise<{
   messages: OpenAiMessages;
-  compressionStats: {
-    totalBeforeLength: number;
-    totalAfterLength: number;
-    toolResults: number;
-  };
-} {
-  let totalBeforeLength = 0;
-  let totalAfterLength = 0;
-  let toolResults = 0;
+  stats: CompressionStats;
+}> {
+  const tokenizer = getTokenizer("openai");
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
 
   const result = messages.map((message) => {
     // Only process tool messages (tool results)
     if (message.role === "tool") {
+      logger.info(
+        {
+          toolCallId: message.tool_call_id,
+          contentType: typeof message.content,
+          provider: "openai",
+        },
+        "convertToolResultsToToon: tool message found",
+      );
+
       // Only convert string content
       if (typeof message.content === "string") {
         try {
+          // Unwrap any extra text block wrapping from clients
+          const unwrapped = unwrapToolContent(message.content);
           // Parse JSON to validate it's actually JSON
-          const parsed = JSON.parse(message.content);
-          const beforeJson = message.content;
-          const afterToon = toonEncode(parsed);
+          const parsed = JSON.parse(unwrapped);
+          const noncompressed = unwrapped;
+          const compressed = toonEncode(parsed);
 
-          // Track compression stats
-          totalBeforeLength += beforeJson.length;
-          totalAfterLength += afterToon.length;
-          toolResults++;
+          // Count tokens for before and after
+          const tokensBefore = tokenizer.countTokens([
+            { role: "user", content: noncompressed },
+          ]);
+          const tokensAfter = tokenizer.countTokens([
+            { role: "user", content: compressed },
+          ]);
+
+          // Track compression stats in tokens
+          totalTokensBefore += tokensBefore;
+          totalTokensAfter += tokensAfter;
+          toolResultCount++;
 
           logger.info(
             {
               toolCallId: message.tool_call_id,
-              beforeLength: beforeJson.length,
-              afterLength: afterToon.length,
-              compressionRatio: (
-                (1 - afterToon.length / beforeJson.length) *
-                100
-              ).toFixed(2),
+              beforeLength: noncompressed.length,
+              afterLength: compressed.length,
+              tokensBefore,
+              tokensAfter,
+              toonPreview: compressed.substring(0, 150),
+              provider: "openai",
             },
-            "TOON conversion completed",
+            "convertToolResultsToToon: compressed",
           );
           logger.debug(
             {
               toolCallId: message.tool_call_id,
-              before: beforeJson,
-              after: afterToon,
+              before: noncompressed,
+              after: compressed,
+              provider: "openai",
+              supposedToBeJson: parsed,
             },
-            "TOON conversion before/after",
+            "convertToolResultsToToon: before/after",
           );
 
           return {
             ...message,
-            content: afterToon,
+            content: compressed,
           };
         } catch {
           // If it's not valid JSON, skip conversion
-          logger.debug(
+          logger.info(
             {
               toolCallId: message.tool_call_id,
-              reason: "not_valid_json",
+              contentPreview:
+                typeof message.content === "string"
+                  ? message.content.substring(0, 100)
+                  : "non-string",
             },
-            "Skipping TOON conversion",
+            "Skipping TOON conversion - content is not JSON",
           );
           return message;
         }
@@ -295,12 +323,31 @@ export function convertToolResultsToToon(messages: OpenAiMessages): {
     return message;
   });
 
+  logger.info(
+    { messageCount: messages.length, toolResultCount },
+    "convertToolResultsToToon completed",
+  );
+
+  // Calculate cost savings
+  let toonCostSavings: number | null = null;
+  if (toolResultCount > 0) {
+    const tokensSaved = totalTokensBefore - totalTokensAfter;
+    if (tokensSaved > 0) {
+      const tokenPrice = await TokenPriceModel.findByModel(model);
+      if (tokenPrice) {
+        const inputPricePerToken =
+          Number(tokenPrice.pricePerMillionOutput) / 1000000;
+        toonCostSavings = tokensSaved * inputPricePerToken;
+      }
+    }
+  }
+
   return {
     messages: result,
-    compressionStats: {
-      totalBeforeLength,
-      totalAfterLength,
-      toolResults,
+    stats: {
+      toonTokensBefore: toolResultCount > 0 ? totalTokensBefore : null,
+      toonTokensAfter: toolResultCount > 0 ? totalTokensAfter : null,
+      toonCostSavings,
     },
   };
 }

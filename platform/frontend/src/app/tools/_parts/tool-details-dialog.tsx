@@ -59,7 +59,7 @@ export function ToolDetailsDialog({
             <div className="flex gap-6 text-sm ml-6">
               <div>
                 <div className="text-xs font-medium text-muted-foreground">
-                  Agent
+                  Profile
                 </div>
                 <div className="text-sm text-foreground mt-0.5">
                   {agentTool.agent.name || "-"}

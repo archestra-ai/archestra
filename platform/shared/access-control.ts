@@ -27,6 +27,7 @@ export const ResourceSchema = z.enum([
   "dualLlmConfig",
   "dualLlmResult",
   "organization",
+  "ssoProvider",
   "member",
   "invitation",
   "internalMcpCatalog",
@@ -65,6 +66,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   dualLlmResult: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
   organization: ["read", "update", "delete"],
+  ssoProvider: ["create", "read", "update", "delete"],
   member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
@@ -111,7 +113,7 @@ export const memberRole = ac.newRole({
   limit: ["read"],
   tokenPrice: ["read"],
   chatSettings: ["read"],
-  prompt: ["create", "read", "update", "delete"],
+  prompt: ["read"],
 });
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -278,6 +280,7 @@ export const RouteId = {
   CreateChatConversation: "createChatConversation",
   UpdateChatConversation: "updateChatConversation",
   DeleteChatConversation: "deleteChatConversation",
+  GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
 
   // Chat Settings Routes
@@ -289,6 +292,7 @@ export const RouteId = {
   CreatePrompt: "createPrompt",
   GetPrompt: "getPrompt",
   GetPromptVersions: "getPromptVersions",
+  RollbackPrompt: "rollbackPrompt",
   UpdatePrompt: "updatePrompt",
   DeletePrompt: "deletePrompt",
 
@@ -309,6 +313,14 @@ export const RouteId = {
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
 
+  // SSO Provider Routes
+  GetPublicSsoProviders: "getPublicSsoProviders",
+  GetSsoProviders: "getSsoProviders",
+  GetSsoProvider: "getSsoProvider",
+  CreateSsoProvider: "createSsoProvider",
+  UpdateSsoProvider: "updateSsoProvider",
+  DeleteSsoProvider: "deleteSsoProvider",
+
   // User Routes
   GetUserPermissions: "getUserPermissions",
 
@@ -324,6 +336,7 @@ export const RouteId = {
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostSavingsStatistics: "getCostSavingsStatistics",
 
   // Optimization Rule Routes
   GetOptimizationRules: "getOptimizationRules",
@@ -612,6 +625,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteChatConversation]: {
     conversation: ["delete"],
   },
+  [RouteId.GenerateChatConversationTitle]: {
+    conversation: ["update"],
+  },
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
   },
@@ -632,6 +648,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetPromptVersions]: {
     prompt: ["read"],
+  },
+  [RouteId.RollbackPrompt]: {
+    prompt: ["update"],
   },
   [RouteId.UpdatePrompt]: {
     prompt: ["update"],
@@ -672,6 +691,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateOrganization]: {
     organization: ["update"],
   },
+
+  /**
+   * Get public SSO providers route (minimal info for login page)
+   * Available to unauthenticated users - only returns providerId, no secrets
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get all SSO providers with full config (admin only)
+   * Returns sensitive data including client secrets
+   */
+  [RouteId.GetSsoProviders]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.GetSsoProvider]: {
+    ssoProvider: ["read"],
+  },
+  [RouteId.CreateSsoProvider]: {
+    ssoProvider: ["create"],
+  },
+  [RouteId.UpdateSsoProvider]: {
+    ssoProvider: ["update"],
+  },
+  [RouteId.DeleteSsoProvider]: {
+    ssoProvider: ["delete"],
+  },
+
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
   [RouteId.GetTokenPrices]: {
@@ -699,6 +745,9 @@ export const requiredEndpointPermissionsMap: Partial<
     interaction: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
+    interaction: ["read"],
+  },
+  [RouteId.GetCostSavingsStatistics]: {
     interaction: ["read"],
   },
   [RouteId.GetOptimizationRules]: {
@@ -778,6 +827,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/settings/chat": {
     chatSettings: ["read"],
+  },
+  "/settings/sso-providers": {
+    ssoProvider: ["read"],
   },
 
   // Cost & Limits

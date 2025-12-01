@@ -1,6 +1,6 @@
 import { withSentryConfig } from "@sentry/nextjs";
-import type { NextConfig } from "next";
 import { MCP_CATALOG_API_BASE_URL } from "@shared";
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -11,8 +11,9 @@ const nextConfig: NextConfig = {
   logging: {
     fetches: {
       fullUrl: true,
+      hmrRefreshes: true,
     },
-    incomingRequests: true
+    incomingRequests: true,
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
@@ -21,24 +22,25 @@ const nextConfig: NextConfig = {
     keepAlive: true,
   },
   async rewrites() {
-    const backendUrl = process.env.ARCHESTRA_API_BASE_URL || 'http://localhost:9000';
+    const backendUrl =
+      process.env.ARCHESTRA_API_BASE_URL || "http://localhost:9000";
     return [
       {
-        source: '/api/archestra-catalog/:path*',
+        source: "/api/archestra-catalog/:path*",
         destination: `${MCP_CATALOG_API_BASE_URL}/:path*`,
       },
       {
-        source: '/api/:path*',
+        source: "/api/:path*",
         destination: `${backendUrl}/api/:path*`,
       },
       {
-        source: '/v1/:path*',
+        source: "/v1/:path*",
         destination: `${backendUrl}/v1/:path*`,
       },
       {
-        source: '/health',
+        source: "/health",
         destination: `${backendUrl}/health`,
-      }
+      },
     ];
   },
 };

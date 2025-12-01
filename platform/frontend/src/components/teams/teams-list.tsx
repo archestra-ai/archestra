@@ -120,7 +120,7 @@ export function TeamsList() {
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
-                Manage teams to organize access to agents and MCP servers
+                Manage teams to organize access to profiles and MCP servers
               </CardDescription>
             </div>
             <PermissionButton
@@ -196,7 +196,7 @@ export function TeamsList() {
           <DialogHeader>
             <DialogTitle>Create New Team</DialogTitle>
             <DialogDescription>
-              Create a team to organize access to agents and MCP servers
+              Create a team to organize access to profiles and MCP servers
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

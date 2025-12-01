@@ -4,7 +4,7 @@ A basic [Mastra](https://mastra.ai) project featuring a vulnerable GitHub agent.
 
 1. Install dependencies
 ```bash
-npm install
+pnpm install @ai-sdk/openai @mastra/core @mastra/libsql @mastra/loggers @mastra/memory zod
 ```
 
 2. Change to project directory and set up environment

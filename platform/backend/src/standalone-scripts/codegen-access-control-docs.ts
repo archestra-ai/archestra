@@ -2,9 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 import {
   type Action,
   ADMIN_ROLE_NAME,
@@ -16,6 +13,9 @@ import {
 } from "@shared";
 import logger from "@/logging";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 function getResourceDescription(resource: Resource): string {
   const descriptions: Record<Resource, string> = {
     profile: "Profiles that can use tools and interact with users",
@@ -25,6 +25,7 @@ function getResourceDescription(resource: Resource): string {
     dualLlmConfig: "Dual LLM security configuration settings",
     dualLlmResult: "Results from dual LLM security validation",
     organization: "Organization settings",
+    ssoProvider: "SSO providers for authentication",
     member: "Organization members and their roles",
     invitation: "Member invitations and onboarding",
     internalMcpCatalog: "Internal MCP server catalog management",
@@ -122,6 +123,12 @@ order: 4
 lastUpdated: ${new Date().toISOString().split("T")[0]}
 ---
 
+<!--
+Check ../docs_writer_prompt.md before changing this file.
+
+This document is human-built, shouldn't be updated with AI. Don't change anything here.
+-->
+
 Archestra uses a role-based access control (RBAC) system to manage user permissions within organizations. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.
 
 Permissions in Archestra are defined using a \`resource:action\` format, where:
@@ -156,9 +163,11 @@ ${generateCustomRolesPermissionsTable()}
 ## Best Practices
 
 ### Principle of Least Privilege
+
 Grant users only the minimum permissions necessary for their role. Start with the member role and add specific permissions as needed.
 
 ### Team-Based Organization
+
 Combine roles with team-based access control for fine-grained resource access:
 
 1. **Create teams** for different groups (e.g., "Data Scientists", "Developers")
@@ -168,22 +177,27 @@ Combine roles with team-based access control for fine-grained resource access:
 #### Team Access Control Rules
 
 **For Profiles:**
+
 - Team members can only see profiles assigned to teams they belong to
 - Exception: Users with \`profile:admin\` permission can see all profiles
 - Exception: Profiles with no team assignment are visible to all organization members
 
 **For MCP Servers:**
+
 - Team members can only access MCP servers assigned to teams they belong to
 - Exception: Users with \`mcpServer:admin\` permission can access all MCP servers
 - Exception: MCP servers with no team assignment are accessible to all organization members
 
 **Associated Artifacts:**
+
 Team-based access extends to related resources like interaction logs, policies, and tool assignments. Members can only view these artifacts for profiles and MCP servers they have access to.
 
 ### Regular Review
+
 Periodically review custom roles and member assignments to ensure they align with current organizational needs and security requirements.
 
 ### Role Naming
+
 Use clear, descriptive names for custom roles that indicate their purpose (e.g., "Profile-Manager", "Read-Only-Analyst", "Tool-Developer").
 `;
 }
@@ -194,7 +208,7 @@ async function main() {
   const markdownContent = generateMarkdownContent();
   const docsFilePath = path.join(
     __dirname,
-    "../../../../../website/app/app/docs/content/platform-access-control.md",
+    "../../../../docs/pages/platform-access-control.md",
   );
 
   // Ensure directory exists

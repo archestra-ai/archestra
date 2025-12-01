@@ -1,7 +1,6 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentLabelsTable } from "./agent-label";
-export { default as agentPromptsTable } from "./agent-prompt";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
@@ -29,6 +28,7 @@ export { organizationRole as organizationRolesTable } from "./organization-role"
 export { default as promptsTable } from "./prompt";
 export { default as secretsTable } from "./secret";
 export { default as sessionsTable } from "./session";
+export { default as ssoProvidersTable } from "./sso-provider";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as tokenPricesTable } from "./token-price";
 export { default as toolsTable } from "./tool";

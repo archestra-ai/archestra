@@ -11,23 +11,17 @@ import { SupportedProvidersSchema } from "./llm-providers";
  * Content length optimization rule conditions
  * maxLength is measured in tokens (not characters)
  */
-export const OptimizationRuleContentLengthConditionsSchema = z.object({
+export const ContentLengthConditionsSchema = z.object({
   maxLength: z.number().int().positive(),
 });
 
-export const OptimizationRuleToolPresenceConditionsSchema = z.object({
+export const ToolPresenceConditionsSchema = z.object({
   hasTools: z.boolean(),
 });
 
-export const OptimizationRuleConditionsSchema = z.union([
-  OptimizationRuleContentLengthConditionsSchema,
-  OptimizationRuleToolPresenceConditionsSchema,
-]);
-
-export const OptimizationRuleTypeSchema = z.enum([
-  "content_length",
-  "tool_presence",
-]);
+export const OptimizationRuleConditionsSchema = z
+  .union([ContentLengthConditionsSchema, ToolPresenceConditionsSchema])
+  .array();
 
 export const OptimizationRuleEntityTypeSchema = z.enum([
   "organization",
@@ -37,7 +31,6 @@ export const OptimizationRuleEntityTypeSchema = z.enum([
 
 const extendedFields = {
   entityType: OptimizationRuleEntityTypeSchema,
-  ruleType: OptimizationRuleTypeSchema,
   conditions: OptimizationRuleConditionsSchema,
   provider: SupportedProvidersSchema,
 };
@@ -56,16 +49,15 @@ export const UpdateOptimizationRuleSchema = createUpdateSchema(
   extendedFields,
 );
 
-export type OptimizationRuleContentLengthConditions = z.infer<
-  typeof OptimizationRuleContentLengthConditionsSchema
+export type ContentLengthConditions = z.infer<
+  typeof ContentLengthConditionsSchema
 >;
-export type OptimizationRuleToolPresenceConditions = z.infer<
-  typeof OptimizationRuleToolPresenceConditionsSchema
+export type ToolPresenceConditions = z.infer<
+  typeof ToolPresenceConditionsSchema
 >;
 export type OptimizationRuleConditions = z.infer<
   typeof OptimizationRuleConditionsSchema
 >;
-export type OptimizationRuleType = z.infer<typeof OptimizationRuleTypeSchema>;
 export type OptimizationRuleEntityType = z.infer<
   typeof OptimizationRuleEntityTypeSchema
 >;

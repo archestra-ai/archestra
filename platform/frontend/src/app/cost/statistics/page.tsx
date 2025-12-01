@@ -61,21 +61,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  useAgentStatistics,
+  useCostSavingsStatistics,
   useModelStatistics,
+  useProfileStatistics,
   useTeamStatistics,
 } from "@/lib/statistics.query";
 
 // Type aliases for better readability
 type TeamStatisticsData =
   archestraApiTypes.GetTeamStatisticsResponses["200"][number];
-type AgentStatisticsData =
+type ProfileStatisticsData =
   archestraApiTypes.GetAgentStatisticsResponses["200"][number];
 type ModelStatisticsData =
   archestraApiTypes.GetModelStatisticsResponses["200"][number];
 type StatisticsData =
   | TeamStatisticsData
-  | AgentStatisticsData
+  | ProfileStatisticsData
   | ModelStatisticsData;
 
 // Type guards
@@ -83,7 +84,9 @@ function isTeamStatistics(data: StatisticsData): data is TeamStatisticsData {
   return "teamName" in data;
 }
 
-function isAgentStatistics(data: StatisticsData): data is AgentStatisticsData {
+function isProfileStatistics(
+  data: StatisticsData,
+): data is ProfileStatisticsData {
   return "agentName" in data;
 }
 
@@ -151,7 +154,7 @@ export default function StatisticsPage() {
 
   // Track hidden items for each category
   const [hiddenTeams, setHiddenTeams] = useState<Set<string>>(new Set());
-  const [hiddenAgents, setHiddenAgents] = useState<Set<string>>(new Set());
+  const [hiddenProfiles, setHiddenProfiles] = useState<Set<string>>(new Set());
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(new Set());
 
   // Statistics data fetching hooks
@@ -159,10 +162,13 @@ export default function StatisticsPage() {
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe: currentTimeframe,
   });
-  const { data: agentStatistics = [] } = useAgentStatistics({
+  const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe: currentTimeframe,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
+    timeframe: currentTimeframe,
+  });
+  const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe: currentTimeframe,
   });
 
@@ -272,7 +278,7 @@ export default function StatisticsPage() {
       statistics: T[],
       labelKey:
         | keyof Pick<TeamStatisticsData, "teamName">
-        | keyof Pick<AgentStatisticsData, "agentName">
+        | keyof Pick<ProfileStatisticsData, "agentName">
         | keyof Pick<ModelStatisticsData, "model">,
       colors: string[],
       hiddenIds: Set<string>,
@@ -297,7 +303,7 @@ export default function StatisticsPage() {
         let label: string;
         if (labelKey === "teamName" && isTeamStatistics(stat)) {
           label = stat.teamName;
-        } else if (labelKey === "agentName" && isAgentStatistics(stat)) {
+        } else if (labelKey === "agentName" && isProfileStatistics(stat)) {
           label = stat.agentName;
         } else if (labelKey === "model" && isModelStatistics(stat)) {
           label = stat.model;
@@ -347,8 +353,8 @@ export default function StatisticsPage() {
   const visibleTeamStatistics = teamStatistics.filter(
     (team) => !hiddenTeams.has(team.teamId),
   );
-  const visibleAgentStatistics = agentStatistics.filter(
-    (agent) => !hiddenAgents.has(agent.agentId),
+  const visibleProfileStatistics = agentStatistics.filter(
+    (agent) => !hiddenProfiles.has(agent.agentId),
   );
   const visibleModelStatistics = modelStatistics.filter(
     (model) => !hiddenModels.has(model.model),
@@ -381,11 +387,11 @@ export default function StatisticsPage() {
 
   const agentChartData =
     agentStatistics.length > 0
-      ? convertStatsToChartData<AgentStatisticsData>(
+      ? convertStatsToChartData<ProfileStatisticsData>(
           agentStatistics,
           "agentName",
           colors,
-          hiddenAgents,
+          hiddenProfiles,
           (stat) => stat.agentId,
         )
       : {
@@ -429,7 +435,7 @@ export default function StatisticsPage() {
 
   // Chart keys to force remount when data changes
   const teamChartKey = `team-${timeframe}-${teamStatistics.length}-${hiddenTeams.size}`;
-  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenAgents.size}`;
+  const agentChartKey = `agent-${timeframe}-${agentStatistics.length}-${hiddenProfiles.size}`;
   const modelChartKey = `model-${timeframe}-${modelStatistics.length}-${hiddenModels.size}`;
 
   // Chart options with default legend behavior (strikethrough on click)
@@ -461,7 +467,7 @@ export default function StatisticsPage() {
           borderWidth: 1,
           cornerRadius: 12,
           padding: 16,
-          displayColors: false,
+          displayColors: true,
           titleFont: {
             size: 14,
             weight: "bold" as const,
@@ -474,7 +480,7 @@ export default function StatisticsPage() {
             "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
           callbacks: {
             label: (context: TooltipItem<"line">) =>
-              `Cost: $${context.parsed.y?.toFixed(2) || "0"}`,
+              `${context.dataset.label}: $${context.parsed.y?.toFixed(2) || "0"}`,
             title: (context: TooltipItem<"line">[]) =>
               `Time: ${context[0].label}`,
           },
@@ -551,7 +557,7 @@ export default function StatisticsPage() {
         "agentVisibilitySync",
         agentStatistics,
         (agent) => agent.agentId,
-        setHiddenAgents,
+        setHiddenProfiles,
       ),
     [agentStatistics],
   );
@@ -566,6 +572,142 @@ export default function StatisticsPage() {
       ),
     [modelStatistics],
   );
+
+  // Cost savings chart data (baseline vs actual)
+  const costSavingsChartData = useMemo(() => {
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
+      return {
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No data available",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
+    }
+
+    const labels = costSavingsData.timeSeries.map((point) => {
+      const date = new Date(point.timestamp);
+      if (timeframe === "1h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "24h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "7d" || timeframe === "30d") {
+        return format(date, "MMM d");
+      } else {
+        return format(date, "MMM d");
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Non-Optimized Cost",
+          data: costSavingsData.timeSeries.map((point) => point.baselineCost),
+          borderColor: "#ef4444", // red
+          backgroundColor: "rgba(239, 68, 68, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#ef4444",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+        {
+          label: "Actual Cost",
+          data: costSavingsData.timeSeries.map((point) => point.actualCost),
+          borderColor: "#10b981", // green
+          backgroundColor: "rgba(16, 185, 129, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#10b981",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+      ],
+    };
+  }, [costSavingsData, timeframe]);
+
+  // Savings breakdown chart data (optimization rules vs TOON)
+  const savingsBreakdownChartData = useMemo(() => {
+    if (!costSavingsData || costSavingsData.timeSeries.length === 0) {
+      return {
+        labels: ["No Data"],
+        datasets: [
+          {
+            label: "No data available",
+            data: [0],
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.1)",
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+          },
+        ],
+      };
+    }
+
+    const labels = costSavingsData.timeSeries.map((point) => {
+      const date = new Date(point.timestamp);
+      if (timeframe === "1h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "24h") {
+        return format(date, "HH:mm");
+      } else if (timeframe === "7d" || timeframe === "30d") {
+        return format(date, "MMM d");
+      } else {
+        return format(date, "MMM d");
+      }
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Optimization Rules Savings",
+          data: costSavingsData.timeSeries.map(
+            (point) => point.optimizationSavings,
+          ),
+          borderColor: "#3b82f6", // blue
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#3b82f6",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+        {
+          label: "Tool Compression Savings",
+          data: costSavingsData.timeSeries.map((point) => point.toonSavings),
+          borderColor: "#8b5cf6", // purple
+          backgroundColor: "rgba(139, 92, 246, 0.1)",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: "#8b5cf6",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 8,
+        },
+      ],
+    };
+  }, [costSavingsData, timeframe]);
 
   return (
     <div className="space-y-6">
@@ -706,6 +848,38 @@ export default function StatisticsPage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cost Savings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <Line
+                key={`cost-savings-${timeframe}`}
+                data={costSavingsChartData}
+                options={chartOptions}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Savings Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <Line
+                key={`savings-breakdown-${timeframe}`}
+                data={savingsBreakdownChartData}
+                options={chartOptions}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Teams</CardTitle>
@@ -801,7 +975,7 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleAgentStatistics.length === 0 ? (
+                  {visibleProfileStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -811,20 +985,22 @@ export default function StatisticsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    visibleAgentStatistics.map((agent) => (
-                      <TableRow key={agent.agentId}>
+                    visibleProfileStatistics.map((profile) => (
+                      <TableRow key={profile.agentId}>
                         <TableCell className="font-medium">
-                          {agent.agentName}
+                          {profile.agentName}
                         </TableCell>
-                        <TableCell>{agent.teamName}</TableCell>
-                        <TableCell>{agent.requests.toLocaleString()}</TableCell>
+                        <TableCell>{profile.teamName}</TableCell>
+                        <TableCell>
+                          {profile.requests.toLocaleString()}
+                        </TableCell>
                         <TableCell>
                           {(
-                            agent.inputTokens + agent.outputTokens
+                            profile.inputTokens + profile.outputTokens
                           ).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          ${agent.cost.toFixed(2)}
+                          ${profile.cost.toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))

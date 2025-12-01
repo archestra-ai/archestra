@@ -6,12 +6,18 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { get } from "lodash-es";
 import { z } from "zod";
 import config from "@/config";
+import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableFetch,
   reportBlockedTools,
   reportLLMTokens,
 } from "@/llm-metrics";
-import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
+import {
+  AgentModel,
+  InteractionModel,
+  LimitValidationService,
+  TokenPriceModel,
+} from "@/models";
 import {
   type Agent,
   Anthropic,
@@ -134,6 +140,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
+
       if (!agent) {
         return reply.status(404).send({
           error: {
@@ -222,28 +229,35 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const baselineModel = body.model;
       let model = baselineModel;
-      // Optimize model selection for cost if enabled using dynamic rules
-      if (resolvedAgent.optimizeCost) {
-        const hasTools = mergedTools.length > 0;
-        const optimizedModel = await utils.costOptimization.getOptimizedModel(
-          resolvedAgent,
-          body.messages,
-          "anthropic",
-          hasTools,
-        );
+      // Optimize model selection for cost using dynamic rules
+      const hasTools = mergedTools.length > 0;
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        body.messages,
+        "anthropic",
+        hasTools,
+      );
 
-        if (optimizedModel) {
-          model = optimizedModel;
-          fastify.log.info(
-            { resolvedAgentId, optimizedModel },
-            "Optimized model selected",
-          );
-        } else {
-          fastify.log.info(
-            { resolvedAgentId, baselineModel },
-            "No matching optimized model found, proceeding with baseline model",
-          );
-        }
+      if (optimizedModel) {
+        model = optimizedModel;
+        fastify.log.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        fastify.log.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
+      }
+
+      // Ensure TokenPrice records exist for both baseline and optimized models
+      const baselinePricing = getDefaultPricing(baselineModel);
+      await TokenPriceModel.createIfNotExists(baselineModel, baselinePricing);
+
+      if (model !== baselineModel) {
+        const optimizedPricing = getDefaultPricing(model);
+        await TokenPriceModel.createIfNotExists(model, optimizedPricing);
       }
 
       // Convert to common format and evaluate trusted data policies
@@ -323,43 +337,43 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
-      // Convert tool results to TOON format if enabled on agent
-      let toonTokensBefore: number | null = null;
-      let toonTokensAfter: number | null = null;
-
-      if (resolvedAgent.convertToolResultsToToon) {
-        const { messages: convertedMessages, compressionStats } =
-          utils.adapters.anthropic.convertToolResultsToToon(filteredMessages);
-        filteredMessages = convertedMessages;
-
-        // Calculate token counts if tool results were actually compressed
-        if (compressionStats.toolResults > 0) {
-          const tokenizer = utils.tokenizers.getTokenizer("anthropic");
-          // Estimate tokens from character count (character length serves as proxy)
-          toonTokensBefore = tokenizer.countTokens([
-            {
-              role: "user",
-              content: "x".repeat(compressionStats.totalBeforeLength),
-            },
-          ]);
-          toonTokensAfter = tokenizer.countTokens([
-            {
-              role: "user",
-              content: "x".repeat(compressionStats.totalAfterLength),
-            },
-          ]);
-        }
-      }
-
       fastify.log.info(
         {
           resolvedAgentId,
           originalMessagesCount: body.messages.length,
           filteredMessagesCount: filteredMessages.length,
           toolResultUpdatesCount: toolResultUpdates.length,
-          toonConversionEnabled: resolvedAgent.convertToolResultsToToon,
         },
         "Messages filtered after trusted data evaluation",
+      );
+
+      // Determine if TOON compression should be applied
+      let toonTokensBefore: number | null = null;
+      let toonTokensAfter: number | null = null;
+      let toonCostSavings: number | null = null;
+      const shouldApplyToonCompression =
+        await utils.toonConversion.shouldApplyToonCompression(resolvedAgentId);
+
+      if (shouldApplyToonCompression) {
+        const { messages: convertedMessages, stats } =
+          await utils.adapters.anthropic.convertToolResultsToToon(
+            filteredMessages,
+            model,
+          );
+        filteredMessages = convertedMessages;
+        toonTokensBefore = stats.toonTokensBefore;
+        toonTokensAfter = stats.toonTokensAfter;
+        toonCostSavings = stats.toonCostSavings;
+      }
+
+      fastify.log.info(
+        {
+          shouldApplyToonCompression,
+          toonTokensBefore,
+          toonTokensAfter,
+          toonCostSavings,
+        },
+        "anthropic proxy routes: handle messages: tool results compression completed",
       );
 
       if (stream) {
@@ -391,326 +405,384 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Track indices of tool use blocks to know which content_block_stop events to skip
         const toolUseBlockIndices = new Set<number>();
 
-        for await (const event of messageStream) {
-          events.push(event);
+        // Variables for interaction recording (accessible in finally block)
+        let responseContent:
+          | AnthropicProvider.Messages.ContentBlock[]
+          | undefined;
+        let messageStartEvent:
+          | AnthropicProvider.Messages.MessageStartEvent
+          | undefined;
 
-          // Stream message_start event immediately (contains message metadata)
-          if (event.type === "message_start") {
-            fastify.log.info(
-              { eventType: event.type },
-              "Streaming message_start event",
-            );
-            reply.raw.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-          }
+        try {
+          for await (const event of messageStream) {
+            events.push(event);
 
-          // Stream content_block_start for text blocks immediately
-          if (
-            event.type === "content_block_start" &&
-            event.content_block.type === "text"
-          ) {
-            fastify.log.info(
-              { eventType: event.type, index: event.index },
-              "Streaming content_block_start (text)",
-            );
-            reply.raw.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-          }
-
-          // Stream text content immediately
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            reply.raw.write(
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-            );
-            accumulatedText += event.delta.text;
-          }
-
-          // Stream content_block_stop for text blocks immediately (skip tool blocks)
-          if (event.type === "content_block_stop") {
-            if (!toolUseBlockIndices.has(event.index)) {
+            // Stream message_start event immediately (contains message metadata)
+            if (event.type === "message_start") {
               fastify.log.info(
-                { eventType: event.type, index: event.index },
-                "Streaming content_block_stop (text)",
+                { eventType: event.type },
+                "Streaming message_start event",
               );
               reply.raw.write(
                 `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
               );
-            } else {
+            }
+
+            // Stream content_block_start for text blocks immediately
+            if (
+              event.type === "content_block_start" &&
+              event.content_block.type === "text"
+            ) {
               fastify.log.info(
                 { eventType: event.type, index: event.index },
-                "Skipping content_block_stop (tool_use)",
+                "Streaming content_block_start (text)",
+              );
+              reply.raw.write(
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
               );
             }
-          }
 
-          // Accumulate tool calls (don't stream yet - need to evaluate policies first)
-          if (
-            event.type === "content_block_start" &&
-            event.content_block.type === "tool_use"
-          ) {
-            toolUseBlockIndices.add(event.index);
-            accumulatedToolCalls.push(event.content_block);
-            fastify.log.info(
-              { eventType: event.type, index: event.index },
-              "Accumulating content_block_start (tool_use)",
-            );
-          } else if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "input_json_delta"
-          ) {
-            // Accumulate tool input JSON
-            const lastToolCall =
-              accumulatedToolCalls[accumulatedToolCalls.length - 1];
-            if (lastToolCall) {
-              lastToolCall.input =
-                (lastToolCall.input || "") + event.delta.partial_json;
+            // Stream text content immediately
+            if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "text_delta"
+            ) {
+              reply.raw.write(
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              );
+              accumulatedText += event.delta.text;
             }
-          }
-        }
 
-        fastify.log.info("Stream loop completed, processing final events");
-
-        // Parse accumulated tool inputs
-        for (const toolCall of accumulatedToolCalls) {
-          try {
-            toolCall.input = JSON.parse(toolCall.input as string);
-          } catch {
-            // If parsing fails, leave as string
-          }
-        }
-
-        // Evaluate tool invocation policies dynamically
-        let toolInvocationRefusal: [string, string] | null = null;
-        if (accumulatedToolCalls.length > 0) {
-          fastify.log.info(
-            {
-              toolCallCount: accumulatedToolCalls.length,
-              toolNames: accumulatedToolCalls.map((tc) => tc.name),
-            },
-            "Evaluating tool invocation policies",
-          );
-          toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-            accumulatedToolCalls.map((toolCall) => ({
-              toolCallName: toolCall.name,
-              toolCallArgs: JSON.stringify(toolCall.input),
-            })),
-            resolvedAgentId,
-            contextIsTrusted,
-          );
-          fastify.log.info(
-            { refused: !!toolInvocationRefusal },
-            "Tool invocation policy result",
-          );
-        }
-
-        // Build the final response for persistence
-        let responseContent: AnthropicProvider.Messages.ContentBlock[];
-
-        if (toolInvocationRefusal) {
-          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
-          responseContent = [
-            {
-              type: "text",
-              text: contentMessage,
-              citations: null,
-            },
-          ];
-
-          // Stream the refusal - must send content_block_start before delta
-          const startEvent = {
-            type: "content_block_start",
-            index: 0,
-            content_block: {
-              type: "text",
-              text: "",
-            },
-          };
-          reply.raw.write(
-            `event: content_block_start\ndata: ${JSON.stringify(startEvent)}\n\n`,
-          );
-
-          const refusalEvent = {
-            type: "content_block_delta",
-            index: 0,
-            delta: {
-              type: "text_delta",
-              text: contentMessage,
-            },
-          };
-          reply.raw.write(
-            `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
-          );
-
-          const stopEvent = {
-            type: "content_block_stop",
-            index: 0,
-          };
-          reply.raw.write(
-            `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
-          );
-          reportBlockedTools(
-            "anthropic",
-            resolvedAgent,
-            accumulatedToolCalls.length,
-          );
-        } else {
-          // Tool calls are allowed - stream them now
-          if (accumulatedToolCalls.length > 0) {
-            fastify.log.info(
-              { toolCallCount: accumulatedToolCalls.length },
-              "Tool calls allowed, streaming them now",
-            );
-            responseContent = [
-              ...(accumulatedText
-                ? [
-                    {
-                      type: "text" as const,
-                      text: accumulatedText,
-                      citations: null,
-                    },
-                  ]
-                : []),
-              ...accumulatedToolCalls,
-            ];
-
-            let streamedToolEvents = 0;
-            for (const event of events) {
-              if (
-                event.type === "content_block_start" &&
-                event.content_block.type === "tool_use"
-              ) {
+            // Stream content_block_stop for text blocks immediately (skip tool blocks)
+            if (event.type === "content_block_stop") {
+              if (!toolUseBlockIndices.has(event.index)) {
+                fastify.log.info(
+                  { eventType: event.type, index: event.index },
+                  "Streaming content_block_stop (text)",
+                );
                 reply.raw.write(
                   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
                 );
-                streamedToolEvents++;
-              } else if (
-                event.type === "content_block_delta" &&
-                event.delta.type === "input_json_delta"
-              ) {
-                reply.raw.write(
-                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+              } else {
+                fastify.log.info(
+                  { eventType: event.type, index: event.index },
+                  "Skipping content_block_stop (tool_use)",
                 );
-                streamedToolEvents++;
-              } else if (
-                event.type === "content_block_stop" &&
-                toolUseBlockIndices.has(event.index)
-              ) {
-                // Stream content_block_stop for tool_use blocks
-                reply.raw.write(
-                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-                );
-                streamedToolEvents++;
               }
             }
+
+            // Accumulate tool calls (don't stream yet - need to evaluate policies first)
+            if (
+              event.type === "content_block_start" &&
+              event.content_block.type === "tool_use"
+            ) {
+              toolUseBlockIndices.add(event.index);
+              accumulatedToolCalls.push(event.content_block);
+              fastify.log.info(
+                { eventType: event.type, index: event.index },
+                "Accumulating content_block_start (tool_use)",
+              );
+            } else if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "input_json_delta"
+            ) {
+              // Accumulate tool input JSON
+              const lastToolCall =
+                accumulatedToolCalls[accumulatedToolCalls.length - 1];
+              if (lastToolCall) {
+                lastToolCall.input =
+                  (lastToolCall.input || "") + event.delta.partial_json;
+              }
+            }
+          }
+
+          fastify.log.info("Stream loop completed, processing final events");
+
+          // Parse accumulated tool inputs
+          for (const toolCall of accumulatedToolCalls) {
+            try {
+              toolCall.input = JSON.parse(toolCall.input as string);
+            } catch {
+              // If parsing fails, leave as string
+            }
+          }
+
+          // Evaluate tool invocation policies dynamically
+          let toolInvocationRefusal: [string, string] | null = null;
+          if (accumulatedToolCalls.length > 0) {
             fastify.log.info(
-              { streamedToolEvents },
-              "Streamed tool call events",
+              {
+                toolCallCount: accumulatedToolCalls.length,
+                toolNames: accumulatedToolCalls.map((tc) => tc.name),
+              },
+              "Evaluating tool invocation policies",
             );
-          } else {
+            toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+              accumulatedToolCalls.map((toolCall) => ({
+                toolCallName: toolCall.name,
+                toolCallArgs: JSON.stringify(toolCall.input),
+              })),
+              resolvedAgentId,
+              contextIsTrusted,
+            );
+            fastify.log.info(
+              { refused: !!toolInvocationRefusal },
+              "Tool invocation policy result",
+            );
+          }
+
+          // Build the final response for persistence
+
+          if (toolInvocationRefusal) {
+            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
             responseContent = [
               {
                 type: "text",
-                text: accumulatedText,
+                text: contentMessage,
                 citations: null,
               },
             ];
+
+            // Stream the refusal - must send content_block_start before delta
+            const startEvent = {
+              type: "content_block_start",
+              index: 0,
+              content_block: {
+                type: "text",
+                text: "",
+              },
+            };
+            reply.raw.write(
+              `event: content_block_start\ndata: ${JSON.stringify(startEvent)}\n\n`,
+            );
+
+            const refusalEvent = {
+              type: "content_block_delta",
+              index: 0,
+              delta: {
+                type: "text_delta",
+                text: contentMessage,
+              },
+            };
+            reply.raw.write(
+              `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
+            );
+
+            const stopEvent = {
+              type: "content_block_stop",
+              index: 0,
+            };
+            reply.raw.write(
+              `event: content_block_stop\ndata: ${JSON.stringify(stopEvent)}\n\n`,
+            );
+            reportBlockedTools(
+              "anthropic",
+              resolvedAgent,
+              accumulatedToolCalls.length,
+            );
+          } else {
+            // Tool calls are allowed - stream them now
+            if (accumulatedToolCalls.length > 0) {
+              fastify.log.info(
+                { toolCallCount: accumulatedToolCalls.length },
+                "Tool calls allowed, streaming them now",
+              );
+              responseContent = [
+                ...(accumulatedText
+                  ? [
+                      {
+                        type: "text" as const,
+                        text: accumulatedText,
+                        citations: null,
+                      },
+                    ]
+                  : []),
+                ...accumulatedToolCalls,
+              ];
+
+              let streamedToolEvents = 0;
+              for (const event of events) {
+                if (
+                  event.type === "content_block_start" &&
+                  event.content_block.type === "tool_use"
+                ) {
+                  reply.raw.write(
+                    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  );
+                  streamedToolEvents++;
+                } else if (
+                  event.type === "content_block_delta" &&
+                  event.delta.type === "input_json_delta"
+                ) {
+                  reply.raw.write(
+                    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  );
+                  streamedToolEvents++;
+                } else if (
+                  event.type === "content_block_stop" &&
+                  toolUseBlockIndices.has(event.index)
+                ) {
+                  // Stream content_block_stop for tool_use blocks
+                  reply.raw.write(
+                    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  );
+                  streamedToolEvents++;
+                }
+              }
+              fastify.log.info(
+                { streamedToolEvents },
+                "Streamed tool call events",
+              );
+            } else {
+              responseContent = [
+                {
+                  type: "text",
+                  text: accumulatedText,
+                  citations: null,
+                },
+              ];
+            }
+          }
+
+          // Get the message ID and other metadata from the stream
+          messageStartEvent = events.find((e) => e.type === "message_start") as
+            | AnthropicProvider.Messages.MessageStartEvent
+            | undefined;
+
+          // Send message_delta with stop_reason and usage
+          const messageDeltaEvent = {
+            type: "message_delta",
+            delta: {
+              stop_reason: "end_turn",
+              stop_sequence: null,
+            },
+            usage: {
+              output_tokens:
+                messageStartEvent?.message.usage?.output_tokens || 0,
+            },
+          };
+          fastify.log.info("Streaming message_delta event");
+          reply.raw.write(
+            `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
+          );
+          1;
+
+          // Send message_stop event
+          const messageStopEvent = {
+            type: "message_stop",
+          };
+          fastify.log.info("Streaming message_stop event");
+          reply.raw.write(
+            `event: message_stop\ndata: ${JSON.stringify(messageStopEvent)}\n\n`,
+          );
+
+          fastify.log.info("Stream complete, ending response");
+          reply.raw.end();
+          return reply;
+        } finally {
+          // Always record interaction (whether stream completed or was aborted)
+          if (messageStartEvent?.message.usage) {
+            // If responseContent wasn't built (stream aborted), build it from accumulated data
+            if (!responseContent) {
+              fastify.log.info(
+                "Stream was aborted before completion, building partial response",
+              );
+
+              // Parse accumulated tool inputs
+              for (const toolCall of accumulatedToolCalls) {
+                try {
+                  toolCall.input = JSON.parse(toolCall.input as string);
+                } catch {
+                  // If parsing fails, leave as string
+                }
+              }
+
+              // Build response content from what we have so far
+              responseContent =
+                accumulatedToolCalls.length > 0
+                  ? [
+                      ...(accumulatedText
+                        ? [
+                            {
+                              type: "text" as const,
+                              text: accumulatedText,
+                              citations: null,
+                            },
+                          ]
+                        : []),
+                      ...accumulatedToolCalls,
+                    ]
+                  : [
+                      {
+                        type: "text" as const,
+                        text: accumulatedText,
+                        citations: null,
+                      },
+                    ];
+            }
+
+            // Extract token usage and calculate costs
+            const usage = messageStartEvent.message.usage;
+            const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
+
+            if (messageStartEvent.message.usage) {
+              reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
+            }
+
+            const baselineCost = await utils.costOptimization.calculateCost(
+              body.model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
+            const costAfterModelOptimization =
+              await utils.costOptimization.calculateCost(
+                model,
+                tokenUsage.input,
+                tokenUsage.output,
+              );
+
+            fastify.log.info(
+              {
+                model: model,
+                baselineModel: body.model,
+                baselineCost: baselineCost,
+                costAfterModelOptimization: costAfterModelOptimization,
+                inputTokens: tokenUsage.input,
+                outputTokens: tokenUsage.output,
+              },
+              "anthropic proxy routes: handle messages: costs",
+            );
+
+            // Record the interaction
+            await InteractionModel.create({
+              agentId: resolvedAgentId,
+              type: "anthropic:messages",
+              request: body,
+              processedRequest: {
+                ...body,
+                messages: filteredMessages,
+              },
+              response: {
+                id: messageStartEvent.message.id,
+                type: "message",
+                role: "assistant",
+                content: responseContent,
+                model: model,
+                stop_reason: "end_turn",
+                stop_sequence: null,
+                usage,
+              },
+              model: model,
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
+              cost: costAfterModelOptimization?.toFixed(10) ?? null,
+              baselineCost: baselineCost?.toFixed(10) ?? null,
+              toonTokensBefore,
+              toonTokensAfter,
+              toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+            });
           }
         }
-
-        // Get the message ID and other metadata from the stream
-        const messageStartEvent = events.find(
-          (e) => e.type === "message_start",
-        ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
-
-        // Extract token usage and report metrics for streaming
-        const usage = messageStartEvent?.message.usage || {
-          input_tokens: 0,
-          output_tokens: 0,
-        };
-        const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
-
-        if (messageStartEvent?.message.usage) {
-          reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
-        }
-
-        // Only calculate costs if cost optimization is enabled
-        let cost: number | undefined;
-        let baselineCost: number | undefined;
-
-        if (resolvedAgent.optimizeCost) {
-          cost = await utils.costOptimization.calculateCost(
-            model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-        }
-
-        // Store the complete interaction
-        await InteractionModel.create({
-          agentId: resolvedAgentId,
-          type: "anthropic:messages",
-          request: body,
-          processedRequest: {
-            ...body,
-            messages: filteredMessages,
-          },
-          response: {
-            id: messageStartEvent?.message.id || "msg-unknown",
-            type: "message",
-            role: "assistant",
-            content: responseContent,
-            model: model,
-            stop_reason: "end_turn",
-            stop_sequence: null,
-            usage,
-          },
-          model: model,
-          inputTokens: tokenUsage.input,
-          outputTokens: tokenUsage.output,
-          cost: cost?.toFixed(10) ?? null,
-          baselineCost: baselineCost?.toFixed(10) ?? null,
-          toonTokensBefore,
-          toonTokensAfter,
-        });
-
-        // Send message_delta with stop_reason and usage
-        const messageDeltaEvent = {
-          type: "message_delta",
-          delta: {
-            stop_reason: "end_turn",
-            stop_sequence: null,
-          },
-          usage: {
-            output_tokens: usage.output_tokens,
-          },
-        };
-        fastify.log.info("Streaming message_delta event");
-        reply.raw.write(
-          `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
-        );
-
-        // Send message_stop event
-        const messageStopEvent = {
-          type: "message_stop",
-        };
-        fastify.log.info("Streaming message_stop event");
-        reply.raw.write(
-          `event: message_stop\ndata: ${JSON.stringify(messageStopEvent)}\n\n`,
-        );
-
-        fastify.log.info("Stream complete, ending response");
-        reply.raw.end();
-        return reply;
       } else {
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(
@@ -764,22 +836,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? utils.adapters.anthropic.getUsageTokens(response.usage)
               : { input: null, output: null };
 
-            // Only calculate costs if cost optimization is enabled
-            let cost: number | undefined;
-            let baselineCost: number | undefined;
-
-            if (resolvedAgent.optimizeCost) {
-              cost = await utils.costOptimization.calculateCost(
+            // Always calculate baseline cost (original requested model)
+            const baselineCost = await utils.costOptimization.calculateCost(
+              body.model,
+              tokenUsage.input,
+              tokenUsage.output,
+            );
+            const costAfterModelOptimization =
+              await utils.costOptimization.calculateCost(
                 model,
                 tokenUsage.input,
                 tokenUsage.output,
               );
-              baselineCost = await utils.costOptimization.calculateCost(
-                body.model,
-                tokenUsage.input,
-                tokenUsage.output,
-              );
-            }
 
             await InteractionModel.create({
               agentId: resolvedAgentId,
@@ -793,10 +861,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               model: model,
               inputTokens: tokenUsage.input,
               outputTokens: tokenUsage.output,
-              cost: cost?.toFixed(10) ?? null,
+              cost: costAfterModelOptimization?.toFixed(10) ?? null,
               baselineCost: baselineCost?.toFixed(10) ?? null,
               toonTokensBefore,
               toonTokensAfter,
+              toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
             });
 
             return reply.send(response);
@@ -811,22 +880,20 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : { input: null, output: null };
 
         // Calculate costs using database pricing (TokenPriceModel)
-        // Only calculate costs if cost optimization is enabled
-        let cost: number | undefined;
-        let baselineCost: number | undefined;
+        // Always calculate costs for proper TOON compression tracking
+        const baselineCost = await utils.costOptimization.calculateCost(
+          body.model,
+          tokenUsage.input,
+          tokenUsage.output,
+        );
 
-        if (resolvedAgent.optimizeCost) {
-          cost = await utils.costOptimization.calculateCost(
+        // Calculate actual cost (potentially optimized model)
+        const costAfterModelOptimization =
+          await utils.costOptimization.calculateCost(
             model,
             tokenUsage.input,
             tokenUsage.output,
           );
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-        }
 
         await InteractionModel.create({
           agentId: resolvedAgentId,
@@ -840,10 +907,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           model: model,
           inputTokens: tokenUsage.input,
           outputTokens: tokenUsage.output,
-          cost: cost?.toFixed(10) ?? null,
+          cost: costAfterModelOptimization?.toFixed(10) ?? null,
           baselineCost: baselineCost?.toFixed(10) ?? null,
           toonTokensBefore,
           toonTokensAfter,
+          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
         });
 
         return reply.send(response);

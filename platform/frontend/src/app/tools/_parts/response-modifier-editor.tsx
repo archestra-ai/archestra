@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 
 interface ResponseModifierEditorProps {
   agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"]["data"][number];
@@ -30,7 +30,7 @@ interface ResponseModifierEditorProps {
 export function ResponseModifierEditor({
   agentTool: { id, responseModifierTemplate, tool },
 }: ResponseModifierEditorProps) {
-  const agentToolPatchMutation = useAgentToolPatchMutation();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
   const [template, setTemplate] = useState<string>(
     responseModifierTemplate || "",
   );

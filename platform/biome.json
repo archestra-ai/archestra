@@ -8,8 +8,8 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "**/src/**/*.tsx",
-      "**/src/**/*.ts",
+      "**/*.tsx",
+      "**/*.ts",
       "e2e-tests/**/*.ts",
       "shared/**/*.ts",
       "!node_modules",

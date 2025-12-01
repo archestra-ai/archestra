@@ -15,6 +15,7 @@ class AgentTeamModel {
       const allAgents = await db
         .select({ id: schema.agentsTable.id })
         .from(schema.agentsTable);
+
       return allAgents.map((agent) => agent.id);
     }
 

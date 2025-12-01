@@ -1,19 +1,25 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { RouteId } from "@shared";
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import {
+  convertToModelMessages,
+  generateText,
+  stepCountIs,
+  streamText,
+} from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import {
   AgentModel,
-  AgentPromptModel,
   ChatSettingsModel,
   ConversationModel,
   MessageModel,
-  SecretModel,
+  PromptModel,
 } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -58,41 +64,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools, agent prompts, and chat settings in parallel
-      const [mcpTools, agentPrompts, chatSettings] = await Promise.all([
+      const [mcpTools, prompt, chatSettings] = await Promise.all([
         getChatMcpTools(conversation.agentId),
-        AgentPromptModel.findByAgentIdWithPrompts(conversation.agentId),
+        PromptModel.findById(conversation.promptId),
         ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
 
-      // Separate system and regular prompts
-      const systemPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "system",
-      );
-      const regularPrompts = agentPrompts.filter(
-        (ap) => ap.prompt.type === "regular",
-      );
-
-      // Build system prompt from agent's assigned prompts
+      // Build system prompt from prompts' systemPrompt and userPrompt fields
       let systemPrompt: string | undefined;
+      const systemPromptParts: string[] = [];
+      const userPromptParts: string[] = [];
 
-      if (systemPrompts.length > 0) {
-        systemPrompt = systemPrompts[0].prompt.content;
+      // Collect system and user prompts from all assigned prompts
+      if (prompt?.systemPrompt) {
+        systemPromptParts.push(prompt.systemPrompt);
+      }
+      if (prompt?.userPrompt) {
+        userPromptParts.push(prompt.userPrompt);
       }
 
-      // Append regular prompts to system prompt if any exist
-      if (regularPrompts.length > 0) {
-        const regularPromptsText = regularPrompts
-          .map((ap) => ap.prompt.content)
-          .join("\n\n");
-
-        if (systemPrompt) {
-          systemPrompt = `${systemPrompt}\n\n${regularPromptsText}`;
-        } else {
-          systemPrompt = regularPromptsText;
-        }
+      // Combine all prompts into system prompt (system prompts first, then user prompts)
+      if (systemPromptParts.length > 0 || userPromptParts.length > 0) {
+        const allParts = [...systemPromptParts, ...userPromptParts];
+        systemPrompt = allParts.join("\n\n");
       }
 
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           agentId: conversation.agentId,
@@ -100,9 +97,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orgId: organizationId,
           toolCount: Object.keys(mcpTools).length,
           model: conversation.selectedModel,
-          promptsCount: agentPrompts.length,
-          hasSystemPrompt: systemPrompts.length > 0,
-          regularPromptsCount: regularPrompts.length,
+          promptId: prompt?.id,
+          hasSystemPromptParts: systemPromptParts.length > 0,
+          hasUserPromptParts: userPromptParts.length > 0,
           systemPromptProvided: !!systemPrompt,
         },
         "Starting chat stream",
@@ -111,15 +108,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let anthropicApiKey = config.chat.anthropic.apiKey; // Fallback to env var
 
       if (chatSettings?.anthropicApiKeySecretId) {
-        const secret = await SecretModel.findById(
+        const secret = await secretManager.getSecret(
           chatSettings.anthropicApiKeySecretId,
         );
         if (secret?.secret?.anthropicApiKey) {
           anthropicApiKey = secret.secret.anthropicApiKey as string;
-          fastify.log.info("Using Anthropic API key from database");
+          logger.info("Using Anthropic API key from database");
         }
       } else {
-        fastify.log.info("Using Anthropic API key from environment variable");
+        logger.info("Using Anthropic API key from environment variable");
       }
 
       if (!anthropicApiKey) {
@@ -144,7 +141,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tools: mcpTools,
         stopWhen: stepCountIs(20),
         onFinish: async ({ usage, finishReason }) => {
-          fastify.log.info(
+          logger.info(
             {
               conversationId,
               usage,
@@ -164,7 +161,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         originalMessages: messages,
         onError: (error) => {
-          fastify.log.error(
+          logger.error(
             { error, conversationId, agentId: conversation.agentId },
             "Chat stream error occurred",
           );
@@ -172,7 +169,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Return full error as JSON string for debugging
           try {
             const fullError = JSON.stringify(error, null, 2);
-            fastify.log.info(
+            logger.info(
               { fullError, willBeSentToFrontend: true },
               "Returning full error to frontend via stream",
             );
@@ -181,7 +178,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // If stringify fails (circular reference), fall back to error message
             const fallbackMessage =
               error instanceof Error ? error.message : String(error);
-            fastify.log.info(
+            logger.info(
               { fallbackMessage, stringifyError },
               "Failed to stringify error, using fallback",
             );
@@ -222,7 +219,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               await MessageModel.bulkCreate(messageData);
 
-              fastify.log.info(
+              logger.info(
                 `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (total: ${existingCount + messagesToSave.length})`,
               );
             }
@@ -231,7 +228,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Log response headers for debugging
-      fastify.log.info(
+      logger.info(
         {
           conversationId,
           headers: Object.fromEntries(response.headers.entries()),
@@ -331,7 +328,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
 
       if (!agent) {
-        throw new ApiError(404, "Agent not found");
+        return [];
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
@@ -359,17 +356,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
           agentId: true,
+          promptId: true,
           title: true,
           selectedModel: true,
         })
           .required({ agentId: true })
-          .partial({ title: true, selectedModel: true }),
+          .partial({ promptId: true, title: true, selectedModel: true }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
       {
-        body: { agentId, title, selectedModel },
+        body: { agentId, promptId, title, selectedModel },
         user,
         organizationId,
         headers,
@@ -389,12 +387,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Create conversation with agent
+      // Create conversation with agent and optional prompt
       return reply.send(
         await ConversationModel.create({
           userId: user.id,
           organizationId,
           agentId,
+          promptId,
           title,
           selectedModel: selectedModel || config.chat.defaultModel,
         }),
@@ -444,6 +443,163 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user, organizationId }, reply) => {
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/generate-title",
+    {
+      schema: {
+        operationId: RouteId.GenerateChatConversationTitle,
+        description:
+          "Generate a title for the conversation based on the first user message and assistant response",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z
+          .object({
+            regenerate: z
+              .boolean()
+              .optional()
+              .describe(
+                "Force regeneration even if title already exists (for manual regeneration)",
+              ),
+          })
+          .optional(),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const regenerate = body?.regenerate ?? false;
+
+      // Get conversation with messages
+      const conversation = await ConversationModel.findById(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      // Skip if title is already set (unless regenerating)
+      if (conversation.title && !regenerate) {
+        logger.info(
+          { conversationId: id, existingTitle: conversation.title },
+          "Skipping title generation - title already set",
+        );
+        return reply.send(conversation);
+      }
+
+      // Extract first user message and first assistant message text
+      const messages = conversation.messages || [];
+      let firstUserMessage = "";
+      let firstAssistantMessage = "";
+
+      for (const msg of messages) {
+        // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+        const msgContent = msg as any;
+        if (!firstUserMessage && msgContent.role === "user") {
+          // Extract text from parts
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstUserMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (!firstAssistantMessage && msgContent.role === "assistant") {
+          // Extract text from parts (skip tool calls)
+          for (const part of msgContent.parts || []) {
+            if (part.type === "text" && part.text) {
+              firstAssistantMessage = part.text;
+              break;
+            }
+          }
+        }
+        if (firstUserMessage && firstAssistantMessage) break;
+      }
+
+      // Need at least user message to generate title
+      if (!firstUserMessage) {
+        logger.info(
+          { conversationId: id },
+          "Skipping title generation - no user message found",
+        );
+        return reply.send(conversation);
+      }
+
+      // Get Anthropic API key
+      const chatSettings =
+        await ChatSettingsModel.findByOrganizationId(organizationId);
+      let anthropicApiKey = config.chat.anthropic.apiKey;
+      if (chatSettings?.anthropicApiKeySecretId) {
+        const secret = await secretManager.getSecret(
+          chatSettings.anthropicApiKeySecretId,
+        );
+        if (secret?.secret?.anthropicApiKey) {
+          anthropicApiKey = secret.secret.anthropicApiKey as string;
+        }
+      }
+
+      if (!anthropicApiKey) {
+        throw new ApiError(
+          400,
+          "Anthropic API key not configured. Please configure it in Chat Settings.",
+        );
+      }
+
+      // Create Anthropic client (direct, not through LLM proxy - this is a meta operation)
+      const anthropic = createAnthropic({
+        apiKey: anthropicApiKey,
+      });
+
+      // Build prompt for title generation
+      const contextMessages = firstAssistantMessage
+        ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
+        : `User: ${firstUserMessage}`;
+
+      const titlePrompt = `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
+
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
+
+      try {
+        // Generate title using a fast model
+        const result = await generateText({
+          model: anthropic("claude-3-5-haiku-20241022"),
+          prompt: titlePrompt,
+        });
+
+        const generatedTitle = result.text.trim();
+
+        logger.info(
+          { conversationId: id, generatedTitle },
+          "Generated conversation title",
+        );
+
+        // Update conversation with generated title
+        const updatedConversation = await ConversationModel.update(
+          id,
+          user.id,
+          organizationId,
+          { title: generatedTitle },
+        );
+
+        if (!updatedConversation) {
+          throw new ApiError(500, "Failed to update conversation with title");
+        }
+
+        return reply.send(updatedConversation);
+      } catch (error) {
+        logger.error(
+          { conversationId: id, error },
+          "Failed to generate conversation title",
+        );
+        // Return the conversation without title update on error
+        return reply.send(conversation);
+      }
     },
   );
 };

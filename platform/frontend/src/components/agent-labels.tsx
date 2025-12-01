@@ -8,25 +8,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLabelValues } from "@/lib/agent.query";
 
-export interface AgentLabel {
+export interface ProfileLabel {
   key: string;
   value: string;
   keyId?: string;
   valueId?: string;
 }
 
-interface AgentLabelsProps {
-  labels: AgentLabel[];
-  onLabelsChange: (labels: AgentLabel[]) => void;
+interface ProfileLabelsProps {
+  labels: ProfileLabel[];
+  onLabelsChange: (labels: ProfileLabel[]) => void;
   availableKeys?: string[];
 }
 
-export interface AgentLabelsRef {
-  saveUnsavedLabel: () => AgentLabel[] | null;
+export interface ProfileLabelsRef {
+  saveUnsavedLabel: () => ProfileLabel[] | null;
 }
 
-export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
-  function AgentLabels({ labels, onLabelsChange, availableKeys = [] }, ref) {
+export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
+  function ProfileLabels({ labels, onLabelsChange, availableKeys = [] }, ref) {
     const [newLabelKey, setNewLabelKey] = useState("");
     const [newLabelValue, setNewLabelValue] = useState("");
 
@@ -92,7 +92,7 @@ export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
           (label) => label.key === key,
         );
 
-        let updatedLabels: AgentLabel[];
+        let updatedLabels: ProfileLabel[];
         if (existingLabelIndex >= 0) {
           // Update existing label
           updatedLabels = [...labels];
@@ -114,7 +114,7 @@ export const AgentLabels = forwardRef<AgentLabelsRef, AgentLabelsProps>(
         <div>
           <Label>Labels</Label>
           <p className="text-sm text-muted-foreground mb-2">
-            Add labels to organize and identify your agents
+            Add labels to organize and identify your profiles
           </p>
         </div>
 

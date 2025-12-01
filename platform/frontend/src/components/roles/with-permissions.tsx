@@ -1,101 +1,57 @@
-/**
- * Abstract wrapper component that adds permission-based access control to any button.
- * Wraps in its own tooltip or reuses the existing one.
- * Note: Does not play well in the tooltip trigger, e.g.:
- * <TooltipTrigger><WithPermission><Button /></WithPermission></TooltipTrigger>.
- *
- * @example
- * <WithPermissions permissions={{ profile: ["update"] }}>
- *   <Switch />
- * </WithPermissions>
- */
-
-import type { SwitchProps } from "@radix-ui/react-switch";
 import type { Permissions } from "@shared";
-import React from "react";
-import type { ButtonProps } from "@/components/ui/button";
+import type React from "react";
+import type { ReactElement } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { TooltipButton } from "@/components/ui/tooltip-button";
 import { useHasPermissions } from "@/lib/auth.query";
-import { cn } from "@/lib/utils";
-
-type TooltipButtonProps = React.ComponentProps<typeof TooltipButton>;
-
-type ButtonInstance = React.ReactElement<ButtonProps>;
-type TooltipButtonInstance = React.ReactElement<TooltipButtonProps>;
-type SwitchInstance = React.ReactElement<SwitchProps>;
+import { permissionsToStrings } from "@/lib/auth.utils";
 
 type WithPermissionsProps = {
-  children: ButtonInstance | TooltipButtonInstance | SwitchInstance;
   permissions: Permissions;
-};
-
-/**
- * Type guard to check if element has an 'tooltip' prop (TooltipButton)
- */
-function isTooltipButton(
-  props: ButtonProps | TooltipButtonProps | SwitchProps,
-): props is TooltipButtonProps {
-  return "tooltip" in props;
-}
-
-/**
- * Convert Permissions object to array of permission strings
- */
-function permissionsToStrings(permissions: Permissions): string[] {
-  const result: string[] = [];
-  for (const [resource, actions] of Object.entries(permissions)) {
-    for (const action of actions) {
-      result.push(`${resource}:${action}`);
+} & (
+  | {
+      noPermissionHandle: "tooltip";
+      children: ({ isDisabled }: { isDisabled: boolean }) => ReactElement;
     }
-  }
-  return result;
-}
+  | {
+      noPermissionHandle: "hide";
+      children: React.ReactNode;
+    }
+);
 
 export function WithPermissions({
   children,
   permissions,
+  noPermissionHandle,
 }: WithPermissionsProps) {
   const { data: hasPermission } = useHasPermissions(permissions);
+
+  // if has permission, return children as is
   if (hasPermission) {
-    return children;
+    return typeof children === "function"
+      ? children({ isDisabled: false })
+      : children;
   }
 
-  const withoutHover = children.props.className
-    ? children.props.className
-        .split(" ")
-        .filter((cls) => !cls.startsWith("hover:"))
-        .join(" ")
-    : "";
+  // if no permission and noPermissionHandle is 'hide', return null
+  if (noPermissionHandle === "hide") {
+    return null;
+  }
 
-  // Disable the button and wrap in span for tooltip
-  const props = {
-    ...children.props,
-    disabled: true,
-    className: cn(withoutHover, "opacity-50"),
-  };
-
-  const permissionError = `Missing permissions: ${permissionsToStrings(permissions).join(", ")}`;
-
-  // If it's an TooltipButton with an tooltip prop, append permission error to it
-  if (isTooltipButton(children.props)) {
-    const updatedProps = {
-      ...props,
-      tooltip: `"${children.props.tooltip}" action is disabled. ${permissionError}.`,
-    };
-    return React.cloneElement(children, updatedProps);
-  } else {
-    const disabledButton = React.cloneElement(children, props);
+  // if no permission and noPermissionHandle is 'tooltip', return a tooltip with the permission error
+  if (noPermissionHandle === "tooltip") {
+    const permissionError = `Missing permissions: ${permissionsToStrings(permissions).join(", ")}`;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-not-allowed">{disabledButton}</span>
+          <span className="cursor-not-allowed">
+            {children({ isDisabled: true })}
+          </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-60">{`This action is disabled. ${permissionError}.`}</TooltipContent>
+        <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>
       </Tooltip>
     );
   }

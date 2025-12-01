@@ -12,7 +12,7 @@ Playwright:
 Make sure not to navigate over docs, but over the platform. For the local development, platform is running at localhost:3000 and docs at localhost:3001.
 
 Principals to follow:
-1) There is no need to document objious things and what's visible on the UI.
+1) There is no need to document obvious things and what's visible on the UI.
 2) Describe main concepts, principals, dependencies.
 3) Provide examples, who and for what could use the specified piece.
 4) Good docs are short docs. Make them very-very consize.

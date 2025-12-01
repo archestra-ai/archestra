@@ -1,14 +1,16 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useInvitationCheck } from "@/lib/invitation.query";
 import { useAcceptInvitation } from "@/lib/organization.query";
 
 export default function SignUpWithInvitationPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [hasProcessed, setHasProcessed] = useState(false);
 
@@ -17,6 +19,15 @@ export default function SignUpWithInvitationPage() {
 
   const { data: session } = authClient.useSession();
   const acceptMutation = useAcceptInvitation();
+  const { data: invitationData, isLoading: isCheckingInvitation } =
+    useInvitationCheck(invitationId);
+
+  // Redirect existing users to sign-in
+  useEffect(() => {
+    if (invitationId && invitationData?.userExists) {
+      router.push(`/auth/sign-in?invitationId=${invitationId}`);
+    }
+  }, [invitationId, invitationData, router]);
 
   // Handle auto-accept after sign-up
   useEffect(() => {
@@ -68,6 +79,19 @@ export default function SignUpWithInvitationPage() {
       clearTimeout(timer3);
     };
   }, [email]);
+
+  // Show loading while checking if user exists
+  if (isCheckingInvitation && invitationId) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <main className="flex grow flex-col items-center justify-center md:p-6 h-full">
+            <LoadingSpinner />
+          </main>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>

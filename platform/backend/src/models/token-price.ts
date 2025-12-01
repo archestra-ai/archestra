@@ -1,5 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import getDefaultModelPrice from "@/default-model-prices";
 import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
 
 class TokenPriceModel {
@@ -70,6 +71,21 @@ class TokenPriceModel {
     return tokenPrice;
   }
 
+  static async createIfNotExists(
+    model: string,
+    data: Omit<CreateTokenPrice, "model">,
+  ): Promise<TokenPrice | null> {
+    const result = await db
+      .insert(schema.tokenPricesTable)
+      .values({ model, ...data })
+      .onConflictDoNothing({
+        target: schema.tokenPricesTable.model,
+      })
+      .returning();
+
+    return result[0] || null;
+  }
+
   static async delete(id: string): Promise<boolean> {
     // First check if the token price exists
     const existing = await TokenPriceModel.findById(id);
@@ -85,23 +101,30 @@ class TokenPriceModel {
   }
 
   /**
-   * Get all unique models from interactions table
+   * Get all unique models from interactions table (both actual and requested models)
    */
   static async getAllModelsFromInteractions(): Promise<string[]> {
     const results = await db
       .select({
         model: schema.interactionsTable.model,
+        requestedModel: sql<string>`${schema.interactionsTable.request} ->> 'model'`,
       })
-      .from(schema.interactionsTable)
-      .where(sql`${schema.interactionsTable.model} IS NOT NULL`)
-      .groupBy(schema.interactionsTable.model);
+      .from(schema.interactionsTable);
 
-    return results.map((row) => row.model).filter(Boolean) as string[];
+    // Collect both actual models and requested models
+    const models = new Set<string>();
+    for (const row of results) {
+      if (row.model) {
+        models.add(row.model);
+      }
+      if (row.requestedModel) {
+        models.add(row.requestedModel);
+      }
+    }
+
+    return [...models];
   }
 
-  /**
-   * Ensure all models from interactions have pricing records with default $50 pricing
-   */
   static async ensureAllModelsHavePricing(): Promise<void> {
     const models = await TokenPriceModel.getAllModelsFromInteractions();
     const existingTokenPrices = await TokenPriceModel.findAll();
@@ -113,8 +136,7 @@ class TokenPriceModel {
     if (missingModels.length > 0) {
       const defaultPrices: InsertTokenPrice[] = missingModels.map((model) => ({
         model,
-        pricePerMillionInput: "50.00", // Default $50 per million tokens
-        pricePerMillionOutput: "50.00", // Default $50 per million tokens
+        ...getDefaultModelPrice(model),
       }));
 
       await db

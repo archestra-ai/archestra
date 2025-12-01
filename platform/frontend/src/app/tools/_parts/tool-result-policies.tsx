@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
+import { useProfileToolPatchMutation } from "@/lib/agent-tools.query";
 import {
   useOperators,
   useToolResultPolicies,
@@ -153,15 +153,15 @@ export function ToolResultPolicies({
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
   const {
-    data: { byAgentToolId },
+    data: { byProfileToolId },
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const policies = byAgentToolId[agentTool.id] || [];
+  const policies = byProfileToolId[agentTool.id] || [];
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
-  const agentToolPatchMutation = useAgentToolPatchMutation();
+  const agentToolPatchMutation = useProfileToolPatchMutation();
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">

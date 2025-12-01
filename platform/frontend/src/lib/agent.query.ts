@@ -19,7 +19,7 @@ const {
 } = archestraApiSdk;
 
 // For backward compatibility - returns all agents as an array
-export function useAgents(
+export function useProfiles(
   params: {
     initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
     filters?: archestraApiTypes.GetAllAgentsData["query"];
@@ -36,7 +36,7 @@ export function useAgents(
 }
 
 // New paginated hook for the agents page
-export function useAgentsPaginated(params?: {
+export function useProfilesPaginated(params?: {
   limit?: number;
   offset?: number;
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
@@ -62,7 +62,7 @@ export function useAgentsPaginated(params?: {
   });
 }
 
-export function useDefaultAgent(params?: {
+export function useDefaultProfile(params?: {
   initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
 }) {
   return useQuery({
@@ -72,7 +72,7 @@ export function useDefaultAgent(params?: {
   });
 }
 
-export function useAgent(id: string | undefined) {
+export function useProfile(id: string | undefined) {
   return useQuery({
     queryKey: ["agents", id],
     queryFn: async () => {
@@ -86,7 +86,7 @@ export function useAgent(id: string | undefined) {
   });
 }
 
-export function useCreateAgent() {
+export function useCreateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
@@ -99,7 +99,7 @@ export function useCreateAgent() {
   });
 }
 
-export function useUpdateAgent() {
+export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -118,7 +118,7 @@ export function useUpdateAgent() {
   });
 }
 
-export function useDeleteAgent() {
+export function useDeleteProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {

@@ -1,7 +1,6 @@
 import {
   boolean,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -12,7 +11,6 @@ import {
 import type {
   OptimizationRuleConditions,
   OptimizationRuleEntityType,
-  OptimizationRuleType,
   SupportedProvider,
 } from "@/types";
 
@@ -24,13 +22,11 @@ const optimizationRulesTable = pgTable(
       .$type<OptimizationRuleEntityType>()
       .notNull(),
     entityId: text("entity_id").notNull(),
-    ruleType: text("rule_type").$type<OptimizationRuleType>().notNull(),
     conditions: jsonb("conditions")
       .$type<OptimizationRuleConditions>()
       .notNull(),
     provider: text("provider").$type<SupportedProvider>().notNull(),
     targetModel: text("target_model").notNull(),
-    priority: integer("priority").notNull().default(0),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

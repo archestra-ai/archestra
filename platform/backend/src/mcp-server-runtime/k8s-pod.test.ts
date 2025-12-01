@@ -446,23 +446,24 @@ describe("K8sPod.constructPodName", () => {
       id: "123e4567-e89b-12d3-a456-426614174000",
       expected: "mcp-server.name",
     },
-  ])(
-    "converts server name '$name' with id '$id' to pod name '$expected'",
-    ({ name, id, expected }) => {
-      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
-      const mockServer = { name, id } as any;
-      const result = K8sPod.constructPodName(mockServer);
-      expect(result).toBe(expected);
+  ])("converts server name '$name' with id '$id' to pod name '$expected'", ({
+    name,
+    id,
+    expected,
+  }) => {
+    // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    const mockServer = { name, id } as any;
+    const result = K8sPod.constructPodName(mockServer);
+    expect(result).toBe(expected);
 
-      // Verify all results are valid Kubernetes DNS subdomain names
-      // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
-      expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
-      // Must be no longer than 253 characters
-      expect(result.length).toBeLessThanOrEqual(253);
-      // Must start with 'mcp-'
-      expect(result).toMatch(/^mcp-/);
-    },
-  );
+    // Verify all results are valid Kubernetes DNS subdomain names
+    // Must match pattern: lowercase alphanumeric, '-' or '.', start and end with alphanumeric
+    expect(result).toMatch(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+    // Must be no longer than 253 characters
+    expect(result.length).toBeLessThanOrEqual(253);
+    // Must start with 'mcp-'
+    expect(result).toMatch(/^mcp-/);
+  });
 
   test("handles very long server names by truncating to 253 characters", () => {
     const longName = "a".repeat(300); // 300 character name

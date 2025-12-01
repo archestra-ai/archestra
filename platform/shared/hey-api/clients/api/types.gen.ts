@@ -2080,268 +2080,6 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type GetAgentPromptsData = {
-    body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type GetAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type GetAgentPromptsError = GetAgentPromptsErrors[keyof GetAgentPromptsErrors];
-
-export type GetAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-        prompt: {
-            id: string;
-            organizationId: string;
-            name: string;
-            type: 'system' | 'regular';
-            content: string;
-            version: number;
-            parentPromptId: string | null;
-            isActive: boolean;
-            createdBy: string;
-            createdAt: string;
-            updatedAt: string;
-        };
-    }>;
-};
-
-export type GetAgentPromptsResponse = GetAgentPromptsResponses[keyof GetAgentPromptsResponses];
-
-export type AssignAgentPromptsData = {
-    body?: {
-        systemPromptId?: string | null;
-        regularPromptIds?: Array<string>;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts';
-};
-
-export type AssignAgentPromptsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type AssignAgentPromptsError = AssignAgentPromptsErrors[keyof AssignAgentPromptsErrors];
-
-export type AssignAgentPromptsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        promptId: string;
-        order: number;
-        createdAt: string;
-    }>;
-};
-
-export type AssignAgentPromptsResponse = AssignAgentPromptsResponses[keyof AssignAgentPromptsResponses];
-
-export type DeleteAgentPromptData = {
-    body?: never;
-    path: {
-        agentId: string;
-        promptId: string;
-    };
-    query?: never;
-    url: '/api/agents/{agentId}/prompts/{promptId}';
-};
-
-export type DeleteAgentPromptErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-        };
-    };
-};
-
-export type DeleteAgentPromptError = DeleteAgentPromptErrors[keyof DeleteAgentPromptErrors];
-
-export type DeleteAgentPromptResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteAgentPromptResponse = DeleteAgentPromptResponses[keyof DeleteAgentPromptResponses];
-
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -2427,10 +2165,7 @@ export type GetAgentsResponses = {
             name: string;
             isDemo: boolean;
             isDefault: boolean;
-            optimizeCost: boolean;
             considerContextUntrusted: boolean;
-            useInChat: boolean;
-            convertToolResultsToToon: boolean;
             createdAt: string;
             updatedAt: string;
             tools: Array<{
@@ -2484,10 +2219,7 @@ export type CreateAgentData = {
         name: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
-        useInChat?: boolean;
-        convertToolResultsToToon?: boolean;
         teams: Array<string>;
         labels?: Array<{
             key: string;
@@ -2569,10 +2301,7 @@ export type CreateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2615,9 +2344,7 @@ export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponse
 export type GetAllAgentsData = {
     body?: never;
     path?: never;
-    query?: {
-        useInChat?: boolean;
-    };
+    query?: never;
     url: '/api/agents/all';
 };
 
@@ -2689,10 +2416,7 @@ export type GetAllAgentsResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2807,10 +2531,7 @@ export type GetDefaultAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3006,10 +2727,7 @@ export type GetAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -3054,10 +2772,7 @@ export type UpdateAgentData = {
         name?: string;
         isDemo?: boolean;
         isDefault?: boolean;
-        optimizeCost?: boolean;
         considerContextUntrusted?: boolean;
-        useInChat?: boolean;
-        convertToolResultsToToon?: boolean;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -3141,10 +2856,7 @@ export type UpdateAgentResponses = {
         name: string;
         isDemo: boolean;
         isDefault: boolean;
-        optimizeCost: boolean;
         considerContextUntrusted: boolean;
-        useInChat: boolean;
-        convertToolResultsToToon: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -4306,6 +4018,20 @@ export type GetDefaultCredentialsStatusResponses = {
 
 export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
 
+export type PostApiAuthOrganizationRemoveMemberData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/organization/remove-member';
+};
+
+export type PostApiAuthOrganizationRemoveMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -5435,6 +5161,7 @@ export type GetChatConversationsResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5452,6 +5179,7 @@ export type GetChatConversationsResponse = GetChatConversationsResponses[keyof G
 export type CreateChatConversationData = {
     body: {
         agentId: string;
+        promptId?: string | null;
         title?: string | null;
         selectedModel?: string;
     };
@@ -5528,6 +5256,7 @@ export type CreateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5698,6 +5427,7 @@ export type GetChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5792,6 +5522,7 @@ export type UpdateChatConversationResponses = {
         userId: string;
         organizationId: string;
         agentId: string;
+        promptId: string | null;
         title: string | null;
         selectedModel: string;
         createdAt: string;
@@ -5888,6 +5619,103 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type GenerateChatConversationTitleData = {
+    body?: {
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/generate-title';
+};
+
+export type GenerateChatConversationTitleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
+
+export type GenerateChatConversationTitleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
+    };
+};
+
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
 export type GetChatSettingsData = {
     body?: never;
@@ -7197,6 +7025,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -7212,6 +7041,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         } | {
             id: string;
@@ -7227,6 +7057,7 @@ export type GetInteractionsResponses = {
             cost: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
+            toonCostSavings: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -7328,6 +7159,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7343,6 +7175,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     } | {
         id: string;
@@ -7358,6 +7191,7 @@ export type GetInteractionResponses = {
         cost: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
+        toonCostSavings: string | null;
         createdAt: string;
     };
 };
@@ -11668,15 +11502,13 @@ export type GetOptimizationRulesResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11690,15 +11522,13 @@ export type CreateOptimizationRuleData = {
         id?: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProvidersInput;
         targetModel: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11775,15 +11605,13 @@ export type CreateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -11876,15 +11704,13 @@ export type UpdateOptimizationRuleData = {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
-        ruleType?: 'content_length' | 'tool_presence';
-        conditions?: {
+        conditions?: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider?: SupportedProvidersInput;
         targetModel?: string;
-        priority?: number;
         enabled?: boolean;
         createdAt?: unknown;
         updatedAt?: unknown;
@@ -11963,15 +11789,13 @@ export type UpdateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
-        priority: number;
         enabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -12053,6 +11877,7 @@ export type GetRolesResponses = {
     200: Array<{
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12143,6 +11968,7 @@ export type CreateRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12159,7 +11985,7 @@ export type DeleteRoleData = {
     body?: never;
     path: {
         /**
-         * Custom role ID
+         * Custom role ID (base62)
          */
         roleId: string;
     };
@@ -12315,6 +12141,7 @@ export type GetRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12410,6 +12237,7 @@ export type UpdateRoleResponses = {
     200: {
         id: string;
         organizationId?: string;
+        role: string;
         name: string;
         permission: {
             [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'admin' | 'cancel'>;
@@ -12503,6 +12331,8 @@ export type GetOrganizationResponses = {
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
     };
 };
 
@@ -12513,8 +12343,10 @@ export type UpdateOrganizationData = {
         theme?: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont?: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
         limitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        compressionScope?: 'organization' | 'team';
         logo?: string | null;
         onboardingComplete?: boolean;
+        convertToolResultsToToon?: boolean;
     };
     path?: never;
     query?: never;
@@ -12595,6 +12427,8 @@ export type UpdateOrganizationResponses = {
         onboardingComplete: boolean;
         theme: 'modern-minimal' | 'graphite' | 'clean-slate' | 'mono' | 'elegant-luxury' | 'claymorphism' | 't3-chat' | 'twitter' | 'bubblegum' | 'tangerine' | 'quantum-rose' | 'candyland' | 'pastel-dreams' | 'retro-arcade' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'catppuccin' | 'perpetuity' | 'midnight-bloom' | 'starry-night' | 'cyberpunk' | 'mocha-mousse' | 'kodama-grove' | 'nature' | 'ocean-breeze' | 'sunset-horizon' | 'solar-dusk' | 'bold-tech' | 'neo-brutalism' | 'supabase' | 'vercel' | 'claude' | 'northern-lights' | 'vintage-paper';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
     };
 };
 
@@ -12681,9 +12515,7 @@ export type GetOnboardingStatusResponse = GetOnboardingStatusResponses[keyof Get
 export type GetPromptsData = {
     body?: never;
     path?: never;
-    query?: {
-        type?: 'system' | 'regular';
-    };
+    query?: never;
     url: '/api/prompts';
 };
 
@@ -12754,18 +12586,14 @@ export type GetPromptsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
@@ -12774,8 +12602,12 @@ export type GetPromptsResponse = GetPromptsResponses[keyof GetPromptsResponses];
 export type CreatePromptData = {
     body: {
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
+        version?: number;
+        parentPromptId?: string | null;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;
@@ -12849,18 +12681,14 @@ export type CreatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13021,18 +12849,14 @@ export type GetPromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13041,7 +12865,9 @@ export type GetPromptResponse = GetPromptResponses[keyof GetPromptResponses];
 export type UpdatePromptData = {
     body?: {
         name?: string;
-        content?: string;
+        agentId?: string;
+        userPrompt?: string | null;
+        systemPrompt?: string | null;
     };
     path: {
         id: string;
@@ -13117,18 +12943,14 @@ export type UpdatePromptResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     };
 };
 
@@ -13210,22 +13032,1141 @@ export type GetPromptVersionsResponses = {
         id: string;
         organizationId: string;
         name: string;
-        type: 'system' | 'regular';
-        content: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
         version: number;
         parentPromptId: string | null;
         isActive: boolean;
-        createdBy: string;
         createdAt: string;
         updatedAt: string;
-        agents: Array<{
-            id: string;
-            name: string;
-        }>;
     }>;
 };
 
 export type GetPromptVersionsResponse = GetPromptVersionsResponses[keyof GetPromptVersionsResponses];
+
+export type RollbackPromptData = {
+    body: {
+        versionId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/prompts/{id}/rollback';
+};
+
+export type RollbackPromptErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RollbackPromptError = RollbackPromptErrors[keyof RollbackPromptErrors];
+
+export type RollbackPromptResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        agentId: string;
+        userPrompt: string | null;
+        systemPrompt: string | null;
+        version: number;
+        parentPromptId: string | null;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type RollbackPromptResponse = RollbackPromptResponses[keyof RollbackPromptResponses];
+
+export type GetPublicSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers/public';
+};
+
+export type GetPublicSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetPublicSsoProvidersError = GetPublicSsoProvidersErrors[keyof GetPublicSsoProvidersErrors];
+
+export type GetPublicSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        providerId: string;
+    }>;
+};
+
+export type GetPublicSsoProvidersResponse = GetPublicSsoProvidersResponses[keyof GetPublicSsoProvidersResponses];
+
+export type GetSsoProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type GetSsoProvidersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProvidersError = GetSsoProvidersErrors[keyof GetSsoProvidersErrors];
+
+export type GetSsoProvidersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+    }>;
+};
+
+export type GetSsoProvidersResponse = GetSsoProvidersResponses[keyof GetSsoProvidersResponses];
+
+export type CreateSsoProviderData = {
+    body: {
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        userId?: string | null;
+        providerId: string;
+        domain: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sso-providers';
+};
+
+export type CreateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type CreateSsoProviderError = CreateSsoProviderErrors[keyof CreateSsoProviderErrors];
+
+export type CreateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+    };
+};
+
+export type CreateSsoProviderResponse = CreateSsoProviderResponses[keyof CreateSsoProviderResponses];
+
+export type DeleteSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type DeleteSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type DeleteSsoProviderError = DeleteSsoProviderErrors[keyof DeleteSsoProviderErrors];
+
+export type DeleteSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteSsoProviderResponse = DeleteSsoProviderResponses[keyof DeleteSsoProviderResponses];
+
+export type GetSsoProviderData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type GetSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetSsoProviderError = GetSsoProviderErrors[keyof GetSsoProviderErrors];
+
+export type GetSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+    };
+};
+
+export type GetSsoProviderResponse = GetSsoProviderResponses[keyof GetSsoProviderResponses];
+
+export type UpdateSsoProviderData = {
+    body?: {
+        issuer?: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        providerId?: string;
+        domain?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/sso-providers/{id}';
+};
+
+export type UpdateSsoProviderErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type UpdateSsoProviderError = UpdateSsoProviderErrors[keyof UpdateSsoProviderErrors];
+
+export type UpdateSsoProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
+        oidcConfig?: {
+            issuer: string;
+            pkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationEndpoint?: string;
+            discoveryEndpoint: string;
+            userInfoEndpoint?: string;
+            scopes?: Array<string>;
+            overrideUserInfo?: boolean;
+            tokenEndpoint?: string;
+            tokenEndpointAuthentication?: 'client_secret_post' | 'client_secret_basic';
+            jwksEndpoint?: string;
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L3
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                image?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40
+         */
+        samlConfig?: {
+            issuer: string;
+            entryPoint: string;
+            cert: string;
+            callbackUrl: string;
+            audience?: string;
+            idpMetadata?: {
+                metadata?: string;
+                entityID?: string;
+                entityURL?: string;
+                redirectURL?: string;
+                cert?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+                singleSignOnService?: Array<{
+                    Binding: string;
+                    Location: string;
+                }>;
+            };
+            spMetadata: {
+                metadata?: string;
+                entityID?: string;
+                binding?: string;
+                privateKey?: string;
+                privateKeyPass?: string;
+                isAssertionEncrypted?: boolean;
+                encPrivateKey?: string;
+                encPrivateKeyPass?: string;
+            };
+            wantAssertionsSigned?: boolean;
+            signatureAlgorithm?: string;
+            digestAlgorithm?: string;
+            identifierFormat?: string;
+            privateKey?: string;
+            decryptionPvk?: string;
+            additionalParams?: {
+                [key: string]: unknown;
+            };
+            /**
+             * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L12C30-L20C2
+             */
+            mapping?: {
+                id?: string;
+                email?: string;
+                emailVerified?: string;
+                name?: string;
+                firstName?: string;
+                lastName?: string;
+                extraFields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        userId: string | null;
+        providerId: string;
+        organizationId: string | null;
+        domain: string;
+    };
+};
+
+export type UpdateSsoProviderResponse = UpdateSsoProviderResponses[keyof UpdateSsoProviderResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;
@@ -13578,6 +14519,96 @@ export type GetOverviewStatisticsResponses = {
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
+export type GetCostSavingsStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/cost-savings';
+};
+
+export type GetCostSavingsStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetCostSavingsStatisticsError = GetCostSavingsStatisticsErrors[keyof GetCostSavingsStatisticsErrors];
+
+export type GetCostSavingsStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalBaselineCost: number;
+        totalActualCost: number;
+        totalSavings: number;
+        totalOptimizationSavings: number;
+        totalToonSavings: number;
+        timeSeries: Array<{
+            timestamp: string;
+            baselineCost: number;
+            actualCost: number;
+            optimizationSavings: number;
+            toonSavings: number;
+        }>;
+    };
+};
+
+export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses[keyof GetCostSavingsStatisticsResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;
@@ -13656,6 +14687,7 @@ export type GetTeamsResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -13749,6 +14781,7 @@ export type CreateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -13920,6 +14953,7 @@ export type GetTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;
@@ -13936,6 +14970,7 @@ export type UpdateTeamData = {
     body?: {
         name?: string;
         description?: string;
+        convertToolResultsToToon?: boolean;
     };
     path: {
         id: string;
@@ -14015,6 +15050,7 @@ export type UpdateTeamResponses = {
         createdBy: string;
         createdAt: string;
         updatedAt: string;
+        convertToolResultsToToon: boolean;
         members?: Array<{
             id: string;
             teamId: string;

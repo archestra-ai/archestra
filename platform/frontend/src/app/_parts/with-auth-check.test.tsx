@@ -147,6 +147,62 @@ describe("WithAuthCheck", () => {
     });
   });
 
+  describe("special auth pages (/auth/two-factor)", () => {
+    it("should allow access to /auth/two-factor when not authenticated (2FA verification during login)", () => {
+      vi.mocked(authClient.useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as ReturnType<typeof authClient.useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/two-factor");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
+    it("should allow access to /auth/two-factor when authenticated (2FA setup)", () => {
+      vi.mocked(authClient.useSession).mockReturnValue({
+        data: {
+          user: { id: "user123", email: "test@example.com" },
+          session: { id: "session123" },
+        },
+        isPending: false,
+      } as ReturnType<typeof authClient.useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/two-factor");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
+    it("should allow access to /auth/two-factor sub-paths", () => {
+      vi.mocked(authClient.useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as ReturnType<typeof authClient.useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/two-factor/setup");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+  });
+
   describe("Sentry user context", () => {
     it("should set Sentry user context when user is authenticated", () => {
       const mockUser = {

@@ -7,19 +7,16 @@ import {
   predefinedPermissionsMap,
   type Resource,
 } from "@shared";
-import { and, eq, getTableColumns, ne, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  InsertOrganizationRole,
-  OrganizationRole,
-  UpdateOrganizationRole,
-} from "@/types";
+import type { OrganizationRole } from "@/types";
 
 const generatePredefinedRole = (
   role: PredefinedRoleName,
   organizationId: string,
 ): OrganizationRole => ({
   id: role,
+  role: role,
   name: role,
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),
@@ -104,7 +101,7 @@ class OrganizationRoleModel {
     }
 
     // Check if it's a predefined role
-    if (OrganizationRoleModel.isPredefinedRole(role.name)) {
+    if (OrganizationRoleModel.isPredefinedRole(role.role)) {
       return { canDelete: false, reason: "Cannot delete predefined roles" };
     }
 
@@ -115,7 +112,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.membersTable.organizationId, organizationId),
-          eq(schema.membersTable.role, roleId),
+          eq(schema.membersTable.role, role.role),
         ),
       )
       .limit(1);
@@ -134,7 +131,7 @@ class OrganizationRoleModel {
       .where(
         and(
           eq(schema.invitationsTable.organizationId, organizationId),
-          eq(schema.invitationsTable.role, role.name),
+          eq(schema.invitationsTable.role, role.role),
           eq(schema.invitationsTable.status, "pending"),
         ),
       )
@@ -151,34 +148,39 @@ class OrganizationRoleModel {
   }
 
   /**
-   * Validate role name uniqueness within organization
+   * Get a role by identifier, e.g. "member" (buit-in) or "reader" (custom)
    */
-  static async isNameUnique(
-    name: string,
+  static async getByIdentifier(
+    identifier: string,
     organizationId: string,
-    excludeRoleId?: string,
-  ): Promise<boolean> {
-    // Check predefined role names first
-    if (OrganizationRoleModel.isPredefinedRole(name)) {
-      return false;
+  ): Promise<OrganizationRole | null> {
+    // Check if it's a predefined role first
+    if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+      return generatePredefinedRole(identifier, organizationId);
     }
 
-    // Check custom role names
     const [result] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.organizationRolesTable),
+        predefined: sql<boolean>`false`,
+      })
       .from(schema.organizationRolesTable)
       .where(
         and(
-          eq(schema.organizationRolesTable.name, name),
+          eq(schema.organizationRolesTable.role, identifier),
           eq(schema.organizationRolesTable.organizationId, organizationId),
-          excludeRoleId
-            ? ne(schema.organizationRolesTable.id, excludeRoleId)
-            : undefined,
         ),
       )
       .limit(1);
 
-    return !result;
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      permission: JSON.parse(result.permission),
+    };
   }
 
   /**
@@ -193,7 +195,7 @@ class OrganizationRoleModel {
       return generatePredefinedRole(roleId, organizationId);
     }
 
-    // Query custom role from database
+    // Query custom role from database by ID
     const [result] = await db
       .select({
         ...getTableColumns(schema.organizationRolesTable),
@@ -219,14 +221,17 @@ class OrganizationRoleModel {
   }
 
   static async getPermissions(
-    roleId: string,
+    identifier: string,
     organizationId: string,
   ): Promise<Permissions> {
-    if (OrganizationRoleModel.isPredefinedRole(roleId)) {
-      return OrganizationRoleModel.getPredefinedRolePermissions(roleId);
+    if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+      return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }
 
-    const role = await OrganizationRoleModel.getById(roleId, organizationId);
+    const role = await OrganizationRoleModel.getByIdentifier(
+      identifier,
+      organizationId,
+    );
 
     if (!role) {
       return {};
@@ -270,49 +275,34 @@ class OrganizationRoleModel {
     }
   }
 
-  static async create(data: InsertOrganizationRole): Promise<OrganizationRole> {
-    const [result] = await db
-      .insert(schema.organizationRolesTable)
-      .values({
-        ...data,
-        permission: JSON.stringify(data.permission),
-      })
-      .returning();
-
-    return {
-      ...result,
-      predefined: false,
-      permission: JSON.parse(result.permission),
-    };
+  /**
+   * @deprecated Do not use directly. Routes should use betterAuth.api.createOrgRole() instead.
+   * This method exists only for test fixtures.
+   */
+  static async create(): Promise<OrganizationRole> {
+    throw new Error(
+      "OrganizationRoleModel.create() should not be called directly. Use betterAuth.api.createOrgRole() in routes, or direct DB operations in test fixtures.",
+    );
   }
 
-  static async update(
-    roleId: string,
-    data: UpdateOrganizationRole,
-  ): Promise<OrganizationRole> {
-    const [result] = await db
-      .update(schema.organizationRolesTable)
-      .set({
-        ...data,
-        permission: JSON.stringify(data.permission),
-      })
-      .where(eq(schema.organizationRolesTable.id, roleId))
-      .returning();
-
-    return {
-      ...result,
-      predefined: false,
-      permission: JSON.parse(result.permission),
-    };
+  /**
+   * @deprecated Do not use directly. Routes should use betterAuth.api.updateOrgRole() instead.
+   * This method exists only for test fixtures.
+   */
+  static async update(): Promise<OrganizationRole> {
+    throw new Error(
+      "OrganizationRoleModel.update() should not be called directly. Use betterAuth.api.updateOrgRole() in routes, or direct DB operations in test fixtures.",
+    );
   }
 
-  static async delete(roleId: string): Promise<boolean> {
-    const result = await db
-      .delete(schema.organizationRolesTable)
-      .where(eq(schema.organizationRolesTable.id, roleId))
-      .returning();
-
-    return result.length > 0;
+  /**
+   * @deprecated Do not use directly. Routes should use betterAuth.api.deleteOrgRole() instead.
+   * This method exists only for test fixtures.
+   */
+  static async delete(): Promise<boolean> {
+    throw new Error(
+      "OrganizationRoleModel.delete() should not be called directly. Use betterAuth.api.deleteOrgRole() in routes, or direct DB operations in test fixtures.",
+    );
   }
 }
 

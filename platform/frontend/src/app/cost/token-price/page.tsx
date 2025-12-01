@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import type { SupportedProviders } from "@shared/hey-api/clients/api";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import {
@@ -46,9 +47,8 @@ import {
   useTokenPrices,
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
-import type { SupportedProviders } from '@shared/hey-api/clients/api';
 
-type Providers = Extract<SupportedProviders, 'openai' | 'anthropic'>;
+type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
 
 const providerDictionary: Record<Providers, string> = {
   openai: "OpenAI",
@@ -85,8 +85,7 @@ function TokenPriceInlineForm({
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
-    provider:
-      (initialData?.provider as Providers) || ("openai" as const),
+    provider: (initialData?.provider as Providers) || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
@@ -130,11 +129,13 @@ function TokenPriceInlineForm({
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
               <SelectContent>
-                {Object.keys(providerDictionary).map((provider) => (
-                  <SelectItem key={provider} value={provider}>
-                    {providerDictionary[provider]}
-                  </SelectItem>
-                ))}
+                {(Object.keys(providerDictionary) as Providers[]).map(
+                  (provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {providerDictionary[provider]}
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
           </div>

@@ -1,12 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
-import type {
-  CreateTokenPrice,
-  InsertTokenPrice,
-  SupportedProvider,
-  TokenPrice,
-} from "@/types";
+import type { CreateTokenPrice, SupportedProvider, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
@@ -37,7 +32,12 @@ class TokenPriceModel {
   static async create(data: CreateTokenPrice): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values(data as any)
+      .values({
+        provider: data.provider as SupportedProvider,
+        model: data.model,
+        pricePerMillionInput: data.pricePerMillionInput,
+        pricePerMillionOutput: data.pricePerMillionOutput,
+      })
       .returning();
 
     return tokenPrice;
@@ -47,9 +47,21 @@ class TokenPriceModel {
     id: string,
     data: Partial<CreateTokenPrice>,
   ): Promise<TokenPrice | null> {
+    const updateData = {
+      ...(data.provider && { provider: data.provider as SupportedProvider }),
+      ...(data.model && { model: data.model }),
+      ...(data.pricePerMillionInput && {
+        pricePerMillionInput: data.pricePerMillionInput,
+      }),
+      ...(data.pricePerMillionOutput && {
+        pricePerMillionOutput: data.pricePerMillionOutput,
+      }),
+      updatedAt: new Date(),
+    };
+
     const [tokenPrice] = await db
       .update(schema.tokenPricesTable)
-      .set({ ...data, updatedAt: new Date() } as any)
+      .set(updateData)
       .where(eq(schema.tokenPricesTable.id, id))
       .returning();
 
@@ -62,10 +74,16 @@ class TokenPriceModel {
   ): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values({ model, ...data } as any)
+      .values({
+        provider: data.provider as SupportedProvider,
+        model,
+        pricePerMillionInput: data.pricePerMillionInput,
+        pricePerMillionOutput: data.pricePerMillionOutput,
+      })
       .onConflictDoUpdate({
         target: schema.tokenPricesTable.model,
         set: {
+          provider: data.provider as SupportedProvider,
           pricePerMillionInput: data.pricePerMillionInput,
           pricePerMillionOutput: data.pricePerMillionOutput,
           updatedAt: new Date(),
@@ -82,7 +100,12 @@ class TokenPriceModel {
   ): Promise<TokenPrice | null> {
     const result = await db
       .insert(schema.tokenPricesTable)
-      .values({ model, ...data } as any)
+      .values({
+        provider: data.provider as SupportedProvider,
+        model,
+        pricePerMillionInput: data.pricePerMillionInput,
+        pricePerMillionOutput: data.pricePerMillionOutput,
+      })
       .onConflictDoNothing({
         target: schema.tokenPricesTable.model,
       })

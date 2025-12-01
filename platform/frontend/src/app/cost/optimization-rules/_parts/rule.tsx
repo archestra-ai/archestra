@@ -28,20 +28,13 @@ import { cn } from "@/lib/utils";
 type EntityType = OptimizationRule["entityType"];
 type Conditions = OptimizationRule["conditions"];
 type TokenPrices = Array<{
+  provider: string;
   model: string;
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
 }>;
 
-type Providers = Extract<SupportedProviders, 'openai' | 'anthropic'>;
-
-// FIXME Provider is now in token prices, use it
-// Helper to infer provider from model name
-function getProviderFromModel(model: string): Providers | null {
-  if (model.startsWith("claude-")) return "anthropic";
-  if (model.startsWith("gpt-") || model.startsWith("o1-")) return "openai";
-  return null;
-}
+type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
 
 // Sort models by total cost (input + output price) ascending
 function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
@@ -118,7 +111,7 @@ function ModelSelect({
   editable,
 }: {
   model: string;
-  provider: OptimizationRule["provider"];
+  provider: Providers;
   models: TokenPrices;
   onChange: (model: string) => void;
   editable?: boolean;
@@ -359,7 +352,7 @@ export function Rule({
     entityType: EntityType;
     entityId: string;
     conditions: Conditions;
-    provider: OptimizationRule["provider"];
+    provider: Providers;
     targetModel: string;
     enabled: boolean;
   };
@@ -369,7 +362,7 @@ export function Rule({
     entityType,
     entityId,
     conditions,
-    provider,
+    provider: provider as Providers,
     targetModel,
   });
 
@@ -381,7 +374,7 @@ export function Rule({
         entityType,
         entityId,
         conditions,
-        provider,
+        provider: provider as Providers,
         targetModel,
       });
     }
@@ -461,9 +454,7 @@ export function Rule({
   const canAddCondition = formData.conditions.length < 2;
 
   const models = sortModelsByPrice(
-    tokenPrices.filter(
-      (price) => getProviderFromModel(price.model) === formData.provider,
-    ),
+    tokenPrices.filter((price) => price.provider === formData.provider),
   );
 
   return (

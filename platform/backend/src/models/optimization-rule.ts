@@ -219,7 +219,14 @@ class OptimizationRuleModel {
     if (defaultPrices.length > 0) {
       await db
         .insert(schema.tokenPricesTable)
-        .values(defaultPrices as any)
+        .values(
+          defaultPrices.map((price) => ({
+            provider: price.provider as SupportedProvider,
+            model: price.model,
+            pricePerMillionInput: price.pricePerMillionInput,
+            pricePerMillionOutput: price.pricePerMillionOutput,
+          })),
+        )
         .onConflictDoNothing({
           target: schema.tokenPricesTable.model,
         });

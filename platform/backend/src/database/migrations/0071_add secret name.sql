@@ -1,0 +1,1 @@
+ALTER TABLE "secret" ADD COLUMN "name" varchar(256) DEFAULT 'secret' NOT NULL;

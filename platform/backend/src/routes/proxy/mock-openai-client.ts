@@ -7,6 +7,14 @@
 
 import type OpenAI from "openai";
 
+/**
+ * Options for controlling mock stream behavior
+ */
+export interface MockStreamOptions {
+  /** If set, the stream will end early at this chunk index (0-based) */
+  interruptAtChunk?: number;
+}
+
 const MOCK_RESPONSE: OpenAI.Chat.Completions.ChatCompletion = {
   id: "chatcmpl-mock123",
   object: "chat.completion",
@@ -78,7 +86,7 @@ const MOCK_STREAMING_CHUNKS: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
     choices: [
       {
         index: 0,
-        delta: { content: "I help you?" },
+        delta: { content: " I help you?" },
         finish_reason: null,
         logprobs: null,
       },
@@ -97,6 +105,11 @@ const MOCK_STREAMING_CHUNKS: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
         logprobs: null,
       },
     ],
+    usage: {
+      prompt_tokens: 12,
+      completion_tokens: 10,
+      total_tokens: 22,
+    },
   },
 ];
 
@@ -104,6 +117,22 @@ const MOCK_STREAMING_CHUNKS: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
  * Mock OpenAI Client that returns immediate tool call responses
  */
 export class MockOpenAIClient {
+  private static streamOptions: MockStreamOptions = {};
+
+  /**
+   * Configure stream behavior for testing (static method affects all instances)
+   */
+  static setStreamOptions(options: MockStreamOptions) {
+    MockOpenAIClient.streamOptions = options;
+  }
+
+  /**
+   * Reset stream options to default
+   */
+  static resetStreamOptions() {
+    MockOpenAIClient.streamOptions = {};
+  }
+
   chat = {
     completions: {
       create: async (
@@ -116,13 +145,23 @@ export class MockOpenAIClient {
               let index = 0;
               return {
                 async next() {
+                  // Check if we should interrupt at this chunk
+                  // Instead of throwing, just end the stream early (simulates client disconnect)
+                  if (
+                    MockOpenAIClient.streamOptions.interruptAtChunk !==
+                      undefined &&
+                    index === MockOpenAIClient.streamOptions.interruptAtChunk
+                  ) {
+                    return { done: true, value: undefined };
+                  }
+
                   if (index < MOCK_STREAMING_CHUNKS.length) {
                     return {
                       value: MOCK_STREAMING_CHUNKS[index++],
                       done: false,
                     };
                   }
-                  return { done: true };
+                  return { done: true, value: undefined };
                 },
               };
             },

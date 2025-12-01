@@ -65,6 +65,168 @@ describe("Anthropic cost tracking", () => {
   });
 });
 
+describe("Anthropic streaming mode", () => {
+  test("streaming mode completes normally and records interaction", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    await app.register(anthropicProxyRoutes);
+    config.benchmark.mockMode = true;
+
+    // Create token pricing for the model
+    await TokenPriceModel.create({
+      model: "claude-opus-4-20250514",
+      pricePerMillionInput: "15.00",
+      pricePerMillionOutput: "75.00",
+    });
+
+    // Create a test agent
+    const agent = await AgentModel.create({
+      name: "Test Streaming Agent",
+      teams: [],
+    });
+
+    const { InteractionModel } = await import("@/models");
+
+    // Get initial interaction count
+    const initialInteractions =
+      await InteractionModel.getAllInteractionsForAgent(agent.id);
+    const initialCount = initialInteractions.length;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agent.id}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        messages: [{ role: "user", content: "Hello!" }],
+        max_tokens: 1024,
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Verify the response contains SSE events (content-type may not be preserved by inject)
+    const body = response.body;
+    expect(body).toContain("event: message_start");
+    expect(body).toContain("event: content_block_delta");
+    expect(body).toContain("event: message_stop");
+
+    // Wait a bit for async interaction recording
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Find the created interaction
+    const interactions = await InteractionModel.getAllInteractionsForAgent(
+      agent.id,
+    );
+    expect(interactions.length).toBe(initialCount + 1);
+
+    const interaction = interactions[interactions.length - 1];
+
+    // Verify interaction was recorded with proper fields
+    expect(interaction.type).toBe("anthropic:messages");
+    expect(interaction.model).toBe("claude-opus-4-20250514");
+    expect(interaction.inputTokens).toBe(12);
+    expect(interaction.outputTokens).toBe(10);
+    expect(interaction.cost).toBeTruthy();
+    expect(interaction.baselineCost).toBeTruthy();
+    expect(typeof interaction.cost).toBe("string");
+    expect(typeof interaction.baselineCost).toBe("string");
+  });
+
+  test(
+    "streaming mode interrupted still records interaction",
+    { timeout: 10000 },
+    async () => {
+      const app = Fastify().withTypeProvider<ZodTypeProvider>();
+      app.setValidatorCompiler(validatorCompiler);
+      app.setSerializerCompiler(serializerCompiler);
+
+      // Enable mock mode
+      config.benchmark.mockMode = true;
+
+      // Configure mock to interrupt at chunk 3 (after message_start, content_block_start, content_block_delta)
+      const { MockAnthropicClient } = await import("./mock-anthropic-client");
+      MockAnthropicClient.setStreamOptions({ interruptAtChunk: 3 });
+
+      try {
+        await app.register(anthropicProxyRoutes);
+
+        // Create token pricing for the model
+        await TokenPriceModel.create({
+          model: "claude-opus-4-20250514",
+          pricePerMillionInput: "15.00",
+          pricePerMillionOutput: "75.00",
+        });
+
+        // Create a test agent
+        const agent = await AgentModel.create({
+          name: "Test Interrupted Streaming Agent",
+          teams: [],
+        });
+
+        const { InteractionModel } = await import("@/models");
+
+        // Get initial interaction count
+        const initialInteractions =
+          await InteractionModel.getAllInteractionsForAgent(agent.id);
+        const initialCount = initialInteractions.length;
+
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/anthropic/${agent.id}/v1/messages`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            "user-agent": "test-client",
+            "anthropic-version": "2023-06-01",
+            "x-api-key": "test-anthropic-key",
+          },
+          payload: {
+            model: "claude-opus-4-20250514",
+            messages: [{ role: "user", content: "Hello!" }],
+            max_tokens: 1024,
+            stream: true,
+          },
+        });
+
+        // Stream ends early but request should complete successfully
+        expect(response.statusCode).toBe(200);
+
+        // Wait for async interaction recording (longer timeout for error handling)
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        // Verify interaction was still recorded despite interruption
+        const interactions = await InteractionModel.getAllInteractionsForAgent(
+          agent.id,
+        );
+        expect(interactions.length).toBe(initialCount + 1);
+
+        const interaction = interactions[interactions.length - 1];
+
+        // Verify interaction was recorded even though stream was interrupted
+        expect(interaction.type).toBe("anthropic:messages");
+        expect(interaction.model).toBe("claude-opus-4-20250514");
+        expect(interaction.inputTokens).toBe(12);
+        expect(interaction.outputTokens).toBe(10); // Usage from message_start event
+        expect(interaction.cost).toBeTruthy();
+        expect(interaction.baselineCost).toBeTruthy();
+      } finally {
+        // Reset mock options for other tests
+        MockAnthropicClient.resetStreamOptions();
+      }
+    },
+  );
+});
+
 describe("Anthropic proxy routing", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;

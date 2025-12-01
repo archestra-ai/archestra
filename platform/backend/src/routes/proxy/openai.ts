@@ -381,71 +381,76 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         let tokenUsage: { input?: number; output?: number } | undefined;
 
-        for await (const chunk of streamingResponse) {
-          chunks.push(chunk);
+        // Variables for interaction recording (accessible in finally block)
+        let assistantMessage:
+          | OpenAIProvider.Chat.Completions.ChatCompletionMessage
+          | undefined;
 
-          // Capture usage information if present
-          if (chunk.usage) {
-            tokenUsage = utils.adapters.openai.getUsageTokens(chunk.usage);
-          }
-          const delta = chunk.choices[0]?.delta;
-          const finishReason = chunk.choices[0]?.finish_reason;
+        try {
+          for await (const chunk of streamingResponse) {
+            chunks.push(chunk);
 
-          // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
-          // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
-          if (
-            !delta?.tool_calls &&
-            (delta?.content !== undefined ||
-              delta?.refusal !== undefined ||
-              delta?.role ||
-              finishReason)
-          ) {
-            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-
-            // Also accumulate for persistence
-            if (delta?.content) {
-              accumulatedContent += delta.content;
+            // Capture usage information if present
+            if (chunk.usage) {
+              tokenUsage = utils.adapters.openai.getUsageTokens(chunk.usage);
             }
-            if (delta?.refusal) {
-              accumulatedRefusal += delta.refusal;
-            }
-          }
+            const delta = chunk.choices[0]?.delta;
+            const finishReason = chunk.choices[0]?.finish_reason;
 
-          // Accumulate tool calls (don't stream yet - need to evaluate policies first)
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index;
+            // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
+            // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
+            if (
+              !delta?.tool_calls &&
+              (delta?.content !== undefined ||
+                delta?.refusal !== undefined ||
+                delta?.role ||
+                finishReason)
+            ) {
+              reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
-              // Initialize tool call if it doesn't exist
-              if (!accumulatedToolCalls[index]) {
-                accumulatedToolCalls[index] = {
-                  id: toolCallDelta.id || "",
-                  type: "function",
-                  function: {
-                    name: "",
-                    arguments: "",
-                  },
-                };
+              // Also accumulate for persistence
+              if (delta?.content) {
+                accumulatedContent += delta.content;
               }
-
-              // Accumulate tool call fields
-              if (toolCallDelta.id) {
-                accumulatedToolCalls[index].id = toolCallDelta.id;
-              }
-              if (toolCallDelta.function?.name) {
-                accumulatedToolCalls[index].function.name =
-                  toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                accumulatedToolCalls[index].function.arguments +=
-                  toolCallDelta.function.arguments;
+              if (delta?.refusal) {
+                accumulatedRefusal += delta.refusal;
               }
             }
-          }
-        }
 
-        let assistantMessage: OpenAIProvider.Chat.Completions.ChatCompletionMessage =
-          {
+            // Accumulate tool calls (don't stream yet - need to evaluate policies first)
+            if (delta?.tool_calls) {
+              for (const toolCallDelta of delta.tool_calls) {
+                const index = toolCallDelta.index;
+
+                // Initialize tool call if it doesn't exist
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
+                    id: toolCallDelta.id || "",
+                    type: "function",
+                    function: {
+                      name: "",
+                      arguments: "",
+                    },
+                  };
+                }
+
+                // Accumulate tool call fields
+                if (toolCallDelta.id) {
+                  accumulatedToolCalls[index].id = toolCallDelta.id;
+                }
+                if (toolCallDelta.function?.name) {
+                  accumulatedToolCalls[index].function.name =
+                    toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function?.arguments) {
+                  accumulatedToolCalls[index].function.arguments +=
+                    toolCallDelta.function.arguments;
+                }
+              }
+            }
+          }
+
+          assistantMessage = {
             role: "assistant",
             content: accumulatedContent || null,
             refusal: accumulatedRefusal || null,
@@ -455,219 +460,260 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 : undefined,
           };
 
-        // Evaluate tool invocation policies dynamically
-        const toolInvocationRefusal =
-          await utils.toolInvocation.evaluatePolicies(
-            (assistantMessage.tool_calls || []).map((toolCall) => {
-              if (toolCall.type === "function") {
-                return {
-                  toolCallName: toolCall.function.name,
-                  toolCallArgs: toolCall.function.arguments,
-                };
-              } else {
-                return {
-                  toolCallName: toolCall.custom.name,
-                  toolCallArgs: toolCall.custom.input,
-                };
-              }
-            }),
-            resolvedAgentId,
-            contextIsTrusted,
-          );
+          // Evaluate tool invocation policies dynamically
+          const toolInvocationRefusal =
+            await utils.toolInvocation.evaluatePolicies(
+              (assistantMessage.tool_calls || []).map((toolCall) => {
+                if (toolCall.type === "function") {
+                  return {
+                    toolCallName: toolCall.function.name,
+                    toolCallArgs: toolCall.function.arguments,
+                  };
+                } else {
+                  return {
+                    toolCallName: toolCall.custom.name,
+                    toolCallArgs: toolCall.custom.input,
+                  };
+                }
+              }),
+              resolvedAgentId,
+              contextIsTrusted,
+            );
 
-        // If there are tool calls, evaluate policies and stream the result
-        if (accumulatedToolCalls.length > 0) {
-          if (toolInvocationRefusal) {
-            const [refusalMessage, contentMessage] = toolInvocationRefusal;
-            /**
-             * Tool invocation was blocked
-             *
-             * Overwrite the assistant message that will be persisted
-             * and stream the refusal message
-             */
+          // If there are tool calls, evaluate policies and stream the result
+          if (accumulatedToolCalls.length > 0) {
+            if (toolInvocationRefusal) {
+              const [refusalMessage, contentMessage] = toolInvocationRefusal;
+              /**
+               * Tool invocation was blocked
+               *
+               * Overwrite the assistant message that will be persisted
+               * and stream the refusal message
+               */
+              assistantMessage = {
+                role: "assistant",
+                /**
+                 * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+                 * is that most clients expect to see the content field, and don't conditionally render the refusal field
+                 *
+                 * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+                 * message, but also show some special UI to indicate that the tool call was blocked.
+                 */
+                refusal: refusalMessage,
+                content: contentMessage,
+              };
+
+              // Stream the refusal as a single chunk
+              const refusalChunk = {
+                id: "chatcmpl-blocked",
+                object: "chat.completion.chunk" as const,
+                created: Date.now() / 1000,
+                model: model,
+                choices: [
+                  {
+                    index: 0,
+                    delta:
+                      assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+                    finish_reason: "stop" as const,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+              reportBlockedTools(
+                "openai",
+                resolvedAgent,
+                accumulatedToolCalls.length,
+              );
+            } else {
+              // Tool calls are allowed
+              // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
+              for (const [index, toolCall] of accumulatedToolCalls.entries()) {
+                const baseChunk = {
+                  id: chunks[0]?.id || "chatcmpl-unknown",
+                  object: "chat.completion.chunk" as const,
+                  created: chunks[0]?.created || Date.now() / 1000,
+                  model: model,
+                };
+
+                // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
+                const idChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            type: "function" as const,
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
+
+                // Chunk 2: Send function name (with id so clients can use assignment)
+                const nameChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            function: { name: toolCall.function.name },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
+
+                // Chunk 3: Send function arguments (with id so clients can use assignment)
+                const argsChunk = {
+                  ...baseChunk,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        tool_calls: [
+                          {
+                            index,
+                            id: toolCall.id,
+                            function: {
+                              arguments: toolCall.function.arguments,
+                            },
+                          },
+                        ],
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
+              }
+              // Tool calls have been streamed to client
+              // Client is responsible for executing tools via MCP Gateway and sending results back
+            }
+          }
+
+          reply.raw.write("data: [DONE]\n\n");
+          reply.raw.end();
+          return reply;
+        } finally {
+          // Always record interaction (whether stream completed or was aborted)
+          // If assistantMessage wasn't built (stream aborted), build it from accumulated data
+          if (!assistantMessage) {
+            fastify.log.info(
+              "Stream was aborted before completion, building partial response",
+            );
+
+            // Parse accumulated tool call arguments
+            for (const toolCall of accumulatedToolCalls) {
+              try {
+                toolCall.function.arguments = JSON.parse(
+                  toolCall.function.arguments,
+                );
+              } catch {
+                // If parsing fails, leave as string
+              }
+            }
+
+            // Build assistant message from what we have so far
             assistantMessage = {
               role: "assistant",
-              /**
-               * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
-               * is that most clients expect to see the content field, and don't conditionally render the refusal field
-               *
-               * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
-               * message, but also show some special UI to indicate that the tool call was blocked.
-               */
-              refusal: refusalMessage,
-              content: contentMessage,
+              content: accumulatedContent || null,
+              refusal: accumulatedRefusal || null,
+              tool_calls:
+                accumulatedToolCalls.length > 0
+                  ? accumulatedToolCalls
+                  : undefined,
             };
+          }
 
-            // Stream the refusal as a single chunk
-            const refusalChunk = {
-              id: "chatcmpl-blocked",
-              object: "chat.completion.chunk" as const,
-              created: Date.now() / 1000,
+          // Report token usage metrics for streaming (only if available)
+          if (tokenUsage) {
+            reportLLMTokens("openai", resolvedAgent, tokenUsage);
+          }
+
+          // Calculate costs (only if we have token usage)
+          let baselineCost: number | null = null;
+          let costAfterOptimization: number | null = null;
+
+          if (tokenUsage) {
+            baselineCost =
+              (await utils.costOptimization.calculateCost(
+                body.model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
+            costAfterOptimization =
+              (await utils.costOptimization.calculateCost(
+                model,
+                tokenUsage.input || 0,
+                tokenUsage.output || 0,
+              )) ?? null;
+
+            fastify.log.info(
+              {
+                baselineCost,
+                costAfterModelOptimization: costAfterOptimization,
+                inputTokens: tokenUsage.input,
+                outputTokens: tokenUsage.output,
+              },
+              "openai proxy routes: handle chat completions: costs",
+            );
+          } else {
+            fastify.log.warn(
+              "No token usage available for streaming request - recording interaction without usage data",
+            );
+          }
+
+          // Always record the interaction
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            type: "openai:chatCompletions",
+            request: body,
+            processedRequest: {
+              ...body,
+              messages: filteredMessages,
+            },
+            response: {
+              id: chunks[0]?.id || "chatcmpl-unknown",
+              object: "chat.completion",
+              created: chunks[0]?.created || Date.now() / 1000,
               model: model,
               choices: [
                 {
                   index: 0,
-                  delta:
-                    assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-                  finish_reason: "stop" as const,
+                  message: assistantMessage,
+                  finish_reason: "stop",
                   logprobs: null,
                 },
               ],
-            };
-            reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-            reportBlockedTools(
-              "openai",
-              resolvedAgent,
-              accumulatedToolCalls.length,
-            );
-          } else {
-            // Tool calls are allowed
-            // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
-            for (const [index, toolCall] of accumulatedToolCalls.entries()) {
-              const baseChunk = {
-                id: chunks[0]?.id || "chatcmpl-unknown",
-                object: "chat.completion.chunk" as const,
-                created: chunks[0]?.created || Date.now() / 1000,
-                model: model,
-              };
-
-              // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
-              const idChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          type: "function" as const,
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
-
-              // Chunk 2: Send function name (with id so clients can use assignment)
-              const nameChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          function: { name: toolCall.function.name },
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
-
-              // Chunk 3: Send function arguments (with id so clients can use assignment)
-              const argsChunk = {
-                ...baseChunk,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      tool_calls: [
-                        {
-                          index,
-                          id: toolCall.id,
-                          function: { arguments: toolCall.function.arguments },
-                        },
-                      ],
-                    },
-                    finish_reason: null,
-                    logprobs: null,
-                  },
-                ],
-              };
-              reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
-            }
-            // Tool calls have been streamed to client
-            // Client is responsible for executing tools via MCP Gateway and sending results back
-          }
-        }
-
-        let costAfterOptimization: number | undefined;
-        let baselineCost: number | undefined;
-
-        // Report token usage metrics for streaming
-        if (tokenUsage) {
-          reportLLMTokens("openai", resolvedAgent, tokenUsage);
-          // Always calculate baseline cost (original requested model)
-          baselineCost = await utils.costOptimization.calculateCost(
-            body.model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-          // Calculate actual cost (potentially optimized model)
-          costAfterOptimization = await utils.costOptimization.calculateCost(
-            model,
-            tokenUsage.input,
-            tokenUsage.output,
-          );
-        }
-
-        fastify.log.info(
-          {
-            baselineCost,
-            costAfterModelOptimization: costAfterOptimization,
-            inputTokens: tokenUsage?.input,
-            outputTokens: tokenUsage?.output,
-          },
-          "openai proxy routes: handle chat completions: costs",
-        );
-
-        // Store the complete interaction
-        await InteractionModel.create({
-          agentId: resolvedAgentId,
-          type: "openai:chatCompletions",
-          request: body,
-          processedRequest: {
-            ...body,
-            messages: filteredMessages,
-          },
-          response: {
-            id: chunks[0]?.id || "chatcmpl-unknown",
-            object: "chat.completion",
-            created: chunks[0]?.created || Date.now() / 1000,
+            },
             model: model,
-            choices: [
-              {
-                index: 0,
-                message: assistantMessage,
-                finish_reason: "stop",
-                logprobs: null,
-              },
-            ],
-          },
-          model: model,
-          inputTokens: tokenUsage?.input || null,
-          outputTokens: tokenUsage?.output || null,
-          cost: costAfterOptimization?.toFixed(10) ?? null,
-          baselineCost: baselineCost?.toFixed(10) ?? null,
-          toonTokensBefore,
-          toonTokensAfter,
-          toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
-        });
-
-        reply.raw.write("data: [DONE]\n\n");
-        reply.raw.end();
-        return reply;
+            inputTokens: tokenUsage?.input || null,
+            outputTokens: tokenUsage?.output || null,
+            cost: costAfterOptimization?.toFixed(10) ?? null,
+            baselineCost: baselineCost?.toFixed(10) ?? null,
+            toonTokensBefore,
+            toonTokensAfter,
+            toonCostSavings: toonCostSavings?.toFixed(10) ?? null,
+          });
+        }
       } else {
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(

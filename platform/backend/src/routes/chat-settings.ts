@@ -48,6 +48,10 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Handle reset API key request
       if (body.resetApiKey === true) {
+        // Delete the secret from storage (Vault/DB)
+        if (secretId) {
+          await secretManager.deleteSecret(secretId);
+        }
         secretId = null;
       } else if (body.anthropicApiKey && body.anthropicApiKey.trim() !== "") {
         // If API key is provided, create or update secret

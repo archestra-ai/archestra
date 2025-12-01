@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 type EntityType = OptimizationRule["entityType"];
 type RuleType = OptimizationRule["ruleType"];
+type Conditions = OptimizationRule["conditions"];
 type TokenPrices = Array<{
   model: string;
   pricePerMillionInput: string;
@@ -296,29 +297,13 @@ function EntitySelect({
   );
 }
 
-type RuleProps = {
-  id: string;
-  enabled: boolean;
-  entityType: EntityType;
-  entityId: string;
-  ruleType: RuleType;
-  maxLength: number;
-  hasTools: boolean;
-  provider: OptimizationRule["provider"];
-  targetModel: string;
+type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
   tokenPrices: TokenPrices;
   teams?: Team[];
   editable?: boolean;
-  onChange?: (data: {
-    entityType: EntityType;
-    entityId: string;
-    ruleType: RuleType;
-    maxLength: number;
-    hasTools: boolean;
-    provider: OptimizationRule["provider"];
-    targetModel: string;
-    enabled: boolean;
-  }) => void;
+  onChange?: (
+    data: Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">,
+  ) => void;
   onToggle?: (enabled: boolean) => void;
   switchDisabled?: boolean;
   className?: string;
@@ -329,8 +314,7 @@ export function Rule({
   entityType,
   entityId,
   ruleType,
-  maxLength,
-  hasTools,
+  conditions,
   provider,
   targetModel,
   tokenPrices,
@@ -345,8 +329,7 @@ export function Rule({
     entityType: EntityType;
     entityId: string;
     ruleType: RuleType;
-    maxLength: number;
-    hasTools: boolean;
+    conditions: Conditions;
     provider: OptimizationRule["provider"];
     targetModel: string;
     enabled: boolean;
@@ -357,8 +340,7 @@ export function Rule({
     entityType,
     entityId,
     ruleType,
-    maxLength,
-    hasTools,
+    conditions,
     provider,
     targetModel,
   });
@@ -371,8 +353,7 @@ export function Rule({
         entityType,
         entityId,
         ruleType,
-        maxLength,
-        hasTools,
+        conditions,
         provider,
         targetModel,
       });
@@ -383,8 +364,7 @@ export function Rule({
     entityType,
     entityId,
     ruleType,
-    maxLength,
-    hasTools,
+    conditions,
     provider,
     targetModel,
   ]);
@@ -412,15 +392,10 @@ export function Rule({
     });
   };
 
-  const onConditionChange = (
-    ruleType: RuleType,
-    maxLength: number,
-    hasTools: boolean,
-  ) => {
+  const onConditionChange = (ruleType: RuleType, conditions: Conditions) => {
     updateFormData({
       ruleType,
-      maxLength,
-      hasTools,
+      conditions,
     });
   };
 
@@ -464,8 +439,7 @@ export function Rule({
       if{" "}
       <Condition
         ruleType={formData.ruleType}
-        maxLength={formData.maxLength}
-        hasTools={formData.hasTools}
+        conditions={formData.conditions}
         onChange={onConditionChange}
         editable={editable}
       />

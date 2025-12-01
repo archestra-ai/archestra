@@ -16,11 +16,8 @@ import {
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 
 type RuleType = OptimizationRule["ruleType"];
-type ChangeHandler = (
-  ruleType: RuleType,
-  maxLength: number,
-  hasTools: boolean,
-) => void;
+type Conditions = OptimizationRule["conditions"];
+type ChangeHandler = (ruleType: RuleType, conditions: Conditions) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
@@ -31,27 +28,36 @@ function ConditionBlock({ children }: { children: React.ReactNode }) {
 }
 export function Condition({
   ruleType,
-  maxLength,
-  hasTools,
+  conditions,
   onChange,
   editable,
 }: {
   ruleType: RuleType;
-  maxLength: number;
-  hasTools: boolean;
+  conditions: Conditions;
   onChange?: ChangeHandler;
   editable?: boolean;
 }) {
+  // Extract first condition for display (for now we display/edit only the first one)
+  const firstCondition = conditions[0] || {};
+  const maxLength =
+    "maxLength" in firstCondition ? firstCondition.maxLength : 1000;
+  const hasTools =
+    "hasTools" in firstCondition ? firstCondition.hasTools : false;
+
   function onTypeChange(type: RuleType) {
-    onChange?.(type, maxLength, hasTools);
+    const newConditions: Conditions =
+      type === "content_length" ? [{ maxLength }] : [{ hasTools }];
+    onChange?.(type, newConditions);
   }
 
   function onMaxLengthChange(length: number) {
-    onChange?.(ruleType, length, hasTools);
+    const newConditions: Conditions = [{ maxLength: length }];
+    onChange?.(ruleType, newConditions);
   }
 
   function onToolsChange(hasTools: boolean) {
-    onChange?.(ruleType, maxLength, hasTools);
+    const newConditions: Conditions = [{ hasTools }];
+    onChange?.(ruleType, newConditions);
   }
 
   let trigger = null;

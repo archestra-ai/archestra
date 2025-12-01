@@ -498,6 +498,13 @@
       "when": 1764347798818,
       "tag": "0070_vault secrets manager",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1764582756831,
+      "tag": "0071_migrate_conditions_to_array",
+      "breakpoints": true
     }
   ]
 }

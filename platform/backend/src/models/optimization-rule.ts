@@ -95,7 +95,7 @@ class OptimizationRuleModel {
   }
 
   // Evaluate rules for a given context
-  // Rules are grouped by models. If all rules in such group match, returns the model.
+  // Returns the target model of the first matching rule
   static matchByRules(
     rules: OptimizationRule[],
     context: {
@@ -103,39 +103,24 @@ class OptimizationRuleModel {
       hasTools: boolean;
     },
   ): string | null {
-    const rulesByModel: Record<string, OptimizationRule[]> = {};
-
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      const model = rule.targetModel;
-      if (!rulesByModel[model]) {
-        rulesByModel[model] = [];
-      }
-      rulesByModel[model].push(rule);
-    }
-
-    for (const [model, modelRules] of Object.entries(rulesByModel)) {
-      let match = true;
-
-      for (const rule of modelRules) {
+      // Check if all conditions in the array match
+      const allConditionsMatch = rule.conditions.every((condition) => {
         if (rule.ruleType === "content_length") {
-          const conditions = rule.conditions as ContentLengthConditions;
-          if (context.tokenCount > conditions.maxLength) {
-            match = false;
-            break;
-          }
-        } else if (rule.ruleType === "tool_presence") {
-          const conditions = rule.conditions as ToolPresenceConditions;
-          if (context.hasTools !== conditions.hasTools) {
-            match = false;
-            break;
-          }
+          const contentCondition = condition as ContentLengthConditions;
+          return context.tokenCount <= contentCondition.maxLength;
         }
-      }
+        if (rule.ruleType === "tool_presence") {
+          const toolCondition = condition as ToolPresenceConditions;
+          return context.hasTools === toolCondition.hasTools;
+        }
+        return false;
+      });
 
-      if (match) {
-        return model;
+      if (allConditionsMatch) {
+        return rule.targetModel;
       }
     }
 
@@ -195,7 +180,7 @@ class OptimizationRuleModel {
             entityType: "organization",
             entityId: organizationId,
             ruleType: "tool_presence",
-            conditions: { hasTools: false },
+            conditions: [{ hasTools: false }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -204,7 +189,7 @@ class OptimizationRuleModel {
             entityType: "organization",
             entityId: organizationId,
             ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -215,7 +200,7 @@ class OptimizationRuleModel {
             entityType: "organization",
             entityId: organizationId,
             ruleType: "tool_presence",
-            conditions: { hasTools: false },
+            conditions: [{ hasTools: false }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,
@@ -224,7 +209,7 @@ class OptimizationRuleModel {
             entityType: "organization",
             entityId: organizationId,
             ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,

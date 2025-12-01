@@ -19,10 +19,9 @@ export const ToolPresenceConditionsSchema = z.object({
   hasTools: z.boolean(),
 });
 
-export const OptimizationRuleConditionsSchema = z.union([
-  ContentLengthConditionsSchema,
-  ToolPresenceConditionsSchema,
-]);
+export const OptimizationRuleConditionsSchema = z
+  .union([ContentLengthConditionsSchema, ToolPresenceConditionsSchema])
+  .array();
 
 export const OptimizationRuleTypeSchema = z.enum([
   "content_length",

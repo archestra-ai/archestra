@@ -11406,11 +11406,11 @@ export type GetOptimizationRulesResponses = {
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
         ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11427,11 +11427,11 @@ export type CreateOptimizationRuleData = {
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
         ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProvidersInput;
         targetModel: string;
         enabled?: boolean;
@@ -11511,11 +11511,11 @@ export type CreateOptimizationRuleResponses = {
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
         ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11611,11 +11611,11 @@ export type UpdateOptimizationRuleData = {
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
         ruleType?: 'content_length' | 'tool_presence';
-        conditions?: {
+        conditions?: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider?: SupportedProvidersInput;
         targetModel?: string;
         enabled?: boolean;
@@ -11697,11 +11697,11 @@ export type UpdateOptimizationRuleResponses = {
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
         ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;

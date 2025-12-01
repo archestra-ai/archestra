@@ -84,8 +84,8 @@ function formDataToConditions(
   data: RuleFormData,
 ): CreateOptimizationRuleInput["conditions"] {
   return data.ruleType === "content_length"
-    ? { maxLength: Number(data.maxLength) }
-    : { hasTools: data.hasTools ?? false };
+    ? [{ maxLength: Number(data.maxLength) }]
+    : [{ hasTools: data.hasTools ?? false }];
 }
 
 // Helper to check if a rule has valid pricing
@@ -202,8 +202,8 @@ export default function OptimizationRulesPage() {
         ruleType: newRuleData.ruleType,
         conditions:
           newRuleData.ruleType === "content_length"
-            ? { maxLength: newRuleData.maxLength }
-            : { hasTools: newRuleData.hasTools },
+            ? [{ maxLength: newRuleData.maxLength }]
+            : [{ hasTools: newRuleData.hasTools }],
         provider: newRuleData.provider,
         targetModel: newRuleData.targetModel,
         createdAt: "",
@@ -318,11 +318,11 @@ export default function OptimizationRulesPage() {
     if (!editingRuleId || !editedRuleData) return;
 
     try {
-      // Convert maxLength/hasTools to conditions object
+      // Convert maxLength/hasTools to conditions array
       const conditions =
         editedRuleData.ruleType === "content_length"
-          ? { maxLength: Number(editedRuleData.maxLength) }
-          : { hasTools: editedRuleData.hasTools ?? false };
+          ? [{ maxLength: Number(editedRuleData.maxLength) }]
+          : [{ hasTools: editedRuleData.hasTools ?? false }];
 
       await updateRule.mutateAsync({
         id: editingRuleId,
@@ -414,12 +414,12 @@ export default function OptimizationRulesPage() {
 
                 // Extract maxLength/hasTools from conditions
                 const maxLength =
-                  rule.ruleType === "content_length"
-                    ? (rule.conditions as { maxLength: number }).maxLength
+                  rule.ruleType === "content_length" && rule.conditions[0]
+                    ? (rule.conditions[0] as { maxLength: number }).maxLength
                     : 1000;
                 const hasTools =
-                  rule.ruleType === "tool_presence"
-                    ? (rule.conditions as { hasTools: boolean }).hasTools
+                  rule.ruleType === "tool_presence" && rule.conditions[0]
+                    ? (rule.conditions[0] as { hasTools: boolean }).hasTools
                     : false;
 
                 const handleSubmit = async (e: React.FormEvent) => {

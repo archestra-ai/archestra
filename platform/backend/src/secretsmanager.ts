@@ -11,7 +11,7 @@ export interface SecretManager {
   /**
    * Create a new secret
    * @param secretValue - The secret value as JSON
-   * @param name - Human-readable name to identify the secret in external storage (max 27 chars: 64 - UUID length - separator)
+   * @param name - Human-readable name to identify the secret in external storage
    * @returns The created secret with generated ID
    */
   createSecret(secretValue: SecretValue, name: string): Promise<SelectSecret>;
@@ -120,8 +120,11 @@ export class VaultSecretManager implements SecretManager {
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
+    // Trim name to 64 chars to avoid Vault path length limits
+    const trimmedName = name.slice(0, 64);
+
     const dbRecord = await SecretModel.create({
-      name,
+      name: trimmedName,
       secret: {},
       isVault: true,
     });

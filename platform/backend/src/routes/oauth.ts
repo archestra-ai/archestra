@@ -652,7 +652,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
           token_type: "Bearer",
         },
-        "mcpoauthtoken",
+        `${catalogItem.name}-oauth`,
       );
 
       // Clean up used state

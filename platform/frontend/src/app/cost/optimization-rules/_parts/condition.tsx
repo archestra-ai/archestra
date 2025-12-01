@@ -1,4 +1,7 @@
+import { X } from "lucide-react";
+import type React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,9 +18,9 @@ import {
 } from "@/components/ui/select";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 
-type RuleType = OptimizationRule["ruleType"];
 type Conditions = OptimizationRule["conditions"];
-type ChangeHandler = (ruleType: RuleType, conditions: Conditions) => void;
+type SingleCondition = Conditions[number];
+type ChangeHandler = (condition: SingleCondition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
@@ -27,53 +30,50 @@ function ConditionBlock({ children }: { children: React.ReactNode }) {
   );
 }
 export function Condition({
-  ruleType,
-  conditions,
-  onChange,
+  condition,
   editable,
+  removable,
+  onChange,
+  onRemove,
 }: {
-  ruleType: RuleType;
-  conditions: Conditions;
+  condition: SingleCondition;
   onChange?: ChangeHandler;
+  onRemove?: () => void;
   editable?: boolean;
+  removable?: boolean;
 }) {
-  // Extract first condition for display (for now we display/edit only the first one)
-  const firstCondition = conditions[0] || {};
-  const maxLength =
-    "maxLength" in firstCondition ? firstCondition.maxLength : 1000;
-  const hasTools =
-    "hasTools" in firstCondition ? firstCondition.hasTools : false;
+  const maxLength = "maxLength" in condition ? condition.maxLength : 1000;
+  const hasTools = "hasTools" in condition ? condition.hasTools : false;
 
-  function onTypeChange(type: RuleType) {
-    const newConditions: Conditions =
-      type === "content_length" ? [{ maxLength }] : [{ hasTools }];
-    onChange?.(type, newConditions);
+  function onTypeChange(toContentLength: boolean) {
+    const newCondition: SingleCondition = toContentLength
+      ? { maxLength: 1000 }
+      : { hasTools: false };
+    onChange?.(newCondition);
   }
 
   function onMaxLengthChange(length: number) {
-    const newConditions: Conditions = [{ maxLength: length }];
-    onChange?.(ruleType, newConditions);
+    onChange?.({ maxLength: length });
   }
 
   function onToolsChange(hasTools: boolean) {
-    const newConditions: Conditions = [{ hasTools }];
-    onChange?.(ruleType, newConditions);
+    onChange?.({ hasTools });
   }
 
   let trigger = null;
-  if (ruleType === "content_length") {
+  if ("maxLength" in condition) {
     trigger = (
       <span className="flex gap-2">
         content length
         <span>&lt;</span>
       </span>
     );
-  } else if (ruleType === "tool_presence") {
+  } else {
     trigger = <>tool calls</>;
   }
 
   if (!editable) {
-    if (ruleType === "content_length") {
+    if ("maxLength" in condition) {
       return (
         <ConditionBlock>
           content length <span>&lt;</span>
@@ -83,7 +83,7 @@ export function Condition({
           tokens
         </ConditionBlock>
       );
-    } else if (ruleType === "tool_presence") {
+    } else {
       return (
         <ConditionBlock>
           tool calls{" "}
@@ -96,7 +96,7 @@ export function Condition({
   }
 
   let controls = null;
-  if (ruleType === "content_length") {
+  if ("maxLength" in condition) {
     controls = (
       <span className="flex gap-2 items-center">
         <Input
@@ -112,7 +112,7 @@ export function Condition({
         tokens
       </span>
     );
-  } else if (ruleType === "tool_presence") {
+  } else {
     controls = (
       <Select
         value={hasTools ? "true" : "false"}
@@ -137,10 +137,10 @@ export function Condition({
             {trigger}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="ml-[-8px]">
-            <DropdownMenuItem onClick={() => onTypeChange("content_length")}>
+            <DropdownMenuItem onClick={() => onTypeChange(true)}>
               content length in tokens
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onTypeChange("tool_presence")}>
+            <DropdownMenuItem onClick={() => onTypeChange(false)}>
               with or without tool calls
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -149,6 +149,17 @@ export function Condition({
         trigger
       )}
       {controls}
+      {removable && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-6 h-6 mr-[-6px] bg-primary/20"
+          onClick={onRemove}
+          title="Remove condition"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
     </ConditionBlock>
   );
 }

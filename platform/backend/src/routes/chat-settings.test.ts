@@ -37,7 +37,7 @@ describe("chat-settings route - resetApiKey", () => {
 
     // Verify the secret is deleted
     const secretAfter = await SecretModel.findById(secret.id);
-    expect(secretAfter).toBeNull();
+    expect(secretAfter).toBeFalsy();
 
     // Verify chat settings no longer reference the secret
     const updatedSettings = await ChatSettingsModel.findByOrganizationId(

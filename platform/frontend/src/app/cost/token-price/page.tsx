@@ -26,6 +26,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -39,6 +46,43 @@ import {
   useTokenPrices,
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
+
+type SupportedProvider = "openai" | "gemini" | "anthropic";
+
+const PROVIDERS: { value: SupportedProvider; label: string }[] = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "gemini", label: "Gemini" },
+];
+
+const MODELS_BY_PROVIDER: Record<SupportedProvider, string[]> = {
+  openai: [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "o1",
+    "o1-mini",
+    "o3-mini",
+  ],
+  anthropic: [
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+  ],
+  gemini: [
+    "gemini-2.0-flash-exp",
+    "gemini-exp-1206",
+    "gemini-2.0-flash-thinking-exp-01-21",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+  ],
+};
 
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
@@ -70,6 +114,8 @@ function TokenPriceInlineForm({
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
+    provider:
+      (initialData?.provider as SupportedProvider) || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
@@ -84,32 +130,72 @@ function TokenPriceInlineForm({
   );
 
   const isValid =
+    formData.provider &&
     formData.model &&
     formData.pricePerMillionInput &&
     formData.pricePerMillionOutput;
 
   return (
     <tr className="border-b">
-      <td colSpan={4} className="p-4 bg-muted/30">
+      <td colSpan={5} className="p-4 bg-muted/30">
         <form
           onSubmit={handleSubmit}
           className="flex flex-wrap items-center gap-4"
         >
           <div className="flex items-center gap-2">
+            <Label htmlFor="provider" className="text-sm whitespace-nowrap">
+              Provider
+            </Label>
+            <Select
+              value={formData.provider}
+              onValueChange={(value) => {
+                const newProvider = value as SupportedProvider;
+                // Reset model if it's not available for the new provider
+                const models = MODELS_BY_PROVIDER[newProvider];
+                const newModel = models.includes(formData.model)
+                  ? formData.model
+                  : "";
+                setFormData({
+                  ...formData,
+                  provider: newProvider,
+                  model: newModel,
+                });
+              }}
+            >
+              <SelectTrigger id="provider" className="w-40">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.value} value={provider.value}>
+                    {provider.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
             <Label htmlFor="model" className="text-sm whitespace-nowrap">
               Model
             </Label>
-            <Input
-              id="model"
-              type="text"
+            <Select
               value={formData.model}
-              onChange={(e) =>
-                setFormData({ ...formData, model: e.target.value })
+              onValueChange={(value) =>
+                setFormData({ ...formData, model: value })
               }
-              placeholder="e.g. gpt-4"
-              required
-              className="w-48"
-            />
+            >
+              <SelectTrigger id="model" className="w-64">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                {MODELS_BY_PROVIDER[formData.provider].map((model) => (
+                  <SelectItem key={model} value={model}>
+                    {model}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-center gap-2">
@@ -205,6 +291,7 @@ function TokenPriceRow({
 
   return (
     <tr className="border-b hover:bg-muted/30">
+      <td className="p-4 capitalize">{tokenPrice.provider}</td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
         ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}
@@ -332,6 +419,7 @@ export default function TokenPricePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Provider</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Input Price ($)</TableHead>
                   <TableHead>Output Price ($)</TableHead>
@@ -348,7 +436,7 @@ export default function TokenPricePage() {
                 {tokenPrices.length === 0 && !isAddingTokenPrice ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="text-center py-8 text-muted-foreground"
                     >
                       <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />

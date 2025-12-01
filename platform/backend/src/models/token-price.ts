@@ -1,7 +1,12 @@
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
-import type { CreateTokenPrice, InsertTokenPrice, SupportedProvider, TokenPrice } from "@/types";
+import type {
+  CreateTokenPrice,
+  InsertTokenPrice,
+  SupportedProvider,
+  TokenPrice,
+} from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
@@ -32,7 +37,7 @@ class TokenPriceModel {
   static async create(data: CreateTokenPrice): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values(data)
+      .values(data as any)
       .returning();
 
     return tokenPrice;
@@ -44,7 +49,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice | null> {
     const [tokenPrice] = await db
       .update(schema.tokenPricesTable)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...data, updatedAt: new Date() } as any)
       .where(eq(schema.tokenPricesTable.id, id))
       .returning();
 
@@ -57,7 +62,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values({ model, ...data })
+      .values({ model, ...data } as any)
       .onConflictDoUpdate({
         target: schema.tokenPricesTable.model,
         set: {
@@ -77,7 +82,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice | null> {
     const result = await db
       .insert(schema.tokenPricesTable)
-      .values({ model, ...data })
+      .values({ model, ...data } as any)
       .onConflictDoNothing({
         target: schema.tokenPricesTable.model,
       })
@@ -103,7 +108,9 @@ class TokenPriceModel {
   /**
    * Get all unique models from interactions table (both actual and requested models)
    */
-  static async getAllModelsFromInteractions(): Promise<{provider: SupportedProvider, model: string}[]> {
+  static async getAllModelsFromInteractions(): Promise<
+    { provider: SupportedProvider; model: string }[]
+  > {
     const results = await db
       .select({
         model: schema.interactionsTable.model,
@@ -116,7 +123,7 @@ class TokenPriceModel {
     // When the model was optimized, they are different.
     const modelDictionary: Record<string, SupportedProvider> = {};
     for (const row of results) {
-      const provider = row.type.split(':')[0];
+      const provider = row.type.split(":")[0] as SupportedProvider;
       if (row.model) {
         modelDictionary[row.model] = provider;
       }
@@ -125,7 +132,10 @@ class TokenPriceModel {
       }
     }
 
-    return Object.entries(modelDictionary).map(([model, provider]) => ({ provider, model }));
+    return Object.entries(modelDictionary).map(([model, provider]) => ({
+      provider,
+      model,
+    }));
   }
 
   static async ensureAllModelsHavePricing(): Promise<void> {
@@ -134,10 +144,12 @@ class TokenPriceModel {
     const existingModels = new Set(existingTokenPrices.map((tp) => tp.model));
 
     // Create default pricing for models that don't have pricing records
-    const missingEntries = entries.filter(({ model }) => !existingModels.has(model));
+    const missingEntries = entries.filter(
+      ({ model }) => !existingModels.has(model),
+    );
 
     if (missingEntries.length > 0) {
-      const defaultPrices: InsertTokenPrice[] = missingEntries.map(({ provider, model}) => ({
+      const defaultPrices = missingEntries.map(({ provider, model }) => ({
         model,
         provider,
         ...getDefaultModelPrice(model),
@@ -145,7 +157,7 @@ class TokenPriceModel {
 
       await db
         .insert(schema.tokenPricesTable)
-        .values(defaultPrices)
+        .values(defaultPrices as any)
         .onConflictDoNothing({
           target: schema.tokenPricesTable.model,
         });

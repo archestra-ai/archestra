@@ -1,12 +1,13 @@
 import {
   index,
   numeric,
-  pgTable, text,
+  pgTable,
+  text,
   timestamp,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { SupportedProvider } from '@/types';
+import type { SupportedProvider } from "@/types";
 
 const tokenPriceTable = pgTable(
   "token_price",

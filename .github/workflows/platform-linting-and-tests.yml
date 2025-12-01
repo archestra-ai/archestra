@@ -51,9 +51,46 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: pnpm check:ci
 
+  # Resolve Playwright version to use for the e2e tests container
+  # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
+  resolve-playwright-version:
+    name: Resolve Playwright Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.resolve.outputs.version || steps.skip.outputs.version }}
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          sparse-checkout: platform/e2e-tests/package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve Playwright version
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        id: resolve
+        run: |
+          # Extract version from package.json, removing any ^ or ~ prefix
+          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
+          echo "Resolved Playwright version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Output dummy version for skip mode
+        if: ${{ inputs.should-skip-running-and-always-succeed == true }}
+        id: skip
+        run: echo "version=1.56.1" >> $GITHUB_OUTPUT
+
   platform-e2e-tests:
     name: Platform e2e Tests
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    needs: resolve-playwright-version
+    # Use official Playwright container which has all browsers and dependencies pre-installed
+    # This eliminates the need for manual Playwright installation and caching
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.resolve-playwright-version.outputs.version }}-noble
     permissions:
       contents: read
     steps:
@@ -232,34 +269,6 @@ jobs:
           else
             echo "✅ No new migration files were generated - schema is in sync with migrations"
           fi
-
-      - name: Get Playwright version
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: |
-          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
-
-      - name: Cache Playwright binaries and dependencies
-        id: playwright-cache
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
-
-      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
-      - name: Install Playwright browsers
-        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
-
-      # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
-      # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
-      # explicitly install, just the webkit ones, each time 🥲
-      - name: Install Playwright system dependencies for WebKit
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install-deps webkit
 
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}

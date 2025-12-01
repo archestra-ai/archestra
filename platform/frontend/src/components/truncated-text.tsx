@@ -53,11 +53,8 @@ export function TruncatedText({
             <span>{displayText}</span>
           </TooltipTrigger>
           <TooltipContent
-            className={cn(
-              "max-w-md whitespace-pre-wrap break-words",
-              tooltipContentProps?.className,
-            )}
             {...tooltipContentProps}
+            className={cn("max-w-sm", tooltipContentProps?.className)}
           >
             {message}
           </TooltipContent>

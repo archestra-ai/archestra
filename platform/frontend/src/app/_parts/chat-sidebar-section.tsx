@@ -4,17 +4,6 @@ import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -26,12 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { WithInlineConfirm } from "@/components/ui/with-inline-confirm";
 import {
   useConversations,
   useDeleteConversation,
@@ -131,6 +115,8 @@ export function ChatSidebarSection() {
     await deleteConversationMutation.mutateAsync(id);
   };
 
+  console.log(visibleChats);
+
   return (
     <SidebarGroup className="px-4 py-0">
       <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
@@ -162,7 +148,7 @@ export function ChatSidebarSection() {
                 );
                 const buttons =
                   editingId !== conv.id ? (
-                    <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
+                    <div className="flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 transition-opacity shrink-0">
                       <PermissionButton
                         permissions={{ conversation: ["update"] }}
                         type="button"
@@ -177,46 +163,27 @@ export function ChatSidebarSection() {
                       >
                         <Edit2 className="h-4 w-4" />
                       </PermissionButton>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                            title="Delete chat"
-                            className="p-1 w-fit"
-                          >
-                            <Trash2 className="p-0 h-2 w-2 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Delete Conversation
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete this conversation?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteConversation(conv.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <WithInlineConfirm
+                        onConfirm={() => handleDeleteConversation(conv.id)}
+                      >
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          title="Delete chat"
+                          className="p-1 w-fit"
+                        >
+                          <Trash2 className="p-0 h-2 w-2 text-destructive" />
+                        </Button>
+                      </WithInlineConfirm>
                     </div>
                   ) : null;
 
                 return (
-                  <SidebarMenuItem key={conv.id} className="group/chat-item">
+                  <SidebarMenuItem key={conv.id}>
                     <div className="flex items-center justify-between w-full gap-1">
                       {editingId === conv.id ? (
                         <Input
@@ -242,11 +209,11 @@ export function ChatSidebarSection() {
                         >
                           <TruncatedText
                             message={displayTitle}
-                            maxLength={22}
-                            className="flex-1 pr-0"
+                            maxLength={20}
+                            className="flex-1 pr-0 group-hover/menu-item:pr-2 transition-all"
                             tooltipContentProps={{
                               side: "right",
-                              className: "translate-x-20",
+                              className: "relative left-20 pointer-events-none",
                               noArrow: true,
                             }}
                           />

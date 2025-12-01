@@ -181,15 +181,7 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            conditions: [{ hasTools: false }],
-            provider: "openai",
-            targetModel: "gpt-5-mini",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            conditions: [{ maxLength: 1000 }],
+            conditions: [{ maxLength: 1000 }, { hasTools: false }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -199,15 +191,7 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            conditions: [{ hasTools: false }],
-            provider: "anthropic",
-            targetModel: "claude-haiku-4-5",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            conditions: [{ maxLength: 1000 }],
+            conditions: [{ maxLength: 1000 }, { hasTools: false }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,

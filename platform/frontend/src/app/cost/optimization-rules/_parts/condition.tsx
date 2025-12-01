@@ -19,8 +19,8 @@ import {
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 
 type Conditions = OptimizationRule["conditions"];
-type SingleCondition = Conditions[number];
-type ChangeHandler = (condition: SingleCondition) => void;
+type Condition = Conditions[number];
+type ChangeHandler = (condition: Condition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
@@ -36,7 +36,7 @@ export function Condition({
   onChange,
   onRemove,
 }: {
-  condition: SingleCondition;
+  condition: Condition;
   onChange?: ChangeHandler;
   onRemove?: () => void;
   editable?: boolean;
@@ -45,10 +45,7 @@ export function Condition({
   const maxLength = "maxLength" in condition ? condition.maxLength : 1000;
   const hasTools = "hasTools" in condition ? condition.hasTools : false;
 
-  function onTypeChange(toContentLength: boolean) {
-    const newCondition: SingleCondition = toContentLength
-      ? { maxLength: 1000 }
-      : { hasTools: false };
+  function onConditionChange(newCondition: Condition) {
     onChange?.(newCondition);
   }
 
@@ -137,10 +134,14 @@ export function Condition({
             {trigger}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="ml-[-8px]">
-            <DropdownMenuItem onClick={() => onTypeChange(true)}>
+            <DropdownMenuItem
+              onClick={() => onConditionChange({ maxLength: 1000 })}
+            >
               content length in tokens
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onTypeChange(false)}>
+            <DropdownMenuItem
+              onClick={() => onConditionChange({ hasTools: false })}
+            >
               with or without tool calls
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -24,7 +24,6 @@ import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import type { Team } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
 
-type Provider = "openai" | "anthropic";
 type EntityType = OptimizationRule["entityType"];
 type RuleType = OptimizationRule["ruleType"];
 type TokenPrices = Array<{
@@ -34,9 +33,10 @@ type TokenPrices = Array<{
 }>;
 
 // Helper to infer provider from model name
-function getProviderFromModel(model: string): Provider | null {
+function getProviderFromModel(model: string): SupportedProviders | null {
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gpt-") || model.startsWith("o1-")) return "openai";
+  if (model.startsWith("gemini-")) return "gemini";
   return null;
 }
 
@@ -51,9 +51,10 @@ function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {
   });
 }
 
-const providerDictionary: Record<Provider, string> = {
+const providerDictionary: Record<SupportedProviders, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
+  gemini: "Gemini",
 };
 
 // Helper to get entity display name
@@ -77,12 +78,12 @@ export function ProviderSelect({
 }: {
   provider: SupportedProviders;
   providers: SupportedProviders[];
-  onChange: (provider: Provider) => void;
+  onChange: (provider: SupportedProviders) => void;
   editable?: boolean;
 }) {
   if (!editable) {
     return (
-      <Badge variant="primary" className="text-sm">
+      <Badge variant="outline" className="text-sm">
         {providerDictionary[provider]}
       </Badge>
     );
@@ -94,10 +95,10 @@ export function ProviderSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {providers.map((provider) => {
+        {providers.map((providerItem) => {
           return (
-            <SelectItem key={provider} value={provider}>
-              {providerDictionary[provider]}
+            <SelectItem key={providerItem} value={providerItem}>
+              {providerDictionary[providerItem]}
             </SelectItem>
           );
         })}
@@ -171,7 +172,7 @@ function ModelSelect({
     return (
       <div className="flex items-center gap-1">
         <Badge
-          variant="secondary"
+          variant="outline"
           className={cn(
             "text-sm bg-green-100",
             !hasPricing && "bg-orange-100 border-orange-300",
@@ -250,7 +251,7 @@ function EntitySelect({
   if (!editable) {
     const entityName = getEntityName(entityType, entityId, teams);
     return (
-      <Badge variant="primary" className="text-sm">
+      <Badge variant="outline" className="text-sm">
         {entityName}
       </Badge>
     );
@@ -260,7 +261,11 @@ function EntitySelect({
     <div className="flex flex-row gap-2 whitespace-nowrap">
       <Select
         value={entityType}
-        onValueChange={(value) => onChange(value, undefined)}
+        onValueChange={(value) => {
+          if (value === "organization" || value === "team") {
+            onChange(value, undefined);
+          }
+        }}
       >
         <SelectTrigger size="sm" className="!h-7">
           <SelectValue />
@@ -391,15 +396,16 @@ export function Rule({
     onChange?.(updated);
   };
 
-  const onProviderChange = (provider: Provider) =>
+  const onProviderChange = (provider: SupportedProviders) =>
     updateFormData({
       provider,
       targetModel: "",
     });
 
-  const onModelChange = (value) => updateFormData({ targetModel: value });
+  const onModelChange = (value: string) =>
+    updateFormData({ targetModel: value });
 
-  const onEntityChange = (entityType: "organization" | "team", entityId) => {
+  const onEntityChange = (entityType: EntityType, entityId?: string) => {
     updateFormData({
       entityType,
       entityId: entityId || "",

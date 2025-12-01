@@ -5,12 +5,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@shared"],
-  devIndicators: {
-    position: "bottom-right",
-  },
+  // Disable dev indicators so they don't show up in docs automated screenshots
+  devIndicators: false,
   logging: {
     fetches: {
       fullUrl: true,
+      hmrRefreshes: true,
     },
     incomingRequests: true,
   },

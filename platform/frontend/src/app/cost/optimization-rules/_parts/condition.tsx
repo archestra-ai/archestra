@@ -1,4 +1,7 @@
+import { X } from "lucide-react";
+import type React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,12 +18,9 @@ import {
 } from "@/components/ui/select";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 
-type RuleType = OptimizationRule["ruleType"];
-type ChangeHandler = (
-  ruleType: RuleType,
-  maxLength: number,
-  hasTools: boolean,
-) => void;
+type Conditions = OptimizationRule["conditions"];
+type Condition = Conditions[number];
+type ChangeHandler = (condition: Condition) => void;
 
 function ConditionBlock({ children }: { children: React.ReactNode }) {
   return (
@@ -30,44 +30,47 @@ function ConditionBlock({ children }: { children: React.ReactNode }) {
   );
 }
 export function Condition({
-  ruleType,
-  maxLength,
-  hasTools,
-  onChange,
+  condition,
   editable,
+  removable,
+  onChange,
+  onRemove,
 }: {
-  ruleType: RuleType;
-  maxLength: number;
-  hasTools: boolean;
+  condition: Condition;
   onChange?: ChangeHandler;
+  onRemove?: () => void;
   editable?: boolean;
+  removable?: boolean;
 }) {
-  function onTypeChange(type: RuleType) {
-    onChange?.(type, maxLength, hasTools);
+  const maxLength = "maxLength" in condition ? condition.maxLength : 1000;
+  const hasTools = "hasTools" in condition ? condition.hasTools : false;
+
+  function onConditionChange(newCondition: Condition) {
+    onChange?.(newCondition);
   }
 
   function onMaxLengthChange(length: number) {
-    onChange?.(ruleType, length, hasTools);
+    onChange?.({ maxLength: length });
   }
 
   function onToolsChange(hasTools: boolean) {
-    onChange?.(ruleType, maxLength, hasTools);
+    onChange?.({ hasTools });
   }
 
   let trigger = null;
-  if (ruleType === "content_length") {
+  if ("maxLength" in condition) {
     trigger = (
       <span className="flex gap-2">
         content length
         <span>&lt;</span>
       </span>
     );
-  } else if (ruleType === "tool_presence") {
-    trigger = <>tool calls</>;
+  } else {
+    trigger = <>tools</>;
   }
 
   if (!editable) {
-    if (ruleType === "content_length") {
+    if ("maxLength" in condition) {
       return (
         <ConditionBlock>
           content length <span>&lt;</span>
@@ -77,10 +80,10 @@ export function Condition({
           tokens
         </ConditionBlock>
       );
-    } else if (ruleType === "tool_presence") {
+    } else {
       return (
         <ConditionBlock>
-          tool calls{" "}
+          tools{" "}
           <Badge variant="outline" className="text-sm bg-background">
             {hasTools ? "present" : "absent"}
           </Badge>
@@ -90,7 +93,7 @@ export function Condition({
   }
 
   let controls = null;
-  if (ruleType === "content_length") {
+  if ("maxLength" in condition) {
     controls = (
       <span className="flex gap-2 items-center">
         <Input
@@ -106,7 +109,7 @@ export function Condition({
         tokens
       </span>
     );
-  } else if (ruleType === "tool_presence") {
+  } else {
     controls = (
       <Select
         value={hasTools ? "true" : "false"}
@@ -131,11 +134,15 @@ export function Condition({
             {trigger}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="ml-[-8px]">
-            <DropdownMenuItem onClick={() => onTypeChange("content_length")}>
+            <DropdownMenuItem
+              onClick={() => onConditionChange({ maxLength: 1000 })}
+            >
               content length in tokens
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onTypeChange("tool_presence")}>
-              with or without tool calls
+            <DropdownMenuItem
+              onClick={() => onConditionChange({ hasTools: false })}
+            >
+              with or without tools
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -143,6 +150,18 @@ export function Condition({
         trigger
       )}
       {controls}
+      {removable && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-6 h-6 mr-[-6px] bg-primary/20"
+          onClick={onRemove}
+          title="Remove condition"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
     </ConditionBlock>
   );
 }

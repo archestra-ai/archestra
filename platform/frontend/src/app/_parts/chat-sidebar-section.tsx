@@ -1,19 +1,15 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  ChevronDown,
+  ChevronRight,
+  Edit2,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -31,9 +27,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TypingText } from "@/components/ui/typing-text";
+import { WithInlineConfirm } from "@/components/ui/with-inline-confirm";
+import { useRecentlyGeneratedTitles } from "@/lib/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
+  useGenerateConversationTitle,
   useUpdateConversation,
 } from "@/lib/chat.query";
 
@@ -54,7 +54,7 @@ function getConversationDisplayTitle(
       if (msg.role === "user" && msg.parts) {
         for (const part of msg.parts) {
           if (part.type === "text" && part.text) {
-            return part.text.slice(0, 15);
+            return part.text;
           }
         }
       }
@@ -71,11 +71,16 @@ export function ChatSidebarSection() {
   const { data: conversations = [], isLoading } = useConversations();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
+  const generateTitleMutation = useGenerateConversationTitle();
 
   const [showAllChats, setShowAllChats] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Track conversations with recently auto-generated titles for animation
+  const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
+    useRecentlyGeneratedTitles(conversations);
 
   const currentConversationId = pathname.startsWith("/chat")
     ? searchParams.get(CONVERSATION_QUERY_PARAM)
@@ -96,51 +101,49 @@ export function ChatSidebarSection() {
     }
   }, [editingId]);
 
-  const handleSelectConversation = useCallback(
-    (id: string) => {
-      router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
-    },
-    [router],
-  );
+  const handleSelectConversation = (id: string) => {
+    router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
+  };
 
-  const handleStartEdit = useCallback(
-    (id: string, currentTitle: string | null) => {
-      setEditingId(id);
-      setEditingTitle(currentTitle || "");
-    },
-    [],
-  );
+  const handleStartEdit = (id: string, currentTitle: string | null) => {
+    setEditingId(id);
+    setEditingTitle(currentTitle || "");
+  };
 
-  const handleSaveEdit = useCallback(
-    async (id: string) => {
-      if (editingTitle.trim()) {
-        await updateConversationMutation.mutateAsync({
-          id,
-          title: editingTitle.trim(),
-        });
-      }
-      setEditingId(null);
-      setEditingTitle("");
-    },
-    [editingTitle, updateConversationMutation],
-  );
-
-  const handleCancelEdit = useCallback(() => {
+  const handleSaveEdit = async (id: string) => {
+    if (editingTitle.trim()) {
+      await updateConversationMutation.mutateAsync({
+        id,
+        title: editingTitle.trim(),
+      });
+    }
     setEditingId(null);
     setEditingTitle("");
-  }, []);
+  };
 
-  const handleDeleteConversation = useCallback(
-    async (id: string) => {
-      // If we're deleting the current conversation, navigate to new chat
-      if (currentConversationId === id) {
-        router.push("/chat");
-      }
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingTitle("");
+  };
 
-      await deleteConversationMutation.mutateAsync(id);
-    },
-    [currentConversationId, deleteConversationMutation, router],
-  );
+  const handleDeleteConversation = async (id: string) => {
+    // If we're deleting the current conversation, navigate to new chat
+    if (currentConversationId === id) {
+      router.push("/chat");
+    }
+
+    await deleteConversationMutation.mutateAsync(id);
+  };
+
+  const handleRegenerateTitle = async (id: string) => {
+    // Mark as regenerating (shows loading state until new title arrives)
+    triggerRegeneration(id);
+    // Close edit mode
+    setEditingId(null);
+    setEditingTitle("");
+    // Regenerate the title
+    await generateTitleMutation.mutateAsync({ id, regenerate: true });
+  };
 
   return (
     <SidebarGroup className="px-4 py-0">
@@ -171,103 +174,145 @@ export function ChatSidebarSection() {
                   conv.title,
                   conv.messages,
                 );
+                const hasRecentlyGeneratedTitle = recentlyGeneratedTitles.has(
+                  conv.id,
+                );
+                const isRegenerating = regeneratingTitles.has(conv.id);
+                const buttons =
+                  editingId !== conv.id ? (
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
+                      <PermissionButton
+                        permissions={{ conversation: ["update"] }}
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(conv.id, displayTitle);
+                        }}
+                        title="Edit chat name"
+                        className="p-1 w-fit"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </PermissionButton>
+                      <WithInlineConfirm
+                        onConfirm={() => handleDeleteConversation(conv.id)}
+                      >
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          title="Delete chat"
+                          className="p-1 w-fit"
+                        >
+                          <Trash2 className="p-0 h-2 w-2 text-destructive" />
+                        </Button>
+                      </WithInlineConfirm>
+                    </div>
+                  ) : null;
 
                 return (
-                  <SidebarMenuItem key={conv.id} className="group/chat-item">
-                    <div className="flex items-center w-full gap-1">
+                  <SidebarMenuItem key={conv.id}>
+                    <div className="flex items-center justify-between w-full gap-1">
                       {editingId === conv.id ? (
-                        <Input
-                          ref={inputRef}
-                          value={editingTitle}
-                          onChange={(e) => setEditingTitle(e.target.value)}
-                          onBlur={() => handleSaveEdit(conv.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleSaveEdit(conv.id);
-                            } else if (e.key === "Escape") {
-                              handleCancelEdit();
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-7 text-sm flex-1"
-                        />
-                      ) : (
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <SidebarMenuButton
-                                onClick={() =>
-                                  handleSelectConversation(conv.id)
-                                }
-                                isActive={isCurrentConversation}
-                                className="cursor-pointer flex-1 pr-1 justify-start"
-                              >
-                                <span className="truncate" title={displayTitle}>
-                                  {displayTitle}
-                                </span>
-                              </SidebarMenuButton>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p>{conv.agent.name}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {editingId !== conv.id && (
-                        <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
-                          <PermissionButton
-                            permissions={{ conversation: ["update"] }}
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(conv.id, conv.title);
+                        <div className="flex items-center gap-1 flex-1">
+                          <Input
+                            ref={inputRef}
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={() => handleSaveEdit(conv.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSaveEdit(conv.id);
+                              } else if (e.key === "Escape") {
+                                handleCancelEdit();
+                              }
                             }}
-                            className="hover:bg-muted"
-                            title="Edit chat name"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </PermissionButton>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="hover:bg-destructive/10"
-                                title="Delete chat"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete Conversation
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete this
-                                  conversation?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() =>
-                                    handleDeleteConversation(conv.id)
-                                  }
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-7 text-sm flex-1"
+                          />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onMouseDown={(e) => {
+                                    // Prevent input blur from triggering handleSaveEdit
+                                    e.preventDefault();
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRegenerateTitle(conv.id);
+                                  }}
+                                  disabled={generateTitleMutation.isPending}
+                                  className="h-7 w-7 shrink-0"
                                 >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                                  <Sparkles
+                                    className={`h-4 w-4 text-yellow-400 ${
+                                      generateTitleMutation.isPending
+                                        ? "animate-[spin_800ms_ease_200ms_infinite]"
+                                        : ""
+                                    }`}
+                                  />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                Regenerate title with AI
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
+                      ) : (
+                        <>
+                          <SidebarMenuButton
+                            onClick={() => handleSelectConversation(conv.id)}
+                            isActive={isCurrentConversation}
+                            className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
+                          >
+                            {(hasRecentlyGeneratedTitle || isRegenerating) && (
+                              <Sparkles
+                                className="h-4 w-4 text-yellow-400 animate-[spin_800ms_ease_200ms_infinite]"
+                                aria-label="AI generated"
+                              />
+                            )}
+                            {isRegenerating ? (
+                              <span className="flex-1 pr-0 text-muted-foreground text-sm">
+                                Generating...
+                              </span>
+                            ) : hasRecentlyGeneratedTitle ? (
+                              <span className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all overflow-hidden">
+                                <TypingText
+                                  text={
+                                    displayTitle.length > 17
+                                      ? `${displayTitle.slice(0, 17)}...`
+                                      : displayTitle
+                                  }
+                                  typingSpeed={35}
+                                  showCursor
+                                  cursorClassName="bg-yellow-400"
+                                />
+                              </span>
+                            ) : (
+                              <TruncatedText
+                                message={displayTitle}
+                                maxLength={20}
+                                className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
+                                tooltipContentProps={{
+                                  side: "right",
+                                  className:
+                                    "relative left-20 pointer-events-none",
+                                  noArrow: true,
+                                }}
+                              />
+                            )}
+                          </SidebarMenuButton>
+                          {buttons}
+                        </>
                       )}
                     </div>
                   </SidebarMenuItem>

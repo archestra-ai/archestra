@@ -10,6 +10,7 @@ import type {
   ToolResultUpdates,
 } from "@/types";
 import type { CompressionStats } from "../toon-conversion";
+import { unwrapToolContent } from "../unwrap-tool-content";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -284,8 +285,10 @@ export async function convertToolResultsToToon(
           // Handle string content
           if (typeof contentBlock.content === "string") {
             try {
-              const parsed = JSON.parse(contentBlock.content);
-              const noncompressed = contentBlock.content;
+              // Unwrap any extra text block wrapping from clients
+              const unwrapped = unwrapToolContent(contentBlock.content);
+              const parsed = JSON.parse(unwrapped);
+              const noncompressed = unwrapped;
               const compressed = toonEncode(parsed);
 
               // Count tokens for before and after
@@ -345,9 +348,11 @@ export async function convertToolResultsToToon(
             const updatedBlocks = contentBlock.content.map((block) => {
               if (block.type === "text" && typeof block.text === "string") {
                 try {
+                  // Unwrap any extra text block wrapping from clients
+                  const unwrapped = unwrapToolContent(block.text);
                   // Try to parse as JSON
-                  const parsed = JSON.parse(block.text);
-                  const noncompressed = block.text;
+                  const parsed = JSON.parse(unwrapped);
+                  const noncompressed = unwrapped;
                   const compressed = toonEncode(parsed);
 
                   // Count tokens for before and after

@@ -1,13 +1,12 @@
 import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
+import logger from "@/logging";
 import type {
-  ContentLengthConditions,
   InsertOptimizationRule,
   InsertTokenPrice,
   OptimizationRule,
   SupportedProvider,
-  ToolPresenceConditions,
   UpdateOptimizationRule,
 } from "@/types";
 
@@ -95,7 +94,7 @@ class OptimizationRuleModel {
   }
 
   // Evaluate rules for a given context
-  // Rules are grouped by models. If all rules in such group match, returns the model.
+  // Returns the target model of the first matching rule
   static matchByRules(
     rules: OptimizationRule[],
     context: {
@@ -103,39 +102,27 @@ class OptimizationRuleModel {
       hasTools: boolean;
     },
   ): string | null {
-    const rulesByModel: Record<string, OptimizationRule[]> = {};
-
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      const model = rule.targetModel;
-      if (!rulesByModel[model]) {
-        rulesByModel[model] = [];
-      }
-      rulesByModel[model].push(rule);
-    }
+      logger.info(
+        { conditions: rule.conditions, context },
+        "[CostOptimization] matching rule conditions with context",
+      );
 
-    for (const [model, modelRules] of Object.entries(rulesByModel)) {
-      let match = true;
-
-      for (const rule of modelRules) {
-        if (rule.ruleType === "content_length") {
-          const conditions = rule.conditions as ContentLengthConditions;
-          if (context.tokenCount > conditions.maxLength) {
-            match = false;
-            break;
-          }
-        } else if (rule.ruleType === "tool_presence") {
-          const conditions = rule.conditions as ToolPresenceConditions;
-          if (context.hasTools !== conditions.hasTools) {
-            match = false;
-            break;
-          }
+      // Check if all conditions in the array match
+      const allConditionsMatch = rule.conditions.every((condition) => {
+        if ("maxLength" in condition) {
+          return context.tokenCount <= condition.maxLength;
         }
-      }
+        if ("hasTools" in condition) {
+          return context.hasTools === condition.hasTools;
+        }
+        return false;
+      });
 
-      if (match) {
-        return model;
+      if (allConditionsMatch) {
+        return rule.targetModel;
       }
     }
 
@@ -194,17 +181,7 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
-            conditions: { hasTools: false },
-            provider: "openai",
-            targetModel: "gpt-5-mini",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            conditions: [{ maxLength: 1000 }],
             provider: "openai",
             targetModel: "gpt-5-mini",
             enabled: true,
@@ -214,17 +191,8 @@ class OptimizationRuleModel {
           {
             entityType: "organization",
             entityId: organizationId,
-            ruleType: "tool_presence",
-            conditions: { hasTools: false },
-            provider: "anthropic",
-            targetModel: "claude-haiku-4-5",
-            enabled: true,
-          },
-          {
-            entityType: "organization",
-            entityId: organizationId,
-            ruleType: "content_length",
-            conditions: { maxLength: 1000 },
+            // Adding a hasTools: false will not work with chat because it has tools
+            conditions: [{ maxLength: 1000 }],
             provider: "anthropic",
             targetModel: "claude-haiku-4-5",
             enabled: true,

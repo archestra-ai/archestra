@@ -1,11 +1,12 @@
 /** The component to display an editable optimization rule */
 
 import type { SupportedProviders } from "@shared/hey-api/clients/api";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/cost/optimization-rules/_parts/condition";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -25,7 +26,7 @@ import type { Team } from "@/lib/team.query";
 import { cn } from "@/lib/utils";
 
 type EntityType = OptimizationRule["entityType"];
-type RuleType = OptimizationRule["ruleType"];
+type Conditions = OptimizationRule["conditions"];
 type TokenPrices = Array<{
   model: string;
   pricePerMillionInput: string;
@@ -296,29 +297,43 @@ function EntitySelect({
   );
 }
 
-type RuleProps = {
-  id: string;
-  enabled: boolean;
-  entityType: EntityType;
-  entityId: string;
-  ruleType: RuleType;
-  maxLength: number;
-  hasTools: boolean;
-  provider: OptimizationRule["provider"];
-  targetModel: string;
+function AddCondition({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            className="text-primary hover:text-primary h-9 w-10"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Add condition</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+type RuleProps = Omit<OptimizationRule, "createdAt" | "updatedAt"> & {
   tokenPrices: TokenPrices;
   teams?: Team[];
   editable?: boolean;
-  onChange?: (data: {
-    entityType: EntityType;
-    entityId: string;
-    ruleType: RuleType;
-    maxLength: number;
-    hasTools: boolean;
-    provider: OptimizationRule["provider"];
-    targetModel: string;
-    enabled: boolean;
-  }) => void;
+  onChange?: (
+    data: Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">,
+  ) => void;
   onToggle?: (enabled: boolean) => void;
   switchDisabled?: boolean;
   className?: string;
@@ -328,9 +343,7 @@ export function Rule({
   enabled,
   entityType,
   entityId,
-  ruleType,
-  maxLength,
-  hasTools,
+  conditions,
   provider,
   targetModel,
   tokenPrices,
@@ -344,9 +357,7 @@ export function Rule({
   type FormData = {
     entityType: EntityType;
     entityId: string;
-    ruleType: RuleType;
-    maxLength: number;
-    hasTools: boolean;
+    conditions: Conditions;
     provider: OptimizationRule["provider"];
     targetModel: string;
     enabled: boolean;
@@ -356,9 +367,7 @@ export function Rule({
     enabled,
     entityType,
     entityId,
-    ruleType,
-    maxLength,
-    hasTools,
+    conditions,
     provider,
     targetModel,
   });
@@ -370,9 +379,7 @@ export function Rule({
         enabled,
         entityType,
         entityId,
-        ruleType,
-        maxLength,
-        hasTools,
+        conditions,
         provider,
         targetModel,
       });
@@ -382,9 +389,7 @@ export function Rule({
     enabled,
     entityType,
     entityId,
-    ruleType,
-    maxLength,
-    hasTools,
+    conditions,
     provider,
     targetModel,
   ]);
@@ -412,17 +417,47 @@ export function Rule({
     });
   };
 
-  const onConditionChange = (
-    ruleType: RuleType,
-    maxLength: number,
-    hasTools: boolean,
-  ) => {
+  const onConditionChange = (index: number, condition: Conditions[number]) => {
+    const newConditions = [...formData.conditions];
+    newConditions[index] = condition;
     updateFormData({
-      ruleType,
-      maxLength,
-      hasTools,
+      conditions: newConditions,
     });
   };
+
+  const onRemoveCondition = (index: number) => {
+    if (formData.conditions.length <= 1) return; // Keep at least one condition
+    const newConditions = formData.conditions.filter((_, i) => i !== index);
+    updateFormData({
+      conditions: newConditions,
+    });
+  };
+
+  const onAddCondition = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    // Check what condition types already exist
+    const hasContentLength = formData.conditions.some((c) => "maxLength" in c);
+    const hasToolPresence = formData.conditions.some((c) => "hasTools" in c);
+
+    // Determine which type to add based on what's missing
+    let newCondition: Conditions[number];
+    if (!hasContentLength) {
+      newCondition = { maxLength: 1000 };
+    } else if (!hasToolPresence) {
+      newCondition = { hasTools: false };
+    } else {
+      // Both types already exist, don't add anything
+      return;
+    }
+
+    updateFormData({
+      conditions: [...formData.conditions, newCondition],
+    });
+  };
+
+  // Check if we can add more conditions (max 2: one of each type)
+  const canAddCondition = formData.conditions.length < 2;
 
   const models = sortModelsByPrice(
     tokenPrices.filter(
@@ -462,13 +497,28 @@ export function Rule({
         editable={editable}
       />
       if{" "}
-      <Condition
-        ruleType={formData.ruleType}
-        maxLength={formData.maxLength}
-        hasTools={formData.hasTools}
-        onChange={onConditionChange}
-        editable={editable}
-      />
+      <div className="flex gap-2 flex-wrap items-center">
+        {formData.conditions.map((condition, index, conditions) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: conditions don't have unique IDs
+          <React.Fragment key={index}>
+            <Condition
+              condition={condition}
+              onChange={(updatedCondition) =>
+                onConditionChange(index, updatedCondition)
+              }
+              onRemove={() => {
+                onRemoveCondition(index);
+              }}
+              editable={editable}
+              removable={conditions.length > 1}
+            />
+            {index < conditions.length - 1 && <span>and</span>}
+          </React.Fragment>
+        ))}
+        {editable && formData.conditions.length < 2 && (
+          <AddCondition disabled={!canAddCondition} onClick={onAddCondition} />
+        )}
+      </div>
     </div>
   );
 }

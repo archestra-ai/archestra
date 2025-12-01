@@ -643,14 +643,17 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create secret entry with the OAuth tokens
-      const secret = await secretManager.createSecret({
-        access_token: tokenData.access_token,
-        ...(tokenData.refresh_token && {
-          refresh_token: tokenData.refresh_token,
-        }),
-        ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
-        token_type: "Bearer",
-      });
+      const secret = await secretManager.createSecret(
+        {
+          access_token: tokenData.access_token,
+          ...(tokenData.refresh_token && {
+            refresh_token: tokenData.refresh_token,
+          }),
+          ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
+          token_type: "Bearer",
+        },
+        `${catalogItem.name}-oauth`,
+      );
 
       // Clean up used state
       oauthStateStore.delete(state);

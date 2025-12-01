@@ -148,9 +148,9 @@ ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER=    # Bearer token for OTLP auth (takes
 ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Secrets Manager Configuration
-SECRETS_MANAGER=DB  # Options: DB (default), Vault
-HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when SECRETS_MANAGER=Vault
-HASHICORP_VAULT_TOKEN=dev-root-token  # Required when SECRETS_MANAGER=Vault
+ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
+HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+HASHICORP_VAULT_TOKEN=dev-root-token  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
 
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN

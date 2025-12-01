@@ -16,8 +16,8 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@ai-sdk/react": "^2.0.93",
-    "@better-auth/sso": "1.4.0",
+    "@ai-sdk/react": "^2.0.101",
+    "@better-auth/sso": "1.4.1",
     "@daveyplate/better-auth-ui": "^3.2.9",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
@@ -45,8 +45,8 @@
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
-    "ai": "^5.0.93",
-    "better-auth": "1.4.0",
+    "ai": "^5.0.101",
+    "better-auth": "1.4.1",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -56,10 +56,10 @@
     "lucide-react": "^0.554.0",
     "mermaid": "^11.12.1",
     "nanoid": "^5.1.6",
-    "next": "16.0.3",
+    "next": "16.0.4",
     "next-runtime-env": "^3.3.0",
     "next-themes": "^0.4.6",
-    "posthog-js": "^1.295.0",
+    "posthog-js": "^1.298.0",
     "react": "19.2.0",
     "react-chartjs-2": "^5.3.1",
     "react-day-picker": "^9.11.1",
@@ -74,10 +74,10 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "sonner": "^2.0.7",
-    "streamdown": "^1.5.1",
+    "streamdown": "^1.6.7",
     "tailwind-merge": "^3.4.0",
     "use-stick-to-bottom": "^1.1.1",
-    "zod": "^4.1.12"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

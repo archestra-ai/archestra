@@ -25,10 +25,7 @@ import {
 } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
-import type {
-  CreateOptimizationRuleInput,
-  OptimizationRule,
-} from "@/lib/optimization-rule.query";
+import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
   useDeleteOptimizationRule,
@@ -40,28 +37,9 @@ import { useTeams } from "@/lib/team.query";
 import { useTokenPrices } from "@/lib/token-price.query";
 import { cn } from "@/lib/utils";
 
-// Form data type for inline editing - uses strings for number inputs
-type RuleFormData = {
+// Form data type for inline editing
+type RuleFormData = Omit<OptimizationRule, "id" | "createdAt" | "updatedAt"> & {
   id?: string;
-  entityType: OptimizationRule["entityType"];
-  entityId: string;
-  ruleType: OptimizationRule["ruleType"];
-  maxLength?: string;
-  hasTools?: boolean;
-  provider: OptimizationRule["provider"];
-  targetModel: string;
-  enabled: boolean;
-};
-
-type RuleFormState = {
-  entityType: OptimizationRule["entityType"];
-  entityId: string;
-  ruleType: OptimizationRule["ruleType"];
-  maxLength: number;
-  hasTools: boolean;
-  provider: OptimizationRule["provider"];
-  targetModel: string;
-  enabled: boolean;
 };
 
 function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
@@ -77,15 +55,6 @@ function LoadingSkeleton({ count, prefix }: { count: number; prefix: string }) {
       ))}
     </div>
   );
-}
-
-// Helper to convert form data to API input format
-function formDataToConditions(
-  data: RuleFormData,
-): CreateOptimizationRuleInput["conditions"] {
-  return data.ruleType === "content_length"
-    ? { maxLength: Number(data.maxLength) }
-    : { hasTools: data.hasTools ?? false };
 }
 
 // Helper to check if a rule has valid pricing
@@ -153,10 +122,11 @@ function DeleteRuleConfirmation({
 export default function OptimizationRulesPage() {
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editedRuleData, setEditedRuleData] =
-    useState<Partial<RuleFormState> | null>(null);
-  const [newRuleData, setNewRuleData] = useState<RuleFormState | null>(null);
+    useState<Partial<RuleFormData> | null>(null);
+  const [newRuleData, setNewRuleData] = useState<RuleFormData | null>(null);
   const [ruleOrder, setRuleOrder] = useState<string[]>([]);
   const hasInitialized = useRef(false);
+  const editedRuleDataRef = useRef<Partial<RuleFormData> | null>(null);
 
   const { data: allRules = [], isLoading: rulesLoading } =
     useOptimizationRules();
@@ -194,21 +164,7 @@ export default function OptimizationRulesPage() {
 
   // Create a pending rule when adding a new rule
   const pendingRule: OptimizationRule | null = newRuleData
-    ? {
-        id: "",
-        enabled: newRuleData.enabled,
-        entityType: newRuleData.entityType,
-        entityId: newRuleData.entityId,
-        ruleType: newRuleData.ruleType,
-        conditions:
-          newRuleData.ruleType === "content_length"
-            ? { maxLength: newRuleData.maxLength }
-            : { hasTools: newRuleData.hasTools },
-        provider: newRuleData.provider,
-        targetModel: newRuleData.targetModel,
-        createdAt: "",
-        updatedAt: "",
-      }
+    ? { ...newRuleData, id: "", createdAt: "", updatedAt: "" }
     : null;
 
   // Combine existing rules with pending rule
@@ -219,19 +175,11 @@ export default function OptimizationRulesPage() {
   const handleCreateRule = useCallback(
     async (data: RuleFormData) => {
       try {
-        await createRule.mutateAsync({
-          entityType: data.entityType,
-          entityId:
-            data.entityType === "organization"
-              ? (organization?.id ?? "")
-              : data.entityId,
-          ruleType: data.ruleType,
-          conditions: formDataToConditions(data),
-          provider: data.provider,
-          targetModel: data.targetModel,
-          enabled: data.enabled,
-          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
-        } as any);
+        const entityId =
+          data.entityType === "organization"
+            ? (organization?.id ?? "")
+            : data.entityId;
+        await createRule.mutateAsync({ ...data, entityId });
         setNewRuleData(null);
         toast.success("Optimization rule created");
       } catch (error) {
@@ -244,37 +192,6 @@ export default function OptimizationRulesPage() {
       }
     },
     [createRule, organization?.id],
-  );
-
-  const _handleUpdateRule = useCallback(
-    async (id: string, data: RuleFormData) => {
-      try {
-        await updateRule.mutateAsync({
-          id,
-          entityType: data.entityType,
-          entityId:
-            data.entityType === "organization"
-              ? (organization?.id ?? "")
-              : data.entityId,
-          ruleType: data.ruleType,
-          conditions: formDataToConditions(data),
-          provider: data.provider,
-          targetModel: data.targetModel,
-          enabled: data.enabled,
-          // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
-        } as any);
-        setEditingRuleId(null);
-        toast.success("Optimization rule updated");
-      } catch (error) {
-        console.error("Failed to update optimization rule:", error);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to update optimization rule";
-        toast.error(message);
-      }
-    },
-    [updateRule, organization?.id],
   );
 
   const handleDeleteRule = useCallback(
@@ -297,10 +214,7 @@ export default function OptimizationRulesPage() {
   const handleToggleEnabled = useCallback(
     async (id: string, enabled: boolean) => {
       try {
-        await updateRule.mutateAsync({
-          id,
-          enabled,
-        });
+        await updateRule.mutateAsync({ id, enabled });
         toast.success(`Optimization rule ${enabled ? "enabled" : "disabled"}`);
       } catch (error) {
         console.error("Failed to toggle optimization rule:", error);
@@ -314,32 +228,29 @@ export default function OptimizationRulesPage() {
     [updateRule],
   );
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    editedRuleDataRef.current = editedRuleData;
+  }, [editedRuleData]);
+
   const handleSaveEdit = useCallback(async () => {
-    if (!editingRuleId || !editedRuleData) return;
+    // Use ref to get the latest data, avoiding stale state from batched updates
+    const dataToSave = editedRuleDataRef.current;
+    if (!editingRuleId || !dataToSave) return;
 
     try {
-      // Convert maxLength/hasTools to conditions object
-      const conditions =
-        editedRuleData.ruleType === "content_length"
-          ? { maxLength: Number(editedRuleData.maxLength) }
-          : { hasTools: editedRuleData.hasTools ?? false };
-
+      const entityId =
+        dataToSave.entityType === "organization"
+          ? (organization?.id ?? "")
+          : dataToSave.entityId;
       await updateRule.mutateAsync({
+        ...dataToSave,
         id: editingRuleId,
-        entityType: editedRuleData.entityType,
-        entityId:
-          editedRuleData.entityType === "organization"
-            ? (organization?.id ?? "")
-            : editedRuleData.entityId,
-        ruleType: editedRuleData.ruleType,
-        conditions,
-        provider: editedRuleData.provider,
-        targetModel: editedRuleData.targetModel,
-        enabled: editedRuleData.enabled,
-        // biome-ignore lint/suspicious/noExplicitAny: Type assertion until API client is regenerated
-      } as any);
+        entityId,
+      });
       setEditingRuleId(null);
       setEditedRuleData(null);
+      editedRuleDataRef.current = null;
       toast.success("Optimization rule updated");
     } catch (error) {
       console.error("Failed to update optimization rule:", error);
@@ -349,11 +260,12 @@ export default function OptimizationRulesPage() {
           : "Failed to update optimization rule";
       toast.error(message);
     }
-  }, [editingRuleId, editedRuleData, updateRule, organization?.id]);
+  }, [editingRuleId, updateRule, organization?.id]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingRuleId(null);
     setEditedRuleData(null);
+    editedRuleDataRef.current = null;
   }, []);
 
   return (
@@ -377,9 +289,7 @@ export default function OptimizationRulesPage() {
                 setNewRuleData({
                   entityType: "organization",
                   entityId: "",
-                  ruleType: "content_length",
-                  maxLength: 1000,
-                  hasTools: false,
+                  conditions: [{ maxLength: 1000 }],
                   provider: "openai",
                   targetModel: "",
                   enabled: true,
@@ -412,30 +322,10 @@ export default function OptimizationRulesPage() {
                   (editingRuleId !== null && !isEditing) ||
                   (newRuleData !== null && !isPending);
 
-                // Extract maxLength/hasTools from conditions
-                const maxLength =
-                  rule.ruleType === "content_length"
-                    ? (rule.conditions as { maxLength: number }).maxLength
-                    : 1000;
-                const hasTools =
-                  rule.ruleType === "tool_presence"
-                    ? (rule.conditions as { hasTools: boolean }).hasTools
-                    : false;
-
                 const handleSubmit = async (e: React.FormEvent) => {
                   e.preventDefault();
                   if (isPending && newRuleData) {
-                    const formData: RuleFormData = {
-                      entityType: newRuleData.entityType,
-                      entityId: newRuleData.entityId,
-                      ruleType: newRuleData.ruleType,
-                      maxLength: String(newRuleData.maxLength),
-                      hasTools: newRuleData.hasTools,
-                      provider: newRuleData.provider,
-                      targetModel: newRuleData.targetModel,
-                      enabled: newRuleData.enabled,
-                    };
-                    await handleCreateRule(formData);
+                    await handleCreateRule(newRuleData);
                   } else if (isEditing) {
                     await handleSaveEdit();
                   }
@@ -477,8 +367,6 @@ export default function OptimizationRulesPage() {
                   <>
                     <Rule
                       {...rule}
-                      maxLength={maxLength}
-                      hasTools={hasTools}
                       tokenPrices={tokenPrices}
                       teams={teams}
                       editable={isPending || isEditing}
@@ -552,9 +440,7 @@ export default function OptimizationRulesPage() {
                               setEditedRuleData({
                                 entityType: rule.entityType,
                                 entityId: rule.entityId,
-                                ruleType: rule.ruleType,
-                                maxLength,
-                                hasTools,
+                                conditions: rule.conditions,
                                 provider: rule.provider,
                                 targetModel: rule.targetModel,
                                 enabled: rule.enabled,

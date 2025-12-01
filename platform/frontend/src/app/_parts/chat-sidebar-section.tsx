@@ -2,7 +2,8 @@
 
 import { ChevronDown, ChevronRight, Edit2, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TruncatedText } from "@/components/truncated-text";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,7 +55,7 @@ function getConversationDisplayTitle(
       if (msg.role === "user" && msg.parts) {
         for (const part of msg.parts) {
           if (part.type === "text" && part.text) {
-            return part.text.slice(0, 15);
+            return part.text;
           }
         }
       }
@@ -96,51 +97,39 @@ export function ChatSidebarSection() {
     }
   }, [editingId]);
 
-  const handleSelectConversation = useCallback(
-    (id: string) => {
-      router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
-    },
-    [router],
-  );
+  const handleSelectConversation = (id: string) => {
+    router.push(`/chat?${CONVERSATION_QUERY_PARAM}=${id}`);
+  };
 
-  const handleStartEdit = useCallback(
-    (id: string, currentTitle: string | null) => {
-      setEditingId(id);
-      setEditingTitle(currentTitle || "");
-    },
-    [],
-  );
+  const handleStartEdit = (id: string, currentTitle: string | null) => {
+    setEditingId(id);
+    setEditingTitle(currentTitle || "");
+  };
 
-  const handleSaveEdit = useCallback(
-    async (id: string) => {
-      if (editingTitle.trim()) {
-        await updateConversationMutation.mutateAsync({
-          id,
-          title: editingTitle.trim(),
-        });
-      }
-      setEditingId(null);
-      setEditingTitle("");
-    },
-    [editingTitle, updateConversationMutation],
-  );
-
-  const handleCancelEdit = useCallback(() => {
+  const handleSaveEdit = async (id: string) => {
+    if (editingTitle.trim()) {
+      await updateConversationMutation.mutateAsync({
+        id,
+        title: editingTitle.trim(),
+      });
+    }
     setEditingId(null);
     setEditingTitle("");
-  }, []);
+  };
 
-  const handleDeleteConversation = useCallback(
-    async (id: string) => {
-      // If we're deleting the current conversation, navigate to new chat
-      if (currentConversationId === id) {
-        router.push("/chat");
-      }
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingTitle("");
+  };
 
-      await deleteConversationMutation.mutateAsync(id);
-    },
-    [currentConversationId, deleteConversationMutation, router],
-  );
+  const handleDeleteConversation = async (id: string) => {
+    // If we're deleting the current conversation, navigate to new chat
+    if (currentConversationId === id) {
+      router.push("/chat");
+    }
+
+    await deleteConversationMutation.mutateAsync(id);
+  };
 
   return (
     <SidebarGroup className="px-4 py-0">
@@ -171,10 +160,64 @@ export function ChatSidebarSection() {
                   conv.title,
                   conv.messages,
                 );
+                const buttons =
+                  editingId !== conv.id ? (
+                    <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
+                      <PermissionButton
+                        permissions={{ conversation: ["update"] }}
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(conv.id, displayTitle);
+                        }}
+                        title="Edit chat name"
+                        className="p-1 w-fit"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </PermissionButton>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
+                            title="Delete chat"
+                            className="p-1 w-fit"
+                          >
+                            <Trash2 className="p-0 h-2 w-2 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete Conversation
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this conversation?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteConversation(conv.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ) : null;
 
                 return (
                   <SidebarMenuItem key={conv.id} className="group/chat-item">
-                    <div className="flex items-center w-full gap-1">
+                    <div className="flex items-center justify-between w-full gap-1">
                       {editingId === conv.id ? (
                         <Input
                           ref={inputRef}
@@ -192,82 +235,23 @@ export function ChatSidebarSection() {
                           className="h-7 text-sm flex-1"
                         />
                       ) : (
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <SidebarMenuButton
-                                onClick={() =>
-                                  handleSelectConversation(conv.id)
-                                }
-                                isActive={isCurrentConversation}
-                                className="cursor-pointer flex-1 pr-1 justify-start"
-                              >
-                                <span className="truncate" title={displayTitle}>
-                                  {displayTitle}
-                                </span>
-                              </SidebarMenuButton>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p>{conv.agent.name}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {editingId !== conv.id && (
-                        <div className="flex gap-0.5 opacity-0 group-hover/chat-item:opacity-100 transition-opacity shrink-0">
-                          <PermissionButton
-                            permissions={{ conversation: ["update"] }}
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(conv.id, conv.title);
+                        <SidebarMenuButton
+                          onClick={() => handleSelectConversation(conv.id)}
+                          isActive={isCurrentConversation}
+                          className="cursor-pointer flex-1 justify-between"
+                        >
+                          <TruncatedText
+                            message={displayTitle}
+                            maxLength={22}
+                            className="flex-1 pr-0"
+                            tooltipContentProps={{
+                              side: "right",
+                              className: "translate-x-20",
+                              noArrow: true,
                             }}
-                            className="hover:bg-muted"
-                            title="Edit chat name"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </PermissionButton>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="hover:bg-destructive/10"
-                                title="Delete chat"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete Conversation
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete this
-                                  conversation?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() =>
-                                    handleDeleteConversation(conv.id)
-                                  }
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
+                          />
+                          {buttons}
+                        </SidebarMenuButton>
                       )}
                     </div>
                   </SidebarMenuItem>

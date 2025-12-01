@@ -505,6 +505,13 @@
       "when": 1764588841370,
       "tag": "0071_mixed_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1764594586650,
+      "tag": "0072_add secret name",
+      "breakpoints": true
     }
   ]
 }

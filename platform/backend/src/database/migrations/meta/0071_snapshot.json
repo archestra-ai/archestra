@@ -2601,13 +2601,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "name": {
-          "name": "name",
-          "type": "varchar(27)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'secret'"
-        },
         "secret": {
           "name": "secret",
           "type": "jsonb",

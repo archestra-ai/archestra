@@ -148,7 +148,7 @@ export function ChatSidebarSection() {
                 );
                 const buttons =
                   editingId !== conv.id ? (
-                    <div className="flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 transition-opacity shrink-0">
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/menu-item:opacity-100 has-[[data-confirm-open]]:opacity-100 transition-opacity">
                       <PermissionButton
                         permissions={{ conversation: ["update"] }}
                         type="button"
@@ -202,23 +202,26 @@ export function ChatSidebarSection() {
                           className="h-7 text-sm flex-1"
                         />
                       ) : (
-                        <SidebarMenuButton
-                          onClick={() => handleSelectConversation(conv.id)}
-                          isActive={isCurrentConversation}
-                          className="cursor-pointer flex-1 justify-between"
-                        >
-                          <TruncatedText
-                            message={displayTitle}
-                            maxLength={20}
-                            className="flex-1 pr-0 group-hover/menu-item:pr-2 transition-all"
-                            tooltipContentProps={{
-                              side: "right",
-                              className: "relative left-20 pointer-events-none",
-                              noArrow: true,
-                            }}
-                          />
+                        <>
+                          <SidebarMenuButton
+                            onClick={() => handleSelectConversation(conv.id)}
+                            isActive={isCurrentConversation}
+                            className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
+                          >
+                            <TruncatedText
+                              message={displayTitle}
+                              maxLength={20}
+                              className="flex-1 pr-0 group-hover/menu-item:pr-12 transition-all"
+                              tooltipContentProps={{
+                                side: "right",
+                                className:
+                                  "relative left-20 pointer-events-none",
+                                noArrow: true,
+                              }}
+                            />
+                          </SidebarMenuButton>
                           {buttons}
-                        </SidebarMenuButton>
+                        </>
                       )}
                     </div>
                   </SidebarMenuItem>

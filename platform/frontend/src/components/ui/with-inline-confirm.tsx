@@ -77,6 +77,10 @@ export function WithInlineConfirm({
   const triggerElement = cloneElement(children, {
     onClick: handleTriggerClick,
     onPointerLeave: scheduleClose,
+    ...({ "data-confirm-open": open ? "true" : undefined } as Record<
+      string,
+      unknown
+    >),
   });
 
   return (

@@ -55,7 +55,7 @@
     "@shared": "workspace:*",
     "@toon-format/toon": "^2.0.0",
     "ai": "^5.0.101",
-    "better-auth": "1.4.1",
+    "better-auth": "1.4.2",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.7",
     "drizzle-orm": "^0.44.5",

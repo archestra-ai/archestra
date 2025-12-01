@@ -6582,6 +6582,7 @@ export type GetFeaturesResponses = {
      */
     200: {
         'orchestrator-k8s-runtime': boolean;
+        sso: boolean;
     };
 };
 

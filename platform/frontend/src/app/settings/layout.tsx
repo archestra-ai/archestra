@@ -2,6 +2,7 @@
 
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
+import { useFeatures } from "@/lib/features.query";
 
 export default function SettingsLayout({
   children,
@@ -16,6 +17,9 @@ export default function SettingsLayout({
     ssoProvider: ["read"],
   });
 
+  const { data: features } = useFeatures();
+  const isSsoEnabled = features?.sso ?? false;
+
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
     { label: "Dual LLM", href: "/settings/dual-llm" },
@@ -26,7 +30,8 @@ export default function SettingsLayout({
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },
           { label: "Roles", href: "/settings/roles" },
-          ...(userCanReadSsoProviders
+          // SSO Providers tab is only shown when SSO feature is enabled
+          ...(isSsoEnabled && userCanReadSsoProviders
             ? [{ label: "SSO Providers", href: "/settings/sso-providers" }]
             : []),
           { label: "Appearance", href: "/settings/appearance" },

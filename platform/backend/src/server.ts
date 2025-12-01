@@ -373,7 +373,14 @@ const start = async () => {
       }),
     );
 
-    for (const route of Object.values(routes)) {
+    for (const [routeName, route] of Object.entries(routes)) {
+      // Skip SSO provider routes if enterprise license is not activated
+      if (
+        routeName === "ssoProviderRoutes" &&
+        !config.enterpriseLicenseActivated
+      ) {
+        continue;
+      }
       fastify.register(route);
     }
 

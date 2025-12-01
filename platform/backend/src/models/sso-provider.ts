@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth/better-auth";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type {
   InsertSsoProvider,
@@ -81,6 +82,13 @@ class SsoProviderModel {
     organizationId: string,
     headers: HeadersInit,
   ): Promise<SsoProvider> {
+    // SSO feature requires enterprise license
+    if (!config.enterpriseLicenseActivated) {
+      throw new Error(
+        "SSO feature requires enterprise license to be activated",
+      );
+    }
+
     // Parse JSON configs if they exist
     const parsedData = {
       providerId: data.providerId,
@@ -111,8 +119,15 @@ class SsoProviderModel {
       };
     }
 
-    // Register with Better Auth
-    await auth.api.registerSSOProvider({
+    // Register with Better Auth SSO plugin
+    // The SSO plugin is only loaded when enterprise license is activated
+    const authApi = auth.api as typeof auth.api & {
+      registerSSOProvider: (params: {
+        body: typeof parsedData;
+        headers: Headers;
+      }) => Promise<unknown>;
+    };
+    await authApi.registerSSOProvider({
       body: parsedData,
       headers: new Headers(headers),
     });

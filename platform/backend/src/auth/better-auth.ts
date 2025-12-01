@@ -12,12 +12,15 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import type { BetterAuthPlugin } from "better-auth/types";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { InvitationModel, MemberModel, SessionModel } from "@/models";
+
+const { enterpriseLicenseActivated } = config;
 
 const APP_NAME = "Archestra";
 const {
@@ -112,35 +115,37 @@ export const auth = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
-    /**
-     * TODO: add this plugin conditionally based on value of ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
-     */
-    sso({
-      organizationProvisioning: {
-        disabled: false,
-        defaultRole: MEMBER_ROLE_NAME,
-        // TODO: allow configuration of these provisioning options dynamically..
-        getRole: async (_data) => {
-          // Custom role assignment logic based on user attributes
-          // const { user, token, provider, userInfo } = data;
+    // SSO plugin is only enabled when enterprise license is activated
+    ...(enterpriseLicenseActivated
+      ? [
+          sso({
+            organizationProvisioning: {
+              disabled: false,
+              defaultRole: MEMBER_ROLE_NAME,
+              // TODO: allow configuration of these provisioning options dynamically..
+              getRole: async (_data) => {
+                // Custom role assignment logic based on user attributes
+                // const { user, token, provider, userInfo } = data;
 
-          // Look for admin indicators in user attributes
-          // const isAdmin =
-          //   userInfo.role === "admin" ||
-          //   userInfo.groups?.includes("admin") ||
-          //   userInfo.department === "IT" ||
-          //   userInfo.title?.toLowerCase().includes("admin") ||
-          //   userInfo.title?.toLowerCase().includes("manager");
-          const isAdmin = false;
+                // Look for admin indicators in user attributes
+                // const isAdmin =
+                //   userInfo.role === "admin" ||
+                //   userInfo.groups?.includes("admin") ||
+                //   userInfo.department === "IT" ||
+                //   userInfo.title?.toLowerCase().includes("admin") ||
+                //   userInfo.title?.toLowerCase().includes("manager");
+                const isAdmin = false;
 
-          return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
-        },
-      },
-      defaultOverrideUserInfo: true,
-      disableImplicitSignUp: false,
-      providersLimit: 10,
-      trustEmailVerified: true, // Trust email verification from SSO providers
-    }),
+                return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
+              },
+            },
+            defaultOverrideUserInfo: true,
+            disableImplicitSignUp: false,
+            providersLimit: 10,
+            trustEmailVerified: true, // Trust email verification from SSO providers
+          }) as BetterAuthPlugin,
+        ]
+      : []),
   ],
 
   user: {
@@ -166,7 +171,10 @@ export const auth = betterAuth({
       teamMember: schema.teamMembersTable,
       twoFactor: schema.twoFactorsTable,
       verification: schema.verificationsTable,
-      ssoProvider: schema.ssoProvidersTable,
+      // SSO provider schema is only included when enterprise license is activated
+      ...(enterpriseLicenseActivated
+        ? { ssoProvider: schema.ssoProvidersTable }
+        : {}),
     },
   }),
 
@@ -181,9 +189,11 @@ export const auth = betterAuth({
      */
     accountLinking: {
       enabled: true,
-      // Trust SSO providers for automatic account linking
+      // Trust SSO providers for automatic account linking (only when enterprise license is activated)
       // This allows existing users to sign in with SSO without manual linking
-      trustedProviders: SSO_TRUSTED_PROVIDER_IDS,
+      trustedProviders: enterpriseLicenseActivated
+        ? SSO_TRUSTED_PROVIDER_IDS
+        : [],
       allowDifferentEmails: true,
       allowUnlinkingAll: true,
     },

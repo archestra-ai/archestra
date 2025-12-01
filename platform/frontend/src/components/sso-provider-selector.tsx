@@ -5,9 +5,12 @@ import { toast } from "sonner";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useFeatures } from "@/lib/features.query";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
 export function SsoProviderSelector() {
+  const { data: features } = useFeatures();
+  const isSsoEnabled = features?.sso ?? false;
   const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
 
   const handleSsoSignIn = useCallback(async (providerId: string) => {
@@ -24,7 +27,8 @@ export function SsoProviderSelector() {
     }
   }, []);
 
-  if (isLoading || ssoProviders.length === 0) {
+  // Don't show SSO options if the feature is disabled
+  if (!isSsoEnabled || isLoading || ssoProviders.length === 0) {
     return null;
   }
 

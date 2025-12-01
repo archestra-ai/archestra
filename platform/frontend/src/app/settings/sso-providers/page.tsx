@@ -12,6 +12,7 @@ import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useFeatures } from "@/lib/features.query";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
@@ -258,6 +259,8 @@ type SsoProvider = NonNullable<
 >[number];
 
 function SsoProvidersSettingsContent() {
+  const { data: features, isLoading: isFeaturesLoading } = useFeatures();
+  const isSsoEnabled = features?.sso ?? false;
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
@@ -303,7 +306,26 @@ function SsoProvidersSettingsContent() {
     [getProviderStatus],
   );
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isFeaturesLoading || isLoading) return <LoadingSpinner />;
+
+  // Show message if SSO feature is disabled
+  if (!isSsoEnabled) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">SSO Providers</h1>
+          <p className="text-muted-foreground mt-2">
+            SSO (Single Sign-On) is an enterprise feature that requires the
+            enterprise license to be activated. Please set{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-sm">
+              ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true
+            </code>{" "}
+            to enable this feature.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

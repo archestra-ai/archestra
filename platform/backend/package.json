@@ -26,8 +26,8 @@
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.45",
-    "@anthropic-ai/sdk": "^0.70.1",
+    "@ai-sdk/anthropic": "^2.0.47",
+    "@anthropic-ai/sdk": "^0.71.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@better-auth/core": "1.4.1",
     "@better-auth/sso": "1.4.1",

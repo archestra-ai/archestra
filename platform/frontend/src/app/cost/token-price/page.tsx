@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import type { SupportedProviders } from "@shared/hey-api/clients/api";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -67,7 +68,7 @@ const modelDictionary: Record<Providers, string[]> = {
     "claude-3.5-haiku",
     "claude-3.5-sonnet",
     "claude-3-haiku",
-    "claude-3-opus"
+    "claude-3-opus",
   ],
   openai: [
     "gpt-5.1",
@@ -93,9 +94,9 @@ const modelDictionary: Record<Providers, string[]> = {
     "o3-mini",
     "o3-pro",
     "o4-mini",
-    "o4-mini-high"
-  ]
-}
+    "o4-mini-high",
+  ],
+};
 
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
@@ -132,6 +133,15 @@ function TokenPriceInlineForm({
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
   });
+
+  const modelOptions = useMemo(
+    () =>
+      modelDictionary[formData.provider].map((model) => ({
+        value: model,
+        label: model,
+      })),
+    [formData.provider],
+  );
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -186,15 +196,14 @@ function TokenPriceInlineForm({
             <Label htmlFor="model" className="text-sm whitespace-nowrap">
               Model
             </Label>
-            <Input
-              id="model"
-              type="text"
+            <SearchableSelect
               value={formData.model}
-              onChange={(e) =>
-                setFormData({ ...formData, model: e.target.value })
+              onValueChange={(value) =>
+                setFormData({ ...formData, model: value })
               }
-              placeholder="e.g. gpt-4"
-              required
+              placeholder="Select or type model..."
+              items={modelOptions}
+              allowCustom
               className="w-48"
             />
           </div>
@@ -292,7 +301,10 @@ function TokenPriceRow({
 
   return (
     <tr className="border-b hover:bg-muted/30">
-      <td className="p-4 capitalize">{providerDictionary[tokenPrice.provider]}</td>
+      <td className="p-4 capitalize">
+        {providerDictionary[tokenPrice.provider as Providers] ||
+          tokenPrice.provider}
+      </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
         ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}

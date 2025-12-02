@@ -83,11 +83,11 @@ export function SearchableSelect({
         </div>
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filteredItems.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (
                 <>
                   Press{" "}
-                  <kbd className="px-1 py-0.5 text-xs bg-muted rounded">
+                  <kbd className="px-2 py-1 text-xs bg-muted rounded">
                     Enter
                   </kbd>{" "}
                   to use &quot;{searchQuery}&quot;

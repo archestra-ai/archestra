@@ -34,7 +34,8 @@
       "cache": false
     },
     "test:e2e": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
     },
     "test:e2e:ui": {
       "cache": false

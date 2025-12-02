@@ -626,6 +626,21 @@ class AgentToolModel {
   }
 
   /**
+   * Delete all agent-tool assignments that use a specific MCP server as their execution source.
+   * Used when a local MCP server is deleted/uninstalled.
+   */
+  static async deleteByExecutionSourceMcpServerId(
+    mcpServerId: string,
+  ): Promise<number> {
+    const result = await db
+      .delete(schema.agentToolsTable)
+      .where(
+        eq(schema.agentToolsTable.executionSourceMcpServerId, mcpServerId),
+      );
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Clean up invalid credential sources when a user is removed from a team.
    * Sets credentialSourceMcpServerId to null for agent-tools where:
    * - The credential source is a personal token owned by the removed user

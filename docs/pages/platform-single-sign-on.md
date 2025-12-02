@@ -16,9 +16,11 @@ This document covers SSO configuration for Archestra Platform. Include:
 - Limitations and requirements
 -->
 
-![SSO Providers Overview](/assets/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
+![SSO Providers Overview](/docs/automated_screenshots/platform-single-sign-on_sso-providers-overview.png)
 
 Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OIDC) and SAML 2.0 providers. Once configured, users can authenticate with their existing identity provider credentials instead of managing separate passwords.
+
+> **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
 
 ## How SSO Works
 
@@ -27,7 +29,7 @@ Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OID
 3. Users click the SSO button and authenticate with their identity provider
 4. After successful authentication, users are automatically provisioned and logged in
 
-![Sign-in with SSO](/assets/automated_screenshots/platform-single-sign-on_sign-in-with-sso.png)
+![Sign-in with SSO](/docs/automated_screenshots/platform-single-sign-on_sign-in-with-sso.png)
 
 ## Callback URLs
 

@@ -120,6 +120,9 @@ export function useRevokeUserMcpServerAccess() {
         queryKey: ["mcp-servers"],
         type: "active",
       });
+      // Invalidate agent-tools since revoking user access deletes the MCP server and its tool assignments
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
       toast.success("User access revoked successfully");
     },
     onError: (error) => {
@@ -181,6 +184,9 @@ export function useRevokeTeamMcpServerAccess() {
         queryKey: ["mcp-servers"],
         type: "active",
       });
+      // Invalidate agent-tools since revoking team access may delete the MCP server and its tool assignments
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
       toast.success("Team access revoked successfully");
     },
     onError: (error) => {
@@ -204,6 +210,9 @@ export function useRevokeAllTeamsMcpServerAccess() {
         queryKey: ["mcp-servers"],
         type: "active",
       });
+      // Invalidate agent-tools since revoking all teams deletes the MCP server and its tool assignments
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
       toast.success("Team token revoked successfully");
     },
     onError: (error) => {

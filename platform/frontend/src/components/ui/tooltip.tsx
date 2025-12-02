@@ -38,8 +38,11 @@ function TooltipContent({
   className,
   sideOffset = 0,
   children,
+  noArrow = false,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & {
+  noArrow?: boolean;
+}) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
@@ -52,9 +55,11 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <span className="[&>span]:z-[-50]">
-          <TooltipPrimitive.Arrow className="bg-popover fill-popover border z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
-        </span>
+        {!noArrow && (
+          <span className="[&>span]:z-[-50]">
+            <TooltipPrimitive.Arrow className="bg-popover fill-popover border z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+          </span>
+        )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

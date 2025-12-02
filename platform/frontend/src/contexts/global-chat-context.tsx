@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useGenerateConversationTitle } from "@/lib/chat.query";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 
@@ -186,6 +187,9 @@ function ChatSessionHook({
   const queryClient = useQueryClient();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const generateTitleMutation = useGenerateConversationTitle();
+  // Track if title generation has been attempted for this conversation
+  const titleGenerationAttemptedRef = useRef(false);
 
   const {
     messages,
@@ -205,6 +209,9 @@ function ChatSessionHook({
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+
+      // Attempt to generate title after first assistant response
+      // This will be checked when messages update in the effect below
     },
     onError: (chatError) => {
       console.error("[ChatSession] Error occurred:", {
@@ -222,6 +229,39 @@ function ChatSessionHook({
       }
     },
   } as Parameters<typeof useChat>[0]);
+
+  // Auto-generate title after first assistant response
+  useEffect(() => {
+    // Skip if already attempted or currently generating
+    if (
+      titleGenerationAttemptedRef.current ||
+      generateTitleMutation.isPending
+    ) {
+      return;
+    }
+
+    // Check if we have at least one user message and one assistant message
+    const userMessages = messages.filter((m) => m.role === "user");
+    const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+    // Only generate title after first exchange (1 user + 1 assistant message)
+    // and when status is ready (not still streaming)
+    if (
+      userMessages.length === 1 &&
+      assistantMessages.length === 1 &&
+      status === "ready"
+    ) {
+      // Check if assistant message has actual text content (not just tool calls)
+      const assistantHasText = assistantMessages[0].parts.some(
+        (part) => part.type === "text" && "text" in part && part.text,
+      );
+
+      if (assistantHasText) {
+        titleGenerationAttemptedRef.current = true;
+        generateTitleMutation.mutate({ id: conversationId });
+      }
+    }
+  }, [messages, status, conversationId, generateTitleMutation]);
 
   // Update session in ref whenever state changes
   useEffect(() => {

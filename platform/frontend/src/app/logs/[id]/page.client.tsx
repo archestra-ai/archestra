@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
+import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
 import { Savings } from "@/components/savings";
 import {
@@ -83,25 +84,21 @@ function LogDetail({
 
   return (
     <>
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-          <div className="flex items-center gap-4 mb-2">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/logs">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Log Details
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground ml-14">
-            {formatDate({ date: interaction.createdAt })}
-          </p>
+      <div className="mb-6">
+        <div className="flex items-center gap-4 mb-2">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/logs">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">Log Details</h1>
         </div>
+        <p className="text-sm text-muted-foreground ml-14">
+          {formatDate({ date: interaction.createdAt })}
+        </p>
       </div>
-
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
+      <Divider className="my-6" />
+      <div>
         <div>
           <h2 className="text-xl font-semibold mb-4">Metadata</h2>
           <div className="border border-border rounded-lg p-6 bg-card">

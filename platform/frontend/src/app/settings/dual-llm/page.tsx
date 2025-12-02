@@ -186,7 +186,7 @@ function DualLLMContent({
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div>
       <div className="space-y-6">
         <div className="bg-card rounded-lg p-8 shadow-sm">
           <h2 className="text-lg font-semibold mb-2">How it works</h2>

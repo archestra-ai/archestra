@@ -439,11 +439,22 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       try {
-        let server: Server;
-        let transport: StreamableHTTPServerTransport;
+        let server: Server | undefined;
+        let transport: StreamableHTTPServerTransport | undefined;
 
-        // Check if we have an existing session
+        /**
+         * Check if we have an existing session
+         *
+         * we trust the session if it exists - stale sessions are cleaned up by:
+         * 1. transport.onclose handler when the client disconnects
+         * 2. SESSION_TIMEOUT_MS periodic cleanup (30 min)
+         */
         if (sessionId && activeSessions.has(sessionId)) {
+          const sessionData = activeSessions.get(sessionId);
+          if (!sessionData) {
+            throw new Error("Session data not found");
+          }
+
           fastify.log.info(
             {
               agentId,
@@ -452,18 +463,15 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Reusing existing session",
           );
 
-          const sessionData = activeSessions.get(sessionId);
-          if (!sessionData) {
-            throw new Error("Session data not found");
-          }
-
           transport = sessionData.transport;
           server = sessionData.server;
           // Update last access time
           sessionData.lastAccess = Date.now();
 
-          // If this is a re-initialize request on an existing session,
-          // we can just reuse the existing server/transport
+          /**
+           * If this is a re-initialize request on an existing session,
+           * we can just reuse the existing server/transport
+           */
           if (isInitialize) {
             fastify.log.info(
               { agentId, sessionId },
@@ -471,10 +479,13 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
           }
         } else if (isInitialize) {
-          // Initialize request - create new session
-          // Generate session ID upfront if not provided by client
-          // This prevents race condition where notifications/initialized arrives
-          // before session is stored
+          /**
+           * Initialize request - create new session
+           *
+           * Generate session ID upfront if not provided by client
+           * This prevents race condition where notifications/initialized arrives
+           * before session is stored
+           */
           const effectiveSessionId =
             sessionId || `session-${Date.now()}-${randomUUID()}`;
 
@@ -495,13 +506,61 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           server = newServer;
           transport = createTransport(agentId, effectiveSessionId, fastify.log);
 
+          /**
+           * Set up transport close handler to clean up session immediately
+           *
+           * This ensures stale sessions are removed when the client disconnects
+           * Capture transport reference to prevent race condition where old transport's
+           * onclose handler deletes a newly created session with the same ID
+           */
+          const thisTransport = transport;
+          transport.onclose = () => {
+            fastify.log.info(
+              { agentId, sessionId: effectiveSessionId },
+              "Transport closed - checking if session should be cleaned up",
+            );
+            /**
+             * Only delete if this session still has the same transport
+             *
+             * This prevents race condition where old transport's onclose fires after
+             * a new session was created with the same sessionId
+             */
+            const currentSession = activeSessions.get(effectiveSessionId);
+            if (currentSession && currentSession.transport === thisTransport) {
+              activeSessions.delete(effectiveSessionId);
+              fastify.log.info(
+                {
+                  agentId,
+                  sessionId: effectiveSessionId,
+                  remainingSessions: activeSessions.size,
+                },
+                "Session cleaned up after transport close",
+              );
+            } else {
+              fastify.log.info(
+                {
+                  agentId,
+                  sessionId: effectiveSessionId,
+                  sessionExists: !!currentSession,
+                  transportMatches: currentSession?.transport === thisTransport,
+                },
+                "Transport close ignored - session already replaced or removed",
+              );
+            }
+          };
+
           // Connect server to transport (this also starts the transport)
           fastify.log.info({ agentId }, "Connecting server to transport");
           await server.connect(transport);
           fastify.log.info({ agentId }, "Server connected to transport");
 
-          // Store session immediately before handleRequest
-          // This ensures the session exists when notifications/initialized arrives
+          /**
+           * Store session immediately before handleRequest
+           *
+           * This ensures the session exists when notifications/initialized arrives
+           * to prevent race condition where notifications/initialized arrives
+           * before session is stored
+           */
           activeSessions.set(effectiveSessionId, {
             server,
             transport,
@@ -517,8 +576,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Session stored before handleRequest",
           );
-        } else {
-          // Non-initialize request without a valid session
+        } else if (!server || !transport) {
+          // Non-initialize request without a valid session (server/transport not assigned)
           fastify.log.error(
             { agentId, sessionId, method: request.body?.method },
             "Request received without valid session",
@@ -534,8 +593,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
         }
 
-        // Let the MCP SDK handle the request/response
-        // Cast Fastify request/reply to Node.js types expected by SDK
+        /**
+         * Let the MCP SDK handle the request/response
+         *
+         * Cast Fastify request/reply to Node.js types expected by SDK
+         */
         fastify.log.info(
           { agentId, sessionId },
           "Calling transport.handleRequest",

@@ -23,45 +23,25 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Search for MCP servers with filtering and sorting options
  */
-export const searchMcpServerCatalog = <ThrowOnError extends boolean = false>(options?: Options<SearchMcpServerCatalogData, ThrowOnError>) => {
-    return (options?.client ?? client).get<SearchMcpServerCatalogResponses, unknown, ThrowOnError>({
-        url: '/search',
-        ...options
-    });
-};
+export const searchMcpServerCatalog = <ThrowOnError extends boolean = false>(options?: Options<SearchMcpServerCatalogData, ThrowOnError>) => (options?.client ?? client).get<SearchMcpServerCatalogResponses, unknown, ThrowOnError>({ url: '/search', ...options });
 
 /**
  * Get MCP server by name
  *
  * Retrieve detailed information about a specific MCP server by its name identifier
  */
-export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({
-        url: '/server/{name}',
-        ...options
-    });
-};
+export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({ url: '/server/{name}', ...options });
 
 /**
  * Get quality badge
  *
  * Get an SVG quality badge for an MCP server
  */
-export const getMcpServerQualityBadge = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerQualityBadgeData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerQualityBadgeResponses, GetMcpServerQualityBadgeErrors, ThrowOnError>({
-        url: '/badge/quality/{org}/{repo}',
-        ...options
-    });
-};
+export const getMcpServerQualityBadge = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerQualityBadgeData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerQualityBadgeResponses, GetMcpServerQualityBadgeErrors, ThrowOnError>({ url: '/badge/quality/{org}/{repo}', ...options });
 
 /**
  * Get available categories
  *
  * Get a list of all available MCP server categories
  */
-export const getMcpServerCategories = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerCategoriesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpServerCategoriesResponses, unknown, ThrowOnError>({
-        url: '/category',
-        ...options
-    });
-};
+export const getMcpServerCategories = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerCategoriesData, ThrowOnError>) => (options?.client ?? client).get<GetMcpServerCategoriesResponses, unknown, ThrowOnError>({ url: '/category', ...options });

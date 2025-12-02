@@ -5620,6 +5620,103 @@ export type GetChatAgentMcpToolsResponses = {
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
 
+export type GenerateChatConversationTitleData = {
+    body?: {
+        /**
+         * Force regeneration even if title already exists (for manual regeneration)
+         */
+        regenerate?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/generate-title';
+};
+
+export type GenerateChatConversationTitleErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GenerateChatConversationTitleError = GenerateChatConversationTitleErrors[keyof GenerateChatConversationTitleErrors];
+
+export type GenerateChatConversationTitleResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string;
+        promptId: string | null;
+        title: string | null;
+        selectedModel: string;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        messages: Array<unknown>;
+    };
+};
+
+export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
+
 export type GetChatSettingsData = {
     body?: never;
     path?: never;
@@ -11405,12 +11502,11 @@ export type GetOptimizationRulesResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11426,12 +11522,11 @@ export type CreateOptimizationRuleData = {
         id?: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProvidersInput;
         targetModel: string;
         enabled?: boolean;
@@ -11510,12 +11605,11 @@ export type CreateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -11610,12 +11704,11 @@ export type UpdateOptimizationRuleData = {
         id?: string;
         entityType?: 'organization' | 'team' | 'agent';
         entityId?: string;
-        ruleType?: 'content_length' | 'tool_presence';
-        conditions?: {
+        conditions?: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider?: SupportedProvidersInput;
         targetModel?: string;
         enabled?: boolean;
@@ -11696,12 +11789,11 @@ export type UpdateOptimizationRuleResponses = {
         id: string;
         entityType: 'organization' | 'team' | 'agent';
         entityId: string;
-        ruleType: 'content_length' | 'tool_presence';
-        conditions: {
+        conditions: Array<{
             maxLength: number;
         } | {
             hasTools: boolean;
-        };
+        }>;
         provider: SupportedProviders;
         targetModel: string;
         enabled: boolean;
@@ -15292,6 +15384,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15304,6 +15397,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
+        provider: SupportedProvidersInput;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15378,6 +15472,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15541,6 +15636,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15553,6 +15649,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
+        provider?: SupportedProvidersInput;
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -15629,6 +15726,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

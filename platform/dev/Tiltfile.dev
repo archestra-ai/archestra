@@ -30,6 +30,8 @@ def get_frontend_env():
 
   return env
 
+frontend_env_vars = get_frontend_env()
+
 local_resource(
   'pnpm-install',
   cmd='CI=true pnpm install',
@@ -49,7 +51,8 @@ if is_prod:
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],
-    serve_env=get_frontend_env()
+    env=frontend_env_vars,
+    serve_env=frontend_env_vars
   )
 else:
   local_resource(
@@ -58,7 +61,7 @@ else:
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],
-    serve_env=get_frontend_env()
+    serve_env=frontend_env_vars
   )
 
 local_resource(

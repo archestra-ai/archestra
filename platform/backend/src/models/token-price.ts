@@ -32,12 +32,7 @@ class TokenPriceModel {
   static async create(data: CreateTokenPrice): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values({
-        provider: data.provider as SupportedProvider,
-        model: data.model,
-        pricePerMillionInput: data.pricePerMillionInput,
-        pricePerMillionOutput: data.pricePerMillionOutput,
-      })
+      .values(data)
       .returning();
 
     return tokenPrice;
@@ -47,21 +42,9 @@ class TokenPriceModel {
     id: string,
     data: Partial<CreateTokenPrice>,
   ): Promise<TokenPrice | null> {
-    const updateData = {
-      ...(data.provider && { provider: data.provider as SupportedProvider }),
-      ...(data.model && { model: data.model }),
-      ...(data.pricePerMillionInput && {
-        pricePerMillionInput: data.pricePerMillionInput,
-      }),
-      ...(data.pricePerMillionOutput && {
-        pricePerMillionOutput: data.pricePerMillionOutput,
-      }),
-      updatedAt: new Date(),
-    };
-
     const [tokenPrice] = await db
       .update(schema.tokenPricesTable)
-      .set(updateData)
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(schema.tokenPricesTable.id, id))
       .returning();
 
@@ -74,12 +57,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice> {
     const [tokenPrice] = await db
       .insert(schema.tokenPricesTable)
-      .values({
-        provider: data.provider as SupportedProvider,
-        model,
-        pricePerMillionInput: data.pricePerMillionInput,
-        pricePerMillionOutput: data.pricePerMillionOutput,
-      })
+      .values({ model, ...data })
       .onConflictDoUpdate({
         target: schema.tokenPricesTable.model,
         set: {
@@ -100,12 +78,7 @@ class TokenPriceModel {
   ): Promise<TokenPrice | null> {
     const result = await db
       .insert(schema.tokenPricesTable)
-      .values({
-        provider: data.provider as SupportedProvider,
-        model,
-        pricePerMillionInput: data.pricePerMillionInput,
-        pricePerMillionOutput: data.pricePerMillionOutput,
-      })
+      .values({ model, ...data })
       .onConflictDoNothing({
         target: schema.tokenPricesTable.model,
       })

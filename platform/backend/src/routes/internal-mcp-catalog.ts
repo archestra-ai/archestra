@@ -28,16 +28,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (_request, reply) => {
       const catalogItems = await InternalMcpCatalogModel.findAll();
-      await Promise.all(catalogItems.map(async (item) => {
-        const clientSecretId = item.clientSecretId;
-        if (!clientSecretId) {
-          return
-        }
-        const secret = await secretManager.getSecret(item.clientSecretId)
-        if (secret?.secret.client_secret && item.oauthConfig) {
-          item.oauthConfig.client_secret = String(secret.secret.client_secret);
-        }
-      }))
+      await Promise.all(
+        catalogItems.map(async (item) => {
+          const clientSecretId = item.clientSecretId;
+          if (!clientSecretId) {
+            return;
+          }
+          const secret = await secretManager.getSecret(clientSecretId);
+          if (secret?.secret.client_secret && item.oauthConfig) {
+            item.oauthConfig.client_secret = String(
+              secret.secret.client_secret,
+            );
+          }
+        }),
+      );
 
       return reply.send(catalogItems);
     },
@@ -58,7 +62,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientSecretId: string | undefined;
 
       // If oauthConfig has client_secret, extract it and store in secrets table
-      if ('client_secret' in body.oauthConfig) {
+      if (body.oauthConfig && "client_secret" in body.oauthConfig) {
         const clientSecret = body.oauthConfig.client_secret;
         const secret = await secretManager.createSecret(
           { client_secret: clientSecret },
@@ -67,7 +71,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientSecretId = secret.id;
 
         body.clientSecretId = clientSecretId;
-        delete body.oauthConfig.client_secret
+        delete body.oauthConfig.client_secret;
       }
 
       const catalogItem = await InternalMcpCatalogModel.create(body);
@@ -75,8 +79,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Add client_secret back to response for backward compatibility
       if (clientSecretId && catalogItem.oauthConfig) {
         const secret = await secretManager.getSecret(clientSecretId);
-        if (secret && secret.secret.client_secret) {
-          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret);
+        if (secret?.secret.client_secret) {
+          catalogItem.oauthConfig.client_secret = String(
+            secret.secret.client_secret,
+          );
         }
       }
 
@@ -110,7 +116,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogItem.clientSecretId,
         );
         if (secret?.secret.client_secret) {
-          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret)
+          catalogItem.oauthConfig.client_secret = String(
+            secret.secret.client_secret,
+          );
         }
       }
 
@@ -143,7 +151,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientSecretId = originalCatalogItem.clientSecretId;
 
       // If oauthConfig has client_secret, handle secret storage
-      if ('client_secret' in body.oauthConfig) {
+      if (body.oauthConfig && "client_secret" in body.oauthConfig) {
         const clientSecret = body.oauthConfig.client_secret;
 
         if (clientSecretId) {
@@ -190,8 +198,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const secret = await secretManager.getSecret(
           catalogItem.clientSecretId,
         );
-        if (secret && secret.secret.client_secret) {
-          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret);
+        if (secret?.secret.client_secret) {
+          catalogItem.oauthConfig.client_secret = String(
+            secret.secret.client_secret,
+          );
         }
       }
 

@@ -337,7 +337,7 @@ describe("executeArchestraTool", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0]).toMatchObject({ type: "text" });
       expect((result.content[0] as any).text).toContain(
-        "installation request dialog",
+        "A dialog for adding or requesting an MCP",
       );
     });
   });

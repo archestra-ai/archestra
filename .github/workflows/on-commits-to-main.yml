@@ -7,11 +7,6 @@ on:
   # Allow manual triggering of the workflow
   workflow_dispatch:
 
-concurrency:
-  # Cancel any running workflow when new commits are pushed to main.
-  group: on-commits-to-main
-  cancel-in-progress: true
-
 # Set default permissions to empty to enforce least privilege
 # Each job will explicitly declare the permissions it needs
 permissions: {}

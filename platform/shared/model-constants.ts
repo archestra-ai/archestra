@@ -1,4 +1,4 @@
-import { SupportedProviders } from './hey-api/clients/api';
+import type { SupportedProviders } from "./hey-api/clients/api";
 
 type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
 

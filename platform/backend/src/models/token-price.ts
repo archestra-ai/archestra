@@ -61,9 +61,7 @@ class TokenPriceModel {
       .onConflictDoUpdate({
         target: schema.tokenPricesTable.model,
         set: {
-          provider: data.provider as SupportedProvider,
-          pricePerMillionInput: data.pricePerMillionInput,
-          pricePerMillionOutput: data.pricePerMillionOutput,
+          ...data,
           updatedAt: new Date(),
         },
       })

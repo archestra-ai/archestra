@@ -35,7 +35,6 @@
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96",
     "@fastify/otel": "^0.14.0",
-    "@fastify/reply-from": "12.5.0",
     "@fastify/swagger": "^9.6.1",
     "@google/genai": "^1.29.1",
     "@kubernetes/client-node": "^1.4.0",

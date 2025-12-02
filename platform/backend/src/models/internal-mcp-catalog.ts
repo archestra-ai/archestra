@@ -1,5 +1,6 @@
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { secretManager } from "@/secretsmanager";
 import type {
   InsertInternalMcpCatalog,
   InternalMcpCatalog,
@@ -8,6 +9,40 @@ import type {
 import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
+  /**
+   * Enrich a catalog item with secrets from the secrets table
+   */
+  private static async enrichWithSecrets(
+    catalogItem: InternalMcpCatalog,
+  ): Promise<void> {
+    // Enrich OAuth client_secret if present
+    if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+      const secret = await secretManager.getSecret(catalogItem.clientSecretId);
+      if (secret?.secret.client_secret) {
+        catalogItem.oauthConfig.client_secret = String(
+          secret.secret.client_secret,
+        );
+      }
+    }
+
+    // Enrich secret env var values if present
+    if (
+      catalogItem.localConfigSecretId &&
+      catalogItem.localConfig?.environment
+    ) {
+      const secret = await secretManager.getSecret(
+        catalogItem.localConfigSecretId,
+      );
+      if (secret) {
+        for (const envVar of catalogItem.localConfig.environment) {
+          if (envVar.type === "secret" && secret.secret[envVar.key]) {
+            envVar.value = String(secret.secret[envVar.key]);
+          }
+        }
+      }
+    }
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -20,14 +55,23 @@ class InternalMcpCatalogModel {
   }
 
   static async findAll(): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+
+    // Enrich all catalog items with secrets
+    await Promise.all(
+      catalogItems.map((item) =>
+        InternalMcpCatalogModel.enrichWithSecrets(item),
+      ),
+    );
+
+    return catalogItems;
   }
 
   static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -36,6 +80,15 @@ class InternalMcpCatalogModel {
           ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
         ),
       );
+
+    // Enrich all catalog items with secrets
+    await Promise.all(
+      catalogItems.map((item) =>
+        InternalMcpCatalogModel.enrichWithSecrets(item),
+      ),
+    );
+
+    return catalogItems;
   }
 
   static async findById(id: string): Promise<InternalMcpCatalog | null> {
@@ -44,7 +97,14 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    return catalogItem || null;
+    if (!catalogItem) {
+      return null;
+    }
+
+    // Enrich with secrets
+    await InternalMcpCatalogModel.enrichWithSecrets(catalogItem);
+
+    return catalogItem;
   }
 
   /**

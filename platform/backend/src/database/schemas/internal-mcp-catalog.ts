@@ -38,6 +38,12 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   clientSecretId: uuid("client_secret_id").references(() => secretTable.id, {
     onDelete: "set null",
   }), // For OAuth client_secret storage
+  localConfigSecretId: uuid("local_config_secret_id").references(
+    () => secretTable.id,
+    {
+      onDelete: "set null",
+    },
+  ), // For local config secret env vars storage
   // Local server configuration
   localConfig: jsonb("local_config").$type<{
     command?: string;

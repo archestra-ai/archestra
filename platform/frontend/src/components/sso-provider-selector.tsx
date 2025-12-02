@@ -10,7 +10,18 @@ import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
 const { enterpriseLicenseActivated } = config;
 
-export function SsoProviderSelector() {
+interface SsoProviderSelectorProps {
+  /**
+   * Whether to show the "Or continue with SSO" divider above the SSO buttons.
+   * Set to false when basic auth is disabled and there's no form above.
+   * Defaults to true.
+   */
+  showDivider?: boolean;
+}
+
+export function SsoProviderSelector({
+  showDivider = true,
+}: SsoProviderSelectorProps) {
   const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
 
   const handleSsoSignIn = useCallback(async (providerId: string) => {
@@ -34,16 +45,18 @@ export function SsoProviderSelector() {
 
   return (
     <div className="space-y-4">
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+      {showDivider && (
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              Or continue with SSO
+            </span>
+          </div>
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
-            Or continue with SSO
-          </span>
-        </div>
-      </div>
+      )}
 
       <div className="space-y-2">
         {ssoProviders.map((provider) => (

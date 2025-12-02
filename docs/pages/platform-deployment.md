@@ -342,6 +342,12 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
+  - Default: `false`
+  - Set to `true` to disable basic authentication and require users to authenticate via SSO only
+  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
+  - Similar to [Grafana's `disable_login_form`](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/grafana/#disable-basic-authentication)
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
   - Default: `default`
   - Example: `archestra-mcp` or `production`

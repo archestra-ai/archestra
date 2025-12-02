@@ -1,11 +1,20 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { AlertCircle, ExternalLink } from "lucide-react";
+import { AlertCircle, ExternalLink, KeyRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SsoProviderSelector } from "@/components/sso-provider-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useFeatures } from "@/lib/features.query";
+import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
@@ -17,6 +26,12 @@ export function AuthViewWithErrorHandling({
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
+  const { data: features } = useFeatures();
+  const { data: ssoProviders = [], isLoading: isLoadingSsoProviders } =
+    usePublicSsoProviders();
+
+  const isBasicAuthDisabled = features?.["disable-basic-auth"] ?? false;
+  const hasSsoProviders = ssoProviders.length > 0;
 
   useEffect(() => {
     // Intercept fetch to detect 500 errors from auth endpoints
@@ -67,6 +82,34 @@ export function AuthViewWithErrorHandling({
   }, []);
 
   const isSignInPage = path === "sign-in";
+
+  // When basic auth is disabled and SSO providers are still loading, wait
+  if (isBasicAuthDisabled && isLoadingSsoProviders) {
+    return null;
+  }
+
+  // When basic auth is disabled and no SSO providers are configured, show a message
+  if (isBasicAuthDisabled && !hasSsoProviders && isSignInPage) {
+    return (
+      <Card className="max-w-md w-full">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <KeyRound className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <CardTitle>Authentication Required</CardTitle>
+          <CardDescription>
+            Basic authentication has been disabled for this instance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground text-center">
+            Please contact your administrator to configure an SSO provider for
+            authentication.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -122,16 +165,20 @@ export function AuthViewWithErrorHandling({
         </Alert>
       )}
       <div className="space-y-4">
-        <AuthView
-          path={path}
-          callbackURL={callbackURL}
-          classNames={{
-            base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
-            footer: "hidden",
-            form: { forgotPasswordLink: "hidden" },
-          }}
-        />
-        {isSignInPage && <SsoProviderSelector />}
+        {!isBasicAuthDisabled && (
+          <AuthView
+            path={path}
+            callbackURL={callbackURL}
+            classNames={{
+              base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
+              footer: "hidden",
+              form: { forgotPasswordLink: "hidden" },
+            }}
+          />
+        )}
+        {isSignInPage && (
+          <SsoProviderSelector showDivider={!isBasicAuthDisabled} />
+        )}
       </div>
     </>
   );

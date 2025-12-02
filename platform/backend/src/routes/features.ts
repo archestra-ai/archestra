@@ -19,6 +19,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
              * mcp_registry: z.boolean(),
              */
             "orchestrator-k8s-runtime": z.boolean(),
+            "disable-basic-auth": z.boolean(),
           }),
         },
       },
@@ -27,6 +28,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send({
         ...config.features,
         "orchestrator-k8s-runtime": McpServerRuntimeManager.isEnabled,
+        "disable-basic-auth": config.auth.disableBasicAuth,
       }),
   );
 };

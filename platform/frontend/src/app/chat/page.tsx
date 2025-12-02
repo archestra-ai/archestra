@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { CreateCatalogDialog } from "@/app/mcp-catalog/_parts/create-catalog-dialog";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
 import {
   PromptInput,
@@ -46,8 +47,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useConversation, useCreateConversation } from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
+import { useDialogs } from "@/lib/dialog.hook";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
 const CONVERSATION_QUERY_PARAM = "conversation";
@@ -69,9 +72,15 @@ export default function ChatPage() {
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const newlyCreatedConversationRef = useRef<string | undefined>(undefined);
 
-  // State for MCP installation request dialogs
-  const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
-    useState(false);
+  // Dialog management for MCP installation
+  const { isDialogOpened, openDialog, closeDialog } = useDialogs<
+    "custom-request" | "create-catalog"
+  >();
+
+  // Check if user can create catalog items directly
+  const { data: canCreateCatalog } = useHasPermissions({
+    internalMcpCatalog: ["create"],
+  });
 
   // State for prompt management
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
@@ -242,7 +251,12 @@ export default function ChatPage() {
       return;
     }
 
-    setIsCustomServerDialogOpen(true);
+    // Open the appropriate dialog based on user permissions
+    if (canCreateCatalog) {
+      openDialog("create-catalog");
+    } else {
+      openDialog("custom-request");
+    }
 
     void (async () => {
       try {
@@ -251,7 +265,9 @@ export default function ChatPage() {
           toolCallId: pendingCustomServerToolCall.toolCallId,
           output: {
             type: "text",
-            text: "Opening the custom MCP server installation dialog.",
+            text: canCreateCatalog
+              ? "Opening the Add MCP Server to Private Registry dialog."
+              : "Opening the custom MCP server installation request dialog.",
           } as never,
         });
       } catch (toolError) {
@@ -267,6 +283,8 @@ export default function ChatPage() {
     pendingCustomServerToolCall,
     addToolResult,
     setPendingCustomServerToolCall,
+    canCreateCatalog,
+    openDialog,
   ]);
 
   // Sync messages when conversation loads or changes
@@ -563,8 +581,13 @@ export default function ChatPage() {
       </div>
 
       <CustomServerRequestDialog
-        isOpen={isCustomServerDialogOpen}
-        onClose={() => setIsCustomServerDialogOpen(false)}
+        isOpen={isDialogOpened("custom-request")}
+        onClose={() => closeDialog("custom-request")}
+      />
+      <CreateCatalogDialog
+        isOpen={isDialogOpened("create-catalog")}
+        onClose={() => closeDialog("create-catalog")}
+        onSuccess={() => router.push("/mcp-catalog/registry")}
       />
     </div>
   );

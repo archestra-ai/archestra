@@ -37,9 +37,11 @@ type ServerType = "all" | "remote" | "local";
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
   onClose,
+  onSuccess,
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   onClose: () => void;
+  onSuccess?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -264,6 +266,7 @@ export function ArchestraCatalogTab({
 
     // Close the dialog after adding
     onClose();
+    onSuccess?.();
   };
 
   const handleRequestInstallation = async (

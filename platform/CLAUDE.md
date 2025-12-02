@@ -119,9 +119,6 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
-# Feature Flags
-NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH=false  # Enable team-based authentication/installation for MCP servers (disabled by default)
-
 # Authentication Secret (auto-generated in Helm/Docker if not set)
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret

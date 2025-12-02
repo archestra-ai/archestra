@@ -34,7 +34,6 @@ import {
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useMcpServers,
@@ -398,9 +397,7 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: usersAuthenticated },
-            ...(config.features.enableTeamAuth
-              ? [{ id: "2", content: teamsAccess }]
-              : []),
+            { id: "2", content: teamsAccess },
             { id: "3", content: toolsAssigned },
           ].map((item) => (
             <div
@@ -467,42 +464,38 @@ export function McpServerCard({
           Revoke personal token
         </Button>
       )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        currentUserHasTeamAuth && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams token
-          </Button>
-        )}
-      {config.features.enableTeamAuth &&
-        requiresAuth &&
-        !currentUserHasTeamAuth && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ mcpServer: ["admin"] }}
-                  onClick={onInstallRemoteServerTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Connecting..." : "Auth for teams"}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Authenticate and allow teams to use my token</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+      {userIsMcpServerAdmin && currentUserHasTeamAuth && (
+        <Button
+          onClick={handleRevokeTeamAccess}
+          size="sm"
+          variant="outline"
+          className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        >
+          Revoke teams token
+        </Button>
+      )}
+      {requiresAuth && !currentUserHasTeamAuth && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PermissionButton
+                permissions={{ mcpServer: ["admin"] }}
+                onClick={onInstallRemoteServerTeam}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? "Connecting..." : "Auth for teams"}
+              </PermissionButton>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Authenticate and allow teams to use my token</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 
@@ -512,9 +505,7 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: localServersInstalled },
-            ...(config.features.enableTeamAuth
-              ? [{ id: "2", content: teamsAccess }]
-              : []),
+            { id: "2", content: teamsAccess },
             { id: "3", content: toolsAssigned },
           ].map((item) => (
             <div
@@ -603,46 +594,42 @@ export function McpServerCard({
             : "Installing..."}
         </Button>
       )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        currentUserHasLocalTeamInstallation && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams installation
-          </Button>
-        )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        !currentUserHasLocalTeamInstallation && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ mcpServer: ["admin"] }}
-                  onClick={onInstallLocalServerTeam}
-                  disabled={isInstalling || !isLocalMcpEnabled}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? localInstalllingLabel : "Install for teams"}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {!isLocalMcpEnabled
-                    ? LOCAL_MCP_DISABLED_MESSAGE
-                    : "Install and allow teams to use this server"}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+      {userIsMcpServerAdmin && currentUserHasLocalTeamInstallation && (
+        <Button
+          onClick={handleRevokeTeamAccess}
+          size="sm"
+          variant="outline"
+          className="w-full bg-accent text-accent-foreground hover:bg-accent"
+        >
+          Revoke teams installation
+        </Button>
+      )}
+      {userIsMcpServerAdmin && !currentUserHasLocalTeamInstallation && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PermissionButton
+                permissions={{ mcpServer: ["admin"] }}
+                onClick={onInstallLocalServerTeam}
+                disabled={isInstalling || !isLocalMcpEnabled}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? localInstalllingLabel : "Install for teams"}
+              </PermissionButton>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                {!isLocalMcpEnabled
+                  ? LOCAL_MCP_DISABLED_MESSAGE
+                  : "Install and allow teams to use this server"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 

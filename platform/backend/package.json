@@ -53,7 +53,7 @@
     "@sentry/opentelemetry": "^10.27.0",
     "@sentry/profiling-node": "^10.27.0",
     "@shared": "workspace:*",
-    "@toon-format/toon": "^2.0.0",
+    "@toon-format/toon": "^2.0.1",
     "ai": "^5.0.101",
     "better-auth": "1.4.2",
     "dotenv": "^17.2.2",

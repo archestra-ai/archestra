@@ -10,7 +10,6 @@ import type {
   ToolResultUpdates,
 } from "@/types";
 import type { CompressionStats } from "../toon-conversion";
-import { unwrapToolContent } from "../unwrap-tool-content";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -269,6 +268,7 @@ export async function convertToolResultsToToon(
 
   const result = messages.map((message) => {
     // Only process user messages with content arrays that contain tool_result blocks
+    // According to the Anthropic node
     if (message.role === "user" && Array.isArray(message.content)) {
       const updatedContent = message.content.map((contentBlock) => {
         if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
@@ -279,16 +279,82 @@ export async function convertToolResultsToToon(
               contentType: typeof contentBlock.content,
               isArray: Array.isArray(contentBlock.content),
             },
-            "Processing tool_result for TOON conversion",
+            "convertToolResultsToToon: found a tool call result",
           );
 
           // Handle string content
           if (typeof contentBlock.content === "string") {
             try {
-              // Unwrap any extra text block wrapping from clients
-              const unwrapped = unwrapToolContent(contentBlock.content);
-              const parsed = JSON.parse(unwrapped);
-              const noncompressed = unwrapped;
+              const parsed = JSON.parse(contentBlock.content);
+
+              // Check if parsed content is a content blocks array (e.g., [{type: "text", text: "..."}])
+              // This format comes from MCP SDK when tool results contain structured content
+              if (
+                Array.isArray(parsed) &&
+                parsed.length > 0 &&
+                parsed.every(
+                  (block: unknown) =>
+                    typeof block === "object" &&
+                    block !== null &&
+                    "type" in block,
+                )
+              ) {
+                // Process as content blocks - TOON encode inner text fields that contain JSON
+                let hasCompressedContent = false;
+                const processedBlocks = (
+                  parsed as Array<{ type: string; text?: string }>
+                ).map((block) => {
+                  if (block.type === "text" && typeof block.text === "string") {
+                    try {
+                      const innerParsed = JSON.parse(block.text);
+                      const noncompressed = block.text;
+                      const compressed = toonEncode(innerParsed);
+
+                      // Count tokens for before and after
+                      const tokensBefore = tokenizer.countTokens([
+                        { role: "user", content: noncompressed },
+                      ]);
+                      const tokensAfter = tokenizer.countTokens([
+                        { role: "user", content: compressed },
+                      ]);
+                      totalTokensBefore += tokensBefore;
+                      totalTokensAfter += tokensAfter;
+                      hasCompressedContent = true;
+
+                      logger.info(
+                        {
+                          toolCallId: contentBlock.tool_use_id,
+                          beforeLength: noncompressed.length,
+                          afterLength: compressed.length,
+                          tokensBefore,
+                          tokensAfter,
+                          toonPreview: compressed.substring(0, 150),
+                          provider: "anthropic",
+                        },
+                        "convertToolResultsToToon: compressed (string content blocks inner text)",
+                      );
+
+                      return { ...block, text: compressed };
+                    } catch {
+                      // Inner text is not JSON, keep as-is
+                      return block;
+                    }
+                  }
+                  return block;
+                });
+
+                if (hasCompressedContent) {
+                  return {
+                    ...contentBlock,
+                    content: JSON.stringify(processedBlocks),
+                  };
+                }
+                // No inner JSON found, return unchanged
+                return contentBlock;
+              }
+
+              // Regular JSON - TOON encode the whole thing
+              const noncompressed = contentBlock.content;
               const compressed = toonEncode(parsed);
 
               // Count tokens for before and after
@@ -348,11 +414,9 @@ export async function convertToolResultsToToon(
             const updatedBlocks = contentBlock.content.map((block) => {
               if (block.type === "text" && typeof block.text === "string") {
                 try {
-                  // Unwrap any extra text block wrapping from clients
-                  const unwrapped = unwrapToolContent(block.text);
                   // Try to parse as JSON
-                  const parsed = JSON.parse(unwrapped);
-                  const noncompressed = unwrapped;
+                  const parsed = JSON.parse(block.text);
+                  const noncompressed = block.text;
                   const compressed = toonEncode(parsed);
 
                   // Count tokens for before and after

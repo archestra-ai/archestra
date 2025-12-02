@@ -1,5 +1,20 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { toolCallsToCommon, toolResultsToMessages } from "./anthropic";
+import {
+  convertToolResultsToToon,
+  toolCallsToCommon,
+  toolResultsToMessages,
+} from "./anthropic";
+
+// Mock the TokenPriceModel to avoid database dependency
+vi.mock("@/models", () => ({
+  TokenPriceModel: {
+    findByModel: vi.fn().mockResolvedValue({
+      pricePerMillionInput: "3.00",
+      pricePerMillionOutput: "15.00",
+    }),
+  },
+}));
 
 describe("Anthropic MCP Adapters", () => {
   describe("toolCallsToCommon", () => {
@@ -201,6 +216,87 @@ describe("Anthropic MCP Adapters", () => {
       expect(messages[0].content[0].content).toBe(
         "Error: Tool execution failed",
       );
+    });
+  });
+
+  describe("convertToolResultsToToon", () => {
+    test("TOON encodes inner JSON in string content blocks array format", async () => {
+      // Import toonEncode to verify the encoding
+      const { encode: toonEncode } = await import("@toon-format/toon");
+
+      // The actual data we want to compress
+      const issuesData = {
+        issues: [
+          { id: 1, number: 101, state: "OPEN", title: "Bug report" },
+          { id: 2, number: 102, state: "CLOSED", title: "Feature request" },
+        ],
+      };
+
+      // This is the format from MCP SDK: content is a string containing JSON array of content blocks
+      // e.g., '[{"type":"text","text":"{\"issues\":[...]}"}]'
+      const contentBlocksArray = [
+        { type: "text", text: JSON.stringify(issuesData) },
+      ];
+
+      const messages = [
+        {
+          role: "user" as const,
+          content: [
+            {
+              type: "tool_result" as const,
+              tool_use_id: "toolu_01HsTdb6Nyjwvc17W5mxg8Sy",
+              content: JSON.stringify(contentBlocksArray), // For some reason content is string as well in MCP responses I inspected.
+            },
+          ],
+        },
+      ];
+
+      const result = await convertToolResultsToToon(messages, "claude-3-opus");
+
+      // Compare toon-encoded response with expected toon-encoded issues
+      const toolResult = (
+        result.messages[0].content as Array<{ type: string; content: string }>
+      )[0];
+      const parsedContent = JSON.parse(toolResult.content);
+
+      const expectedToonEncodedIssues = toonEncode(issuesData);
+
+      expect(parsedContent[0].text).toBe(expectedToonEncodedIssues);
+    });
+
+    test("leaves content blocks unchanged when inner text is not JSON", async () => {
+      const plainTextContent =
+        "This is a plain text response, not JSON at all.";
+      const contentBlocksArray = [{ type: "text", text: plainTextContent }];
+      const originalContentString = JSON.stringify(contentBlocksArray);
+
+      const messages = [
+        {
+          role: "user" as const,
+          content: [
+            {
+              type: "tool_result" as const,
+              tool_use_id: "toolu_plaintext",
+              content: originalContentString,
+            },
+          ],
+        },
+      ];
+
+      const result = await convertToolResultsToToon(messages, "claude-3-opus");
+
+      // The content should be unchanged since inner text is not JSON
+      const userMessage = result.messages[0];
+      const toolResult = (
+        userMessage.content as Array<{ type: string; content: string }>
+      )[0];
+
+      // Content should remain exactly the same
+      expect(toolResult.content).toBe(originalContentString);
+
+      // Double check by parsing - the inner text should be unchanged
+      const parsedContent = JSON.parse(toolResult.content);
+      expect(parsedContent[0].text).toBe(plainTextContent);
     });
   });
 });

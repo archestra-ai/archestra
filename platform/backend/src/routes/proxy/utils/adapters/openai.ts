@@ -10,7 +10,6 @@ import type {
   ToolResultUpdates,
 } from "@/types";
 import type { CompressionStats } from "../toon-conversion";
-import { unwrapToolContent } from "../unwrap-tool-content";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -256,11 +255,76 @@ export async function convertToolResultsToToon(
       // Only convert string content
       if (typeof message.content === "string") {
         try {
-          // Unwrap any extra text block wrapping from clients
-          const unwrapped = unwrapToolContent(message.content);
           // Parse JSON to validate it's actually JSON
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
+          const parsed = JSON.parse(message.content);
+
+          // Check if parsed content is a content blocks array (e.g., [{type: "text", text: "..."}])
+          // This format comes from MCP SDK when tool results contain structured content
+          if (
+            Array.isArray(parsed) &&
+            parsed.length > 0 &&
+            parsed.every(
+              (block: unknown) =>
+                typeof block === "object" && block !== null && "type" in block,
+            )
+          ) {
+            // Process as content blocks - TOON encode inner text fields that contain JSON
+            let hasCompressedContent = false;
+            const processedBlocks = (
+              parsed as Array<{ type: string; text?: string }>
+            ).map((block) => {
+              if (block.type === "text" && typeof block.text === "string") {
+                try {
+                  const innerParsed = JSON.parse(block.text);
+                  const noncompressed = block.text;
+                  const compressed = toonEncode(innerParsed);
+
+                  // Count tokens for before and after
+                  const tokensBefore = tokenizer.countTokens([
+                    { role: "user", content: noncompressed },
+                  ]);
+                  const tokensAfter = tokenizer.countTokens([
+                    { role: "user", content: compressed },
+                  ]);
+                  totalTokensBefore += tokensBefore;
+                  totalTokensAfter += tokensAfter;
+                  hasCompressedContent = true;
+
+                  logger.info(
+                    {
+                      toolCallId: message.tool_call_id,
+                      beforeLength: noncompressed.length,
+                      afterLength: compressed.length,
+                      tokensBefore,
+                      tokensAfter,
+                      toonPreview: compressed.substring(0, 150),
+                      provider: "openai",
+                    },
+                    "convertToolResultsToToon: compressed (string content blocks inner text)",
+                  );
+
+                  return { ...block, text: compressed };
+                } catch {
+                  // Inner text is not JSON, keep as-is
+                  return block;
+                }
+              }
+              return block;
+            });
+
+            if (hasCompressedContent) {
+              toolResultCount++;
+              return {
+                ...message,
+                content: JSON.stringify(processedBlocks),
+              };
+            }
+            // No inner JSON found, return unchanged
+            return message;
+          }
+
+          // Regular JSON - TOON encode the whole thing
+          const noncompressed = message.content;
           const compressed = toonEncode(parsed);
 
           // Count tokens for before and after

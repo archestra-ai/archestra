@@ -98,8 +98,13 @@ class McpClient {
         arguments: toolCall.arguments,
       });
 
+      logger.info(
+        { result },
+        "MCPClient.executeToolCall: Raw MCP server response",
+      );
+
       // Apply template and return
-      return await this.createSuccessResult(
+      const successResult = await this.createSuccessResult(
         toolCall,
         agentId,
         tool.mcpServerName || "unknown",
@@ -107,6 +112,7 @@ class McpClient {
         !!result.isError,
         tool.responseModifierTemplate,
       );
+      return successResult;
     } catch (error) {
       return await this.createErrorResult(
         toolCall,
@@ -398,16 +404,17 @@ class McpClient {
     isError: boolean,
     template: string | null,
   ): Promise<CommonToolResult> {
-    const modifiedContent = this.applyTemplate(
-      content,
-      template,
-      toolCall.name,
-    );
+    // TODO: bring back
+    // const modifiedContent = this.applyTemplate(
+    //   content,
+    //   template,
+    //   toolCall.name,
+    // );
 
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
-      content: modifiedContent,
+      content: content,
       isError,
     };
 

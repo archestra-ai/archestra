@@ -1,5 +1,20 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { toolCallsToCommon, toolResultsToMessages } from "./openai";
+import {
+  convertToolResultsToToon,
+  toolCallsToCommon,
+  toolResultsToMessages,
+} from "./openai";
+
+// Mock the TokenPriceModel to avoid database dependency
+vi.mock("@/models", () => ({
+  TokenPriceModel: {
+    findByModel: vi.fn().mockResolvedValue({
+      pricePerMillionInput: "3.00",
+      pricePerMillionOutput: "15.00",
+    }),
+  },
+}));
 
 describe("OpenAI MCP Adapters", () => {
   describe("toolCallsToCommon", () => {
@@ -166,6 +181,75 @@ describe("OpenAI MCP Adapters", () => {
         tool_call_id: "call_2",
         content: "Error: Network timeout",
       });
+    });
+  });
+
+  describe("convertToolResultsToToon", () => {
+    test("TOON encodes inner JSON in string content blocks array format", async () => {
+      const { encode: toonEncode } = await import("@toon-format/toon");
+
+      const issuesData = {
+        issues: [
+          { id: 1, number: 101, state: "OPEN", title: "Bug report" },
+          { id: 2, number: 102, state: "CLOSED", title: "Feature request" },
+        ],
+      };
+      // This is the format from MCP SDK: content is a string containing JSON array of content blocks
+      // e.g., '[{"type":"text","text":"{\"issues\":[...]}"}]'
+      const contentBlocksArray = [
+        { type: "text", text: JSON.stringify(issuesData) },
+      ];
+
+      const messages = [
+        {
+          role: "tool" as const,
+          tool_call_id: "call_01HsTdb6Nyjwvc17W5mxg8Sy",
+          content: JSON.stringify(contentBlocksArray), // For some reason content is string as well in MCP responses I inspected.
+        },
+      ];
+      const result = await convertToolResultsToToon(messages, "gpt-4");
+
+      // Compare toon-encoded response with expected toon-encoded issues
+      const toolMessage = result.messages[0];
+      const parsedContent = JSON.parse(
+        (toolMessage as { content: string }).content,
+      );
+      const expectedToonEncodedIssues = toonEncode(issuesData);
+      // The inner text should match the separately TOON encoded issues
+      expect(parsedContent[0].text).toBe(expectedToonEncodedIssues);
+    });
+
+    test("leaves content blocks unchanged when inner text is not JSON", async () => {
+      // Plain text content that is NOT JSON
+      const plainTextContent =
+        "This is a plain text response, not JSON at all.";
+      const contentBlocksArray = [{ type: "text", text: plainTextContent }];
+      const originalContentString = JSON.stringify(contentBlocksArray);
+
+      const messages = [
+        {
+          role: "tool" as const,
+          tool_call_id: "call_plaintext",
+          content: originalContentString,
+        },
+      ];
+
+      const result = await convertToolResultsToToon(messages, "gpt-4");
+
+      // The content should be unchanged since inner text is not JSON
+      const toolMessage = result.messages[0];
+      expect(toolMessage.role).toBe("tool");
+
+      // Content should remain exactly the same
+      expect((toolMessage as { content: string }).content).toBe(
+        originalContentString,
+      );
+
+      // Double check by parsing - the inner text should be unchanged
+      const parsedContent = JSON.parse(
+        (toolMessage as { content: string }).content,
+      );
+      expect(parsedContent[0].text).toBe(plainTextContent);
     });
   });
 });

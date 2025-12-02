@@ -213,16 +213,22 @@ export async function getChatMcpTools(
     toolCache.delete(agentId);
   }
 
-  logger.info({ agentId }, "getChatMcpTools() called - fetching client...");
+  logger.info({ agentId }, "getChatMcpTools: fetching client...");
   const client = await getChatMcpClient(agentId);
 
   if (!client) {
-    logger.warn({ agentId }, "No MCP client available, returning empty tools");
+    logger.warn(
+      { agentId },
+      "getChatMcpTools: No MCP client available, returning empty tools",
+    );
     return {}; // No tools available
   }
 
   try {
-    logger.info({ agentId }, "MCP client available, listing tools...");
+    logger.info(
+      { agentId },
+      "getChatMcpTools: MCP client available, listing tools...",
+    );
     const { tools: mcpTools } = await client.listTools();
 
     logger.info(
@@ -231,7 +237,7 @@ export async function getChatMcpTools(
         toolCount: mcpTools.length,
         toolNames: mcpTools.map((t) => t.name),
       },
-      "Fetched tools from MCP Gateway for agent",
+      "getChatMcpTools: Fetched tools from MCP Gateway for agent",
     );
 
     // Convert MCP tools to AI SDK Tool format
@@ -242,13 +248,13 @@ export async function getChatMcpTools(
         // Normalize the schema and wrap with jsonSchema() helper
         const normalizedSchema = normalizeJsonSchema(mcpTool.inputSchema);
 
-        logger.debug(
+        logger.info(
           {
             toolName: mcpTool.name,
             schemaType: normalizedSchema.type,
             hasProperties: !!normalizedSchema.properties,
           },
-          "Converting MCP tool with JSON Schema",
+          "getChatMcpTools: Converting MCP tool with JSON Schema",
         );
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
@@ -259,7 +265,7 @@ export async function getChatMcpTools(
           execute: async (args: any) => {
             logger.info(
               { agentId, toolName: mcpTool.name, arguments: args },
-              "Executing MCP tool from chat",
+              "getChatMcpTools.execute: Executing MCP tool from chat",
             );
 
             try {
@@ -270,33 +276,31 @@ export async function getChatMcpTools(
 
               logger.info(
                 { agentId, toolName: mcpTool.name, result },
-                "MCP tool execution completed",
+                "getChatMcpTools.execute: MCP tool execution completed",
               );
 
-              // Convert MCP content to string for AI SDK
-              const content = (
-                result.content as Array<{ type: string; text?: string }>
-              )
-                .map((item: { type: string; text?: string }) => {
-                  if (item.type === "text" && item.text) {
-                    return item.text;
-                  }
-                  return JSON.stringify(item);
-                })
-                .join("\n");
-
+              // convert content to string for AI SDK
+              // TODO: double check if we need to stringify it.
+              // 1. Is content already a string?
+              // 2. Does AI sdk really need a string?
+              // const content = JSON.stringify(result.content);
+              const content = result.content;
+              logger.info(
+                { agentId, toolName: mcpTool.name, content },
+                "getChatMcpTools.execute: Content",
+              );
               // Check if MCP tool returned an error
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
               if (result.isError) {
-                throw new Error(content);
+                throw new Error(content as string);
               }
 
               return content;
             } catch (error) {
               logger.error(
                 { agentId, toolName: mcpTool.name, error },
-                "MCP tool execution failed",
+                "getChatMcpTools.execute: MCP tool execution failed",
               );
               throw error;
             }
@@ -305,7 +309,7 @@ export async function getChatMcpTools(
       } catch (error) {
         logger.error(
           { agentId, toolName: mcpTool.name, error },
-          "Failed to convert MCP tool to AI SDK format, skipping",
+          "getChatMcpTools: Failed to convert MCP tool to AI SDK format, skipping",
         );
         // Skip this tool and continue with others
       }
@@ -313,7 +317,7 @@ export async function getChatMcpTools(
 
     logger.info(
       { agentId, convertedToolCount: Object.keys(aiTools).length },
-      "Successfully converted MCP tools to AI SDK Tool format",
+      "getChatMcpTools: Successfully converted MCP tools to AI SDK Tool format",
     );
 
     toolCache.set(agentId, {
@@ -323,7 +327,10 @@ export async function getChatMcpTools(
 
     return aiTools;
   } catch (error) {
-    logger.error({ agentId, error }, "Failed to fetch tools from MCP Gateway");
+    logger.error(
+      { agentId, error },
+      "getChatMcpTools: Failed to fetch tools from MCP Gateway",
+    );
     return {};
   }
 }

@@ -108,8 +108,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       '@toon-format/toon':
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.0.1
+        version: 2.0.1
       ai:
         specifier: ^5.0.101
         version: 5.0.101(zod@4.1.13)
@@ -3325,8 +3325,8 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@toon-format/toon@2.0.0':
-    resolution: {integrity: sha512-7lIVGzCZ9MzKKcbWOumUO4CXB1owpAwDhvDzpjmyqT0B8l9fROMyEMeSubJrGc8y0IxpGZgwt/8PpCOVLiB7UA==}
+  '@toon-format/toon@2.0.1':
+    resolution: {integrity: sha512-0oohzByDG/VTvsPT7iCfUdoB6yndopkPulh9Kk76fhV6YReVSGqr6ni5EMSxn3umNyfwylI0nOjLYtjJTIiT0w==}
 
   '@triplit/client@1.0.50':
     resolution: {integrity: sha512-3vjXTSdDQ3fzLDrewCK7elkAQc7CiDg0eZEOZInQbVMFRiakdieO5C2voSnNjSepIYHxDxFSBllgg32QsNpL9Q==}
@@ -10332,7 +10332,7 @@ snapshots:
       '@types/react': 19.2.7
       '@types/react-dom': 19.2.3(@types/react@19.2.7)
 
-  '@toon-format/toon@2.0.0': {}
+  '@toon-format/toon@2.0.1': {}
 
   '@triplit/client@1.0.50(typescript@5.9.3)':
     dependencies:

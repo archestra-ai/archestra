@@ -685,6 +685,8 @@ export function McpServerCard({
         onOpenChange={(open) => {
           if (!open) {
             setBulkAssignTools([]);
+            // Close the parent tools dialog as well
+            setIsToolsDialogOpen(false);
             // Reset the tools dialog to clear selections
             setToolsDialogKey((prev) => prev + 1);
           }

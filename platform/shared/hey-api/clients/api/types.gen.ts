@@ -6582,7 +6582,6 @@ export type GetFeaturesResponses = {
      */
     200: {
         'orchestrator-k8s-runtime': boolean;
-        'disable-basic-auth': boolean;
     };
 };
 

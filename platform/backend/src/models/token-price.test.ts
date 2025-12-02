@@ -376,6 +376,7 @@ describe("TokenPriceModel", () => {
       });
 
       await makeInteraction(agent.id, {
+        type: "anthropic:messages",
         model: "claude-3-5-sonnet-20241022",
         inputTokens: 150,
         outputTokens: 250,
@@ -391,8 +392,14 @@ describe("TokenPriceModel", () => {
       const models = await TokenPriceModel.getAllModelsFromInteractions();
 
       expect(models).toHaveLength(2);
-      expect(models).toContain("gpt-4");
-      expect(models).toContain("claude-3-5-sonnet-20241022");
+      expect(models.map((m) => m.model)).toContain("gpt-4");
+      expect(models.map((m) => m.model)).toContain(
+        "claude-3-5-sonnet-20241022",
+      );
+      expect(models.find((m) => m.model === "gpt-4")?.provider).toBe("openai");
+      expect(
+        models.find((m) => m.model === "claude-3-5-sonnet-20241022")?.provider,
+      ).toBe("anthropic");
     });
 
     test("filters out null models", async ({ makeAgent, makeInteraction }) => {
@@ -413,7 +420,8 @@ describe("TokenPriceModel", () => {
       const models = await TokenPriceModel.getAllModelsFromInteractions();
 
       expect(models).toHaveLength(1);
-      expect(models).toContain("gpt-4");
+      expect(models.map((m) => m.model)).toContain("gpt-4");
+      expect(models[0].provider).toBe("openai");
     });
   });
 

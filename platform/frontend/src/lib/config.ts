@@ -107,6 +107,12 @@ export default {
   get enterpriseLicenseActivated() {
     return env("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED") === "true";
   },
+  /**
+   * When true, hides the username/password login form and requires SSO for authentication.
+   */
+  get disableBasicAuth() {
+    return env("NEXT_PUBLIC_ARCHESTRA_DISABLE_BASIC_AUTH") === "true";
+  },
   sentry: {
     get dsn() {
       return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "";

@@ -4,7 +4,7 @@ category: Archestra Platform
 order: 2
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -154,9 +154,9 @@ apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
   name: archestra-platform-backend-config
-  namespace: archestra  # Same namespace as Helm release
+  namespace: archestra # Same namespace as Helm release
 spec:
-  timeoutSec: 600  # 10 minutes for streaming responses and long-running MCP operations
+  timeoutSec: 600 # 10 minutes for streaming responses and long-running MCP operations
   connectionDraining:
     drainingTimeoutSec: 60
   healthCheck:
@@ -181,6 +181,7 @@ archestra:
 ```
 
 Apply via Helm:
+
 ```bash
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
@@ -204,6 +205,7 @@ archestra:
 ```
 
 Apply via Helm:
+
 ```bash
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
@@ -229,6 +231,7 @@ archestra:
 ```
 
 Apply via Helm:
+
 ```bash
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
@@ -313,89 +316,116 @@ For complete documentation, examples, and resource reference, visit the [Archest
 The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
+
   - Format: `postgresql://user:password@host:5432/database`
   - Default: Internal PostgreSQL (Docker) or managed instance (Helm)
   - Required for production deployments with external database
 
 - **`ARCHESTRA_API_BASE_URL`** - Base URL for the Archestra API proxy. This is where your agents should connect to instead of the LLM provider directly.
+
   - Default: `http://localhost:9000`
   - Example: `http://localhost:9001` or `https://api.example.com`
   - Note: This configures both the port where the backend API server listens (parsed from the URL) and the base URL that the frontend uses to connect to the backend
 
 - **`ARCHESTRA_FRONTEND_URL`** - The URL where users access the frontend application.
+
   - Example: `https://frontend.example.com`
   - Optional for local development
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
+
   - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
   - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
   - Required when using different domains or subdomains for frontend and backend
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
+
   - Auto-generated once on first run. Set manually if you need to control the secret value.
   - Example: `something-really-really-secret-12345`
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
+
   - Default: `admin@localhost.ai`
 
 - **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password for the default Archestra Admin user. Set once on first-run.
+
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
+
+  - Default: `false`
+  - Set to `true` to disable basic authentication and require users to authenticate via SSO only
+  - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
+
   - Default: `default`
   - Example: `archestra-mcp` or `production`
 
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
+
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
+
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.
 
 - **`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`** - Path to custom kubeconfig file. Mount the required kubeconfig as volume inside the
+
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces
+
   - Default: `http://localhost:4318/v1/traces`
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME`** - Username for OTEL basic authentication
+
   - Optional: Only used if both username and password are provided
   - Example: `your-username`
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for OTEL basic authentication
+
   - Optional: Only used if both username and password are provided
   - Example: `your-password`
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for OTEL authentication
+
   - Optional: Takes precedence over basic authentication if provided
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
+
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
 
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
+
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access
+
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Secrets storage backend for managing sensitive data (API keys, tokens, etc.)
+
   - Default: `DB` (database storage)
   - Options: `DB` or `Vault`
   - Note: When set to `Vault`, requires `HASHICORP_VAULT_ADDR` and `HASHICORP_VAULT_TOKEN` to be configured
 
 - **`HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
+
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Example: `http://localhost:8200`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 
 - **`HASHICORP_VAULT_TOKEN`** - HashiCorp Vault authentication token
+
   - Required when: `ARCHESTRA_SECRETS_MANAGER=Vault`
   - Note: System falls back to database storage if Vault is configured but credentials are missing
 

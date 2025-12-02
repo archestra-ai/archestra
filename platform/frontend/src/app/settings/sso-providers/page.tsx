@@ -18,8 +18,6 @@ import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
 
-const { enterpriseLicenseActivated } = config;
-
 /** Configuration for a predefined SSO provider card */
 interface SsoProviderConfig {
   /** Internal ID for the config (used as React key) */
@@ -280,9 +278,18 @@ function SsoProvidersSettingsContent() {
           return p.providerId === config.providerId;
         }
 
-        return !SSO_TRUSTED_PROVIDER_IDS.includes(
+        // For generic providers (empty providerId), match by provider type as well
+        // Check if this is a non-trusted provider and matches the same type (OIDC vs SAML)
+        const isNonTrustedProvider = !SSO_TRUSTED_PROVIDER_IDS.includes(
           p.providerId as SsoProviderId,
         );
+        if (!isNonTrustedProvider) {
+          return false;
+        }
+
+        // Determine provider type from config presence
+        const existingProviderType = p.samlConfig ? "saml" : "oidc";
+        return existingProviderType === config.providerType;
       });
       return provider;
     },
@@ -308,7 +315,7 @@ function SsoProvidersSettingsContent() {
   );
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!enterpriseLicenseActivated) {
+  if (!config.enterpriseLicenseActivated) {
     return (
       <div>
         <div className="mb-8">

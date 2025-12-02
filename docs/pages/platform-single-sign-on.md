@@ -31,6 +31,14 @@ Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OID
 
 ![Sign-in with SSO](/docs/automated_screenshots/platform-single-sign-on_sign-in-with-sso.png)
 
+## Disabling Basic Authentication
+
+Once you have configured SSO providers, you can optionally disable the username/password login form to enforce SSO-only authentication. This is useful for organizations that want to centralize authentication through their identity provider.
+
+To disable basic authentication, set the `ARCHESTRA_DISABLE_BASIC_AUTH` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
+
+> **Important:** Ensure at least one SSO provider is configured and working before disabling basic authentication. Otherwise, users (including administrators) will not be able to sign in.
+
 ## Callback URLs
 
 ### OIDC Callback URL

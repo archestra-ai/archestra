@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -20,6 +21,8 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const invitationId = searchParams.get("invitationId");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
+
+  const isBasicAuthDisabled = config.disableBasicAuth;
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");
@@ -88,10 +91,14 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const showExistingUserMessage =
     path === "sign-in" && invitationId && invitationData;
 
+  // Only show default credentials warning when basic auth is enabled
+  const showDefaultCredentialsWarning =
+    path === "sign-in" && !invitationId && !isBasicAuthDisabled;
+
   return (
     <main className="container flex grow flex-col items-center justify-center self-center h-full">
       <div className="space-y-4 w-full max-w-md px-4 md:px-0">
-        {path === "sign-in" && !invitationId && (
+        {showDefaultCredentialsWarning && (
           <div className="p-0 m-0 pb-4">
             <DefaultCredentialsWarning alwaysShow />
           </div>

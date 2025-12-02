@@ -2,6 +2,35 @@
 
 # Define is_prod locally (same logic as main Tiltfile)
 is_prod = os.getenv('PROD') == 'true'
+dev_resource_name = 'pnpm-prod' if is_prod else 'pnpm-dev'
+
+# Build env dict to sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* for frontend
+# This is rebuilt on each Tiltfile evaluation (triggered by .env changes)
+def get_frontend_env():
+  env = {
+    # Always disable analytics in local development
+    'NEXT_PUBLIC_ARCHESTRA_ANALYTICS': 'disabled',
+  }
+
+  # Sync ARCHESTRA_* to NEXT_PUBLIC_ARCHESTRA_* if not already set
+  sync_vars = [
+    'ARCHESTRA_API_BASE_URL',
+    'ARCHESTRA_SENTRY_ENVIRONMENT',
+    'ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED',
+    'ARCHESTRA_DISABLE_BASIC_AUTH',
+  ]
+
+  for var in sync_vars:
+    value = os.getenv(var)
+    next_public_var = 'NEXT_PUBLIC_' + var
+    next_public_value = os.getenv(next_public_var)
+    # Only sync if ARCHESTRA_* is set and NEXT_PUBLIC_* is not
+    if value and value != '' and not next_public_value:
+      env[next_public_var] = value
+
+  return env
+
+frontend_env_vars = get_frontend_env()
 
 local_resource(
   'pnpm-install',
@@ -13,22 +42,26 @@ local_resource(
   labels=['dev']
 )
 
+# Main dev/prod bundle
 if is_prod:
-  # prod bundle
   local_resource(
-    'pnpm-prod',
+    dev_resource_name,
     cmd='rm -rf frontend/.next && pnpm build',
     serve_cmd='pnpm start',
     labels=['dev'],
-    resource_deps=['db-migrate']
+    resource_deps=['db-migrate'],
+    deps=['../.env'],
+    env=frontend_env_vars,
+    serve_env=frontend_env_vars
   )
 else:
-  # dev bundle
   local_resource(
-    'pnpm-dev',
+    dev_resource_name,
     serve_cmd='pnpm dev',
     labels=['dev'],
-    resource_deps=['db-migrate']
+    resource_deps=['db-migrate'],
+    deps=['../.env'],
+    serve_env=frontend_env_vars
   )
 
 local_resource(
@@ -57,7 +90,7 @@ local_resource(
   'codegen:api-client',
   cmd='pnpm codegen:api-client',
   labels=['dev'],
-  resource_deps=['pnpm-install', 'pnpm-dev'],
+  resource_deps=['pnpm-install', dev_resource_name],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
 )

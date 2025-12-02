@@ -4,23 +4,6 @@ load('ext://dotenv', 'dotenv')
 
 is_prod = os.getenv('PROD') == 'true'
 
-# Disable analytics in local development
-os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
-
-# set NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to the same value as ARCHESTRA_API_BASE_URL
-# so it's accessible by the frontend
-api_base_url = os.getenv("ARCHESTRA_API_BASE_URL")
-next_pubic_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
-if not next_pubic_api_base_url and api_base_url and api_base_url != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
-
-# set NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT to the same value as ARCHESTRA_SENTRY_ENVIRONMENT
-# so it's accessible by the frontend
-sentry_server_name = os.getenv("ARCHESTRA_SENTRY_ENVIRONMENT")
-next_public_sentry_server_name = os.getenv("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")
-if not next_public_sentry_server_name and sentry_server_name and sentry_server_name != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT', sentry_server_name)
-
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -28,7 +11,11 @@ if not os.path.exists('.env'):
 else:
   print("📝 .env already exists, skipping copy from .env.example")
 
+# Load .env file FIRST, before any env var syncing
 dotenv('./.env')
+
+# Watch .env file for changes - triggers Tiltfile re-evaluation and restarts pnpm-dev
+watch_file('.env')
 
 # Load sub-Tiltfiles by label
 load_dynamic('./dev/Tiltfile.database')

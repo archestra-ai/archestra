@@ -5,6 +5,7 @@ describe("TokenPriceModel", () => {
   describe("create", () => {
     test("can create a token price", async () => {
       const tokenPrice = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -20,12 +21,14 @@ describe("TokenPriceModel", () => {
 
     test("can create multiple token prices with different models", async () => {
       const tokenPrice1 = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
       });
 
       const tokenPrice2 = await TokenPriceModel.create({
+        provider: "anthropic",
         model: "claude-3-5-sonnet-20241022",
         pricePerMillionInput: "3.00",
         pricePerMillionOutput: "15.00",
@@ -44,12 +47,14 @@ describe("TokenPriceModel", () => {
 
     test("can retrieve all token prices", async () => {
       await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
       });
 
       await TokenPriceModel.create({
+        provider: "anthropic",
         model: "claude-3-5-sonnet-20241022",
         pricePerMillionInput: "3.00",
         pricePerMillionOutput: "15.00",
@@ -62,6 +67,7 @@ describe("TokenPriceModel", () => {
     test("returns token prices ordered by createdAt (oldest first)", async () => {
       // Create first token price
       const first = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-1",
         pricePerMillionInput: "10.00",
         pricePerMillionOutput: "20.00",
@@ -72,6 +78,7 @@ describe("TokenPriceModel", () => {
 
       // Create second token price
       const second = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-2",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "40.00",
@@ -82,6 +89,7 @@ describe("TokenPriceModel", () => {
 
       // Create third token price
       const third = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-3",
         pricePerMillionInput: "50.00",
         pricePerMillionOutput: "60.00",
@@ -98,6 +106,7 @@ describe("TokenPriceModel", () => {
     test("maintains order after updating a token price (bug fix test)", async () => {
       // Create three token prices in sequence
       const first = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-1",
         pricePerMillionInput: "10.00",
         pricePerMillionOutput: "20.00",
@@ -106,6 +115,7 @@ describe("TokenPriceModel", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const second = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-2",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "40.00",
@@ -114,6 +124,7 @@ describe("TokenPriceModel", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const third = await TokenPriceModel.create({
+        provider: "openai",
         model: "model-3",
         pricePerMillionInput: "50.00",
         pricePerMillionOutput: "60.00",
@@ -147,6 +158,7 @@ describe("TokenPriceModel", () => {
   describe("findById", () => {
     test("can find a token price by ID", async () => {
       const created = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -169,6 +181,7 @@ describe("TokenPriceModel", () => {
   describe("findByModel", () => {
     test("can find a token price by model name", async () => {
       await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -189,6 +202,7 @@ describe("TokenPriceModel", () => {
   describe("update", () => {
     test("can update a token price", async () => {
       const tokenPrice = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -207,6 +221,7 @@ describe("TokenPriceModel", () => {
 
     test("updates the updatedAt timestamp", async () => {
       const tokenPrice = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -228,6 +243,7 @@ describe("TokenPriceModel", () => {
 
     test("can partially update a token price", async () => {
       const tokenPrice = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -255,6 +271,7 @@ describe("TokenPriceModel", () => {
   describe("delete", () => {
     test("can delete a token price", async () => {
       const tokenPrice = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -278,6 +295,7 @@ describe("TokenPriceModel", () => {
   describe("upsertForModel", () => {
     test("creates a new token price if model doesn't exist", async () => {
       const tokenPrice = await TokenPriceModel.upsertForModel("gpt-4", {
+        provider: "openai",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
       });
@@ -294,6 +312,7 @@ describe("TokenPriceModel", () => {
     test("updates existing token price if model already exists", async () => {
       // Create initial token price
       const initial = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -301,6 +320,7 @@ describe("TokenPriceModel", () => {
 
       // Upsert with new prices
       const upserted = await TokenPriceModel.upsertForModel("gpt-4", {
+        provider: "openai",
         pricePerMillionInput: "35.00",
         pricePerMillionOutput: "65.00",
       });
@@ -317,6 +337,7 @@ describe("TokenPriceModel", () => {
 
     test("updates the updatedAt timestamp on upsert", async () => {
       const initial = await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",
@@ -325,6 +346,7 @@ describe("TokenPriceModel", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const upserted = await TokenPriceModel.upsertForModel("gpt-4", {
+        provider: "openai",
         pricePerMillionInput: "35.00",
         pricePerMillionOutput: "65.00",
       });
@@ -354,6 +376,7 @@ describe("TokenPriceModel", () => {
       });
 
       await makeInteraction(agent.id, {
+        type: "anthropic:messages",
         model: "claude-3-5-sonnet-20241022",
         inputTokens: 150,
         outputTokens: 250,
@@ -369,8 +392,14 @@ describe("TokenPriceModel", () => {
       const models = await TokenPriceModel.getAllModelsFromInteractions();
 
       expect(models).toHaveLength(2);
-      expect(models).toContain("gpt-4");
-      expect(models).toContain("claude-3-5-sonnet-20241022");
+      expect(models.map((m) => m.model)).toContain("gpt-4");
+      expect(models.map((m) => m.model)).toContain(
+        "claude-3-5-sonnet-20241022",
+      );
+      expect(models.find((m) => m.model === "gpt-4")?.provider).toBe("openai");
+      expect(
+        models.find((m) => m.model === "claude-3-5-sonnet-20241022")?.provider,
+      ).toBe("anthropic");
     });
 
     test("filters out null models", async ({ makeAgent, makeInteraction }) => {
@@ -391,7 +420,8 @@ describe("TokenPriceModel", () => {
       const models = await TokenPriceModel.getAllModelsFromInteractions();
 
       expect(models).toHaveLength(1);
-      expect(models).toContain("gpt-4");
+      expect(models.map((m) => m.model)).toContain("gpt-4");
+      expect(models[0].provider).toBe("openai");
     });
   });
 
@@ -437,6 +467,7 @@ describe("TokenPriceModel", () => {
 
       // Create a model with existing pricing
       await TokenPriceModel.create({
+        provider: "openai",
         model: "existing-model",
         pricePerMillionInput: "10.00",
         pricePerMillionOutput: "20.00",
@@ -472,6 +503,7 @@ describe("TokenPriceModel", () => {
 
       // Create pricing for one model
       await TokenPriceModel.create({
+        provider: "openai",
         model: "model-with-pricing",
         pricePerMillionInput: "15.00",
         pricePerMillionOutput: "25.00",
@@ -514,6 +546,7 @@ describe("TokenPriceModel", () => {
 
       // Create pricing for a model
       await TokenPriceModel.create({
+        provider: "openai",
         model: "gpt-4",
         pricePerMillionInput: "30.00",
         pricePerMillionOutput: "60.00",

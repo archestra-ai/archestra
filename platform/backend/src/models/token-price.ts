@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
-import type { CreateTokenPrice, InsertTokenPrice, TokenPrice } from "@/types";
+import type { CreateTokenPrice, SupportedProvider, TokenPrice } from "@/types";
 
 class TokenPriceModel {
   static async findAll(): Promise<TokenPrice[]> {
@@ -61,8 +61,7 @@ class TokenPriceModel {
       .onConflictDoUpdate({
         target: schema.tokenPricesTable.model,
         set: {
-          pricePerMillionInput: data.pricePerMillionInput,
-          pricePerMillionOutput: data.pricePerMillionOutput,
+          ...data,
           updatedAt: new Date(),
         },
       })
@@ -103,39 +102,50 @@ class TokenPriceModel {
   /**
    * Get all unique models from interactions table (both actual and requested models)
    */
-  static async getAllModelsFromInteractions(): Promise<string[]> {
+  static async getAllModelsFromInteractions(): Promise<
+    { provider: SupportedProvider; model: string }[]
+  > {
     const results = await db
       .select({
         model: schema.interactionsTable.model,
         requestedModel: sql<string>`${schema.interactionsTable.request} ->> 'model'`,
+        type: schema.interactionsTable.type,
       })
       .from(schema.interactionsTable);
 
-    // Collect both actual models and requested models
-    const models = new Set<string>();
+    // Collect both actual models and requested models.
+    // When the model was optimized, they are different.
+    const modelDictionary: Record<string, SupportedProvider> = {};
     for (const row of results) {
+      const provider = row.type.split(":")[0] as SupportedProvider;
       if (row.model) {
-        models.add(row.model);
+        modelDictionary[row.model] = provider;
       }
       if (row.requestedModel) {
-        models.add(row.requestedModel);
+        modelDictionary[row.requestedModel] = provider;
       }
     }
 
-    return [...models];
+    return Object.entries(modelDictionary).map(([model, provider]) => ({
+      provider,
+      model,
+    }));
   }
 
   static async ensureAllModelsHavePricing(): Promise<void> {
-    const models = await TokenPriceModel.getAllModelsFromInteractions();
+    const entries = await TokenPriceModel.getAllModelsFromInteractions();
     const existingTokenPrices = await TokenPriceModel.findAll();
     const existingModels = new Set(existingTokenPrices.map((tp) => tp.model));
 
     // Create default pricing for models that don't have pricing records
-    const missingModels = models.filter((model) => !existingModels.has(model));
+    const missingEntries = entries.filter(
+      ({ model }) => !existingModels.has(model),
+    );
 
-    if (missingModels.length > 0) {
-      const defaultPrices: InsertTokenPrice[] = missingModels.map((model) => ({
+    if (missingEntries.length > 0) {
+      const defaultPrices = missingEntries.map(({ provider, model }) => ({
         model,
+        provider,
         ...getDefaultModelPrice(model),
       }));
 

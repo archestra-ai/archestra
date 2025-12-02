@@ -512,6 +512,13 @@
       "when": 1764595314504,
       "tag": "0072_add secret name",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1764606110739,
+      "tag": "0073_curved_vampiro",
+      "breakpoints": true
     }
   ]
 }

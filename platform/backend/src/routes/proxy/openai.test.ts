@@ -70,6 +70,7 @@ describe("OpenAI cost tracking", () => {
 
     // Create token pricing for the model
     await TokenPriceModel.create({
+      provider: "openai",
       model: "gpt-4o",
       pricePerMillionInput: "2.50",
       pricePerMillionOutput: "10.00",
@@ -124,6 +125,7 @@ describe("OpenAI streaming mode", () => {
 
     // Create token pricing for the model
     await TokenPriceModel.create({
+      provider: "openai",
       model: "gpt-4o",
       pricePerMillionInput: "2.50",
       pricePerMillionOutput: "10.00",
@@ -207,6 +209,7 @@ describe("OpenAI streaming mode", () => {
 
         // Create token pricing for the model
         await TokenPriceModel.create({
+          provider: "openai",
           model: "gpt-4o",
           pricePerMillionInput: "2.50",
           pricePerMillionOutput: "10.00",
@@ -289,6 +292,7 @@ describe("OpenAI streaming mode", () => {
 
         // Create token pricing for the model
         await TokenPriceModel.create({
+          provider: "openai",
           model: "gpt-4o",
           pricePerMillionInput: "2.50",
           pricePerMillionOutput: "10.00",

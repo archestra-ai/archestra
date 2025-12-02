@@ -27,6 +27,7 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { enterpriseLicenseMiddleware } from "@/middleware";
 import { AgentLabelModel } from "@/models";
 import {
   Anthropic,
@@ -276,6 +277,12 @@ const start = async () => {
    * by simply using the request.user and request.organizationId decorators
    */
   fastify.register(fastifyAuthPlugin);
+
+  /**
+   * Enterprise license middleware to enforce license requirements on certain routes.
+   * This should be registered before routes to ensure enterprise-only features are checked properly.
+   */
+  fastify.register(enterpriseLicenseMiddleware);
 
   try {
     await seedRequiredStartingData();

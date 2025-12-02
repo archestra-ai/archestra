@@ -7,14 +7,18 @@ import {
 } from "@shared";
 import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { LoadingSpinner } from "@/components/loading";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import config from "@/lib/config";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
+
+const { enterpriseLicenseActivated } = config;
 
 /** Configuration for a predefined SSO provider card */
 interface SsoProviderConfig {
@@ -302,6 +306,18 @@ function SsoProvidersSettingsContent() {
     },
     [getProviderStatus],
   );
+
+  // Show message if SSO feature is disabled (check before loading since query is disabled)
+  if (!enterpriseLicenseActivated) {
+    return (
+      <div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">SSO Providers</h1>
+          <EnterpriseLicenseRequired featureName="SSO (Single Sign-On)" />
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) return <LoadingSpinner />;
 

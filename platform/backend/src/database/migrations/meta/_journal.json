@@ -519,6 +519,13 @@
       "when": 1764606110739,
       "tag": "0073_curved_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1764680281179,
+      "tag": "0074_left_maggott",
+      "breakpoints": true
     }
   ]
 }

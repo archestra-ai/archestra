@@ -279,7 +279,9 @@ export async function executeArchestraTool(
           {
             type: "text",
             // Return a user-friendly message explaining what will happen
-            text: "An installation request dialog for an MCP server should now be visible in the chat. Please review and submit the request to proceed with the installation.",
+            // Note: The frontend will show either the "Add MCP Server to Private Registry" dialog
+            // (for users with internalMcpCatalog:create permission) or the installation request dialog
+            text: "A dialog for adding or requesting an MCP server should now be visible in the chat. Please review and submit to proceed.",
           },
         ],
         isError: false,

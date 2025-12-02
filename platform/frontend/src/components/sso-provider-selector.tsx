@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query";
+
+const { enterpriseLicenseActivated } = config;
 
 export function SsoProviderSelector() {
   const { data: ssoProviders = [], isLoading } = usePublicSsoProviders();
@@ -24,7 +27,8 @@ export function SsoProviderSelector() {
     }
   }, []);
 
-  if (isLoading || ssoProviders.length === 0) {
+  // Don't show SSO options if the enterprise license is not activated
+  if (!enterpriseLicenseActivated || isLoading || ssoProviders.length === 0) {
     return null;
   }
 

@@ -388,10 +388,12 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <TruncatedText
             message={row.original.tool.name}
             className="break-all"
-            maxLength={25}
+            maxLength={60}
           />
         ),
-        size: 130,
+        size: 200,
+        minSize: 200,
+        maxSize: 200,
       },
       {
         id: "agent",

@@ -92,7 +92,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
     <main className="container flex grow flex-col items-center justify-center self-center h-full">
       <div className="space-y-4 w-full max-w-md px-4 md:px-0">
         {path === "sign-in" && !invitationId && (
-          <div className="max-w-sm p-0 m-0 pb-4">
+          <div className="p-0 m-0 pb-4">
             <DefaultCredentialsWarning alwaysShow />
           </div>
         )}

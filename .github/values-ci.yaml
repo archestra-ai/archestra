@@ -12,6 +12,8 @@ archestra:
     ARCHESTRA_METRICS_SECRET: "foo-bar"
     ARCHESTRA_FRONTEND_URL: "http://localhost:3000"
     ARCHESTRA_AUTH_SECRET: "e2e-auth-secret"
+    # Enable enterprise license for e2e tests (required for SSO tests)
+    ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
 
   # Use NodePort service type to expose services on fixed ports
   service:

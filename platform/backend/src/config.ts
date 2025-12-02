@@ -210,6 +210,8 @@ export default {
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
   },
+  enterpriseLicenseActivated:
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
   orchestrator: {
     mcpServerBaseImage:
       process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||

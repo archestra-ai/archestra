@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "scripts": {
@@ -32,10 +32,13 @@
   },
   "pnpm": {
     "overrides": {
+      "@fastify/reply-from": "12.5.0",
       "body-parser": "2.2.1",
       "glob": "11.1.0",
       "esbuild": "0.27.0",
-      "node-forge": "1.3.2"
+      "node-forge": "1.3.2",
+      "mdast-util-to-hast": "13.2.1",
+      "express": "5.2.0"
     }
   },
   "packageManager": "pnpm@10.24.0"

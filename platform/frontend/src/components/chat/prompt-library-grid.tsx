@@ -85,7 +85,7 @@ export function PromptLibraryGrid({
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (isFreeChatDialogOpen && !selectedProfileId) {
+    if (isFreeChatDialogOpen && !selectedProfileId && agents.length > 0) {
       setSelectedProfileId(agents[0].id);
     }
   }, [isFreeChatDialogOpen, agents, selectedProfileId]);

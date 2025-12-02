@@ -112,9 +112,6 @@ export const auth = betterAuth({
     twoFactor({
       issuer: APP_NAME,
     }),
-    /**
-     * TODO: add this plugin conditionally based on value of ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
-     */
     sso({
       organizationProvisioning: {
         disabled: false,
@@ -181,10 +178,18 @@ export const auth = betterAuth({
      */
     accountLinking: {
       enabled: true,
-      // Trust SSO providers for automatic account linking
-      // This allows existing users to sign in with SSO without manual linking
+      /**
+       * Trust SSO providers for automatic account linking
+       * This allows existing users to sign in with SSO without manual linking
+       */
       trustedProviders: SSO_TRUSTED_PROVIDER_IDS,
-      allowDifferentEmails: true,
+      /**
+       * Don't allow linking accounts with different emails. From the better-auth typescript
+       * annotations they mention for this attribute:
+       *
+       * ⚠️ Warning: enabling allowDifferentEmails might lead to account takeovers
+       */
+      allowDifferentEmails: false,
       allowUnlinkingAll: true,
     },
   },

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.11](https://github.com/archestra-ai/archestra/compare/platform-v0.6.10...platform-v0.6.11) (2025-12-02)
+
+
+### Miscellaneous Chores
+
+* upgrade @fastify/reply-from and mdast-util-to-hast ([#1341](https://github.com/archestra-ai/archestra/issues/1341)) ([446b3d5](https://github.com/archestra-ai/archestra/commit/446b3d55ac494c5bb5f78ded3e1079430f4323de))
+
+## [0.6.10](https://github.com/archestra-ai/archestra/compare/platform-v0.6.9...platform-v0.6.10) (2025-12-02)
+
+
+### Miscellaneous Chores
+
+* Disable SSO/Vault if license not activated ([#1335](https://github.com/archestra-ai/archestra/issues/1335)) ([f28231b](https://github.com/archestra-ai/archestra/commit/f28231b67fedf3c5bdf9d948d31de3fde468d675))
+* enable tool result compression by default ([#1347](https://github.com/archestra-ai/archestra/issues/1347)) ([009bca2](https://github.com/archestra-ai/archestra/commit/009bca250d624f584385e882b4bce0fba69cee01))
+
 ## [0.6.9](https://github.com/archestra-ai/archestra/compare/platform-v0.6.8...platform-v0.6.9) (2025-12-02)
 
 

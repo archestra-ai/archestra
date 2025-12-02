@@ -1,4 +1,5 @@
 import Vault from "node-vault";
+import config from "@/config";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import type { SecretValue, SelectSecret } from "@/types";
@@ -331,6 +332,13 @@ export function createSecretManager(): SecretManager {
   const managerType = getSecretsManagerType();
 
   if (managerType === SecretsManagerType.Vault) {
+    if (!config.enterpriseLicenseActivated) {
+      logger.warn(
+        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
+      );
+      return new DbSecretsManager();
+    }
+
     const vaultConfig = getVaultConfigFromEnv();
 
     if (!vaultConfig) {

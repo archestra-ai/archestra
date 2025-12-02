@@ -307,9 +307,7 @@ function SsoProvidersSettingsContent() {
     [getProviderStatus],
   );
 
-  if (isLoading) return <LoadingSpinner />;
-
-  // Show message if SSO feature is disabled
+  // Show message if SSO feature is disabled (check before loading since query is disabled)
   if (!enterpriseLicenseActivated) {
     return (
       <div>
@@ -320,6 +318,8 @@ function SsoProvidersSettingsContent() {
       </div>
     );
   }
+
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>

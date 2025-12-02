@@ -242,7 +242,7 @@ class McpServerModel {
     // For local servers, stop and remove the K8s pod
     if (mcpServer.serverType === "local") {
       // Clean up agent_tools that use this server as execution source
-      // Must be done before deletion since FK constraint would null out the reference
+      // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
       try {
         const deletedAgentTools =
           await AgentToolModel.deleteByExecutionSourceMcpServerId(id);

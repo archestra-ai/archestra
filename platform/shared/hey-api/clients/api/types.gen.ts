@@ -5717,6 +5717,85 @@ export type GenerateChatConversationTitleResponses = {
 
 export type GenerateChatConversationTitleResponse = GenerateChatConversationTitleResponses[keyof GenerateChatConversationTitleResponses];
 
+export type GetApiChatModelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/models';
+};
+
+export type GetApiChatModelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetApiChatModelsError = GetApiChatModelsErrors[keyof GetApiChatModelsErrors];
+
+export type GetApiChatModelsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        provider: string;
+    }>;
+};
+
+export type GetApiChatModelsResponse = GetApiChatModelsResponses[keyof GetApiChatModelsResponses];
+
 export type GetChatSettingsData = {
     body?: never;
     path?: never;

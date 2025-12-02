@@ -9,6 +9,7 @@ const {
   updateChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
+  getApiChatModels,
 } = archestraApiSdk;
 
 export function useConversation(conversationId?: string) {
@@ -74,13 +75,15 @@ export function useUpdateConversation() {
     mutationFn: async ({
       id,
       title,
+      selectedModel,
     }: {
       id: string;
       title?: string | null;
+      selectedModel?: string;
     }) => {
       const { data, error } = await updateChatConversation({
         path: { id },
-        body: { title },
+        body: { title, selectedModel },
       });
       if (error) throw new Error("Failed to update conversation");
       return data;
@@ -153,5 +156,18 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useChatModels() {
+  return useQuery({
+    queryKey: ["chat", "models"],
+    queryFn: async () => {
+      const { data, error } = await getApiChatModels();
+      if (error) throw new Error("Failed to fetch chat models");
+      return data;
+    },
+    staleTime: 30 * 60 * 1000, // 30 minutes - models don't change often
+    gcTime: 60 * 60 * 1000, // 1 hour
   });
 }

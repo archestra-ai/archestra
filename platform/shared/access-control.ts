@@ -282,6 +282,7 @@ export const RouteId = {
   DeleteChatConversation: "deleteChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
+  GetChatModels: "getChatModels",
 
   // Chat Settings Routes
   GetChatSettings: "getChatSettings",
@@ -630,6 +631,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetChatMcpTools]: {
     conversation: ["read"],
+  },
+  [RouteId.GetChatModels]: {
+    chatSettings: ["read"],
   },
   [RouteId.GetChatSettings]: {
     chatSettings: ["read"],

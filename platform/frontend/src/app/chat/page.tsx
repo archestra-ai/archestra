@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, Plus } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -12,6 +12,18 @@ import {
   useState,
 } from "react";
 import { CustomServerRequestDialog } from "@/app/mcp-catalog/_parts/custom-server-request-dialog";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from "@/components/ai-elements/model-selector";
 import {
   PromptInput,
   PromptInputBody,
@@ -46,7 +58,12 @@ import {
 } from "@/components/ui/tooltip";
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
-import { useConversation, useCreateConversation } from "@/lib/chat.query";
+import {
+  useChatModels,
+  useConversation,
+  useCreateConversation,
+  useUpdateConversation,
+} from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
 
@@ -73,6 +90,9 @@ export default function ChatPage() {
   const [isCustomServerDialogOpen, setIsCustomServerDialogOpen] =
     useState(false);
 
+  // State for model selector dialog
+  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
+
   // State for prompt management
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
@@ -90,6 +110,9 @@ export default function ChatPage() {
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
+
+  // Fetch available chat models
+  const { data: chatModels = [] } = useChatModels();
 
   // Sync conversation ID with URL
   useEffect(() => {
@@ -156,6 +179,9 @@ export default function ChatPage() {
 
   // Create conversation mutation (requires agentId)
   const createConversationMutation = useCreateConversation();
+
+  // Update conversation mutation (for model selection)
+  const updateConversationMutation = useUpdateConversation();
 
   // Handle prompt selection from library
   const handleSelectPrompt = useCallback(
@@ -550,7 +576,61 @@ export default function ChatPage() {
                   <PromptInputTextarea placeholder="Type a message..." />
                 </PromptInputBody>
                 <PromptInputToolbar>
-                  <PromptInputTools />
+                  <PromptInputTools>
+                    <ModelSelector
+                      open={isModelSelectorOpen}
+                      onOpenChange={setIsModelSelectorOpen}
+                    >
+                      <ModelSelectorTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <ModelSelectorLogo
+                            provider="anthropic"
+                            className="size-4"
+                          />
+                          <ModelSelectorName className="max-w-[150px]">
+                            {conversation?.selectedModel || "Select model"}
+                          </ModelSelectorName>
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </button>
+                      </ModelSelectorTrigger>
+                      <ModelSelectorContent>
+                        <ModelSelectorInput placeholder="Search models..." />
+                        <ModelSelectorList>
+                          <ModelSelectorEmpty>
+                            No models found.
+                          </ModelSelectorEmpty>
+                          <ModelSelectorGroup heading="Anthropic">
+                            {chatModels.map((model) => (
+                              <ModelSelectorItem
+                                key={model.id}
+                                value={model.id}
+                                onSelect={() => {
+                                  if (conversationId) {
+                                    updateConversationMutation.mutate({
+                                      id: conversationId,
+                                      selectedModel: model.id,
+                                    });
+                                  }
+                                  setIsModelSelectorOpen(false);
+                                }}
+                              >
+                                <ModelSelectorLogo
+                                  provider="anthropic"
+                                  className="mr-2"
+                                />
+                                <ModelSelectorName>
+                                  {model.name}
+                                </ModelSelectorName>
+                              </ModelSelectorItem>
+                            ))}
+                          </ModelSelectorGroup>
+                        </ModelSelectorList>
+                      </ModelSelectorContent>
+                    </ModelSelector>
+                  </PromptInputTools>
                   <PromptInputSubmit
                     status={status === "error" ? "ready" : status}
                     onStop={stop}

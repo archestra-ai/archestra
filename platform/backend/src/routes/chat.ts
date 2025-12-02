@@ -602,6 +602,90 @@ The title should capture the main topic or theme of the conversation. Respond wi
       }
     },
   );
+
+  fastify.get(
+    "/api/chat/models",
+    {
+      schema: {
+        operationId: RouteId.GetChatModels,
+        description: "Get available Anthropic models for chat",
+        tags: ["Chat"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              provider: z.string(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      // Get chat settings to check if API key is configured
+      const chatSettings =
+        await ChatSettingsModel.findByOrganizationId(organizationId);
+
+      let anthropicApiKey = config.chat.anthropic.apiKey;
+      if (chatSettings?.anthropicApiKeySecretId) {
+        const secret = await secretManager.getSecret(
+          chatSettings.anthropicApiKeySecretId,
+        );
+        if (secret?.secret?.anthropicApiKey) {
+          anthropicApiKey = secret.secret.anthropicApiKey as string;
+        }
+      }
+
+      if (!anthropicApiKey) {
+        throw new ApiError(
+          400,
+          "Anthropic API key not configured. Please configure it in Chat Settings.",
+        );
+      }
+
+      try {
+        // Fetch models from Anthropic API
+        const response = await fetch(
+          `${config.llm.anthropic.baseUrl}/v1/models`,
+          {
+            headers: {
+              "x-api-key": anthropicApiKey,
+              "anthropic-version": "2023-06-01",
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new ApiError(
+            response.status as 400 | 500,
+            `Failed to fetch models from Anthropic: ${response.statusText}`,
+          );
+        }
+
+        const data = (await response.json()) as {
+          data: Array<{ id: string; display_name?: string }>;
+        };
+
+        // Transform to our format and filter to relevant chat models
+        const models = data.data
+          .filter((model) => model.id.includes("claude"))
+          .map((model) => ({
+            id: model.id,
+            name: model.display_name || model.id,
+            provider: "anthropic",
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        return reply.send(models);
+      } catch (error) {
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        logger.error({ error }, "Failed to fetch Anthropic models");
+        throw new ApiError(500, "Failed to fetch models from Anthropic");
+      }
+    },
+  );
 };
 
 export default chatRoutes;

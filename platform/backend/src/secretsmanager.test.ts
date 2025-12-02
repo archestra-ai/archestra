@@ -145,14 +145,26 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set", () => {
+  test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set and enterprise license is activated", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
 
     const manager = createSecretManager();
 
     expect(manager).toBeInstanceOf(VaultSecretManager);
+  });
+
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but enterprise license is not activated", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
   test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {

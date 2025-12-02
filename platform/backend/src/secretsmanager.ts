@@ -322,6 +322,13 @@ export function getSecretsManagerType(): SecretsManagerType {
 }
 
 /**
+ * Check if enterprise license is activated
+ */
+function isEnterpriseLicenseActivated(): boolean {
+  return process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true";
+}
+
+/**
  * Create a secret manager based on environment configuration
  * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
  * - "Vault": Uses VaultSecretManager (requires HASHICORP_VAULT_ADDR and HASHICORP_VAULT_TOKEN)
@@ -331,6 +338,13 @@ export function createSecretManager(): SecretManager {
   const managerType = getSecretsManagerType();
 
   if (managerType === SecretsManagerType.Vault) {
+    if (!isEnterpriseLicenseActivated()) {
+      logger.warn(
+        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
+      );
+      return new DbSecretsManager();
+    }
+
     const vaultConfig = getVaultConfigFromEnv();
 
     if (!vaultConfig) {

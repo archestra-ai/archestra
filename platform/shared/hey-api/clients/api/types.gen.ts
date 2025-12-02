@@ -15397,7 +15397,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
-        provider: string;
+        provider: SupportedProvidersInput;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15649,7 +15649,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
-        provider?: string;
+        provider?: SupportedProvidersInput;
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;

@@ -2,6 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -26,7 +27,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(await InternalMcpCatalogModel.findAll());
+      const catalogItems = await InternalMcpCatalogModel.findAll();
+      await Promise.all(catalogItems.map(async (item) => {
+        const clientSecretId = item.clientSecretId;
+        if (!clientSecretId) {
+          return
+        }
+        const secret = await secretManager.getSecret(item.clientSecretId)
+        if (secret?.secret.client_secret && item.oauthConfig) {
+          item.oauthConfig.client_secret = String(secret.secret.client_secret);
+        }
+      }))
+
+      return reply.send(catalogItems);
     },
   );
 
@@ -42,7 +55,32 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      return reply.send(await InternalMcpCatalogModel.create(body));
+      let clientSecretId: string | undefined;
+
+      // If oauthConfig has client_secret, extract it and store in secrets table
+      if ('client_secret' in body.oauthConfig) {
+        const clientSecret = body.oauthConfig.client_secret;
+        const secret = await secretManager.createSecret(
+          { client_secret: clientSecret },
+          `${body.name}-oauth-client-secret`,
+        );
+        clientSecretId = secret.id;
+
+        body.clientSecretId = clientSecretId;
+        delete body.oauthConfig.client_secret
+      }
+
+      const catalogItem = await InternalMcpCatalogModel.create(body);
+
+      // Add client_secret back to response for backward compatibility
+      if (clientSecretId && catalogItem.oauthConfig) {
+        const secret = await secretManager.getSecret(clientSecretId);
+        if (secret && secret.secret.client_secret) {
+          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret);
+        }
+      }
+
+      return reply.send(catalogItem);
     },
   );
 
@@ -64,6 +102,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Fetch secret and add client_secret to oauthConfig if present
+      if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+        const secret = await secretManager.getSecret(
+          catalogItem.clientSecretId,
+        );
+        if (secret?.secret.client_secret) {
+          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret)
+        }
       }
 
       return reply.send(catalogItem);
@@ -92,6 +140,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
+      let clientSecretId = originalCatalogItem.clientSecretId;
+
+      // If oauthConfig has client_secret, handle secret storage
+      if ('client_secret' in body.oauthConfig) {
+        const clientSecret = body.oauthConfig.client_secret;
+
+        if (clientSecretId) {
+          // Update existing secret
+          await secretManager.updateSecret(clientSecretId, {
+            client_secret: clientSecret,
+          });
+        } else {
+          // Create new secret
+          const secret = await secretManager.createSecret(
+            { client_secret: clientSecret },
+            `${originalCatalogItem.name}-oauth-client-secret`,
+          );
+          clientSecretId = secret.id;
+        }
+
+        body.clientSecretId = clientSecretId;
+        delete body.oauthConfig.client_secret;
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, body);
 
@@ -113,6 +185,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // This ensures tools are rediscovered with updated configuration during reinstall
       await ToolModel.deleteByCatalogId(id);
 
+      // Add client_secret back to response for backward compatibility
+      if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+        const secret = await secretManager.getSecret(
+          catalogItem.clientSecretId,
+        );
+        if (secret && secret.secret.client_secret) {
+          catalogItem.oauthConfig.client_secret = String(secret.secret.client_secret);
+        }
+      }
+
       return reply.send(catalogItem);
     },
   );
@@ -131,6 +213,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id } }, reply) => {
+      // Get the catalog item to check if it has a secret
+      const catalogItem = await InternalMcpCatalogModel.findById(id);
+
+      if (catalogItem?.clientSecretId) {
+        // Delete the associated secret
+        await secretManager.deleteSecret(catalogItem.clientSecretId);
+      }
+
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
       });

@@ -7286,6 +7286,7 @@ export type GetInternalMcpCatalogResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7363,6 +7364,7 @@ export type CreateInternalMcpCatalogItemData = {
         serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7502,6 +7504,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7730,6 +7733,7 @@ export type GetInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7807,6 +7811,7 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7948,6 +7953,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;

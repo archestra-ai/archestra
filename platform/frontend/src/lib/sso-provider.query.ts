@@ -3,8 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import config from "@/lib/config";
 
-const { enterpriseLicenseActivated } = config;
-
 /**
  * Query key factory for SSO provider-related queries
  */
@@ -28,7 +26,7 @@ export function usePublicSsoProviders() {
     },
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    enabled: enterpriseLicenseActivated,
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 
@@ -46,7 +44,7 @@ export function useSsoProviders() {
     },
     retry: false,
     throwOnError: false,
-    enabled: enterpriseLicenseActivated,
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 
@@ -62,7 +60,7 @@ export function useSsoProvider(id: string) {
     },
     retry: false,
     throwOnError: false,
-    enabled: enterpriseLicenseActivated,
+    enabled: config.enterpriseLicenseActivated,
   });
 }
 

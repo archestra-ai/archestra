@@ -8,8 +8,6 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import config from "@/lib/config";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
-const { enterpriseLicenseActivated } = config;
-
 interface SsoProviderSelectorProps {
   /**
    * Whether to show the "Or continue with SSO" divider above the SSO buttons.
@@ -39,7 +37,11 @@ export function SsoProviderSelector({
   }, []);
 
   // Don't show SSO options if the enterprise license is not activated
-  if (!enterpriseLicenseActivated || isLoading || ssoProviders.length === 0) {
+  if (
+    !config.enterpriseLicenseActivated ||
+    isLoading ||
+    ssoProviders.length === 0
+  ) {
     return null;
   }
 

@@ -4,8 +4,6 @@ import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
 
-const { enterpriseLicenseActivated } = config;
-
 export default function SettingsLayout({
   children,
 }: {
@@ -33,7 +31,7 @@ export default function SettingsLayout({
            * SSO Providers tab is only shown when enterprise license is activated
            * and the user has the permission to read SSO providers.
            */
-          ...(enterpriseLicenseActivated && userCanReadSsoProviders
+          ...(config.enterpriseLicenseActivated && userCanReadSsoProviders
             ? [{ label: "SSO Providers", href: "/settings/sso-providers" }]
             : []),
           { label: "Appearance", href: "/settings/appearance" },

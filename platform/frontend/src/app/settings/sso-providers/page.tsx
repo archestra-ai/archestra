@@ -18,8 +18,6 @@ import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
 
-const { enterpriseLicenseActivated } = config;
-
 /** Configuration for a predefined SSO provider card */
 interface SsoProviderConfig {
   /** Internal ID for the config (used as React key) */
@@ -308,7 +306,7 @@ function SsoProvidersSettingsContent() {
   );
 
   // Show message if SSO feature is disabled (check before loading since query is disabled)
-  if (!enterpriseLicenseActivated) {
+  if (!config.enterpriseLicenseActivated) {
     return (
       <div>
         <div className="mb-8">

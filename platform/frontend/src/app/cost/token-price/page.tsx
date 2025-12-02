@@ -1,8 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { modelsByProvider, providerDisplayNames } from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -39,6 +48,11 @@ import {
   useTokenPrices,
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
+
+type Providers = Extract<
+  archestraApiTypes.SupportedProviders,
+  "openai" | "anthropic"
+>;
 
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
@@ -70,10 +84,20 @@ function TokenPriceInlineForm({
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
+    provider: (initialData?.provider as Providers) || ("openai" as const),
     model: initialData?.model || "",
     pricePerMillionInput: String(initialData?.pricePerMillionInput || ""),
     pricePerMillionOutput: String(initialData?.pricePerMillionOutput || ""),
   });
+
+  const modelOptions = useMemo(
+    () =>
+      modelsByProvider[formData.provider].map((model: string) => ({
+        value: model,
+        label: model,
+      })),
+    [formData.provider],
+  );
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -84,30 +108,59 @@ function TokenPriceInlineForm({
   );
 
   const isValid =
+    formData.provider &&
     formData.model &&
     formData.pricePerMillionInput &&
     formData.pricePerMillionOutput;
 
   return (
     <tr className="border-b">
-      <td colSpan={4} className="p-4 bg-muted/30">
+      <td colSpan={5} className="p-4 bg-muted/30">
         <form
           onSubmit={handleSubmit}
           className="flex flex-wrap items-center gap-4"
         >
           <div className="flex items-center gap-2">
+            <Label htmlFor="provider" className="text-sm whitespace-nowrap">
+              Provider
+            </Label>
+            <Select
+              value={formData.provider}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  provider: value as Providers,
+                  model: "", // Clear model when provider changes
+                })
+              }
+            >
+              <SelectTrigger id="provider" className="w-40">
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(providerDisplayNames) as Providers[]).map(
+                  (provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {providerDisplayNames[provider]}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
             <Label htmlFor="model" className="text-sm whitespace-nowrap">
               Model
             </Label>
-            <Input
-              id="model"
-              type="text"
+            <SearchableSelect
               value={formData.model}
-              onChange={(e) =>
-                setFormData({ ...formData, model: e.target.value })
+              onValueChange={(value) =>
+                setFormData({ ...formData, model: value })
               }
-              placeholder="e.g. gpt-4"
-              required
+              placeholder="Select or type model"
+              items={modelOptions}
+              allowCustom
               className="w-48"
             />
           </div>
@@ -205,6 +258,10 @@ function TokenPriceRow({
 
   return (
     <tr className="border-b hover:bg-muted/30">
+      <td className="p-4 capitalize">
+        {providerDisplayNames[tokenPrice.provider as Providers] ||
+          tokenPrice.provider}
+      </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>
       <td className="p-4">
         ${parseFloat(tokenPrice.pricePerMillionInput).toFixed(2)}
@@ -332,6 +389,7 @@ export default function TokenPricePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Provider</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Input Price ($)</TableHead>
                   <TableHead>Output Price ($)</TableHead>
@@ -348,7 +406,7 @@ export default function TokenPricePage() {
                 {tokenPrices.length === 0 && !isAddingTokenPrice ? (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={5}
                       className="text-center py-8 text-muted-foreground"
                     >
                       <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />

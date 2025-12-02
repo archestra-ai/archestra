@@ -233,11 +233,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Ensure TokenPrice records exist for both baseline and optimized models
       const baselinePricing = getDefaultPricing(baselineModel);
-      await TokenPriceModel.createIfNotExists(baselineModel, baselinePricing);
+      await TokenPriceModel.createIfNotExists(baselineModel, {
+        provider: "openai",
+        ...baselinePricing,
+      });
 
       if (model !== baselineModel) {
         const optimizedPricing = getDefaultPricing(model);
-        await TokenPriceModel.createIfNotExists(model, optimizedPricing);
+        await TokenPriceModel.createIfNotExists(model, {
+          provider: "openai",
+          ...optimizedPricing,
+        });
       }
 
       // Convert to common format and evaluate trusted data policies

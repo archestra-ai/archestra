@@ -15385,6 +15385,7 @@ export type GetTokenPricesResponses = {
      */
     200: Array<{
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15397,6 +15398,7 @@ export type GetTokenPricesResponse = GetTokenPricesResponses[keyof GetTokenPrice
 
 export type CreateTokenPriceData = {
     body: {
+        provider: SupportedProvidersInput;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15471,6 +15473,7 @@ export type CreateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15634,6 +15637,7 @@ export type GetTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;
@@ -15646,6 +15650,7 @@ export type GetTokenPriceResponse = GetTokenPriceResponses[keyof GetTokenPriceRe
 
 export type UpdateTokenPriceData = {
     body?: {
+        provider?: SupportedProvidersInput;
         model?: string;
         pricePerMillionInput?: string;
         pricePerMillionOutput?: string;
@@ -15722,6 +15727,7 @@ export type UpdateTokenPriceResponses = {
      */
     200: {
         id: string;
+        provider: string;
         model: string;
         pricePerMillionInput: string;
         pricePerMillionOutput: string;

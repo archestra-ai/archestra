@@ -17,6 +17,7 @@ interface SearchableSelectProps {
   items: Array<{ value: string; label: string }>;
   className?: string;
   disabled?: boolean;
+  allowCustom?: boolean;
 }
 
 export function SearchableSelect({
@@ -26,6 +27,7 @@ export function SearchableSelect({
   items,
   className,
   disabled = false,
+  allowCustom = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -38,6 +40,15 @@ export function SearchableSelect({
   }, [items, searchQuery]);
 
   const selectedItem = items.find((item) => item.value === value);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (allowCustom && e.key === "Enter" && searchQuery && open) {
+      e.preventDefault();
+      onValueChange(searchQuery);
+      setOpen(false);
+      setSearchQuery("");
+    }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -54,7 +65,7 @@ export function SearchableSelect({
           )}
         >
           <span className="truncate">
-            {selectedItem ? selectedItem.label : placeholder}
+            {selectedItem ? selectedItem.label : value || placeholder}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -66,13 +77,24 @@ export function SearchableSelect({
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filteredItems.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              No results found.
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              {allowCustom && searchQuery ? (
+                <>
+                  Press{" "}
+                  <kbd className="px-2 py-1 text-xs bg-muted rounded">
+                    Enter
+                  </kbd>{" "}
+                  to use &quot;{searchQuery}&quot;
+                </>
+              ) : (
+                "No results found."
+              )}
             </div>
           ) : (
             filteredItems.map((item) => (

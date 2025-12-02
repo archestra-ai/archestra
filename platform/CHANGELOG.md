@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.11](https://github.com/archestra-ai/archestra/compare/platform-v0.6.10...platform-v0.6.11) (2025-12-02)
+
+
+### Miscellaneous Chores
+
+* upgrade @fastify/reply-from and mdast-util-to-hast ([#1341](https://github.com/archestra-ai/archestra/issues/1341)) ([446b3d5](https://github.com/archestra-ai/archestra/commit/446b3d55ac494c5bb5f78ded3e1079430f4323de))
+
 ## [0.6.10](https://github.com/archestra-ai/archestra/compare/platform-v0.6.9...platform-v0.6.10) (2025-12-02)
 
 

@@ -27,6 +27,7 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { initializeMetrics } from "@/llm-metrics";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
+import { enterpriseLicenseMiddleware } from "@/middleware";
 import { AgentLabelModel } from "@/models";
 import {
   Anthropic,
@@ -277,6 +278,12 @@ const start = async () => {
    */
   fastify.register(fastifyAuthPlugin);
 
+  /**
+   * Enterprise license middleware to enforce license requirements on certain routes.
+   * This should be registered before routes to ensure enterprise-only features are checked properly.
+   */
+  fastify.register(enterpriseLicenseMiddleware);
+
   try {
     await seedRequiredStartingData();
 
@@ -373,14 +380,7 @@ const start = async () => {
       }),
     );
 
-    for (const [routeName, route] of Object.entries(routes)) {
-      // Skip SSO provider routes if enterprise license is not activated
-      if (
-        routeName === "ssoProviderRoutes" &&
-        !config.enterpriseLicenseActivated
-      ) {
-        continue;
-      }
+    for (const route of Object.values(routes)) {
       fastify.register(route);
     }
 

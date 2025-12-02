@@ -7,15 +7,18 @@ import {
 } from "@shared";
 import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { LoadingSpinner } from "@/components/loading";
 import { SsoProviderIcon } from "@/components/sso-provider-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useFeatures } from "@/lib/features.query";
+import config from "@/lib/config";
 import { useSsoProviders } from "@/lib/sso-provider.query";
 import { CreateSsoProviderDialog } from "./_parts/create-sso-provider-dialog";
 import { EditSsoProviderDialog } from "./_parts/edit-sso-provider-dialog";
+
+const { enterpriseLicenseActivated } = config;
 
 /** Configuration for a predefined SSO provider card */
 interface SsoProviderConfig {
@@ -259,8 +262,6 @@ type SsoProvider = NonNullable<
 >[number];
 
 function SsoProvidersSettingsContent() {
-  const { data: features, isLoading: isFeaturesLoading } = useFeatures();
-  const isSsoEnabled = features?.sso ?? false;
   const { data: ssoProviders = [], isLoading } = useSsoProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
@@ -306,22 +307,15 @@ function SsoProvidersSettingsContent() {
     [getProviderStatus],
   );
 
-  if (isFeaturesLoading || isLoading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
   // Show message if SSO feature is disabled
-  if (!isSsoEnabled) {
+  if (!enterpriseLicenseActivated) {
     return (
       <div>
         <div className="mb-8">
           <h1 className="text-2xl font-bold">SSO Providers</h1>
-          <p className="text-muted-foreground mt-2">
-            SSO (Single Sign-On) is an enterprise feature that requires the
-            enterprise license to be activated. Please set{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-sm">
-              ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true
-            </code>{" "}
-            to enable this feature.
-          </p>
+          <EnterpriseLicenseRequired featureName="SSO (Single Sign-On)" />
         </div>
       </div>
     );

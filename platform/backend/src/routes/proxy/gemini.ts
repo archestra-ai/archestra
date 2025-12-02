@@ -8,6 +8,7 @@ import { AgentModel, InteractionModel, LimitValidationService } from "@/models";
 
 import {
   type Agent,
+  ApiError,
   constructResponseSchema,
   ErrorResponsesSchema,
   Gemini,
@@ -258,12 +259,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // reply.raw.end();
         // return reply;
 
-        return reply.code(400).send({
-          error: {
-            message: "Streaming is not supported for Anthropic. Coming soon!",
-            type: "not_supported",
-          },
-        });
+        throw new ApiError(
+          400,
+          "Streaming is not supported for Gemini. Coming soon!",
+        );
       } else {
         // Non-streaming response with span to measure LLM call duration
         const response = await utils.tracing.startActiveLlmSpan(

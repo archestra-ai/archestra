@@ -1,6 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { SSO_PROVIDERS_API_PREFIX } from "@/constants";
 import { SsoProviderModel } from "@/models";
 import {
   ApiError,
@@ -18,7 +19,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Auth is skipped for this endpoint in middleware.
    */
   fastify.get(
-    "/api/sso-providers/public",
+    `${SSO_PROVIDERS_API_PREFIX}/public`,
     {
       schema: {
         operationId: RouteId.GetPublicSsoProviders,
@@ -38,7 +39,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Requires authentication and ssoProvider:read permission.
    */
   fastify.get(
-    "/api/sso-providers",
+    SSO_PROVIDERS_API_PREFIX,
     {
       schema: {
         operationId: RouteId.GetSsoProviders,
@@ -54,7 +55,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/sso-providers/:id",
+    `${SSO_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
         operationId: RouteId.GetSsoProvider,
@@ -79,7 +80,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/sso-providers",
+    SSO_PROVIDERS_API_PREFIX,
     {
       schema: {
         operationId: RouteId.CreateSsoProvider,
@@ -104,7 +105,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    "/api/sso-providers/:id",
+    `${SSO_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
         operationId: RouteId.UpdateSsoProvider,
@@ -127,7 +128,7 @@ const ssoProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/sso-providers/:id",
+    `${SSO_PROVIDERS_API_PREFIX}/:id`,
     {
       schema: {
         operationId: RouteId.DeleteSsoProvider,

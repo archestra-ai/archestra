@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import config from "@/config";
 import SecretModel from "@/models/secret";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -87,6 +88,15 @@ describe("getSecretsManagerType", () => {
 
 describe("createSecretManager", () => {
   const originalEnv = process.env;
+  const originalEnterpriseLicenseActivated = config.enterpriseLicenseActivated;
+
+  const setEnterpriseLicenseActivated = (value: boolean) => {
+    Object.defineProperty(config, "enterpriseLicenseActivated", {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -95,6 +105,7 @@ describe("createSecretManager", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    setEnterpriseLicenseActivated(originalEnterpriseLicenseActivated);
   });
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", () => {
@@ -149,7 +160,7 @@ describe("createSecretManager", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
-    process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED = "true";
+    setEnterpriseLicenseActivated(true);
 
     const manager = createSecretManager();
 
@@ -160,7 +171,7 @@ describe("createSecretManager", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
-    delete process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED;
+    setEnterpriseLicenseActivated(false);
 
     const manager = createSecretManager();
 

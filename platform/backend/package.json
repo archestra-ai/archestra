@@ -10,7 +10,7 @@
     "build": "tsdown && sh scripts/upload-sentry-sourcemaps.sh",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
     "dev": "tsdown --watch --onSuccess \"node --enable-source-maps dist/server.mjs\"",
-    "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect-brk dist/server.mjs\"",
+    "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect dist/server.mjs\"",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",

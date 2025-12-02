@@ -5,6 +5,7 @@ import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { secretManager } from "@/secretsmanager";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import McpServerUserModel from "./mcp-server-user";
@@ -240,6 +241,24 @@ class McpServerModel {
 
     // For local servers, stop and remove the K8s pod
     if (mcpServer.serverType === "local") {
+      // Clean up agent_tools that use this server as execution source
+      // Must be done before deletion to ensure agents do not retain unusable tool assignments; FK constraint would only null out the reference, not remove the assignment
+      try {
+        const deletedAgentTools =
+          await AgentToolModel.deleteByExecutionSourceMcpServerId(id);
+        if (deletedAgentTools > 0) {
+          logger.info(
+            `Deleted ${deletedAgentTools} agent tool assignments for local MCP server: ${mcpServer.name}`,
+          );
+        }
+      } catch (error) {
+        logger.error(
+          { err: error },
+          `Failed to clean up agent tools for MCP server ${mcpServer.name}:`,
+        );
+        // Continue with deletion even if agent tool cleanup fails
+      }
+
       try {
         await McpServerRuntimeManager.removeMcpServer(id);
         logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);

@@ -253,11 +253,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Ensure TokenPrice records exist for both baseline and optimized models
       const baselinePricing = getDefaultPricing(baselineModel);
-      await TokenPriceModel.createIfNotExists(baselineModel, baselinePricing);
+      await TokenPriceModel.createIfNotExists(baselineModel, {
+        provider: "anthropic",
+        ...baselinePricing,
+      });
 
       if (model !== baselineModel) {
         const optimizedPricing = getDefaultPricing(model);
-        await TokenPriceModel.createIfNotExists(model, optimizedPricing);
+        await TokenPriceModel.createIfNotExists(model, {
+          provider: "anthropic",
+          ...optimizedPricing,
+        });
       }
 
       // Convert to common format and evaluate trusted data policies

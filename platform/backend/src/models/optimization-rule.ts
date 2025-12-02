@@ -161,12 +161,14 @@ class OptimizationRuleModel {
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
       openai: [
         {
+          provider: "openai",
           model: "gpt-5-mini",
           ...getDefaultModelPrice("gpt-5-mini"),
         },
       ],
       anthropic: [
         {
+          provider: "anthropic",
           model: "claude-haiku-4-5",
           ...getDefaultModelPrice("claude-haiku-4-5"),
         },

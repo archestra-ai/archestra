@@ -20,6 +20,7 @@ describe("Anthropic cost tracking", () => {
 
     // Create token pricing for the model
     await TokenPriceModel.create({
+      provider: "anthropic",
       model: "claude-opus-4-20250514",
       pricePerMillionInput: "15.00",
       pricePerMillionOutput: "75.00",
@@ -76,6 +77,7 @@ describe("Anthropic streaming mode", () => {
 
     // Create token pricing for the model
     await TokenPriceModel.create({
+      provider: "anthropic",
       model: "claude-opus-4-20250514",
       pricePerMillionInput: "15.00",
       pricePerMillionOutput: "75.00",
@@ -162,6 +164,7 @@ describe("Anthropic streaming mode", () => {
 
         // Create token pricing for the model
         await TokenPriceModel.create({
+          provider: "anthropic",
           model: "claude-opus-4-20250514",
           pricePerMillionInput: "15.00",
           pricePerMillionOutput: "75.00",

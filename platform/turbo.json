@@ -1,5 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*"],
+  "globalDependencies": [".env"],
   "tasks": {
     "build": {
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]

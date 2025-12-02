@@ -1,6 +1,6 @@
 /** The component to display an editable optimization rule */
 
-import type { SupportedProviders } from "@shared/hey-api/clients/api";
+import type { archestraApiTypes } from "@shared";
 import { AlertCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
@@ -34,7 +34,10 @@ type TokenPrices = Array<{
   pricePerMillionOutput: string;
 }>;
 
-type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
+type Providers = Extract<
+  archestraApiTypes.SupportedProviders,
+  "openai" | "anthropic"
+>;
 
 // Sort models by total cost (input + output price) ascending
 function sortModelsByPrice(tokenPrices: TokenPrices): TokenPrices {

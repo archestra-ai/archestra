@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import type { SupportedProviders } from "@shared/hey-api/clients/api";
+import { modelsByProvider, providerDisplayNames } from "@shared";
 import { Edit, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -49,54 +49,10 @@ import {
   useUpdateTokenPrice,
 } from "@/lib/token-price.query";
 
-type Providers = Extract<SupportedProviders, "openai" | "anthropic">;
-
-const providerDictionary: Record<Providers, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-};
-
-const modelDictionary: Record<Providers, string[]> = {
-  anthropic: [
-    "claude-opus-4.5",
-    "claude-haiku-4.5",
-    "claude-sonnet-4.5",
-    "claude-opus-4.1",
-    "claude-opus-4",
-    "claude-sonnet-4",
-    "claude-3.7-sonnet",
-    "claude-3.5-haiku",
-    "claude-3.5-sonnet",
-    "claude-3-haiku",
-    "claude-3-opus",
-  ],
-  openai: [
-    "gpt-5.1",
-    "gpt-5.1-chat",
-    "gpt-5-pro",
-    "gpt-5-chat",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4o-mini-search-preview",
-    "gpt-4o-search-preview",
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4-turbo",
-    "gpt-3.5-turbo",
-    "gpt-4",
-    "o1-pro",
-    "o3",
-    "o3-mini-high",
-    "o3-mini",
-    "o3-pro",
-    "o4-mini",
-    "o4-mini-high",
-  ],
-};
+type Providers = Extract<
+  archestraApiTypes.SupportedProviders,
+  "openai" | "anthropic"
+>;
 
 // Type aliases for better readability
 type TokenPriceData = archestraApiTypes.GetTokenPricesResponses["200"][number];
@@ -136,7 +92,7 @@ function TokenPriceInlineForm({
 
   const modelOptions = useMemo(
     () =>
-      modelDictionary[formData.provider].map((model) => ({
+      modelsByProvider[formData.provider].map((model: string) => ({
         value: model,
         label: model,
       })),
@@ -174,6 +130,7 @@ function TokenPriceInlineForm({
                 setFormData({
                   ...formData,
                   provider: value as Providers,
+                  model: "", // Clear model when provider changes
                 })
               }
             >
@@ -181,10 +138,10 @@ function TokenPriceInlineForm({
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(providerDictionary) as Providers[]).map(
+                {(Object.keys(providerDisplayNames) as Providers[]).map(
                   (provider) => (
                     <SelectItem key={provider} value={provider}>
-                      {providerDictionary[provider]}
+                      {providerDisplayNames[provider]}
                     </SelectItem>
                   ),
                 )}
@@ -201,7 +158,7 @@ function TokenPriceInlineForm({
               onValueChange={(value) =>
                 setFormData({ ...formData, model: value })
               }
-              placeholder="Select or type model..."
+              placeholder="Select or type model"
               items={modelOptions}
               allowCustom
               className="w-48"
@@ -302,7 +259,7 @@ function TokenPriceRow({
   return (
     <tr className="border-b hover:bg-muted/30">
       <td className="p-4 capitalize">
-        {providerDictionary[tokenPrice.provider as Providers] ||
+        {providerDisplayNames[tokenPrice.provider as Providers] ||
           tokenPrice.provider}
       </td>
       <td className="p-4 font-medium">{tokenPrice.model}</td>

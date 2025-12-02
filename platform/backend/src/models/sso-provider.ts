@@ -111,7 +111,7 @@ class SsoProviderModel {
       };
     }
 
-    // Register with Better Auth SSO plugin
+    // Register with Better Auth
     await auth.api.registerSSOProvider({
       body: parsedData,
       headers: new Headers(headers),

@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useFeatures } from "@/lib/features.query";
+import config from "@/lib/config";
 import { usePublicSsoProviders } from "@/lib/sso-provider.query";
 
 interface AuthViewWithErrorHandlingProps {
@@ -26,11 +26,10 @@ export function AuthViewWithErrorHandling({
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
-  const { data: features } = useFeatures();
   const { data: ssoProviders = [], isLoading: isLoadingSsoProviders } =
     usePublicSsoProviders();
 
-  const isBasicAuthDisabled = features?.["disable-basic-auth"] ?? false;
+  const isBasicAuthDisabled = config.disableBasicAuth;
   const hasSsoProviders = ssoProviders.length > 0;
 
   useEffect(() => {
@@ -83,8 +82,12 @@ export function AuthViewWithErrorHandling({
 
   const isSignInPage = path === "sign-in";
 
-  // When basic auth is disabled and SSO providers are still loading, wait
-  if (isBasicAuthDisabled && isLoadingSsoProviders) {
+  // These paths should always render AuthView regardless of basic auth setting
+  // (sign-out, callback, error, etc. are handled by better-auth-ui)
+  const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
+
+  // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)
+  if (isBasicAuthDisabled && isLoadingSsoProviders && isSignInPage) {
     return null;
   }
 
@@ -106,6 +109,23 @@ export function AuthViewWithErrorHandling({
             Please contact your administrator to configure an SSO provider for
             authentication.
           </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // When basic auth is disabled but SSO providers exist, show SSO in a card
+  if (isBasicAuthDisabled && hasSsoProviders && isSignInPage) {
+    return (
+      <Card className="max-w-md w-full">
+        <CardHeader>
+          <CardTitle>Sign In</CardTitle>
+          <CardDescription>
+            Sign in to your account using single sign-on
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SsoProviderSelector showDivider={false} />
         </CardContent>
       </Card>
     );
@@ -165,7 +185,7 @@ export function AuthViewWithErrorHandling({
         </Alert>
       )}
       <div className="space-y-4">
-        {!isBasicAuthDisabled && (
+        {(!isBasicAuthDisabled || alwaysShowAuthView) && (
           <AuthView
             path={path}
             callbackURL={callbackURL}

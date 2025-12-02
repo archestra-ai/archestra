@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useFeatures } from "@/lib/features.query";
+import config from "@/lib/config";
 import { useInvitationCheck } from "@/lib/invitation.query";
 
 export function AuthPageWithInvitationCheck({ path }: { path: string }) {
@@ -21,9 +21,8 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const invitationId = searchParams.get("invitationId");
 
   const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
-  const { data: features } = useFeatures();
 
-  const isBasicAuthDisabled = features?.["disable-basic-auth"] ?? false;
+  const isBasicAuthDisabled = config.disableBasicAuth;
 
   // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");

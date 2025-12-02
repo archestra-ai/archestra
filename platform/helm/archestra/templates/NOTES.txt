@@ -1,16 +1,25 @@
 Archestra Platform has been installed!
 
+{{- $apiBaseUrl := index .Values.archestra.env "ARCHESTRA_API_BASE_URL" | default "" }}
+{{- $frontendUrl := index .Values.archestra.env "ARCHESTRA_FRONTEND_URL" | default "" }}
+
+{{- if or (not $apiBaseUrl) (not $frontendUrl) }}
 To access the platform, run the following commands:
+{{- if not $apiBaseUrl }}
 
   # Forward the backend API (port 9000)
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "archestra-platform.fullname" . }} 9000:9000
+{{- end }}
+{{- if not $frontendUrl }}
 
   # Forward the frontend (port 3000)
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "archestra-platform.fullname" . }} 3000:3000
+{{- end }}
+{{- end }}
 
 Then visit:
-  - Backend API: http://localhost:9000
-  - Frontend: http://localhost:3000
+  - Backend API: {{ $apiBaseUrl | default "http://localhost:9000" }}
+  - Frontend: {{ $frontendUrl | default "http://localhost:3000" }}
 
 {{- if .Values.postgresql.external_database_url }}
 

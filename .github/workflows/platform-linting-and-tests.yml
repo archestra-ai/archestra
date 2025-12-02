@@ -233,38 +233,30 @@ jobs:
             echo "✅ No new migration files were generated - schema is in sync with migrations"
           fi
 
-      - name: Get Playwright version
+      # Resolve Playwright version for the container used to run e2e tests
+      - name: Resolve Playwright version
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
         run: |
-          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
+          VERSION=$(cat platform/e2e-tests/package.json | jq -r '.devDependencies["@playwright/test"]' | sed 's/^[\^~]//')
+          echo "Resolved Playwright version: $VERSION"
+          echo "PLAYWRIGHT_VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Cache Playwright binaries and dependencies
-        id: playwright-cache
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium-webkit-firefox
-
-      # see https://github.com/microsoft/playwright/issues/7249#issuecomment-2806545369
-      - name: Install Playwright browsers
-        if: inputs.should-skip-running-and-always-succeed != true && steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install --with-deps chromium webkit firefox
-
-      # See here https://github.com/microsoft/playwright/issues/30538#issuecomment-2185965508
-      # basically some webkit dependencies lay outside of ~/.cache/ms-playwright, so we still need to
-      # explicitly install, just the webkit ones, each time 🥲
-      - name: Install Playwright system dependencies for WebKit
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        working-directory: ./platform/e2e-tests
-        run: pnpm exec playwright install-deps webkit
-
+      # Run E2E tests inside the official Playwright container
+      # This eliminates the need for manual Playwright browser installation and caching
+      # See https://github.com/microsoft/playwright/issues/7249#issuecomment-3345742301
       - name: Run E2E tests
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform
-        run: pnpm test:e2e
+        run: |
+          docker run --rm \
+            --network host \
+            --ipc=host \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work/platform \
+            -e CI=true \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+            /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e"
 
       - name: Upload Playwright report
         if: failure()

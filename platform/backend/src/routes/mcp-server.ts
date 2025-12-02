@@ -155,6 +155,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
+        // Enrich secret env vars for installation (they're removed from the template)
+        if (
+          catalogItem.localConfigSecretId &&
+          catalogItem.localConfig?.environment
+        ) {
+          const secret = await secretManager.getSecret(
+            catalogItem.localConfigSecretId,
+          );
+          if (secret) {
+            for (const envVar of catalogItem.localConfig.environment) {
+              if (envVar.type === "secret" && secret.secret[envVar.key]) {
+                envVar.value = String(secret.secret[envVar.key]);
+              }
+            }
+          }
+        }
+
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 

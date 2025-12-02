@@ -10,35 +10,20 @@ import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
   /**
-   * Enrich a catalog item with secrets from the secrets table
+   * Enrich a catalog item with OAuth client_secret only.
+   * Note: Secret env vars are NOT enriched - they remain removed from the template.
+   * Only MCP server installation flow should fetch and use secret env vars when needed.
    */
   private static async enrichWithSecrets(
     catalogItem: InternalMcpCatalog,
   ): Promise<void> {
-    // Enrich OAuth client_secret if present
+    // Enrich OAuth client_secret if present (needed for OAuth flow)
     if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
       const secret = await secretManager.getSecret(catalogItem.clientSecretId);
       if (secret?.secret.client_secret) {
         catalogItem.oauthConfig.client_secret = String(
           secret.secret.client_secret,
         );
-      }
-    }
-
-    // Enrich secret env var values if present
-    if (
-      catalogItem.localConfigSecretId &&
-      catalogItem.localConfig?.environment
-    ) {
-      const secret = await secretManager.getSecret(
-        catalogItem.localConfigSecretId,
-      );
-      if (secret) {
-        for (const envVar of catalogItem.localConfig.environment) {
-          if (envVar.type === "secret" && secret.secret[envVar.key]) {
-            envVar.value = String(secret.secret[envVar.key]);
-          }
-        }
       }
     }
   }

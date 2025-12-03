@@ -63,7 +63,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.localConfig?.environment) {
         const secretEnvVars: Record<string, string> = {};
         for (const envVar of body.localConfig.environment) {
-          if (envVar.type === "secret" && envVar.value) {
+          if (envVar.type === "secret" && envVar.value && !envVar.promptOnInstallation) {
             secretEnvVars[envVar.key] = envVar.value;
             delete envVar.value; // Remove value from catalog template
           }

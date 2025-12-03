@@ -64,7 +64,9 @@ class InternalMcpCatalogModel {
 
     // Enrich all catalog items with secret values for edit forms
     await Promise.all(
-      catalogItems.map((item) => this.enrichWithSecrets(item)),
+      catalogItems.map((item) =>
+        InternalMcpCatalogModel.enrichWithSecrets(item),
+      ),
     );
 
     return catalogItems;
@@ -83,7 +85,9 @@ class InternalMcpCatalogModel {
 
     // Enrich all catalog items with secret values for edit forms
     await Promise.all(
-      catalogItems.map((item) => this.enrichWithSecrets(item)),
+      catalogItems.map((item) =>
+        InternalMcpCatalogModel.enrichWithSecrets(item),
+      ),
     );
 
     return catalogItems;

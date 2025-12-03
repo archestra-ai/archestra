@@ -124,23 +124,77 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
 };
 
 /**
+ * Parse SSO trusted origins from ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS environment variable.
+ * Expects a JSON array of strings (e.g., '["null", "https://idp.example.com"]').
+ *
+ * This is useful for SAML SSO where Identity Providers (IdPs) send POST requests
+ * to the ACS (Assertion Consumer Service) URL via cross-origin form submissions.
+ * Browsers set the Origin header to "null" for these cross-origin form POSTs,
+ * so "null" must be explicitly allowed as a trusted origin for SAML to work.
+ *
+ * @returns Array of additional trusted origins, or empty array if not configured/invalid
+ */
+export const parseSsoTrustedOrigins = (): string[] => {
+  const envValue = process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(envValue);
+
+    if (!Array.isArray(parsed)) {
+      logger.warn(
+        "ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS must be a JSON array of strings, ignoring invalid value",
+      );
+      return [];
+    }
+
+    // Filter to only valid strings
+    const validOrigins = parsed.filter((item): item is string => {
+      if (typeof item !== "string") {
+        logger.warn(
+          `ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS contains non-string value: ${JSON.stringify(item)}, skipping`,
+        );
+        return false;
+      }
+      return true;
+    });
+
+    return validOrigins;
+  } catch (error) {
+    logger.warn(
+      `Failed to parse ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS as JSON: ${error instanceof Error ? error.message : "unknown error"}`,
+    );
+    return [];
+  }
+};
+
+/**
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
+ * Additional SSO trusted origins (e.g., "null" for SAML) can be configured via
+ * ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS environment variable.
  */
-const getTrustedOrigins = (): string[] | undefined => {
+export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
+  const ssoOrigins = parseSsoTrustedOrigins();
 
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
-    return [
+    const defaultOrigins = [
       "http://localhost:*",
       "https://localhost:*",
       "http://127.0.0.1:*",
       "https://127.0.0.1:*",
     ];
+
+    return [...new Set([...defaultOrigins, ...ssoOrigins])];
   }
 
-  return origins;
+  // Production: use configured origins + SSO origins
+  return [...new Set([...origins, ...ssoOrigins])];
 };
 
 export default {

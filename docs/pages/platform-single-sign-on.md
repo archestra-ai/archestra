@@ -35,7 +35,7 @@ Archestra supports Single Sign-On (SSO) authentication using OpenID Connect (OID
 
 Once you have configured SSO providers, you can optionally disable the username/password login form to enforce SSO-only authentication. This is useful for organizations that want to centralize authentication through their identity provider.
 
-To disable basic authentication, set the `ARCHESTRA_DISABLE_BASIC_AUTH` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
+To disable basic authentication, set the `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
 
 > **Important:** Ensure at least one SSO provider is configured and working before disabling basic authentication. Otherwise, users (including administrators) will not be able to sign in.
 
@@ -227,6 +227,18 @@ Optional configuration:
 - The NameID format should be set to `emailAddress` in your IdP
 - User attributes (email, firstName, lastName) should be included in the SAML assertion
 - See your IdP's documentation for specific configuration steps
+
+<a id="saml-configuration"></a>
+
+**SAML Trusted Origins Configuration:**
+
+SAML Identity Providers send authentication responses via cross-origin form POST requests to the Assertion Consumer Service (ACS) URL. Due to browser security policies, these requests have their `Origin` header set to `null`. To allow these requests, you must configure the `ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS` environment variable:
+
+```bash
+ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS='["null"]'
+```
+
+Without this configuration, SAML authentication will fail with a "Missing or null Origin" error. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for more configuration details.
 
 #### Using Keycloak as a SAML Provider
 

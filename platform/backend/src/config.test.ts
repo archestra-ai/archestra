@@ -1,6 +1,11 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
+import {
+  getDatabaseUrl,
+  getOtlpAuthHeaders,
+  getTrustedOrigins,
+  parseSsoTrustedOrigins,
+} from "./config";
 
 // Mock the logger
 vi.mock("./logging", () => ({
@@ -228,6 +233,253 @@ describe("getOtlpAuthHeaders", () => {
 
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("parseSsoTrustedOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("should return empty array when env var is not set", () => {
+    delete process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS;
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("should return empty array when env var is empty string", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = "";
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("should return empty array when env var is whitespace only", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = "   ";
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("should parse valid JSON array with single origin", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = '["null"]';
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual(["null"]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("should parse valid JSON array with multiple origins", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS =
+      '["null", "https://idp.example.com", "https://auth.company.com"]';
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([
+      "null",
+      "https://idp.example.com",
+      "https://auth.company.com",
+    ]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("should warn and return empty array for invalid JSON", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = "not valid json";
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Failed to parse ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS as JSON",
+      ),
+    );
+  });
+
+  test("should warn and return empty array when JSON is not an array", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = '{"origin": "null"}';
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS must be a JSON array of strings, ignoring invalid value",
+    );
+  });
+
+  test("should warn and return empty array when JSON is a string", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = '"null"';
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS must be a JSON array of strings, ignoring invalid value",
+    );
+  });
+
+  test("should filter out non-string values and warn for each", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS =
+      '["valid", 123, "also-valid", null, true]';
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual(["valid", "also-valid"]);
+    expect(logger.warn).toHaveBeenCalledTimes(3); // 123, null, true
+  });
+
+  test("should handle empty JSON array", () => {
+    process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = "[]";
+
+    const result = parseSsoTrustedOrigins();
+
+    expect(result).toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTrustedOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("development mode (default localhost origins)", () => {
+    // Note: NODE_ENV is determined at module load time, so tests run in development mode
+    // since the test environment is not production
+
+    test("should return localhost wildcards when no SSO origins configured", () => {
+      delete process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS;
+
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+      ]);
+    });
+
+    test("should append SSO origins to localhost wildcards", () => {
+      process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = '["null"]';
+
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "null",
+      ]);
+    });
+
+    test("should append multiple SSO origins", () => {
+      process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS =
+        '["null", "https://idp.example.com"]';
+
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "null",
+        "https://idp.example.com",
+      ]);
+    });
+
+    test("should not duplicate origins that already exist in defaults", () => {
+      process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS =
+        '["http://localhost:*", "null"]';
+
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+        "null",
+      ]);
+      // http://localhost:* should only appear once
+      expect(result?.filter((o) => o === "http://localhost:*")).toHaveLength(1);
+    });
+  });
+
+  describe("production mode (specific frontend URL)", () => {
+    // Note: These tests use dynamic imports with vi.resetModules() to test production behavior
+    // because NODE_ENV is evaluated at module load time
+
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return frontend URL when no SSO origins configured", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      delete process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS;
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com"]);
+    });
+
+    test("should append SSO origins to frontend URL", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS = '["null"]';
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com", "null"]);
+    });
+
+    test("should not duplicate frontend URL if in SSO origins", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+      process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS =
+        '["https://app.example.com", "null"]';
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com", "null"]);
+      expect(
+        result?.filter((o) => o === "https://app.example.com"),
+      ).toHaveLength(1);
     });
   });
 });

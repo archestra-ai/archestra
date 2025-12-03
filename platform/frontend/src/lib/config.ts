@@ -111,7 +111,7 @@ export default {
    * When true, hides the username/password login form and requires SSO for authentication.
    */
   get disableBasicAuth() {
-    return env("NEXT_PUBLIC_ARCHESTRA_DISABLE_BASIC_AUTH") === "true";
+    return env("NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH") === "true";
   },
   sentry: {
     get dsn() {

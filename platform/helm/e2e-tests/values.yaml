@@ -51,159 +51,16 @@ keycloak:
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
+  # Test user for SSO E2E tests
+  # This user should match the Archestra admin user created during onboarding
+  # so that SSO login can link to an existing account
+  testUser:
+    username: "admin"
+    email: "admin@example.com"
+    password: "password"
+    firstName: "Admin"
+    lastName: "User"
   # Realm configuration for e2e testing
   # Set import: true to auto-import the realm on startup
   realm:
     import: true
-    config: |
-      {
-        "realm": "archestra",
-        "enabled": true,
-        "sslRequired": "none",
-        "registrationAllowed": false,
-        "loginWithEmailAllowed": true,
-        "duplicateEmailsAllowed": false,
-        "resetPasswordAllowed": true,
-        "editUsernameAllowed": false,
-        "bruteForceProtected": false,
-        "clients": [
-          {
-            "clientId": "archestra-oidc",
-            "name": "Archestra OIDC Client",
-            "enabled": true,
-            "clientAuthenticatorType": "client-secret",
-            "secret": "archestra-oidc-secret",
-            "redirectUris": [
-              "http://localhost:3000/*",
-              "http://localhost:9000/*"
-            ],
-            "webOrigins": [
-              "http://localhost:3000",
-              "http://localhost:9000"
-            ],
-            "standardFlowEnabled": true,
-            "directAccessGrantsEnabled": true,
-            "publicClient": false,
-            "protocol": "openid-connect",
-            "attributes": {
-              "pkce.code.challenge.method": "S256"
-            },
-            "protocolMappers": [
-              {
-                "name": "email",
-                "protocol": "openid-connect",
-                "protocolMapper": "oidc-usermodel-property-mapper",
-                "consentRequired": false,
-                "config": {
-                  "userinfo.token.claim": "true",
-                  "user.attribute": "email",
-                  "id.token.claim": "true",
-                  "access.token.claim": "true",
-                  "claim.name": "email",
-                  "jsonType.label": "String"
-                }
-              },
-              {
-                "name": "name",
-                "protocol": "openid-connect",
-                "protocolMapper": "oidc-full-name-mapper",
-                "consentRequired": false,
-                "config": {
-                  "id.token.claim": "true",
-                  "access.token.claim": "true",
-                  "claim.name": "name",
-                  "userinfo.token.claim": "true"
-                }
-              }
-            ]
-          },
-          {
-            "clientId": "http://localhost:3000",
-            "name": "Archestra SAML Client",
-            "enabled": true,
-            "protocol": "saml",
-            "frontchannelLogout": true,
-            "attributes": {
-              "saml.assertion.signature": "true",
-              "saml.force.post.binding": "true",
-              "saml.multivalued.roles": "false",
-              "saml.encrypt": "false",
-              "saml.server.signature": "true",
-              "saml.server.signature.keyinfo.ext": "false",
-              "saml.signing.certificate": "",
-              "saml_force_name_id_format": "true",
-              "saml.client.signature": "false",
-              "saml.authnstatement": "true",
-              "saml_name_id_format": "email",
-              "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
-            },
-            "redirectUris": [
-              "http://localhost:3000/*",
-              "http://localhost:9000/*"
-            ],
-            "protocolMappers": [
-              {
-                "name": "email",
-                "protocol": "saml",
-                "protocolMapper": "saml-user-property-idp-mapper",
-                "consentRequired": false,
-                "config": {
-                  "user.attribute": "email",
-                  "friendly.name": "email",
-                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
-                }
-              },
-              {
-                "name": "firstName",
-                "protocol": "saml",
-                "protocolMapper": "saml-user-property-idp-mapper",
-                "consentRequired": false,
-                "config": {
-                  "user.attribute": "firstName",
-                  "friendly.name": "firstName",
-                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname"
-                }
-              },
-              {
-                "name": "lastName",
-                "protocol": "saml",
-                "protocolMapper": "saml-user-property-idp-mapper",
-                "consentRequired": false,
-                "config": {
-                  "user.attribute": "lastName",
-                  "friendly.name": "lastName",
-                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname"
-                }
-              },
-              {
-                "name": "name",
-                "protocol": "saml",
-                "protocolMapper": "saml-user-property-idp-mapper",
-                "consentRequired": false,
-                "config": {
-                  "user.attribute": "username",
-                  "friendly.name": "name",
-                  "attribute.name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
-                }
-              }
-            ]
-          }
-        ],
-        "users": [
-          {
-            "username": "testuser",
-            "email": "testuser@archestra.test",
-            "firstName": "Test",
-            "lastName": "User",
-            "enabled": true,
-            "emailVerified": true,
-            "credentials": [
-              {
-                "type": "password",
-                "value": "testpassword",
-                "temporary": false
-              }
-            ]
-          }
-        ]
-      }

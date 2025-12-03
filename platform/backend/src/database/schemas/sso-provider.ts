@@ -1,5 +1,5 @@
 import type { SsoProviderOidcConfig, SsoProviderSamlConfig } from "@shared";
-import { pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text } from "drizzle-orm/pg-core";
 import usersTable from "./user";
 
 const ssoProvidersTable = pgTable("sso_provider", {
@@ -13,6 +13,7 @@ const ssoProvidersTable = pgTable("sso_provider", {
   providerId: text("provider_id").notNull().unique(),
   organizationId: text("organization_id"),
   domain: text("domain").notNull(),
+  domainVerified: boolean("domain_verified"),
 });
 
 export default ssoProvidersTable;

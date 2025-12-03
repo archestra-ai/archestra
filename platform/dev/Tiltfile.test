@@ -20,7 +20,7 @@ local_resource(
 
 local_resource(
   'e2e-tests',
-  cmd='pnpm test:e2e',
+  cmd='Cnpm test:e2e',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,

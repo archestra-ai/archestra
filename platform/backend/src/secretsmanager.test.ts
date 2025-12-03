@@ -110,6 +110,8 @@ describe("createSecretManager", () => {
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", () => {
     delete process.env.ARCHESTRA_SECRETS_MANAGER;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
     delete process.env.HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -128,6 +130,8 @@ describe("createSecretManager", () => {
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but vault env vars are missing", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
     delete process.env.HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -136,9 +140,10 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_ADDR is set", () => {
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only ARCHESTRA_HASHICORP_VAULT_ADDR is set", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
     const manager = createSecretManager();
@@ -146,10 +151,11 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only HASHICORP_VAULT_TOKEN is set", () => {
+  test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but only ARCHESTRA_HASHICORP_VAULT_TOKEN is set", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_ADDR;
-    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
 
     const manager = createSecretManager();
 
@@ -158,8 +164,8 @@ describe("createSecretManager", () => {
 
   test("should return VaultSecretManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' and vault env vars are set and enterprise license is activated", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
-    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
     setEnterpriseLicenseActivated(true);
 
     const manager = createSecretManager();
@@ -169,8 +175,8 @@ describe("createSecretManager", () => {
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but enterprise license is not activated", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
-    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
     setEnterpriseLicenseActivated(false);
 
     const manager = createSecretManager();
@@ -180,8 +186,23 @@ describe("createSecretManager", () => {
 
   test("should return DbSecretsManager even when vault env vars are set if ARCHESTRA_SECRETS_MANAGER is 'DB'", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "DB";
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
-    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
+  });
+
+  // Note: K8s auth integration test is skipped because it requires the K8s service account token file
+  // The K8s config parsing is tested in getVaultConfigFromEnv tests
+
+  test("should return DbSecretsManager when K8S_AUTH is enabled but K8S_ROLE is missing", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_AUTH = "true";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
+    setEnterpriseLicenseActivated(true);
 
     const manager = createSecretManager();
 
@@ -201,6 +222,8 @@ describe("getVaultConfigFromEnv", () => {
   });
 
   test("should return null when no vault env vars are set", () => {
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
     delete process.env.HASHICORP_VAULT_ADDR;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
@@ -210,7 +233,8 @@ describe("getVaultConfigFromEnv", () => {
   });
 
   test("should return null when only address is set", () => {
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
     delete process.env.HASHICORP_VAULT_TOKEN;
 
     const config = getVaultConfigFromEnv();
@@ -218,15 +242,69 @@ describe("getVaultConfigFromEnv", () => {
     expect(config).toBeNull();
   });
 
-  test("should return config when both env vars are set", () => {
-    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
-    process.env.HASHICORP_VAULT_TOKEN = "dev-root-token";
+  test("should return token auth config when address and token are set", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
 
     const config = getVaultConfigFromEnv();
 
     expect(config).toEqual({
       address: "http://localhost:8200",
+      authMethod: "token",
       token: "dev-root-token",
+    });
+  });
+
+  test("should return K8s auth config when K8S_AUTH is enabled", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_AUTH = "true";
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE = "archestra";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "kubernetes",
+      k8sRole: "archestra",
+      k8sTokenPath: undefined,
+    });
+  });
+
+  test("should return null when K8S_AUTH is enabled but role is missing", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_AUTH = "true";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toBeNull();
+  });
+
+  test("should support legacy HASHICORP_VAULT_* env vars for backward compatibility", () => {
+    process.env.HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.HASHICORP_VAULT_TOKEN = "legacy-token";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "token",
+      token: "legacy-token",
+    });
+  });
+
+  test("should prefer ARCHESTRA_ prefix over legacy HASHICORP_ prefix", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://new-vault:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "new-token";
+    process.env.HASHICORP_VAULT_ADDR = "http://old-vault:8200";
+    process.env.HASHICORP_VAULT_TOKEN = "old-token";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://new-vault:8200",
+      authMethod: "token",
+      token: "new-token",
     });
   });
 });
@@ -234,6 +312,7 @@ describe("getVaultConfigFromEnv", () => {
 describe("VaultSecretManager", () => {
   const vaultConfig = {
     address: "http://localhost:8200",
+    authMethod: "token" as const,
     token: "dev-root-token",
   };
 

@@ -51,13 +51,24 @@ export interface SecretManager {
 }
 
 /**
+ * Vault authentication method
+ */
+export type VaultAuthMethod = "token" | "kubernetes";
+
+/**
  * Configuration for Vault SecretManager
  */
 export interface VaultConfig {
   /** Vault server address (default: http://localhost:8200) */
   address: string;
-  /** Vault token for authentication */
-  token: string;
+  /** Authentication method to use */
+  authMethod: VaultAuthMethod;
+  /** Vault token for authentication (required for token auth) */
+  token?: string;
+  /** Kubernetes auth role (required for kubernetes auth) */
+  k8sRole?: string;
+  /** Path to service account token file (defaults to /var/run/secrets/kubernetes.io/serviceaccount/token) */
+  k8sTokenPath?: string;
 }
 
 /**
@@ -120,18 +131,77 @@ function sanitizeVaultSecretName(name: string): string {
   return sanitized;
 }
 
+/** Default path to Kubernetes service account token */
+const DEFAULT_K8S_TOKEN_PATH =
+  "/var/run/secrets/kubernetes.io/serviceaccount/token";
+
 /**
  * Vault-backed implementation of SecretManager
  * Stores secret metadata in PostgreSQL with isVault=true, actual secrets in HashiCorp Vault
  */
 export class VaultSecretManager implements SecretManager {
   private client: ReturnType<typeof Vault>;
+  private initialized: Promise<void>;
+  private config: VaultConfig;
 
   constructor(config: VaultConfig) {
+    this.config = config;
     this.client = Vault({
       endpoint: config.address,
-      token: config.token,
     });
+
+    if (config.authMethod === "kubernetes") {
+      if (!config.k8sRole) {
+        throw new Error(
+          "VaultSecretManager: k8sRole is required for Kubernetes authentication",
+        );
+      }
+      this.initialized = this.loginWithKubernetes();
+    } else {
+      if (!config.token) {
+        throw new Error(
+          "VaultSecretManager: token is required for token authentication",
+        );
+      }
+      this.client.token = config.token;
+      this.initialized = Promise.resolve();
+    }
+  }
+
+  /**
+   * Authenticate with Vault using Kubernetes service account token
+   */
+  private async loginWithKubernetes(): Promise<void> {
+    const tokenPath = this.config.k8sTokenPath ?? DEFAULT_K8S_TOKEN_PATH;
+
+    try {
+      const fs = await import("node:fs/promises");
+      const jwt = await fs.readFile(tokenPath, "utf-8");
+
+      const result = await this.client.kubernetesLogin({
+        role: this.config.k8sRole,
+        jwt: jwt.trim(),
+      });
+
+      this.client.token = result.auth.client_token;
+      logger.info(
+        { role: this.config.k8sRole },
+        "VaultSecretManager: authenticated via Kubernetes auth",
+      );
+    } catch (error) {
+      logger.error(
+        { error, tokenPath, role: this.config.k8sRole },
+        "VaultSecretManager: Kubernetes authentication failed",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure authentication is complete before any operation
+   */
+  private async ensureInitialized(): Promise<void> {
+    await this.initialized;
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -146,6 +216,8 @@ export class VaultSecretManager implements SecretManager {
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
+    await this.ensureInitialized();
+
     // Sanitize name to conform to Vault naming rules
     const sanitizedName = sanitizeVaultSecretName(name);
 
@@ -180,6 +252,8 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async deleteSecret(secid: string): Promise<boolean> {
+    await this.ensureInitialized();
+
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return false;
@@ -211,6 +285,8 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async getSecret(secid: string): Promise<SelectSecret | null> {
+    await this.ensureInitialized();
+
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return null;
@@ -248,6 +324,8 @@ export class VaultSecretManager implements SecretManager {
     secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
+    await this.ensureInitialized();
+
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
       return null;
@@ -288,16 +366,58 @@ export class VaultSecretManager implements SecretManager {
 
 /**
  * Get Vault configuration from environment variables
+ *
+ * Supports two authentication methods:
+ * 1. Token auth: ARCHESTRA_HASHICORP_VAULT_ADDR + ARCHESTRA_HASHICORP_VAULT_TOKEN
+ * 2. Kubernetes auth: ARCHESTRA_HASHICORP_VAULT_ADDR + ARCHESTRA_HASHICORP_VAULT_K8S_AUTH=true + ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
+ *
+ * Kubernetes auth takes precedence if ARCHESTRA_HASHICORP_VAULT_K8S_AUTH is set to "true"
+ *
+ * Note: Legacy HASHICORP_VAULT_* env vars are still supported for backward compatibility
  */
 export function getVaultConfigFromEnv(): VaultConfig | null {
-  const address = process.env.HASHICORP_VAULT_ADDR;
-  const token = process.env.HASHICORP_VAULT_TOKEN;
+  // Support both new ARCHESTRA_HASHICORP_ prefix and legacy HASHICORP_ prefix
+  const address =
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ??
+    process.env.HASHICORP_VAULT_ADDR;
 
-  if (!address || !token) {
+  if (!address) {
     return null;
   }
 
-  return { address, token };
+  const useK8s =
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_AUTH?.toLowerCase() === "true";
+
+  if (useK8s) {
+    const k8sRole = process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE;
+    if (!k8sRole) {
+      logger.warn(
+        "getVaultConfigFromEnv: Kubernetes auth enabled but ARCHESTRA_HASHICORP_VAULT_K8S_ROLE is not set",
+      );
+      return null;
+    }
+
+    return {
+      address,
+      authMethod: "kubernetes",
+      k8sRole,
+      k8sTokenPath: process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH,
+    };
+  }
+
+  // Fall back to token auth
+  const token =
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN ??
+    process.env.HASHICORP_VAULT_TOKEN;
+  if (!token) {
+    return null;
+  }
+
+  return {
+    address,
+    authMethod: "token",
+    token,
+  };
 }
 
 /**
@@ -325,7 +445,9 @@ export function getSecretsManagerType(): SecretsManagerType {
 /**
  * Create a secret manager based on environment configuration
  * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
- * - "Vault": Uses VaultSecretManager (requires HASHICORP_VAULT_ADDR and HASHICORP_VAULT_TOKEN)
+ * - "Vault": Uses VaultSecretManager with either:
+ *   - Token auth: HASHICORP_VAULT_ADDR + HASHICORP_VAULT_TOKEN
+ *   - Kubernetes auth: HASHICORP_VAULT_ADDR + HASHICORP_VAULT_USE_K8S=true + HASHICORP_VAULT_K8S_ROLE
  * - "DB" or not set: Uses DbSecretsManager (default)
  */
 export function createSecretManager(): SecretManager {
@@ -343,13 +465,15 @@ export function createSecretManager(): SecretManager {
 
     if (!vaultConfig) {
       logger.warn(
-        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault but HASHICORP_VAULT_ADDR or HASHICORP_VAULT_TOKEN not set, falling back to DbSecretsManager",
+        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault but Vault configuration is incomplete. " +
+          "Either set ARCHESTRA_HASHICORP_VAULT_TOKEN for token auth, or set ARCHESTRA_HASHICORP_VAULT_K8S_AUTH=true and ARCHESTRA_HASHICORP_VAULT_K8S_ROLE for K8s auth. " +
+          "Falling back to DbSecretsManager.",
       );
       return new DbSecretsManager();
     }
 
     logger.info(
-      { address: vaultConfig.address },
+      { address: vaultConfig.address, authMethod: vaultConfig.authMethod },
       "createSecretManager: using VaultSecretManager",
     );
     return new VaultSecretManager(vaultConfig);

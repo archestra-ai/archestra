@@ -294,6 +294,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (secret) {
           clientSecret = secret.secret.client_secret as string | undefined;
+          logger.info(
+            { catalogId: catalogItem.id, hasClientSecret: !!clientSecret },
+            "Fetched OAuth client_secret from secret table",
+          );
         }
       }
 
@@ -531,6 +535,13 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           storedClientSecret = secret.secret.client_secret as
             | string
             | undefined;
+          logger.info(
+            {
+              catalogId: catalogItem.id,
+              hasClientSecret: !!storedClientSecret,
+            },
+            "Fetched OAuth client_secret from secret table for callback",
+          );
         }
       }
 

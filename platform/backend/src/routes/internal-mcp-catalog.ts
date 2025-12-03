@@ -27,8 +27,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const catalogItems = await InternalMcpCatalogModel.findAll();
-      return reply.send(catalogItems);
+      return reply.send(await InternalMcpCatalogModel.findAll());
     },
   );
 

@@ -30,12 +30,10 @@ const KEYCLOAK_OIDC_CLIENT_SECRET = "archestra-oidc-secret";
 const KEYCLOAK_SAML_ENTITY_ID = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
 const KEYCLOAK_SAML_SSO_URL = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`;
 
-// Keycloak test user credentials - these should match the Archestra admin user
-// so that SSO login can link to the existing admin account.
-// The Helm chart configures Keycloak with these same credentials via:
-//   helm install e2e-tests ./helm/e2e-tests \
-//     --set keycloak.testUser.email=<ADMIN_EMAIL> \
-//     --set keycloak.testUser.password=<ADMIN_PASSWORD>
+// Keycloak test user credentials - match the Archestra admin user so SSO can link accounts.
+// Test users are defined in helm/e2e-tests/values.yaml:
+//   - admin@example.com (archestra-admins group) - for admin role mapping
+//   - member@example.com (archestra-users group) - for member role mapping
 // Extract username from email (e.g., "admin@example.com" -> "admin")
 const KEYCLOAK_TEST_USER = ADMIN_EMAIL.split("@")[0];
 const KEYCLOAK_TEST_PASSWORD = ADMIN_PASSWORD;

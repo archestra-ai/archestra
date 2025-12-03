@@ -1,7 +1,8 @@
 import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
-import { describe, expect, test, vi } from "@/test";
+import { vi } from "vitest";
+import { describe, expect, test } from "@/test";
 import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
 
 // Mock the logger to avoid console output during tests

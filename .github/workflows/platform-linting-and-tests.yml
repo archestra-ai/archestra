@@ -114,12 +114,8 @@ jobs:
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
           # Deploy e2e test dependencies (WireMock, Keycloak)
-          # Configure Keycloak test user to match Archestra admin credentials
-          # so SSO login can link to the existing admin account
-          helm install e2e-tests ./platform/helm/e2e-tests \
-            --set keycloak.testUser.email=admin@example.com \
-            --set keycloak.testUser.password=password \
-            --set keycloak.testUser.username=admin
+          # Test users defined in helm/e2e-tests/values.yaml match Archestra defaults
+          helm install e2e-tests ./platform/helm/e2e-tests
 
           helm install archestra-platform ./platform/helm/archestra \
             --values .github/values-ci.yaml \

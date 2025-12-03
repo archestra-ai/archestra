@@ -219,9 +219,7 @@ export function ManageUsersDialog({
                 </TableHeader>
                 <TableBody>
                   {userDetails.map((user) => {
-                    const unassignedTeams = getUnassignedTeamsForUser(
-                      user.teams,
-                    );
+                    const unassignedTeams = getUnassignedTeamsForUser();
 
                     return (
                       <TableRow key={user.userId}>

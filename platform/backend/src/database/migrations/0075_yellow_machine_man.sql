@@ -1,1 +1,0 @@
-ALTER TABLE "sso_provider" ADD COLUMN "domain_verified" boolean;

@@ -61,7 +61,9 @@ else:
     labels=['dev'],
     resource_deps=['db-migrate'],
     deps=['../.env'],
-    serve_env=frontend_env_vars
+    serve_env=frontend_env_vars,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False
   )
 
 local_resource(

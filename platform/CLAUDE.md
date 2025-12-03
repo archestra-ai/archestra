@@ -124,7 +124,7 @@ ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
 # For local dev: Must be set manually in .env file
-ARCHESTRA_AUTH_SECRET=  # Optional in Helm/Docker (auto-generated), required for local dev
+ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
 
 # Disable Basic Authentication (username/password login form)
 ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO

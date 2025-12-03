@@ -37,10 +37,245 @@ local_resource(
   auto_init=False
 )
 
-local_resource(
+# HashiCorp Vault in K8s (manual trigger)
+# Start with: tilt trigger vault
+load('ext://helm_remote', 'helm_remote')
+
+helm_remote(
   'vault',
-  serve_cmd='docker run --rm -p 8200:8200 -e VAULT_DEV_ROOT_TOKEN_ID=dev-root-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 --cap-add=IPC_LOCK hashicorp/vault:1.15',
+  repo_url='https://helm.releases.hashicorp.com',
+  namespace='archestra-dev',
+  create_namespace=False,  # Namespace already created by Tiltfile.database
+  set=[
+    # Run in dev mode (unsealed, in-memory storage)
+    'server.dev.enabled=true',
+    'server.dev.devRootToken=dev-root-token',
+    # Disable injector and CSI (not needed for dev)
+    'injector.enabled=false',
+    'csi.enabled=false',
+    # Resource limits for dev
+    'server.resources.requests.memory=256Mi',
+    'server.resources.requests.cpu=250m',
+  ]
+)
+
+k8s_resource(
+  'vault',
+  port_forwards=['8200:8200'],
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
+)
+
+# Configure Vault K8s auth (run after vault is started)
+local_resource(
+  'vault-k8s-auth-setup',
+  cmd='''
+    echo "⏳ Waiting for Vault to be ready..."
+    for i in {1..30}; do
+      if kubectl exec -n archestra-dev vault-0 -- vault status 2>/dev/null | grep -q "Initialized.*true"; then
+        echo "✅ Vault is ready"
+        break
+      fi
+      echo "Waiting... (attempt $i/30)"
+      sleep 2
+    done
+
+    echo "🔧 Configuring Vault K8s auth..."
+
+    # Enable KV secrets engine at secret/ path
+    kubectl exec -n archestra-dev vault-0 -- vault secrets enable -path=secret kv-v2 2>/dev/null || true
+
+    # Enable Kubernetes auth method
+    kubectl exec -n archestra-dev vault-0 -- vault auth enable kubernetes 2>/dev/null || true
+
+    # Configure K8s auth to use the in-cluster API
+    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
+
+    # Create a policy for archestra secrets
+    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets - <<EOF
+path "secret/data/archestra/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "secret/metadata/archestra/*" {
+  capabilities = ["delete", "list"]
+}
+EOF'
+
+    # Create a role bound to the archestra-platform service account (created by Helm chart)
+    kubectl exec -n archestra-dev vault-0 -- vault write auth/kubernetes/role/archestra \
+      bound_service_account_names="archestra-platform" \
+      bound_service_account_namespaces="archestra-dev" \
+      policies="archestra-secrets" \
+      ttl="24h"
+
+    echo ""
+    echo "✅ Vault K8s auth configured!"
+    echo ""
+    echo "Created:"
+    echo "  - Vault role: archestra (bound to archestra-platform SA)"
+    echo "  - Vault policy: archestra-secrets"
+    echo ""
+    echo "Token auth (local dev):"
+    echo "  ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200"
+    echo "  ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token"
+    echo ""
+    echo "K8s auth (for archestra-k8s deployment):"
+    echo "  Uses ServiceAccount: archestra-platform"
+    echo "  Vault addr: http://vault.archestra-dev.svc:8200"
+  ''',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+# Archestra running in K8s (for testing Vault K8s auth, etc.)
+# Start with: tilt trigger archestra-k8s
+docker_build(
+  'archestra/platform-dev',
+  context='..',
+  dockerfile='../Dockerfile',
+  only=[
+    'package.json',
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'turbo.json',
+    'backend',
+    'frontend',
+    'shared',
+    'docker-banner.sh',
+  ],
+  ignore=[
+    '**/node_modules',
+    '**/.next',
+    '**/dist',
+    '**/*.test.ts',
+    '**/*.spec.ts',
+  ]
+)
+
+k8s_yaml(local('''cat <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: archestra-platform-mcp-manager
+  namespace: archestra-dev
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: archestra-platform-mcp-manager
+  namespace: archestra-dev
+subjects:
+- kind: ServiceAccount
+  name: archestra-platform
+  namespace: archestra-dev
+roleRef:
+  kind: Role
+  name: archestra-platform-mcp-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+spec:
+  type: NodePort
+  ports:
+    - port: 9000
+      targetPort: 9000
+      nodePort: 30900
+      name: backend
+    - port: 9050
+      targetPort: 9050
+      nodePort: 30905
+      name: metrics
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300
+      name: frontend
+  selector:
+    app: archestra-platform
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archestra-platform
+  namespace: archestra-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: archestra-platform
+  template:
+    metadata:
+      labels:
+        app: archestra-platform
+    spec:
+      serviceAccountName: archestra-platform
+      containers:
+        - name: archestra
+          image: archestra/platform-dev
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9000
+            - containerPort: 9050
+            - containerPort: 3000
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: ARCHESTRA_DATABASE_URL
+              value: "postgresql://archestra:archestra_dev_password@postgresql.archestra-dev.svc:5432/archestra_dev?schema=public"
+            - name: ARCHESTRA_SECRETS_MANAGER
+              value: "Vault"
+            - name: ARCHESTRA_HASHICORP_VAULT_ADDR
+              value: "http://vault.archestra-dev.svc:8200"
+            - name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
+              value: "k8s"
+            - name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
+              value: "archestra"
+            - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
+              value: "true"
+            - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
+              value: "archestra-dev"
+            - name: ARCHESTRA_ANALYTICS
+              value: "disabled"
+            - name: ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED
+              value: "true"
+EOF
+'''))
+
+k8s_resource(
+  'archestra-platform',
+  port_forwards=['3000:3000', '9000:9000'],
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['postgresql', 'vault']
 )

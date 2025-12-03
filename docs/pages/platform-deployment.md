@@ -100,11 +100,18 @@ helm upgrade archestra-platform \
   --namespace archestra \
   --create-namespace \
   --set archestra.env.ARCHESTRA_API_BASE_URL=https://api.example.com \
-  --set archestra.env.ARCHESTRA_AUTH_SECRET=better-auth-secret-123456789 \
   --wait
 ```
 
-Note: `ARCHESTRA_AUTH_SECRET` is optional. It will be auto-generated if not specified.
+**Note**: `ARCHESTRA_AUTH_SECRET` is optional and will be auto-generated (64 characters) if not specified. If you need to set it manually, it must be at least 32 characters:
+
+```bash
+# Generate a secure secret
+openssl rand -base64 32
+
+# Then add to your helm command:
+--set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
+```
 
 #### MCP Server Runtime Configuration
 

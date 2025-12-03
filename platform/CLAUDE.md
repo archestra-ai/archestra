@@ -119,10 +119,12 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
-# Authentication Secret (auto-generated in Helm/Docker if not set)
+# Authentication Secret (REQUIRED, must be at least 32 characters)
+# Generate with: openssl rand -base64 32
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
-ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
+# For local dev: Must be set manually in .env file
+ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
 
 # Disable Basic Authentication (username/password login form)
 ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
@@ -149,8 +151,16 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Secrets Manager Configuration
 ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
-HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
-HASHICORP_VAULT_TOKEN=dev-root-token  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=token  # Options: "token" (default) or "k8s"
+
+# Vault Token Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=token or not set)
+ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for token auth
+
+# Vault Kubernetes Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=k8s)
+ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=  # Required for k8s auth: Vault role bound to K8s service account
+ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH=  # Optional: Path to SA token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
+ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT=  # Optional: Vault K8s auth mount point (default: kubernetes)
 
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN

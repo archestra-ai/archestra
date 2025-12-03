@@ -1,5 +1,5 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTeam, Team, TeamMember, UpdateTeam } from "@/types";
 
@@ -202,6 +202,28 @@ class TeamModel {
       .where(eq(schema.teamMembersTable.userId, userId));
 
     return teamMemberships.map((membership) => membership.teamId);
+  }
+
+  /**
+   * Get all user IDs that share at least one team with the given user
+   */
+  static async getTeammateUserIds(userId: string): Promise<string[]> {
+    // First get the user's team IDs
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+    if (userTeamIds.length === 0) {
+      return [];
+    }
+
+    // Then get all users in those teams
+    const teammates = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
+
+    // Return unique user IDs (excluding the user themselves)
+    const teammateIds = [...new Set(teammates.map((t) => t.userId))];
+    return teammateIds.filter((id) => id !== userId);
   }
 
   /**

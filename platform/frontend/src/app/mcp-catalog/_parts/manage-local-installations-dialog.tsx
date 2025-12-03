@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
-import { Server, Trash, X } from "lucide-react";
+import { Info, Server, Trash, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useGrantTeamMcpServerAccess,
@@ -170,6 +175,17 @@ export function ManageLocalInstallationsDialog({
     return allTeams?.filter((team) => !assignedTeamIds.has(team.id)) || [];
   };
 
+  // Get teams that a user belongs to (based on team membership)
+  const getUserMembershipTeams = useCallback(
+    (userId: string) => {
+      if (!allTeams) return [];
+      return allTeams.filter((team) =>
+        team.members?.some((member) => member.userId === userId),
+      );
+    },
+    [allTeams],
+  );
+
   if (!liveServer) {
     return null;
   }
@@ -201,9 +217,24 @@ export function ManageLocalInstallationsDialog({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>User</TableHead>
+                    <TableHead>Owner</TableHead>
                     <TableHead>Installed on</TableHead>
-                    <TableHead>Teams</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Granted for teams
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              Users without <code>profile:admin</code>{" "}
+                              permission can only assign teams they belong to
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableHead>
                     <TableHead className="w-[120px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -216,16 +247,44 @@ export function ManageLocalInstallationsDialog({
                     return (
                       <TableRow key={installation.userId}>
                         <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {installation.email}
-                            {currentUserId === installation.userId && (
-                              <Badge
-                                variant="secondary"
-                                className="text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-                              >
-                                You
-                              </Badge>
-                            )}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              {installation.email}
+                              {currentUserId === installation.userId && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
+                                >
+                                  You
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {(() => {
+                                const membershipTeams = getUserMembershipTeams(
+                                  installation.userId,
+                                );
+                                if (membershipTeams.length === 0) {
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1 py-0 h-4 text-muted-foreground"
+                                    >
+                                      No team
+                                    </Badge>
+                                  );
+                                }
+                                return membershipTeams.map((team) => (
+                                  <Badge
+                                    key={team.id}
+                                    variant="outline"
+                                    className="text-[12px] px-2 py-2 h-4"
+                                  >
+                                    {team.name}
+                                  </Badge>
+                                ));
+                              })()}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">

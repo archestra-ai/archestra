@@ -9909,6 +9909,7 @@ export type GetMcpServersResponses = {
             userId: string;
             email: string;
             createdAt: string;
+            canManage?: boolean;
         }>;
         teamDetails?: Array<{
             teamId: string;
@@ -10028,6 +10029,7 @@ export type InstallMcpServerResponses = {
             userId: string;
             email: string;
             createdAt: string;
+            canManage?: boolean;
         }>;
         teamDetails?: Array<{
             teamId: string;
@@ -10210,6 +10212,7 @@ export type GetMcpServerResponses = {
             userId: string;
             email: string;
             createdAt: string;
+            canManage?: boolean;
         }>;
         teamDetails?: Array<{
             teamId: string;

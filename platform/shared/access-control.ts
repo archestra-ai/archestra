@@ -387,7 +387,7 @@ export const requiredEndpointPermissionsMap: Partial<
     tool: ["read"],
   },
   [RouteId.GetAgentAvailableTokens]: {
-    profile: ["admin"],
+    profile: ["read"],
   },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],

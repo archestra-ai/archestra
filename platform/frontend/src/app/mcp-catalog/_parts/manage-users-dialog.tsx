@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
-import { Building2, Trash, User, X } from "lucide-react";
+import { Trash, User, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

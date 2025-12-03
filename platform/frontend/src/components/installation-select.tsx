@@ -101,7 +101,7 @@ export function InstallationSelect({
                     <Badge
                       key={team.teamId}
                       variant="secondary"
-                      className="text-[10px] px-1 py-0"
+                      className="text-xs"
                     >
                       {team.name}
                     </Badge>

@@ -5,6 +5,7 @@ import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();
+const gaugeSet = vi.fn();
 const registerRemoveSingleMetric = vi.fn();
 
 vi.mock("prom-client", () => {
@@ -20,6 +21,11 @@ vi.mock("prom-client", () => {
           return counterInc(...args);
         }
       },
+      Gauge: class {
+        set(...args: unknown[]) {
+          return gaugeSet(...args);
+        }
+      },
       register: {
         removeSingleMetric: (...args: unknown[]) =>
           registerRemoveSingleMetric(...args),
@@ -32,6 +38,9 @@ import {
   getObservableFetch,
   getObservableGenAI,
   initializeMetrics,
+  reportBlockedTools,
+  reportLLMCost,
+  reportLLMTokens,
 } from "./llm-metrics";
 
 describe("getObservableFetch", () => {
@@ -52,6 +61,7 @@ describe("getObservableFetch", () => {
       clone: () => ({
         json: async () => ({
           usage: { prompt_tokens: 100, completion_tokens: 50 },
+          model: "gpt-4",
         }),
       }),
     } as Response;
@@ -62,6 +72,7 @@ describe("getObservableFetch", () => {
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
+      body: JSON.stringify({ model: "gpt-4" }),
     });
 
     expect(histogramObserve).toHaveBeenCalledWith(
@@ -71,6 +82,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "gpt-4",
         status_code: "200",
       },
       expect.any(Number),
@@ -83,6 +95,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "gpt-4",
         type: "input",
       },
       100,
@@ -95,6 +108,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "gpt-4",
         type: "output",
       },
       50,
@@ -123,6 +137,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "400",
       },
       expect.any(Number),
@@ -151,6 +166,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "503",
       },
       expect.any(Number),
@@ -173,6 +189,7 @@ describe("getObservableFetch", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "0",
       },
       expect.any(Number),
@@ -200,26 +217,28 @@ describe("getObservableFetch", () => {
     });
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "anthropic",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         type: "input",
-      },
+      }),
       200,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "anthropic",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         type: "output",
-      },
+      }),
       75,
     );
   });
@@ -303,32 +322,35 @@ describe("getObservableGenAI", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "200",
       },
       expect.any(Number),
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "gemini",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         type: "input",
-      },
+      }),
       150,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         provider: "gemini",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         type: "output",
-      },
+      }),
       80,
     );
   });
@@ -352,6 +374,7 @@ describe("getObservableGenAI", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "400",
       },
       expect.any(Number),
@@ -375,6 +398,7 @@ describe("getObservableGenAI", () => {
         agent_name: testAgent.name,
         profile_id: testAgent.id,
         profile_name: testAgent.name,
+        model: "unknown",
         status_code: "0",
       },
       expect.any(Number),
@@ -499,5 +523,113 @@ describe("initializeMetrics", () => {
     initializeMetrics(["region", "team", "environment"]);
 
     expect(registerRemoveSingleMetric).not.toHaveBeenCalled();
+  });
+});
+
+describe("reportLLMCost", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records cost with model", () => {
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05);
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.05,
+    );
+  });
+
+  test("records cost without model", () => {
+    reportLLMCost("anthropic", testAgent, "unknown", 0.02);
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      0.02,
+    );
+  });
+});
+
+describe("reportLLMTokens with model", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records tokens with model specified", () => {
+    reportLLMTokens("openai", testAgent, { input: 100, output: 50 }, "gpt-4");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "input",
+      },
+      100,
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+        type: "output",
+      },
+      50,
+    );
+  });
+});
+
+describe("reportBlockedTools with model", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records blocked tools with model", () => {
+    reportBlockedTools("openai", testAgent, 3, "gpt-4");
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      3,
+    );
   });
 });

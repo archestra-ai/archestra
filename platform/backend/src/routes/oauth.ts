@@ -286,26 +286,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const oauthConfig = catalogItem.oauthConfig;
 
-      // Fetch client_secret from secrets table if clientSecretId exists
-      let clientSecret: string | undefined;
-      if (catalogItem.clientSecretId) {
-        const secret = await secretManager.getSecret(
-          catalogItem.clientSecretId,
-        );
-        if (secret) {
-          clientSecret = secret.secret.client_secret as string | undefined;
-          logger.info(
-            { catalogId: catalogItem.id, hasClientSecret: !!clientSecret },
-            "Fetched OAuth client_secret from secret table",
-          );
-        }
-      }
-
       // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
       // This ensures the redirect URI matches where the user initiated the OAuth flow from
       const redirectUri = oauthConfig.redirect_uris[0];
 
       let clientId = oauthConfig.client_id;
+      let clientSecret = oauthConfig.client_secret;
 
       // Discover actual scopes from the OAuth server (like desktop app does)
       const discoveredScopes = await discoverScopes(
@@ -525,29 +511,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const oauthConfig = catalogItem.oauthConfig;
 
-      // Fetch client_secret from secrets table if clientSecretId exists
-      let storedClientSecret: string | undefined;
-      if (catalogItem.clientSecretId) {
-        const secret = await secretManager.getSecret(
-          catalogItem.clientSecretId,
-        );
-        if (secret) {
-          storedClientSecret = secret.secret.client_secret as
-            | string
-            | undefined;
-          logger.info(
-            {
-              catalogId: catalogItem.id,
-              hasClientSecret: !!storedClientSecret,
-            },
-            "Fetched OAuth client_secret from secret table for callback",
-          );
-        }
-      }
-
       // Use client credentials from state (dynamically registered) or fall back to config
       const clientId = oauthState.clientId || oauthConfig.client_id;
-      const clientSecret = oauthState.clientSecret || storedClientSecret;
+      const clientSecret = oauthState.clientSecret || oauthConfig.client_secret;
 
       // Use the same redirect URI that was registered during initiation
       // This must match exactly what was used in the authorization request

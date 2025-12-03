@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.16](https://github.com/archestra-ai/archestra/compare/platform-v0.6.15...platform-v0.6.16) (2025-12-03)
+
+
+### Features
+
+* SSO role mapping ([#1378](https://github.com/archestra-ai/archestra/issues/1378)) ([58a6445](https://github.com/archestra-ai/archestra/commit/58a64450b531eadedd6e41576a0228ad812d64b9))
+* vault secrets manager k8s auth ([#1370](https://github.com/archestra-ai/archestra/issues/1370)) ([4efb47b](https://github.com/archestra-ai/archestra/commit/4efb47b3d8a23e99b1c89f8549e71b21afa58dcc))
+
+
+### Bug Fixes
+
+* store MCP client secret in secrets ([#1346](https://github.com/archestra-ai/archestra/issues/1346)) ([99494bb](https://github.com/archestra-ai/archestra/commit/99494bb23f4e50c46fef71d9186365cdebb4088f))
+
+
+### Documentation
+
+* remove default auth secret ([#1375](https://github.com/archestra-ai/archestra/issues/1375)) ([01d84f6](https://github.com/archestra-ai/archestra/commit/01d84f6a6de36812b43b3a089f2635898307cdec))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump next from 16.0.4 to 16.0.7 in /platform/frontend ([#1376](https://github.com/archestra-ai/archestra/issues/1376)) ([28718ec](https://github.com/archestra-ai/archestra/commit/28718ec4858d949ebf806c68f100d9dba842e6d6))
+* fix `logo.png` console warning ([#1373](https://github.com/archestra-ai/archestra/issues/1373)) ([08b8860](https://github.com/archestra-ai/archestra/commit/08b8860d44b4c886c31bc995130925adabaf2528))
+* make `lint:fix` a manual Tilt resource ([#1379](https://github.com/archestra-ai/archestra/issues/1379)) ([a3512da](https://github.com/archestra-ai/archestra/commit/a3512da5c2eb1b1c1db2efa94f6f1deb0df86e4d))
+* update .npmrc ([#1377](https://github.com/archestra-ai/archestra/issues/1377)) ([1e3e01a](https://github.com/archestra-ai/archestra/commit/1e3e01a453a669a80ccd2fd422bd2243278fba97))
+
 ## [0.6.15](https://github.com/archestra-ai/archestra/compare/platform-v0.6.14...platform-v0.6.15) (2025-12-03)
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.14](https://github.com/archestra-ai/archestra/compare/platform-v0.6.13...platform-v0.6.14) (2025-12-03)
+
+
+### Bug Fixes
+
+* fix mcp client connection key for local servers ([#1365](https://github.com/archestra-ai/archestra/issues/1365)) ([8c77839](https://github.com/archestra-ai/archestra/commit/8c778396f6d252eecad0b30710ccc831e1d4842e))
+* fix tool calling when custom server includes whitespace ([#1363](https://github.com/archestra-ai/archestra/issues/1363)) ([27fa58a](https://github.com/archestra-ai/archestra/commit/27fa58a3e504bf4fcf9f27244cdb8e5a155f6a43))
+
+
+### Miscellaneous Chores
+
+* e2e test - ignore status check for agent tools fixture ([#1369](https://github.com/archestra-ai/archestra/issues/1369)) ([ccf7140](https://github.com/archestra-ai/archestra/commit/ccf71409880484255d238026070d5ef9e7fd7d31))
+* team credentials ([#1362](https://github.com/archestra-ai/archestra/issues/1362)) ([89b3bf9](https://github.com/archestra-ai/archestra/commit/89b3bf90479a364343e174be5b38bcbec8af8c79))
+* upgrade playwright and fix flaky test ([#1368](https://github.com/archestra-ai/archestra/issues/1368)) ([ccceedb](https://github.com/archestra-ai/archestra/commit/ccceedbad580daa03d01fe4dc887fb0210c2670e))
+
 ## [0.6.13](https://github.com/archestra-ai/archestra/compare/platform-v0.6.12...platform-v0.6.13) (2025-12-02)
 
 

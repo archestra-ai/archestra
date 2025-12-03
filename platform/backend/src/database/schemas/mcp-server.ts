@@ -24,9 +24,6 @@ const mcpServerTable = pgTable("mcp_server", {
   ownerId: text("owner_id").references(() => usersTable.id, {
     onDelete: "set null",
   }),
-  authType: text("auth_type", {
-    enum: ["personal", "team"],
-  }),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),
   localInstallationStatus: text("local_installation_status")
     .notNull()

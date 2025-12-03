@@ -345,7 +345,6 @@ async function makeMcpServer(
       catalogId,
       secretId: null,
       ownerId: null,
-      authType: null,
       reinstallRequired: false,
       localInstallationStatus: "idle",
       localInstallationError: null,

@@ -478,7 +478,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 id: z.string(),
                 name: z.string(),
-                authType: z.enum(["personal", "team"]),
                 serverType: z.enum(["local", "remote"]),
                 catalogId: z.string().nullable(),
                 ownerId: z.string().nullable(),
@@ -508,17 +507,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const allServers = await McpServerModel.findAll(user.id, isAgentAdmin);
 
       // Filter by catalogId if provided, otherwise include all
-      const filteredServers = allServers.filter(
-        (server) =>
-          (catalogId ? server.catalogId === catalogId : true) &&
-          server.authType !== null,
-      );
+      const filteredServers = catalogId
+        ? allServers.filter((server) => server.catalogId === catalogId)
+        : allServers;
 
       // Map servers to the response format
       const mappedServers = filteredServers.map((server) => ({
         id: server.id,
         name: server.name,
-        authType: server.authType as "personal" | "team",
         serverType: server.serverType as "local" | "remote",
         catalogId: server.catalogId,
         ownerId: server.ownerId,
@@ -526,21 +522,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamDetails: server.teamDetails,
       }));
 
-      // Sort servers: current user's personal tokens first, then other personal tokens, then team tokens
+      // Sort servers: current user's credentials first, then others
       const currentUserId = user.id;
       const sortedServers = mappedServers.sort((a, b) => {
-        const aIsCurrentUser =
-          a.authType === "personal" && a.ownerId === currentUserId;
-        const bIsCurrentUser =
-          b.authType === "personal" && b.ownerId === currentUserId;
+        const aIsCurrentUser = a.ownerId === currentUserId;
+        const bIsCurrentUser = b.ownerId === currentUserId;
 
-        // Current user's tokens come first
+        // Current user's credentials come first
         if (aIsCurrentUser && !bIsCurrentUser) return -1;
         if (!aIsCurrentUser && bIsCurrentUser) return 1;
-
-        // Then other personal tokens before team tokens
-        if (a.authType === "personal" && b.authType === "team") return -1;
-        if (a.authType === "team" && b.authType === "personal") return 1;
 
         // Keep original order otherwise
         return 0;
@@ -741,47 +731,22 @@ async function validateCredentialSource(
     };
   }
 
-  if (mcpServer.authType === "team") {
-    // For team tokens: agent and MCP server must share at least one team
-    const shareTeam = await AgentTeamModel.agentAndMcpServerShareTeam(
-      agentId,
-      credentialSourceMcpServerId,
-    );
+  // Check if the owner has access to the agent (either directly or through teams)
+  const hasAccess = await AgentTeamModel.userHasAgentAccess(
+    owner.id,
+    agentId,
+    true,
+  );
 
-    if (!shareTeam) {
-      return {
-        status: 400,
-        error: {
-          message:
-            "The selected team token must belong to a team that this agent is assigned to",
-          type: "validation_error",
-        },
-      };
-    }
-  } else if (mcpServer.authType === "personal") {
-    /**
-     * For personal tokens: check if the user is an agent admin or if the owner belongs to a team that the agent
-     * is assigned to
-     *
-     * NOTE: this is granting too much access here.. we should refactor this,
-     * see the comment above the hasPermission call above for more context..
-     */
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
-      owner.id,
-      agentId,
-      true,
-    );
-
-    if (!hasAccess) {
-      return {
-        status: 400,
-        error: {
-          message:
-            "The selected personal token must belong to a user who is a member of a team that this agent is assigned to",
-          type: "validation_error",
-        },
-      };
-    }
+  if (!hasAccess) {
+    return {
+      status: 400,
+      error: {
+        message:
+          "The credential owner must be a member of a team that this profile is assigned to",
+        type: "validation_error",
+      },
+    };
   }
 
   return null;

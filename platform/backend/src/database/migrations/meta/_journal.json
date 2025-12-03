@@ -526,6 +526,13 @@
       "when": 1764680281179,
       "tag": "0074_left_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1764741373326,
+      "tag": "0075_natural_enchantress",
+      "breakpoints": true
     }
   ]
 }

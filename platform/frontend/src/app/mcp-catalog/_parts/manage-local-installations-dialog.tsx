@@ -54,12 +54,9 @@ export function ManageLocalInstallationsDialog({
   const userInstallations = useMemo(() => {
     if (!server?.catalogId || !allServers) return server?.userDetails || [];
 
-    // Find all local personal servers with the same catalogId
-    const localPersonalServers = allServers.filter(
-      (s) =>
-        s.catalogId === server.catalogId &&
-        s.serverType === "local" &&
-        s.authType === "personal",
+    // Find all local servers with the same catalogId
+    const localServers = allServers.filter(
+      (s) => s.catalogId === server.catalogId && s.serverType === "local",
     );
 
     // Aggregate user details from all personal servers
@@ -70,7 +67,7 @@ export function ManageLocalInstallationsDialog({
       serverId: string;
     }> = [];
 
-    for (const srv of localPersonalServers) {
+    for (const srv of localServers) {
       if (srv.userDetails) {
         for (const userDetail of srv.userDetails) {
           // Only add if not already present

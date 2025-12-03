@@ -30,14 +30,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMcpServers,
         description: "Get all installed MCP servers",
-        querystring: z.object({
-          authType: z.enum(["personal", "team"]).optional(),
-        }),
         tags: ["MCP Server"],
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
-    async ({ user, headers, query: { authType } }, reply) => {
+    async ({ user, headers }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServer: ["admin"] },
         headers,
@@ -47,12 +44,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isMcpServerAdmin,
       );
 
-      // Filter by authType if provided
-      const filteredServers = authType
-        ? allServers.filter((server) => server.authType === authType)
-        : allServers;
-
-      return reply.send(filteredServers);
+      return reply.send(allServers);
     },
   );
 
@@ -97,7 +89,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ body, user, headers }, reply) => {
+    async ({ body, user }, reply) => {
       let {
         agentIds,
         secretId,
@@ -113,28 +105,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serverType: "local",
       };
 
-      // Set owner_id to current user
+      // Set owner_id and userId to current user
       serverData.ownerId = user.id;
-
-      // Determine auth type and set userId for personal auth
-      if (!serverData.teams || serverData.teams.length === 0) {
-        serverData.authType = "personal";
-        serverData.userId = user.id;
-      } else {
-        const { success: isMcpServerAdmin } = await hasPermission(
-          { mcpServer: ["admin"] },
-          headers,
-        );
-
-        // Team installation requires MCP server admin role
-        if (!isMcpServerAdmin) {
-          throw new ApiError(
-            403,
-            "Only MCP server admins can install MCP servers for teams",
-          );
-        }
-        serverData.authType = "team";
-      }
+      serverData.userId = user.id;
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
@@ -736,20 +709,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Find all servers with this catalogId
       const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
 
-      // Find the personal-auth server owned by this user
-      const personalServer = serversForCatalog.find(
-        (s) => s.authType === "personal" && s.ownerId === userId,
-      );
+      // Find the server owned by this user
+      const userServer = serversForCatalog.find((s) => s.ownerId === userId);
 
-      if (!personalServer) {
+      if (!userServer) {
         throw new ApiError(
           404,
-          "Personal MCP server installation not found for this user",
+          "MCP server installation not found for this user",
         );
       }
 
-      // Delete the personal-auth server (which will cascade delete the secret and mcp_server_user entries)
-      await McpServerModel.delete(personalServer.id);
+      // Delete the server (which will cascade delete the secret and mcp_server_user entries)
+      await McpServerModel.delete(userServer.id);
 
       return reply.send({ success: true });
     },
@@ -761,14 +732,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GrantTeamMcpServerAccess,
         description:
-          "Grant team(s) access to an MCP server using current user's team-auth token (admin only)",
+          "Grant team(s) access to an MCP server using specified user's credentials",
         tags: ["MCP Server"],
         params: z.object({
           catalogId: UuidIdSchema,
         }),
         body: z.object({
           teamIds: z.array(z.string()).min(1),
-          userId: z.string().optional(), // Optional: specify which admin's token to use
+          userId: z.string().optional(), // Optional: specify which user's credentials to use
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
@@ -783,20 +754,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Find all servers with this catalogId
       const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
 
-      // Find the team-auth server owned by the specified user
-      const teamServer = serversForCatalog.find(
-        (s) => s.authType === "team" && s.ownerId === ownerIdToUse,
+      // Find the server owned by the specified user
+      const targetServer = serversForCatalog.find(
+        (s) => s.ownerId === ownerIdToUse,
       );
 
-      if (!teamServer) {
+      if (!targetServer) {
         const errorMsg = targetUserId
-          ? `Team authentication not found for the specified admin.`
-          : `Team authentication not found. You must install with team authentication first.`;
+          ? `Credentials not found for the specified user.`
+          : `You must connect first before granting team access.`;
         throw new ApiError(404, errorMsg);
       }
 
       // Assign teams to the MCP server
-      await McpServerTeamModel.assignTeamsToMcpServer(teamServer.id, teamIds);
+      await McpServerTeamModel.assignTeamsToMcpServer(targetServer.id, teamIds);
 
       return reply.send({ success: true });
     },
@@ -881,7 +852,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RevokeAllTeamsMcpServerAccess,
         description:
-          "Revoke all team access to an MCP server by deleting the team-auth installation",
+          "Revoke all team access from current user's MCP server credentials",
         tags: ["MCP Server"],
         params: z.object({
           catalogId: UuidIdSchema,
@@ -893,17 +864,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Find all servers with this catalogId
       const serversForCatalog = await McpServerModel.findByCatalogId(catalogId);
 
-      // Find the team-auth server owned by current user
-      const teamServer = serversForCatalog.find(
-        (s) => s.authType === "team" && s.ownerId === user.id,
-      );
+      // Find the server owned by current user
+      const userServer = serversForCatalog.find((s) => s.ownerId === user.id);
 
-      if (!teamServer) {
-        throw new ApiError(404, "Team MCP server installation not found");
+      if (!userServer) {
+        throw new ApiError(404, "MCP server installation not found");
       }
 
-      // Delete the team-auth server (which will cascade delete the secret and all mcp_server_team entries)
-      await McpServerModel.delete(teamServer.id);
+      // Remove all team assignments from this server
+      await McpServerTeamModel.syncMcpServerTeams(userServer.id, []);
 
       return reply.send({ success: true });
     },

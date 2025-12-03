@@ -4,7 +4,6 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 describe("InternalMcpCatalogModel", () => {
   describe("findAll with expandSecrets", () => {
     test("expands OAuth client_secret and localConfig environment secrets", async ({
-      makeInternalMcpCatalog,
       makeSecret,
     }) => {
       // Create secrets
@@ -17,16 +16,20 @@ describe("InternalMcpCatalogModel", () => {
         secret: { API_KEY: "test-api-key-456", DB_PASSWORD: "test-db-pass-789" },
       });
 
-      // Create catalog item with secret references
-      const catalog = await makeInternalMcpCatalog({
+      // Create catalog item with secret references using the model directly
+      const catalog = await InternalMcpCatalogModel.create({
         name: "test-catalog-with-secrets",
         serverType: "remote",
         clientSecretId: oauthSecret.id,
         localConfigSecretId: envSecret.id,
         oauthConfig: {
-          authorization_url: "https://example.com/oauth/authorize",
-          token_url: "https://example.com/oauth/token",
+          name: "Test OAuth",
+          server_url: "https://example.com",
           client_id: "test-client-id",
+          redirect_uris: ["http://localhost:3000/oauth/callback"],
+          scopes: ["read", "write"],
+          default_scopes: ["read"],
+          supports_resource_metadata: false,
         },
         localConfig: {
           command: "npx",

@@ -10,41 +10,58 @@ import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
   /**
-   * Enrich catalog item with secrets from secret table.
-   * This allows the UI to display secret values in edit forms.
-   * Enriches both OAuth client_secret and local config secret env vars.
+   * Expands secrets and adds them to the catalog items, mutating the items.
    */
-  private static async enrichWithSecrets(
-    catalogItem: InternalMcpCatalog,
+  private static async expandSecrets(
+    catalogItems: InternalMcpCatalog[],
   ): Promise<void> {
-    // Enrich OAuth client_secret
-    if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
-      const secret = await secretManager.getSecret(catalogItem.clientSecretId);
-      if (secret?.secret.client_secret) {
-        catalogItem.oauthConfig.client_secret = String(
-          secret.secret.client_secret,
-        );
-      }
+    // Collect all unique secret IDs
+    const secretIds = new Set<string>();
+    for (const item of catalogItems) {
+      if (item.clientSecretId) secretIds.add(item.clientSecretId);
+      if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
     }
 
-    // Enrich local config secret env vars (both prompted and non-prompted)
-    // Frontend will mask these with password inputs
-    if (
-      catalogItem.localConfigSecretId &&
-      catalogItem.localConfig?.environment
-    ) {
-      const secret = await secretManager.getSecret(
-        catalogItem.localConfigSecretId,
-      );
-      if (secret) {
-        for (const envVar of catalogItem.localConfig.environment) {
-          if (envVar.type === "secret" && secret.secret[envVar.key]) {
-            envVar.value = String(secret.secret[envVar.key]);
+    if (secretIds.size === 0) return;
+
+    // Fetch all secrets in one query
+    const secrets = await db
+      .select()
+      .from(schema.secretTable)
+      .where(inArray(schema.secretTable.id, Array.from(secretIds)));
+
+    // Create a map for O(1) lookups
+    const secretMap = new Map(secrets.map((s) => [s.id, s]));
+
+    // Enrich each catalog item
+    for (const catalogItem of catalogItems) {
+      // Enrich OAuth client_secret
+      if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value = secret?.secret.client_secret; 
+        if (value) {
+          catalogItem.oauthConfig.client_secret = String(value);
+        }
+      }
+
+      // Enrich local config secret env vars
+      if (
+        catalogItem.localConfigSecretId &&
+        catalogItem.localConfig?.environment
+      ) {
+        const secret = secretMap.get(catalogItem.localConfigSecretId);
+        if (secret) {
+          for (const envVar of catalogItem.localConfig.environment) {
+            const value = secret.secret[envVar.key];
+            if (envVar.type === "secret" && value) {
+              envVar.value = String(value);
+            }
           }
         }
       }
     }
   }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -62,12 +79,8 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
 
-    // Enrich all catalog items with secret values for edit forms
-    await Promise.all(
-      catalogItems.map((item) =>
-        InternalMcpCatalogModel.enrichWithSecrets(item),
-      ),
-    );
+    // Batch enrich all catalog items to avoid N+1 queries
+    await this.expandSecrets(catalogItems);
 
     return catalogItems;
   }
@@ -83,12 +96,8 @@ class InternalMcpCatalogModel {
         ),
       );
 
-    // Enrich all catalog items with secret values for edit forms
-    await Promise.all(
-      catalogItems.map((item) =>
-        InternalMcpCatalogModel.enrichWithSecrets(item),
-      ),
-    );
+    // Batch enrich all catalog items to avoid N+1 queries
+    await this.expandSecrets(catalogItems);
 
     return catalogItems;
   }
@@ -104,7 +113,7 @@ class InternalMcpCatalogModel {
     }
 
     // Enrich with secret values for edit forms (OAuth client_secret and env vars)
-    await InternalMcpCatalogModel.enrichWithSecrets(catalogItem);
+    await InternalMcpCatalogModel.expandSecrets([catalogItem]);
 
     return catalogItem;
   }

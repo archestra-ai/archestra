@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.15](https://github.com/archestra-ai/archestra/compare/platform-v0.6.14...platform-v0.6.15) (2025-12-03)
+
+
+### Bug Fixes
+
+* address issue w/ configuring SAML SSO ([#1361](https://github.com/archestra-ai/archestra/issues/1361)) ([88d3eb6](https://github.com/archestra-ai/archestra/commit/88d3eb6685e68ef913a84565bc39726fe0526875))
+
 ## [0.6.14](https://github.com/archestra-ai/archestra/compare/platform-v0.6.13...platform-v0.6.14) (2025-12-03)
 
 

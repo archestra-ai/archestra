@@ -835,13 +835,13 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        ARCHESTRA_AUTH_SECRET: "my-custom-secret-value"
+        ARCHESTRA_AUTH_SECRET: "auth-secret-helm-tests-32-chars!"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_AUTH_SECRET
-            value: "my-custom-secret-value"
+            value: "auth-secret-helm-tests-32-chars!"
 
   # Service type tests
   - it: should default to ClusterIP service type

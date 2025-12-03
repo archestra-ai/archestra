@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
         source: "/api/archestra-catalog/:path*",
         destination: `${MCP_CATALOG_API_BASE_URL}/:path*`,
       },
-      // Note: /api/auth/* is handled by the API route at app/api/auth/[...path]/route.ts
+      // /api/auth/* is handled by the API route at app/api/auth/[...path]/route.ts
       // to properly forward the Origin header for SAML SSO callbacks.
       // API routes take precedence over rewrites in Next.js.
       {

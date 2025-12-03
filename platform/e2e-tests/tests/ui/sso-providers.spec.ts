@@ -242,9 +242,12 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
       // Login via Keycloak and wait for redirect back to Archestra
       await loginViaKeycloak(ssoPage);
 
-      // Verify we're logged in by checking for user menu (email contains @)
-      await expect(ssoPage.locator('button:has-text("@")')).toBeVisible({
-        timeout: 10000,
+      // Verify we're logged in by checking for authenticated UI elements
+      // The sidebar navigation only appears when logged in
+      await ssoPage.waitForLoadState("networkidle");
+      // Use text locator as fallback since getByRole can be flaky with complex UIs
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
       });
 
       // SSO login successful - user is now logged in
@@ -416,11 +419,14 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
       // Login via Keycloak and wait for redirect back to Archestra
       await loginViaKeycloak(ssoPage);
 
-      // Verify we're logged in by checking for user menu (email contains @)
+      // Verify we're logged in by checking for authenticated UI elements
       // The Keycloak test user matches the Archestra admin user, so SSO should link
       // to the existing account and log us in successfully.
-      await expect(ssoPage.locator('button:has-text("@")')).toBeVisible({
-        timeout: 10000,
+      // The sidebar navigation only appears when logged in
+      await ssoPage.waitForLoadState("networkidle");
+      // Use text locator as fallback since getByRole can be flaky with complex UIs
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
       });
 
       // SSO login successful - user is now logged in

@@ -36,10 +36,21 @@ async function handler(
     }
   });
 
-  // Explicitly set the Origin header if present in the original request
-  // This is critical for SAML callbacks where Origin: null must be forwarded
+  // Handle the Origin header for SAML callbacks
+  // SAML IdPs send POST requests with Origin: null (browser security for cross-origin form POSTs)
+  // Better Auth has a hardcoded check that rejects Origin: null BEFORE checking trusted origins
+  // So we replace "null" with the frontend origin, which is safe because:
+  // 1. This runs on the server (Next.js SSR), not in the browser
+  // 2. The SAML assertion is still cryptographically verified by Better Auth
+  // 3. We're just providing a valid origin for the internal server-to-server request
   const origin = request.headers.get("origin");
-  if (origin) {
+  const frontendOrigin =
+    process.env.ARCHESTRA_FRONTEND_URL || "http://localhost:3000";
+
+  if (origin === "null" || !origin) {
+    // Replace null/missing origin with the frontend origin
+    headers.set("Origin", frontendOrigin);
+  } else {
     headers.set("Origin", origin);
   }
 

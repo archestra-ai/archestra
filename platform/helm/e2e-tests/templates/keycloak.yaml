@@ -61,10 +61,14 @@ spec:
               value: "8080"
             - name: KC_HEALTH_ENABLED
               value: "true"
-            # Allow Keycloak to be accessed from any hostname
+            # Keycloak 26+ v2 hostname configuration
+            # Forces Keycloak to always return consistent issuer in tokens
+            # regardless of how it's accessed (internal K8s service vs NodePort)
+            # In v2, KC_HOSTNAME can be a full URL: scheme://hostname:port
+            # See: https://www.keycloak.org/server/hostname
+            - name: KC_HOSTNAME
+              value: "http://localhost:30081"
             - name: KC_HOSTNAME_STRICT
-              value: "false"
-            - name: KC_HOSTNAME_STRICT_HTTPS
               value: "false"
           ports:
             - containerPort: 8080

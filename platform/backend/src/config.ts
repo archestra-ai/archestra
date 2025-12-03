@@ -155,7 +155,7 @@ export const parseSsoTrustedOrigins = (): string[] => {
     const validOrigins = parsed.filter((item): item is string => {
       if (typeof item !== "string") {
         logger.warn(
-          `ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS contains non-string value: ${JSON.stringify(item)}, skipping`,
+          `ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS contains non-string value of type '${typeof item}', skipping.`,
         );
         return false;
       }

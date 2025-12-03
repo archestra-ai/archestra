@@ -1,6 +1,5 @@
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secretsmanager";
 import type {
   InsertInternalMcpCatalog,
   InternalMcpCatalog,
@@ -38,7 +37,7 @@ class InternalMcpCatalogModel {
       // Enrich OAuth client_secret
       if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
         const secret = secretMap.get(catalogItem.clientSecretId);
-        const value = secret?.secret.client_secret; 
+        const value = secret?.secret.client_secret;
         if (value) {
           catalogItem.oauthConfig.client_secret = String(value);
         }
@@ -80,7 +79,7 @@ class InternalMcpCatalogModel {
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
 
     // Batch enrich all catalog items to avoid N+1 queries
-    await this.expandSecrets(catalogItems);
+    await InternalMcpCatalogModel.expandSecrets(catalogItems);
 
     return catalogItems;
   }
@@ -97,7 +96,7 @@ class InternalMcpCatalogModel {
       );
 
     // Batch enrich all catalog items to avoid N+1 queries
-    await this.expandSecrets(catalogItems);
+    await InternalMcpCatalogModel.expandSecrets(catalogItems);
 
     return catalogItems;
   }

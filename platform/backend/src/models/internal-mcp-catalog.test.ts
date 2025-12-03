@@ -13,7 +13,10 @@ describe("InternalMcpCatalogModel", () => {
       });
       const envSecret = await makeSecret({
         name: "env-secret",
-        secret: { API_KEY: "test-api-key-456", DB_PASSWORD: "test-db-pass-789" },
+        secret: {
+          API_KEY: "test-api-key-456",
+          DB_PASSWORD: "test-db-pass-789",
+        },
       });
 
       // Create catalog item with secret references using the model directly

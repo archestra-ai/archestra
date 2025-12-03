@@ -533,6 +533,13 @@
       "when": 1764741373326,
       "tag": "0075_natural_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1764763021874,
+      "tag": "0076_lowly_mantis",
+      "breakpoints": true
     }
   ]
 }

@@ -69,12 +69,10 @@ local_resource(
   cmd='pnpm type-check && pnpm lint:fix',
   labels=['dev'],
   resource_deps=['pnpm-install'],
-  deps=[
-    "../frontend/src",
-    "../backend/src",
-    "../experiments/src",
-    "../biome.json",
-  ]
+  # Disabled auto-watching to prevent spawning processes on every file change
+  # Trigger manually with: tilt trigger lint:fix
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )
 
 local_resource(

@@ -1,6 +1,6 @@
+import type { SSOOptions } from "@better-auth/sso";
 import { sso } from "@better-auth/sso";
 import {
-  ADMIN_ROLE_NAME,
   ac,
   adminRole,
   allAvailableActions,
@@ -17,9 +17,117 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { InvitationModel, MemberModel, SessionModel } from "@/models";
+import {
+  InvitationModel,
+  MemberModel,
+  SessionModel,
+  SsoProviderModel,
+} from "@/models";
+import { evaluateRoleMapping } from "./role-mapping";
 
 const APP_NAME = "Archestra";
+
+/**
+ * Type for the getRole callback data from better-auth's SSO plugin
+ */
+export type SsoGetRoleData = Parameters<
+  NonNullable<NonNullable<SSOOptions["organizationProvisioning"]>["getRole"]>
+>[0];
+
+/**
+ * Dynamic role assignment based on SSO provider role mapping configuration.
+ * Uses JMESPath expressions to evaluate user attributes from the IdP.
+ *
+ * Supports:
+ * - JMESPath-based role mapping rules
+ * - Strict mode: Deny login if no rules match
+ * - Skip role sync: Only set role on first login
+ *
+ * @param data - SSO user data from the identity provider
+ * @returns The resolved role ("member" | "admin" | custom role)
+ * @throws APIError with FORBIDDEN if strict mode is enabled and no rules match
+ */
+export async function resolveSsoRole(data: SsoGetRoleData): Promise<string> {
+  const { user, token, provider, userInfo } = data;
+
+  try {
+    // Fetch the SSO provider configuration to get role mapping rules
+    const ssoProvider = await SsoProviderModel.findByProviderId(
+      provider.providerId,
+    );
+
+    if (ssoProvider?.roleMapping) {
+      const roleMapping = ssoProvider.roleMapping;
+
+      // Handle skipRoleSync: If enabled and user already has a membership, keep their current role
+      if (roleMapping.skipRoleSync && user?.id) {
+        const existingMember = await MemberModel.getByUserId(user.id);
+        if (existingMember) {
+          logger.info(
+            {
+              providerId: provider.providerId,
+              userId: user.id,
+              currentRole: existingMember.role,
+            },
+            "Skip role sync enabled - keeping existing role",
+          );
+          return existingMember.role;
+        }
+      }
+
+      // Evaluate role mapping rules
+      const result = evaluateRoleMapping(
+        roleMapping,
+        {
+          userInfo: (userInfo as Record<string, unknown>) || {},
+          token: (token as Record<string, unknown>) || {},
+          provider: {
+            id: provider.providerId,
+            providerId: provider.providerId,
+          },
+        },
+        MEMBER_ROLE_NAME,
+      );
+
+      // Handle strict mode: Deny login if no rules matched
+      if (result.error) {
+        logger.warn(
+          {
+            providerId: provider.providerId,
+            email: user?.email,
+          },
+          "SSO login denied due to strict mode",
+        );
+        throw new APIError("FORBIDDEN", {
+          message: result.error,
+        });
+      }
+
+      logger.info(
+        {
+          providerId: provider.providerId,
+          assignedRole: result.role,
+          matched: result.matched,
+        },
+        "SSO role mapping evaluated",
+      );
+
+      return result.role as string;
+    }
+  } catch (error) {
+    // Re-throw APIError (for strict mode)
+    if (error instanceof APIError) {
+      throw error;
+    }
+    logger.error(
+      { err: error, providerId: provider?.providerId },
+      "Error evaluating SSO role mapping",
+    );
+  }
+
+  // Fallback to default role when no role mapping is configured
+  return MEMBER_ROLE_NAME;
+}
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
@@ -117,21 +225,10 @@ export const auth: any = betterAuth({
       organizationProvisioning: {
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
-        // TODO: allow configuration of these provisioning options dynamically..
-        getRole: async (_data) => {
-          // Custom role assignment logic based on user attributes
-          // const { user, token, provider, userInfo } = data;
-
-          // Look for admin indicators in user attributes
-          // const isAdmin =
-          //   userInfo.role === "admin" ||
-          //   userInfo.groups?.includes("admin") ||
-          //   userInfo.department === "IT" ||
-          //   userInfo.title?.toLowerCase().includes("admin") ||
-          //   userInfo.title?.toLowerCase().includes("manager");
-          const isAdmin = false;
-
-          return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
+        getRole: async (data) => {
+          const role = await resolveSsoRole(data);
+          // Cast to the expected union type (better-auth expects "member" | "admin")
+          return role as "member" | "admin";
         },
       },
       defaultOverrideUserInfo: true,

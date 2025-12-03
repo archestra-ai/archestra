@@ -307,6 +307,145 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
   });
 });
 
+test.describe("SSO Role Mapping E2E", () => {
+  test("should map admin group to admin role via OIDC", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    // Role mapping involves SSO flow, so triple the timeout
+    test.slow();
+
+    // Use a unique provider name to avoid conflicts
+    const providerName = `RoleMappingOIDC${Date.now()}`;
+
+    // STEP 1: Navigate to SSO providers page and create OIDC provider with role mapping
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    // Delete any existing Generic OIDC provider first
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // Fill in Keycloak OIDC configuration
+    await page.getByLabel("Provider ID").fill(providerName);
+    await page
+      .getByLabel("Issuer")
+      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
+    await page.getByLabel("Domain").fill(SSO_DOMAIN);
+    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
+    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
+    await page
+      .getByLabel("Discovery Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+      );
+    await page
+      .getByLabel("Authorization Endpoint")
+      .fill(
+        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+      );
+    await page
+      .getByLabel("Token Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+      );
+    await page
+      .getByLabel("JWKS Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+      );
+
+    // STEP 2: Configure Role Mapping
+    // Expand the Role Mapping accordion
+    await page.getByText("Role Mapping (Optional)").click();
+
+    // Wait for accordion to expand
+    await expect(page.getByLabel("Data Source")).toBeVisible();
+
+    // Add a rule to map archestra-admins group to admin role
+    await page.getByRole("button", { name: "Add Rule" }).click();
+
+    // Fill in the JMESPath expression
+    // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
+    await page
+      .getByLabel("JMESPath Expression")
+      .fill("contains(groups || `[]`, 'archestra-admins')");
+
+    // Select admin role
+    await page.locator('[data-testid="role-mapping-rules"]').isVisible().catch(() => {});
+    // The role selector is the second Select in the rule form
+    const roleSelect = page.locator('button[role="combobox"]').filter({ hasText: /member|admin/i }).last();
+    await roleSelect.click();
+    await page.getByRole("option", { name: "Admin" }).click();
+
+    // Set default role to member
+    // Find the default role select (has "Default Role" label before it)
+    const defaultRoleSelect = page.getByLabel("Default Role").locator('..').locator('button[role="combobox"]');
+    if (await defaultRoleSelect.isVisible()) {
+      await defaultRoleSelect.click();
+      await page.getByRole("option", { name: "Member" }).click();
+    }
+
+    // Submit the form
+    await page.getByRole("button", { name: "Create Provider" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 3: Test SSO login with admin user (in archestra-admins group)
+    // The admin user is configured in Keycloak with the archestra-admins group
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Click SSO button and login via Keycloak
+      await ssoPage
+        .getByRole("button", { name: new RegExp(providerName, "i") })
+        .click();
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      await loginViaKeycloak(ssoPage);
+
+      // Wait for redirect back to Archestra
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // Verify the user has admin role by checking they can access admin-only pages
+      // The Roles settings page is only accessible to admins
+      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // If user has admin role, they should see the Roles page
+      // If not, they would be redirected or see an error
+      await expect(
+        ssoPage.getByText("Roles", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Success! The admin user was mapped to admin role via JMESPath
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 4: Cleanup - delete the provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+  });
+});
+
 test.describe("SSO SAML E2E Flow with Keycloak", () => {
   test("should configure SAML provider, login via SSO, update, and delete", async ({
     page,

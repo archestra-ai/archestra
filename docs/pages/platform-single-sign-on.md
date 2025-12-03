@@ -242,15 +242,149 @@ Optional configuration:
 10. Paste the IdP metadata XML into the **IdP Metadata XML** field
 11. Click **Create Provider**
 
+## Role Mapping
+
+Archestra supports automatic role assignment based on user attributes from your identity provider using [JMESPath](https://jmespath.org/examples.html) expressions. This allows you to map SSO groups, roles, or other claims to Archestra roles (e.g., Admin, Member, or any custom role you've defined).
+
+### How Role Mapping Works
+
+1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider (via OIDC userinfo/token claims or SAML assertions)
+2. These attributes are evaluated against your configured mapping rules in order
+3. The first rule that matches determines the user's Archestra role
+4. If no rules match, the user is assigned the configured default role (or "Member" if not specified)
+
+### Configuring Role Mapping
+
+When creating or editing an SSO provider, expand the **Role Mapping (Optional)** section:
+
+1. **Data Source**: Choose which SSO data to evaluate:
+
+   - **Combined (Token + UserInfo)**: Merges ID token claims and userinfo (default, recommended)
+   - **UserInfo Only**: Only use OIDC userinfo endpoint data
+   - **ID Token Only**: Only use ID token claims
+
+2. **Mapping Rules**: Add one or more rules. Each rule has:
+
+   - **JMESPath Expression**: A [JMESPath](https://jmespath.org/) expression that evaluates to a truthy value when the rule should match
+   - **Archestra Role**: The role to assign when the expression matches
+
+3. **Default Role**: The role assigned when no rules match (defaults to "member")
+
+4. **Strict Mode**: When enabled, denies user login if no mapping rules match. This is useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
+
+5. **Skip Role Sync**: When enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
+
+### JMESPath Expression Examples
+
+JMESPath is a query language for JSON. Here are common patterns:
+
+| Expression                                                          | Description                                 |
+| ------------------------------------------------------------------- | ------------------------------------------- |
+| `contains(groups \|\| \`[]\`, 'admins')`                            | Match if "admins" is in the groups array    |
+| `role == 'administrator'`                                           | Match if role claim equals "administrator"  |
+| `roles[?@ == 'platform-admin'] \| [0]`                              | Match if "platform-admin" is in roles array |
+| `department == 'IT' && title != null`                               | Match IT department users with a title set  |
+| `contains(groups \|\| \`[]\`, 'team-leads') \|\| role == 'manager'` | Match team leads OR managers                |
+
+> **Tip**: Use `|| \`[]\`` when checking arrays to handle null/missing values gracefully.
+
+### Provider-Specific Configuration
+
+#### Okta
+
+Okta can send groups in the ID token. Configure a Groups claim:
+
+1. In Okta Admin Console, go to **Security > API > Authorization Servers**
+2. Select your authorization server and go to **Claims**
+3. Add a new claim:
+   - **Name**: `groups`
+   - **Include in token type**: ID Token (Always)
+   - **Value type**: Groups
+   - **Filter**: Configure to match your groups
+
+Example mapping rule:
+
+```
+contains(groups || `[]`, 'Archestra-Admins')
+```
+
+#### Microsoft Entra ID (Azure AD)
+
+Entra ID can include group memberships. Configure group claims:
+
+1. In Azure Portal, go to your App Registration
+2. Navigate to **Token configuration**
+3. Click **Add groups claim**
+4. Select the group types to include
+
+Example mapping rule (using group object IDs):
+
+```
+contains(groups || `[]`, 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
+```
+
+Or configure group names in Entra ID's optional claims.
+
+#### Keycloak
+
+Keycloak can send groups via a protocol mapper:
+
+1. In Keycloak Admin Console, go to your Client
+2. Navigate to **Client scopes** > your client's dedicated scope
+3. Add a mapper:
+   - **Mapper type**: Group Membership
+   - **Token Claim Name**: `groups`
+   - **Full group path**: Off (recommended for simpler matching)
+   - **Add to ID token**: Yes
+   - **Add to userinfo**: Yes
+
+Example mapping rule:
+
+```
+contains(groups || `[]`, 'archestra-admins')
+```
+
+#### Generic SAML
+
+For SAML providers, ensure your IdP sends group/role attributes in the SAML assertion. Configure attribute mappers to include these in the assertion, then reference them in your JMESPath expressions.
+
+The attribute names depend on your IdP's configuration. Common examples:
+
+```
+contains(groups || `[]`, 'admins')
+contains(memberOf || `[]`, 'CN=Admins,OU=Groups,DC=example,DC=com')
+```
+
+### Troubleshooting Role Mapping
+
+**Role not being assigned correctly:**
+
+1. Check your IdP's configuration to ensure the expected claims/attributes are being sent
+2. Use your IdP's token introspection or SAML assertion viewer to verify the actual data
+3. Ensure your JMESPath expression syntax is correct (test at [jmespath.org](https://jmespath.org/))
+4. Rules are evaluated in order - ensure your most specific rules come first
+
+**Missing groups claim:**
+
+- For OIDC: Verify your IdP is configured to include groups in the token/userinfo
+- For SAML: Check that group attributes are included in the assertion and properly mapped
+
+**Expression always returns false:**
+
+- Check for typos in claim/attribute names (they are case-sensitive)
+- Use the "combined" data source to ensure you're checking both token and userinfo
+- Handle null/missing arrays with `|| \`[]\`` fallback
+
 ## User Provisioning
 
 When a user authenticates via SSO for the first time:
 
 1. A new user account is created with their email and name from the identity provider
-2. The user is added to the organization with the **member** role
-3. A session is created and the user is logged in
+2. The user's role is determined by role mapping rules (if configured) or defaults to **Member**
+3. The user is added to the organization with the determined role
+4. A session is created and the user is logged in
 
-Subsequent logins automatically link to the existing account based on email address.
+Subsequent logins automatically link to the existing account based on email address. Role mapping rules are evaluated on each login, so role changes in the IdP are reflected on next sign-in.
 
 ## Account Linking
 

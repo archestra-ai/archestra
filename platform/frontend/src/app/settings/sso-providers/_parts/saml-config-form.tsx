@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { RoleMappingForm } from "./role-mapping-form";
 
 interface SamlConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -365,6 +366,8 @@ export function SamlConfigForm({ form, hideProviderId }: SamlConfigFormProps) {
           />
         </div>
       </div>
+
+      <RoleMappingForm form={form} />
     </div>
   );
 }

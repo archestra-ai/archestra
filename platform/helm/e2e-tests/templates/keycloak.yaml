@@ -122,6 +122,16 @@ data:
       "resetPasswordAllowed": true,
       "editUsernameAllowed": false,
       "bruteForceProtected": false,
+      "groups": [
+        {{- $groups := .Values.keycloak.groups | default list }}
+        {{- range $index, $group := $groups }}
+        {{- if $index }},{{ end }}
+        {
+          "name": {{ $group.name | quote }},
+          "path": {{ printf "/%s" $group.name | quote }}
+        }
+        {{- end }}
+      ],
       "clients": [
         {
           "clientId": "archestra-oidc",
@@ -168,6 +178,19 @@ data:
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.name": "name",
+                "userinfo.token.claim": "true"
+              }
+            },
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "groups",
                 "userinfo.token.claim": "true"
               }
             }
@@ -241,26 +264,50 @@ data:
                 "friendly.name": "name",
                 "attribute.name": "name"
               }
+            },
+            {
+              "name": "groups",
+              "protocol": "saml",
+              "protocolMapper": "saml-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "single": "false",
+                "full.path": "false",
+                "attribute.nameformat": "Basic",
+                "attribute.name": "groups"
+              }
             }
           ]
         }
       ],
       "users": [
+        {{- $users := .Values.keycloak.testUsers | default list }}
+        {{- range $index, $user := $users }}
+        {{- if $index }},{{ end }}
         {
-          "username": {{ .Values.keycloak.testUser.username | quote }},
-          "email": {{ .Values.keycloak.testUser.email | quote }},
-          "firstName": {{ .Values.keycloak.testUser.firstName | quote }},
-          "lastName": {{ .Values.keycloak.testUser.lastName | quote }},
+          "username": {{ $user.username | quote }},
+          "email": {{ $user.email | quote }},
+          "firstName": {{ $user.firstName | quote }},
+          "lastName": {{ $user.lastName | quote }},
           "enabled": true,
           "emailVerified": true,
           "credentials": [
             {
               "type": "password",
-              "value": {{ .Values.keycloak.testUser.password | quote }},
+              "value": {{ $user.password | quote }},
               "temporary": false
             }
           ]
+          {{- if $user.groups }},
+          "groups": [
+            {{- range $gindex, $group := $user.groups }}
+            {{- if $gindex }},{{ end }}
+            {{ $group | quote }}
+            {{- end }}
+          ]
+          {{- end }}
         }
+        {{- end }}
       ]
     }
 {{- end }}

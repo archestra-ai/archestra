@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { RoleMappingForm } from "./role-mapping-form";
 
 interface OidcConfigFormProps {
   form: UseFormReturn<SsoProviderFormValues>;
@@ -444,6 +445,8 @@ export function OidcConfigForm({
           />
         </div>
       </div>
+
+      <RoleMappingForm form={form} />
     </div>
   );
 }

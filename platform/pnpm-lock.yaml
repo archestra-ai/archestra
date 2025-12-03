@@ -146,6 +146,9 @@ importers:
       handlebars:
         specifier: ^4.7.8
         version: 4.7.8
+      jmespath:
+        specifier: ^0.16.0
+        version: 0.16.0
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
@@ -183,6 +186,9 @@ importers:
       '@sentry/cli':
         specifier: ^2.47.0
         version: 2.58.2
+      '@types/jmespath':
+        specifier: ^0.15.2
+        version: 0.15.2
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
@@ -3488,6 +3494,9 @@ packages:
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
+  '@types/jmespath@0.15.2':
+    resolution: {integrity: sha512-pegh49FtNsC389Flyo9y8AfkVIZn9MMPE9yJrO9svhq6Fks2MwymULWjZqySuxmctd3ZH4/n7Mr98D+1Qo5vGA==}
+
   '@types/js-yaml@4.0.9':
     resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
 
@@ -5242,6 +5251,10 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  jmespath@0.16.0:
+    resolution: {integrity: sha512-9FzQjJ7MATs1tSpnco1K6ayiYE3figslrXA72G2HQ/n76RzvYlofyi5QM+iX4YRs/pu3yzxlVQSST23+dMDknw==}
+    engines: {node: '>= 0.6.0'}
 
   jose@6.1.2:
     resolution: {integrity: sha512-MpcPtHLE5EmztuFIqB0vzHAWJPpmN1E6L4oo+kze56LIs3MyXIj9ZHMDxqOvkP38gBR7K1v3jqd4WU2+nrfONQ==}
@@ -10530,6 +10543,8 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
+  '@types/jmespath@0.15.2': {}
+
   '@types/js-yaml@4.0.9': {}
 
   '@types/json-schema@7.0.15': {}
@@ -12312,6 +12327,8 @@ snapshots:
       supports-color: 8.1.1
 
   jiti@2.6.1: {}
+
+  jmespath@0.16.0: {}
 
   jose@6.1.2: {}
 

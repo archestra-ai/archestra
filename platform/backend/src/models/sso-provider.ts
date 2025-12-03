@@ -44,6 +44,9 @@ class SsoProviderModel {
       samlConfig: provider.samlConfig
         ? JSON.parse(provider.samlConfig as unknown as string)
         : undefined,
+      roleMapping: provider.roleMapping
+        ? JSON.parse(provider.roleMapping as unknown as string)
+        : undefined,
     }));
   }
 
@@ -72,6 +75,39 @@ class SsoProviderModel {
         : undefined,
       samlConfig: ssoProvider.samlConfig
         ? JSON.parse(ssoProvider.samlConfig as unknown as string)
+        : undefined,
+      roleMapping: ssoProvider.roleMapping
+        ? JSON.parse(ssoProvider.roleMapping as unknown as string)
+        : undefined,
+    };
+  }
+
+  /**
+   * Find SSO provider by providerId (the user-facing unique identifier).
+   * Used by role mapping during SSO authentication.
+   */
+  static async findByProviderId(
+    providerId: string,
+  ): Promise<SsoProvider | null> {
+    const [ssoProvider] = await db
+      .select()
+      .from(schema.ssoProvidersTable)
+      .where(eq(schema.ssoProvidersTable.providerId, providerId));
+
+    if (!ssoProvider) {
+      return null;
+    }
+
+    return {
+      ...ssoProvider,
+      oidcConfig: ssoProvider.oidcConfig
+        ? JSON.parse(ssoProvider.oidcConfig as unknown as string)
+        : undefined,
+      samlConfig: ssoProvider.samlConfig
+        ? JSON.parse(ssoProvider.samlConfig as unknown as string)
+        : undefined,
+      roleMapping: ssoProvider.roleMapping
+        ? JSON.parse(ssoProvider.roleMapping as unknown as string)
         : undefined,
     };
   }
@@ -141,9 +177,19 @@ class SsoProviderModel {
      * See: https://github.com/better-auth/better-auth/issues/6481
      * TODO: Remove this workaround once the upstream issue is fixed.
      */
+    // Also store roleMapping if provided (Better Auth doesn't handle this field)
+    const updateData: { domainVerified: boolean; roleMapping?: string } = {
+      domainVerified: true,
+    };
+    if (data.roleMapping) {
+      updateData.roleMapping =
+        typeof data.roleMapping === "string"
+          ? data.roleMapping
+          : JSON.stringify(data.roleMapping);
+    }
     await db
       .update(schema.ssoProvidersTable)
-      .set({ domainVerified: true })
+      .set(updateData)
       .where(eq(schema.ssoProvidersTable.id, provider.id));
 
     return {
@@ -154,6 +200,11 @@ class SsoProviderModel {
         : undefined,
       samlConfig: provider.samlConfig
         ? JSON.parse(provider.samlConfig as unknown as string)
+        : undefined,
+      roleMapping: data.roleMapping
+        ? typeof data.roleMapping === "string"
+          ? JSON.parse(data.roleMapping)
+          : data.roleMapping
         : undefined,
     };
   }
@@ -172,10 +223,21 @@ class SsoProviderModel {
       return null;
     }
 
+    // Serialize roleMapping if provided as object
+    const updateData = {
+      ...data,
+      ...(data.roleMapping !== undefined && {
+        roleMapping:
+          typeof data.roleMapping === "string" || data.roleMapping === null
+            ? data.roleMapping
+            : JSON.stringify(data.roleMapping),
+      }),
+    };
+
     // Update in database
     const [updatedProvider] = await db
       .update(schema.ssoProvidersTable)
-      .set(data)
+      .set(updateData)
       .where(
         and(
           eq(schema.ssoProvidersTable.id, id),
@@ -193,6 +255,9 @@ class SsoProviderModel {
         : undefined,
       samlConfig: updatedProvider.samlConfig
         ? JSON.parse(updatedProvider.samlConfig as unknown as string)
+        : undefined,
+      roleMapping: updatedProvider.roleMapping
+        ? JSON.parse(updatedProvider.roleMapping as unknown as string)
         : undefined,
     };
   }

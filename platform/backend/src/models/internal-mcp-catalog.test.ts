@@ -2,6 +2,71 @@ import { describe, expect, test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 describe("InternalMcpCatalogModel", () => {
+  describe("findAll with expandSecrets", () => {
+    test("expands OAuth client_secret and localConfig environment secrets", async ({
+      makeInternalMcpCatalog,
+      makeSecret,
+    }) => {
+      // Create secrets
+      const oauthSecret = await makeSecret({
+        name: "oauth-secret",
+        secret: { client_secret: "test-client-secret-123" },
+      });
+      const envSecret = await makeSecret({
+        name: "env-secret",
+        secret: { API_KEY: "test-api-key-456", DB_PASSWORD: "test-db-pass-789" },
+      });
+
+      // Create catalog item with secret references
+      const catalog = await makeInternalMcpCatalog({
+        name: "test-catalog-with-secrets",
+        serverType: "remote",
+        clientSecretId: oauthSecret.id,
+        localConfigSecretId: envSecret.id,
+        oauthConfig: {
+          authorization_url: "https://example.com/oauth/authorize",
+          token_url: "https://example.com/oauth/token",
+          client_id: "test-client-id",
+        },
+        localConfig: {
+          command: "npx",
+          arguments: ["-y", "@test/server"],
+          environment: [
+            {
+              key: "API_KEY",
+              type: "secret",
+              required: true,
+              description: "API Key",
+              promptOnInstallation: false,
+            },
+            {
+              key: "DB_PASSWORD",
+              type: "secret",
+              required: true,
+              description: "Database Password",
+              promptOnInstallation: false,
+            },
+          ],
+        },
+      });
+
+      // Call findAll which should expand secrets
+      const catalogItems = await InternalMcpCatalogModel.findAll();
+      const foundCatalog = catalogItems.find((item) => item.id === catalog.id);
+
+      expect(foundCatalog).toBeDefined();
+      expect(foundCatalog?.oauthConfig?.client_secret).toBe(
+        "test-client-secret-123",
+      );
+      expect(foundCatalog?.localConfig?.environment?.[0].value).toBe(
+        "test-api-key-456",
+      );
+      expect(foundCatalog?.localConfig?.environment?.[1].value).toBe(
+        "test-db-pass-789",
+      );
+    });
+  });
+
   describe("getByIds", () => {
     test("returns Map of catalog items by ID", async ({
       makeInternalMcpCatalog,

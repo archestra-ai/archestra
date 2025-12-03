@@ -5,9 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -58,14 +56,6 @@ export function InstallationSelect({
     }
   }, [installations.length]);
 
-  // Separate team and personal installations
-  const teamInstallations = installations.filter(
-    (server) => server.authType === "team",
-  );
-  const personalInstallations = installations.filter(
-    (server) => server.authType === "personal",
-  );
-
   if (!installations || installations.length === 0) {
     return (
       <div className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -93,56 +83,35 @@ export function InstallationSelect({
         <SelectValue placeholder="Select installation..." />
       </SelectTrigger>
       <SelectContent>
-        {teamInstallations && teamInstallations.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>Team installations</SelectLabel>
-            {teamInstallations.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">
-                      {server.ownerEmail || "Unknown owner"}
-                    </span>
-                  </div>
-                  {server.teamDetails && server.teamDetails.length > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {server.teamDetails.map((team) => (
-                        <Badge
-                          key={team.teamId}
-                          variant="secondary"
-                          className="text-[10px] px-1 py-0"
-                        >
-                          {team.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-        {personalInstallations && personalInstallations.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>Personal installations</SelectLabel>
-            {personalInstallations.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-              >
+        {installations.map((server) => (
+          <SelectItem
+            key={server.id}
+            value={server.id}
+            className="cursor-pointer"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
                 <span className="text-xs">
                   {server.ownerEmail || "Unknown owner"}
                 </span>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-        {(!installations || installations.length === 0) && (
+              </div>
+              {server.teamDetails && server.teamDetails.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  {server.teamDetails.map((team) => (
+                    <Badge
+                      key={team.teamId}
+                      variant="secondary"
+                      className="text-xs"
+                    >
+                      {team.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </SelectItem>
+        ))}
+        {installations.length === 0 && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
             No installations available
           </div>

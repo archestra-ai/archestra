@@ -694,12 +694,12 @@ export const restartMcpServer = <ThrowOnError extends boolean = false>(options: 
 export const revokeUserMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeUserMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeUserMcpServerAccessResponses, RevokeUserMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/user/{userId}', ...options });
 
 /**
- * Revoke all team access to an MCP server by deleting the team-auth installation
+ * Revoke all team access from current user's MCP server credentials
  */
 export const revokeAllTeamsMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<RevokeAllTeamsMcpServerAccessData, ThrowOnError>) => (options.client ?? client).delete<RevokeAllTeamsMcpServerAccessResponses, RevokeAllTeamsMcpServerAccessErrors, ThrowOnError>({ url: '/api/mcp_server/catalog/{catalogId}/teams', ...options });
 
 /**
- * Grant team(s) access to an MCP server using current user's team-auth token (admin only)
+ * Grant team(s) access to an MCP server using specified user's credentials
  */
 export const grantTeamMcpServerAccess = <ThrowOnError extends boolean = false>(options: Options<GrantTeamMcpServerAccessData, ThrowOnError>) => (options.client ?? client).post<GrantTeamMcpServerAccessResponses, GrantTeamMcpServerAccessErrors, ThrowOnError>({
     url: '/api/mcp_server/catalog/{catalogId}/teams',

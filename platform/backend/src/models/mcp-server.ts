@@ -17,15 +17,11 @@ class McpServerModel {
 
     // For local servers, add a unique identifier to the name to avoid conflicts
     let mcpServerName = serverData.name;
-    if (serverData.serverType === "local") {
-      if (serverData.authType === "personal" && userId) {
-        mcpServerName = `${serverData.name}-${userId}`;
-      } else if (serverData.authType === "team") {
-        mcpServerName = `${serverData.name}-team-${serverData.ownerId}`;
-      }
+    if (serverData.serverType === "local" && userId) {
+      mcpServerName = `${serverData.name}-${userId}`;
     }
 
-    // ownerId and authType are part of serverData and will be inserted
+    // ownerId is part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
       .values({ ...serverData, name: mcpServerName })

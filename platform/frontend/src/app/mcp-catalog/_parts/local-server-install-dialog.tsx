@@ -1,9 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { X } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -16,14 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useTeams } from "@/lib/team.query";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -31,13 +21,9 @@ type CatalogItem =
 interface LocalServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (
-    environmentValues: Record<string, string>,
-    teams?: string[],
-  ) => Promise<void>;
+  onConfirm: (environmentValues: Record<string, string>) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
-  authType?: "personal" | "team";
 }
 
 export function LocalServerInstallDialog({
@@ -46,7 +32,6 @@ export function LocalServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
-  authType = "personal",
 }: LocalServerInstallDialogProps) {
   // Extract environment variables that need prompting during installation
   const promptedEnvVars =
@@ -62,28 +47,9 @@ export function LocalServerInstallDialog({
       return acc;
     }, {}),
   );
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
-  const [currentTeamId, setCurrentTeamId] = useState<string>("");
-
-  const { data: allTeams } = useTeams();
 
   const handleEnvVarChange = (key: string, value: string) => {
     setEnvironmentValues((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleAddTeam = (teamId: string) => {
-    if (teamId && !selectedTeamIds.includes(teamId)) {
-      setSelectedTeamIds([...selectedTeamIds, teamId]);
-      setCurrentTeamId("");
-    }
-  };
-
-  const handleRemoveSelectedTeam = (teamId: string) => {
-    setSelectedTeamIds(selectedTeamIds.filter((id) => id !== teamId));
-  };
-
-  const getTeamById = (teamId: string) => {
-    return allTeams?.find((team) => team.id === teamId);
   };
 
   const handleInstall = async () => {
@@ -103,132 +69,52 @@ export function LocalServerInstallDialog({
       return !value?.trim();
     });
 
-    // For team installations, require at least one team
-    if (authType === "team" && selectedTeamIds.length === 0) {
-      return;
-    }
-
     if (missingEnvVars.length > 0) {
       return;
     }
 
-    await onConfirm(
-      environmentValues,
-      authType === "team" ? selectedTeamIds : undefined,
-    );
+    await onConfirm(environmentValues);
 
     // Reset form
     setEnvironmentValues({});
-    setSelectedTeamIds([]);
-    setCurrentTeamId("");
   };
 
   const handleClose = () => {
     setEnvironmentValues({});
-    setSelectedTeamIds([]);
-    setCurrentTeamId("");
     onClose();
   };
 
   // Check if there are any fields to show
-  const hasFields = promptedEnvVars.length > 0 || authType === "team";
-
-  if (!hasFields && authType === "personal") {
+  if (promptedEnvVars.length === 0) {
     // If no configuration is needed, don't show the dialog
     return null;
   }
 
-  const isValid =
-    promptedEnvVars.every((env) => {
-      // Optional fields don't affect validation
-      if (!env.required) return true;
+  const isValid = promptedEnvVars.every((env) => {
+    // Optional fields don't affect validation
+    if (!env.required) return true;
 
-      const value = environmentValues[env.key];
-      // Boolean fields are always valid if they have a value (should be "true" or "false")
-      if (env.type === "boolean") {
-        return !!value;
-      }
-      // For other types, check if the trimmed value is non-empty
-      return !!value?.trim();
-    }) &&
-    (authType === "personal" || selectedTeamIds.length > 0);
+    const value = environmentValues[env.key];
+    // Boolean fields are always valid if they have a value (should be "true" or "false")
+    if (env.type === "boolean") {
+      return !!value;
+    }
+    // For other types, check if the trimmed value is non-empty
+    return !!value?.trim();
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {authType === "team" ? "Install for teams" : "Install for myself"} -{" "}
-            {catalogItem?.name}
-          </DialogTitle>
+          <DialogTitle>Install - {catalogItem?.name}</DialogTitle>
           <DialogDescription>
-            {authType === "team"
-              ? "Configure and install this MCP server for selected teams. Team members will be able to use this server."
-              : "Provide the required configuration values to install this MCP server for your personal usage."}
+            Provide the required configuration values to install this MCP
+            server.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Team Selection for Team Auth */}
-          {authType === "team" && (
-            <div className="space-y-2">
-              <Label htmlFor="select-team">
-                Select Teams <span className="text-destructive ml-1">*</span>
-              </Label>
-              <Select
-                value={currentTeamId}
-                onValueChange={handleAddTeam}
-                disabled={selectedTeamIds.length >= (allTeams?.length || 0)}
-              >
-                <SelectTrigger id="select-team">
-                  <SelectValue placeholder="Select teams to grant access" />
-                </SelectTrigger>
-                <SelectContent>
-                  {!allTeams || allTeams.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No teams available
-                    </div>
-                  ) : (
-                    allTeams
-                      .filter((team) => !selectedTeamIds.includes(team.id))
-                      .map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                  )}
-                </SelectContent>
-              </Select>
-
-              {/* Selected Teams Display */}
-              {selectedTeamIds.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedTeamIds.map((teamId) => {
-                    const team = getTeamById(teamId);
-                    return (
-                      <Badge
-                        key={teamId}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        <span>{team?.name || teamId}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveSelectedTeam(teamId)}
-                          className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Environment Variables that need prompting */}
           {promptedEnvVars.length > 0 && (
             <div className="space-y-4">

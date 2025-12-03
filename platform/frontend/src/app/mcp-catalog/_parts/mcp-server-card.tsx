@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@shared";
 import {
-  Building2,
   FileText,
   Info,
   MoreVertical,
@@ -34,17 +33,14 @@ import {
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
 import { useFeatureFlag } from "@/lib/features.hook";
 import {
   useMcpServers,
   useMcpServerTools,
-  useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
 import { BulkAssignProfileDialog } from "./bulk-assign-agent-dialog";
 import { ManageLocalInstallationsDialog } from "./manage-local-installations-dialog";
-import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
@@ -81,11 +77,7 @@ type SimpleTool = {
 
 export type McpServerCardProps = {
   item: CatalogItemWithOptionalLabel;
-  installedServer?:
-    | (InstalledServer & {
-        currentUserHasTeamAuth?: boolean;
-      })
-    | null;
+  installedServer?: InstalledServer | null;
   installingItemId: string | null;
   installationStatus?:
     | "error"
@@ -95,16 +87,13 @@ export type McpServerCardProps = {
     | "discovering-tools"
     | null;
   onInstallRemoteServer: () => void;
-  onInstallRemoteServerTeam: () => void;
   onInstallLocalServer: () => void;
-  onInstallLocalServerTeam: () => void;
   onReinstall: () => void;
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onCancelInstallation?: (serverId: string) => void;
   currentUserInstalledLocalServer?: boolean; // For local servers: whether current user owns any installation
-  currentUserHasLocalTeamInstallation?: boolean; // For local servers: whether a team installation exists
   currentUserLocalServerInstallation?: InstalledServer; // For local servers: the current user's specific installation
 };
 
@@ -121,16 +110,13 @@ export function McpServerCard({
   installingItemId,
   installationStatus,
   onInstallRemoteServer,
-  onInstallRemoteServerTeam,
   onInstallLocalServer,
-  onInstallLocalServerTeam,
   onReinstall,
   onDetails,
   onEdit,
   onDelete,
   onCancelInstallation,
   currentUserInstalledLocalServer = false,
-  currentUserHasLocalTeamInstallation = false,
   currentUserLocalServerInstallation,
 }: McpServerCardBaseProps) {
   const { data: tools, isLoading: isLoadingTools } = useMcpServerTools(
@@ -139,7 +125,6 @@ export function McpServerCard({
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
   const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
-  const revokeAllTeamsMutation = useRevokeAllTeamsMcpServerAccess();
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServer: ["admin"],
   });
@@ -155,7 +140,6 @@ export function McpServerCard({
     isManageLocalInstallationsDialogOpen,
     setIsManageLocalInstallationsDialogOpen,
   ] = useState(false);
-  const [isManageTeamsDialogOpen, setIsManageTeamsDialogOpen] = useState(false);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState(false);
   const [selectedToolForAssignment, setSelectedToolForAssignment] =
     useState<ToolForAssignment | null>(null);
@@ -191,7 +175,6 @@ export function McpServerCard({
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage = installedServer?.localInstallationError;
   const userCount = installedServer?.users?.length ?? 0;
-  const teamsCount = installedServer?.teams?.length ?? 0;
 
   const isInstalling = Boolean(
     installingItemId === item.id ||
@@ -199,15 +182,10 @@ export function McpServerCard({
       (installationStatus === "discovering-tools" && installedServer),
   );
 
-  const localInstalllingLabel =
-    installationStatus === "discovering-tools"
-      ? "Discovering tools..."
-      : "Connecting...";
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
       ? installedServer.users.includes(currentUserId)
       : false;
-  const currentUserHasTeamAuth = installedServer?.currentUserHasTeamAuth;
   const toolsDiscoveredCount = tools?.length ?? 0;
   const getToolsAssignedCount = () => {
     if (installationStatus === "discovering-tools")
@@ -231,13 +209,6 @@ export function McpServerCard({
       userId: currentUserId,
     });
   }, [currentUserId, installedServer?.catalogId, revokeUserAccessMutation]);
-
-  const handleRevokeTeamAccess = useCallback(async () => {
-    if (!installedServer?.catalogId) return;
-    await revokeAllTeamsMutation.mutateAsync({
-      catalogId: installedServer.catalogId,
-    });
-  }, [installedServer?.catalogId, revokeAllTeamsMutation]);
 
   // JSX parts
   const manageCatalogItemDropdownMenu = (
@@ -291,7 +262,7 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Users authenticated:{" "}
+          Credentials:{" "}
           <span className="font-medium text-foreground">{userCount}</span>
           {currentUserInstalledLocalServer && (
             <Badge
@@ -320,7 +291,7 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Users authenticated:{" "}
+          Credentials:{" "}
           <span className="font-medium text-foreground">{userCount}</span>
           {isCurrentUserAuthenticated && (
             <Badge
@@ -335,28 +306,6 @@ export function McpServerCard({
       {userCount > 0 && (
         <Button
           onClick={() => setIsManageUsersDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs"
-        >
-          Manage
-        </Button>
-      )}
-    </>
-  );
-
-  const teamsAccess = (
-    <>
-      <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Teams with access:{" "}
-          <span className="font-medium text-foreground">{teamsCount}</span>
-        </span>
-      </div>
-      {teamsCount > 0 && (
-        <Button
-          onClick={() => setIsManageTeamsDialogOpen(true)}
           size="sm"
           variant="link"
           className="h-7 text-xs"
@@ -398,10 +347,7 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: usersAuthenticated },
-            ...(config.features.enableTeamAuth
-              ? [{ id: "2", content: teamsAccess }]
-              : []),
-            { id: "3", content: toolsAssigned },
+            { id: "2", content: toolsAssigned },
           ].map((item) => (
             <div
               key={item.id}
@@ -464,45 +410,9 @@ export function McpServerCard({
           variant="outline"
           className="w-full bg-accent text-accent-foreground hover:bg-accent"
         >
-          Revoke personal token
+          Revoke my credentials
         </Button>
       )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        currentUserHasTeamAuth && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams token
-          </Button>
-        )}
-      {config.features.enableTeamAuth &&
-        requiresAuth &&
-        !currentUserHasTeamAuth && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ mcpServer: ["admin"] }}
-                  onClick={onInstallRemoteServerTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Connecting..." : "Auth for teams"}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Authenticate and allow teams to use my token</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
     </>
   );
 
@@ -512,10 +422,7 @@ export function McpServerCard({
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: localServersInstalled },
-            ...(config.features.enableTeamAuth
-              ? [{ id: "2", content: teamsAccess }]
-              : []),
-            { id: "3", content: toolsAssigned },
+            { id: "2", content: toolsAssigned },
           ].map((item) => (
             <div
               key={item.id}
@@ -603,46 +510,6 @@ export function McpServerCard({
             : "Installing..."}
         </Button>
       )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        currentUserHasLocalTeamInstallation && (
-          <Button
-            onClick={handleRevokeTeamAccess}
-            size="sm"
-            variant="outline"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Revoke teams installation
-          </Button>
-        )}
-      {config.features.enableTeamAuth &&
-        userIsMcpServerAdmin &&
-        !currentUserHasLocalTeamInstallation && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ mcpServer: ["admin"] }}
-                  onClick={onInstallLocalServerTeam}
-                  disabled={isInstalling || !isLocalMcpEnabled}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? localInstalllingLabel : "Install for teams"}
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>
-                  {!isLocalMcpEnabled
-                    ? LOCAL_MCP_DISABLED_MESSAGE
-                    : "Install and allow teams to use this server"}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
     </>
   );
 
@@ -738,13 +605,6 @@ export function McpServerCard({
       <ManageLocalInstallationsDialog
         isOpen={isManageLocalInstallationsDialogOpen}
         onClose={() => setIsManageLocalInstallationsDialogOpen(false)}
-        server={installedServer}
-        label={item.label || item.name}
-      />
-
-      <ManageTeamsDialog
-        isOpen={isManageTeamsDialogOpen}
-        onClose={() => setIsManageTeamsDialogOpen(false)}
         server={installedServer}
         label={item.label || item.name}
       />

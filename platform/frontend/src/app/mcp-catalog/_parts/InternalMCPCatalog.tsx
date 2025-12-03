@@ -73,7 +73,6 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [catalogItemForReinstall, setCatalogItemForReinstall] =
     useState<CatalogItem | null>(null);
-  const [isTeamMode, setIsTeamMode] = useState(false);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
@@ -151,10 +150,8 @@ export function InternalMCPCatalog({
 
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
-    teamMode: boolean,
+    _teamMode: boolean,
   ) => {
-    setIsTeamMode(teamMode);
-
     // Check if this is a remote server with user configuration
     if (
       catalogItem.serverType === "remote" &&
@@ -183,19 +180,7 @@ export function InternalMCPCatalog({
     setInstallingItemId(null);
   };
 
-  const handleInstallRemoteServerTeam = async (catalogItem: CatalogItem) => {
-    await handleInstallRemoteServer(catalogItem, true);
-  };
-
-  const handleInstallLocalServerTeam = async (catalogItem: CatalogItem) => {
-    setIsTeamMode(true);
-    setLocalServerCatalogItem(catalogItem);
-    openDialog("local-install");
-  };
-
   const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
-    setIsTeamMode(false);
-
     // Check if we need to show configuration dialog
     const hasUserConfig =
       catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
@@ -245,7 +230,6 @@ export function InternalMCPCatalog({
 
   const handleLocalServerInstallConfirm = async (
     environmentValues: Record<string, string>,
-    teams?: string[],
   ) => {
     if (!localServerCatalogItem) return;
 
@@ -253,7 +237,7 @@ export function InternalMCPCatalog({
     const result = await installMutation.mutateAsync({
       name: localServerCatalogItem.name,
       catalogId: localServerCatalogItem.id,
-      teams: teams || [],
+      teams: [],
       environmentValues,
       dontShowToast: true,
     });
@@ -332,22 +316,13 @@ export function InternalMCPCatalog({
 
     if (!servers || servers.length === 0) return undefined;
 
-    // If only one server, return it as-is (but check for team auth ownership)
+    // If only one server, return it as-is
     if (servers.length === 1) {
-      const server = servers[0];
-      return {
-        ...server,
-        currentUserHasTeamAuth:
-          server.authType === "team" && server.ownerId === currentUserId,
-      };
+      return servers[0];
     }
 
     // Find current user's specific installation to use as base
-    const currentUserServer = servers.find(
-      (s) =>
-        (s.authType === "personal" && s.ownerId === currentUserId) ||
-        (s.authType === "team" && s.ownerId === currentUserId),
-    );
+    const currentUserServer = servers.find((s) => s.ownerId === currentUserId);
 
     // Prefer current user's server as base, otherwise use first server with users, or just first server
     const baseServer =
@@ -357,11 +332,6 @@ export function InternalMCPCatalog({
 
     // Aggregate multiple servers
     const aggregated = { ...baseServer };
-
-    // Check if current user has a team-auth server
-    const currentUserHasTeamAuth = servers.some(
-      (s) => s.authType === "team" && s.ownerId === currentUserId,
-    );
 
     // Combine all unique users
     const allUsers = new Set<string>();
@@ -424,10 +394,7 @@ export function InternalMCPCatalog({
     aggregated.teams = Array.from(allTeams);
     aggregated.teamDetails = allTeamDetails;
 
-    return {
-      ...aggregated,
-      currentUserHasTeamAuth,
-    };
+    return aggregated;
   };
 
   const handleReinstall = (catalogItem: CatalogItem) => {
@@ -446,8 +413,7 @@ export function InternalMCPCatalog({
       installedServer = installedServers?.find(
         (server) =>
           server.catalogId === catalogItemForReinstall.id &&
-          server.ownerId === currentUserId &&
-          server.authType === "personal",
+          server.ownerId === currentUserId,
       );
     } else {
       installedServer = installedServers?.find(
@@ -532,23 +498,16 @@ export function InternalMCPCatalog({
           server.serverType === "local" && server.catalogId === item.id,
       ) || [];
     const currentUserLocalServerInstallation = currentUserId
-      ? localServers.find(
-          (server) =>
-            server.ownerId === currentUserId && server.authType === "personal",
-        )
+      ? localServers.find((server) => server.ownerId === currentUserId)
       : undefined;
     const currentUserInstalledLocalServer = Boolean(
       currentUserLocalServerInstallation,
-    );
-    const currentUserHasLocalTeamInstallation = Boolean(
-      localServers.some((server) => server.authType === "team"),
     );
 
     return {
       installedServer,
       isInstallInProgress,
       currentUserInstalledLocalServer,
-      currentUserHasLocalTeamInstallation,
       currentUserLocalServerInstallation,
     };
   };
@@ -597,13 +556,7 @@ export function InternalMCPCatalog({
                   onInstallRemoteServer={() =>
                     handleInstallRemoteServer(item, false)
                   }
-                  onInstallRemoteServerTeam={() =>
-                    handleInstallRemoteServerTeam(item)
-                  }
                   onInstallLocalServer={() => handleInstallLocalServer(item)}
-                  onInstallLocalServerTeam={() =>
-                    handleInstallLocalServerTeam(item)
-                  }
                   onReinstall={() => handleReinstall(item)}
                   onEdit={() => setEditingItem(item)}
                   onDetails={() => {
@@ -613,9 +566,6 @@ export function InternalMCPCatalog({
                   onCancelInstallation={handleCancelInstallation}
                   currentUserInstalledLocalServer={
                     serverInfo.currentUserInstalledLocalServer
-                  }
-                  currentUserHasLocalTeamInstallation={
-                    serverInfo.currentUserHasLocalTeamInstallation
                   }
                   currentUserLocalServerInstallation={
                     serverInfo.currentUserLocalServerInstallation
@@ -684,12 +634,10 @@ export function InternalMCPCatalog({
         onClose={() => {
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
-          setIsTeamMode(false);
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
-        isTeamMode={isTeamMode}
       />
 
       <OAuthConfirmationDialog
@@ -704,9 +652,7 @@ export function InternalMCPCatalog({
         onCancel={() => {
           closeDialog("oauth");
           setSelectedCatalogItem(null);
-          setIsTeamMode(false);
         }}
-        isTeamMode={isTeamMode}
         catalogId={selectedCatalogItem?.id}
         installedServers={installedServers}
       />
@@ -744,7 +690,6 @@ export function InternalMCPCatalog({
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
           isInstalling={installMutation.isPending}
-          authType={isTeamMode ? "team" : "personal"}
         />
       )}
     </div>

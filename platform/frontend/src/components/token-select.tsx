@@ -5,9 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -27,7 +25,7 @@ interface TokenSelectProps {
 
 /**
  * Self-contained component for selecting credential source for MCP tool execution.
- * Shows team tokens (authType=team) and user tokens (authType=personal) with owner emails.
+ * Shows all available credentials with their owner emails and team assignments.
  *
  * Fetches all tokens for the specified catalogId (no agent filtering).
  */
@@ -46,12 +44,6 @@ export function TokenSelect({
   // Get tokens for this catalogId from the grouped response
   const mcpServers = groupedTokens?.[catalogId] ?? [];
 
-  // Separate team and personal tokens
-  const teamTokens = mcpServers.filter((server) => server.authType === "team");
-  const userTokens = mcpServers.filter(
-    (server) => server.authType === "personal",
-  );
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && mcpServers.length > 0 && !value) {
@@ -62,7 +54,7 @@ export function TokenSelect({
   if (!mcpServers || mcpServers.length === 0) {
     return (
       <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        No tokens available
+        No credentials available
       </div>
     );
   }
@@ -83,66 +75,43 @@ export function TokenSelect({
         )}
         size="sm"
       >
-        <SelectValue placeholder="Select token..." />
+        <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
-        {teamTokens && teamTokens.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>Team tokens</SelectLabel>
-            {teamTokens.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">
-                      {server.ownerEmail || "Unknown owner"}
-                    </span>
-                  </div>
-                  {server.teamDetails && server.teamDetails.length > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {server.teamDetails.map((team) => (
-                        <Badge
-                          key={team.teamId}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {team.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-
-        {userTokens && userTokens.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>User tokens</SelectLabel>
-            {userTokens.map((server) => (
-              <SelectItem
-                key={server.id}
-                value={server.id}
-                className="cursor-pointer"
-              >
+        {mcpServers.map((server) => (
+          <SelectItem
+            key={server.id}
+            value={server.id}
+            className="cursor-pointer"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
                 <span className="text-xs">
                   {server.ownerEmail || "Unknown owner"}
                 </span>
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-
-        {(!teamTokens || teamTokens.length === 0) &&
-          (!userTokens || userTokens.length === 0) && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              No tokens available
+              </div>
+              {server.teamDetails && server.teamDetails.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  {server.teamDetails.map((team) => (
+                    <Badge
+                      key={team.teamId}
+                      variant="secondary"
+                      className="text-xs"
+                    >
+                      {team.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </SelectItem>
+        ))}
+
+        {mcpServers.length === 0 && (
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+            No credentials available
+          </div>
+        )}
       </SelectContent>
     </Select>
   );

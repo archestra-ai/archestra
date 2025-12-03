@@ -3805,7 +3805,6 @@ export type GetAgentAvailableTokensResponses = {
         [key: string]: Array<{
             id: string;
             name: string;
-            authType: 'personal' | 'team';
             serverType: 'local' | 'remote';
             catalogId: string | null;
             ownerId: string | null;
@@ -9823,9 +9822,7 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: {
-        authType?: 'personal' | 'team';
-    };
+    query?: never;
     url: '/api/mcp_server';
 };
 
@@ -9899,7 +9896,6 @@ export type GetMcpServersResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -9930,7 +9926,6 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         ownerId?: string | null;
-        authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
         localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
@@ -10020,7 +10015,6 @@ export type InstallMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
@@ -10203,7 +10197,6 @@ export type GetMcpServerResponses = {
         serverType: 'local' | 'remote';
         secretId: string | null;
         ownerId: string | null;
-        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;

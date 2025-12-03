@@ -92,15 +92,6 @@ export default {
       );
     },
   },
-  features: {
-    /**
-     * Enable team-based authentication/installation for MCP servers.
-     * Disabled by default.
-     */
-    get enableTeamAuth() {
-      return env("NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH") === "true";
-    },
-  },
   /**
    * Mark enterprise license status to hide Archestra-specific branding and UI sections when enabled.
    */

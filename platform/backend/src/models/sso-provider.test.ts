@@ -461,13 +461,13 @@ describe("SsoProviderModel", () => {
   });
 
   /**
-   * Test for SAML domainVerified workaround.
-   * Better Auth has an inconsistency where SAML requires `domainVerified: true`
-   * for account linking, while OIDC does not.
+   * Test for domainVerified workaround.
+   * With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
+   * all SSO providers need `domainVerified: true` for sign-in to work.
    * See: https://github.com/better-auth/better-auth/issues/6481
    * TODO: Remove this test once the upstream issue is fixed.
    */
-  describe("SAML domainVerified workaround", () => {
+  describe("domainVerified workaround", () => {
     test("SAML providers are created with domainVerified: true", async ({
       makeOrganization,
       makeSsoProvider,
@@ -491,7 +491,7 @@ describe("SsoProviderModel", () => {
       expect(provider?.domainVerified).toBe(true);
     });
 
-    test("OIDC providers are NOT auto-set with domainVerified: true", async ({
+    test("OIDC providers are created with domainVerified: true", async ({
       makeOrganization,
       makeSsoProvider,
     }) => {
@@ -511,9 +511,8 @@ describe("SsoProviderModel", () => {
       const provider = await SsoProviderModel.findById(oidcProvider.id, org.id);
 
       expect(provider).not.toBeNull();
-      // OIDC providers should not have domainVerified auto-set
-      // (it may be null/undefined or false depending on DB defaults)
-      expect(provider?.domainVerified).not.toBe(true);
+      // With domainVerification enabled, OIDC providers also need domainVerified: true
+      expect(provider?.domainVerified).toBe(true);
     });
   });
 });

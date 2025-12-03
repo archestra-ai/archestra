@@ -135,22 +135,20 @@ class SsoProviderModel {
     }
 
     /**
-     * WORKAROUND: Better Auth has an inconsistency where SAML requires `domainVerified: true`
-     * or the provider to be in `trustedProviders` for account linking, while OIDC does not.
-     * We auto-set `domainVerified: true` for SAML providers to make them work consistently with OIDC.
+     * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
+     * all SSO providers require `domainVerified: true` for sign-in to work without DNS verification.
+     * We auto-set this for all providers to bypass the DNS verification requirement.
      * See: https://github.com/better-auth/better-auth/issues/6481
      * TODO: Remove this workaround once the upstream issue is fixed.
      */
-    if (data.samlConfig) {
-      await db
-        .update(schema.ssoProvidersTable)
-        .set({ domainVerified: true })
-        .where(eq(schema.ssoProvidersTable.id, provider.id));
-    }
+    await db
+      .update(schema.ssoProvidersTable)
+      .set({ domainVerified: true })
+      .where(eq(schema.ssoProvidersTable.id, provider.id));
 
     return {
       ...provider,
-      domainVerified: data.samlConfig ? true : provider.domainVerified,
+      domainVerified: true,
       oidcConfig: provider.oidcConfig
         ? JSON.parse(provider.oidcConfig as unknown as string)
         : undefined,

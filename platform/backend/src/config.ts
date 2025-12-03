@@ -181,17 +181,6 @@ export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
   const ssoOrigins = parseSsoTrustedOrigins();
 
-  // Log for debugging
-  logger.info(
-    {
-      isDevelopment,
-      origins,
-      ssoOrigins,
-      envVar: process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS || "(not set)",
-    },
-    "getTrustedOrigins called",
-  );
-
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
     const defaultOrigins = [

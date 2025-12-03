@@ -228,18 +228,6 @@ Optional configuration:
 - User attributes (email, firstName, lastName) should be included in the SAML assertion
 - See your IdP's documentation for specific configuration steps
 
-<a id="saml-configuration"></a>
-
-**SAML Trusted Origins Configuration:**
-
-SAML Identity Providers send authentication responses via cross-origin form POST requests to the Assertion Consumer Service (ACS) URL. Due to browser security policies, these requests have their `Origin` header set to `null`. To allow these requests, you must configure the `ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS` environment variable:
-
-```bash
-ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS='["null"]'
-```
-
-Without this configuration, SAML authentication will fail with a "Missing or null Origin" error. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for more configuration details.
-
 #### Using Keycloak as a SAML Provider
 
 1. In Keycloak Admin Console, create a new **Client** with protocol `saml`

@@ -358,13 +358,6 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
   - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
 
-- **`ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS`** - Additional trusted origins for SSO authentication, as a JSON array of strings.
-
-  - Default: Not set (empty array)
-  - Example: `["null"]` - Required for SAML SSO. SAML Identity Providers send POST requests to the Assertion Consumer Service (ACS) URL via cross-origin form submissions, which browsers send with `Origin: null`. This must be explicitly allowed.
-  - Example: `["null", "https://idp.example.com"]` - Multiple origins can be specified
-  - See [Single Sign-On](/platform-single-sign-on#saml-configuration) for SAML configuration details.
-
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
   - Default: `default`

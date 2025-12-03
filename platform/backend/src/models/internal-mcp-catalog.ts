@@ -27,8 +27,8 @@ class InternalMcpCatalogModel {
     // Fetch all secrets in one query
     const secrets = await db
       .select()
-      .from(schema.secretTable)
-      .where(inArray(schema.secretTable.id, Array.from(secretIds)));
+      .from(schema.secretsTable)
+      .where(inArray(schema.secretsTable.id, Array.from(secretIds)));
 
     // Create a map for O(1) lookups
     const secretMap = new Map(secrets.map((s) => [s.id, s]));

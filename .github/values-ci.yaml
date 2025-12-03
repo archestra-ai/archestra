@@ -15,7 +15,7 @@ archestra:
     # Enable enterprise license for e2e tests (required for SSO tests)
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     # Required for SAML SSO - allows Origin: null from cross-origin form POSTs
-    ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS: '["null"]'
+    ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS: "[\"null\"]"
 
   # Use NodePort service type to expose services on fixed ports
   service:

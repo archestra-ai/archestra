@@ -3,7 +3,7 @@ import type { PostHogConfig } from "posthog-js";
 
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 
-const getBackendBaseUrl = (): string | undefined =>
+export const getBackendBaseUrl = (): string | undefined =>
   env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
 /**

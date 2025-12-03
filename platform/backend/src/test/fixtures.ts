@@ -393,7 +393,9 @@ async function makeInternalMcpCatalog(
 async function makeInvitation(
   organizationId: string,
   inviterId: string,
-  overrides: Partial<Pick<InsertInvitation, "email" | "role" | "status">> = {},
+  overrides: Partial<
+    Pick<InsertInvitation, "email" | "role" | "status" | "expiresAt">
+  > = {},
 ) {
   const [invitation] = await db
     .insert(schema.invitationsTable)

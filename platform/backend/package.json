@@ -66,6 +66,7 @@
     "fastify-type-provider-zod": "^6.0.0",
     "handlebars": "^4.7.8",
     "jmespath": "^0.16.0",
+    "jwt-decode": "^4.0.0",
     "lodash-es": "^4.17.21",
     "node-vault": "^0.10.9",
     "openai": "^6.9.1",

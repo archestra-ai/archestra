@@ -4,9 +4,11 @@ import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import jmespath from "jmespath";
+import { jwtDecode } from "jwt-decode";
 import { auth } from "@/auth/better-auth";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+
 import type {
   InsertSsoProvider,
   PublicSsoProvider,
@@ -170,6 +172,18 @@ class SsoProviderModel {
   static async resolveSsoRole(data: SsoGetRoleData): Promise<string> {
     const { user, token, provider, userInfo } = data;
 
+    // Better-auth passes the raw OAuth token response, not decoded JWT claims.
+    // We need to decode the idToken to get claims like 'groups' for role mapping.
+    const idTokenJwt = token?.idToken;
+    let idTokenClaims: Record<string, unknown> | null = null;
+    if (idTokenJwt) {
+      try {
+        idTokenClaims = jwtDecode<Record<string, unknown>>(idTokenJwt);
+      } catch {
+        logger.warn("Failed to decode idToken JWT for role mapping");
+      }
+    }
+
     try {
       // Fetch the SSO provider configuration to get role mapping rules
       const ssoProvider = await SsoProviderModel.findByProviderId(
@@ -199,11 +213,15 @@ class SsoProviderModel {
         }
 
         // Evaluate role mapping rules
+        // Use decoded idToken claims for 'token' data source (contains groups, roles, etc.)
+        // Fall back to raw token claims if idToken couldn't be decoded (e.g., in tests or non-JWT tokens)
+        const tokenClaims =
+          idTokenClaims || (token as Record<string, unknown>) || {};
         const result = SsoProviderModel.evaluateRoleMapping(
           roleMapping,
           {
             userInfo: (userInfo as Record<string, unknown>) || {},
-            token: (token as Record<string, unknown>) || {},
+            token: tokenClaims,
             provider: {
               id: provider.providerId,
               providerId: provider.providerId,

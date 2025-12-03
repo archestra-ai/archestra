@@ -1,6 +1,5 @@
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { secretManager } from "@/secretsmanager";
 import type {
   InsertInternalMcpCatalog,
   InternalMcpCatalog,
@@ -9,25 +8,6 @@ import type {
 import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
-  /**
-   * Enrich a catalog item with OAuth client_secret only.
-   * Note: Secret env vars are NOT enriched - they remain removed from the template.
-   * Only MCP server installation flow should fetch and use secret env vars when needed.
-   */
-  private static async enrichWithSecrets(
-    catalogItem: InternalMcpCatalog,
-  ): Promise<void> {
-    // Enrich OAuth client_secret if present (needed for OAuth flow)
-    if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
-      const secret = await secretManager.getSecret(catalogItem.clientSecretId);
-      if (secret?.secret.client_secret) {
-        catalogItem.oauthConfig.client_secret = String(
-          secret.secret.client_secret,
-        );
-      }
-    }
-  }
-
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -45,13 +25,6 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
 
-    // Enrich all catalog items with secrets
-    await Promise.all(
-      catalogItems.map((item) =>
-        InternalMcpCatalogModel.enrichWithSecrets(item),
-      ),
-    );
-
     return catalogItems;
   }
 
@@ -66,13 +39,6 @@ class InternalMcpCatalogModel {
         ),
       );
 
-    // Enrich all catalog items with secrets
-    await Promise.all(
-      catalogItems.map((item) =>
-        InternalMcpCatalogModel.enrichWithSecrets(item),
-      ),
-    );
-
     return catalogItems;
   }
 
@@ -85,9 +51,6 @@ class InternalMcpCatalogModel {
     if (!catalogItem) {
       return null;
     }
-
-    // Enrich with secrets
-    await InternalMcpCatalogModel.enrichWithSecrets(catalogItem);
 
     return catalogItem;
   }

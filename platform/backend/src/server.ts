@@ -387,6 +387,14 @@ const start = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
+    // Log trusted origins for debugging SSO issues
+    fastify.log.info(
+      `Auth trusted origins: ${JSON.stringify(config.auth.trustedOrigins)}`,
+    );
+    fastify.log.info(
+      `SSO trusted origins env var: ${process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS || "(not set)"}`,
+    );
+
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");

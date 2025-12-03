@@ -209,7 +209,32 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body,
       });
 
+      // Debug logging for SSO callbacks
+      if (request.url.includes("/sso/") || request.url.includes("/saml")) {
+        logger.info(
+          {
+            url: request.url,
+            method: request.method,
+            origin: request.headers.origin ?? "(not set)",
+            contentType: request.headers["content-type"],
+          },
+          "SSO request received",
+        );
+      }
+
       const response = await betterAuth.handler(req);
+
+      // Log SSO callback response status
+      if (request.url.includes("/sso/") || request.url.includes("/saml")) {
+        logger.info(
+          {
+            url: request.url,
+            status: response.status,
+            origin: request.headers.origin ?? "(not set)",
+          },
+          "SSO response",
+        );
+      }
 
       reply.status(response.status);
 

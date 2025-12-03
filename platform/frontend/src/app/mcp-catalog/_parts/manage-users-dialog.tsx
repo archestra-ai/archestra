@@ -164,11 +164,20 @@ export function ManageUsersDialog({
     [revokeTeamAccessMutation],
   );
 
-  const getUnassignedTeamsForUser = (
-    userTeams: Array<{ teamId: string; name: string; createdAt: string }>,
-  ) => {
-    const assignedTeamIds = new Set(userTeams.map((t) => t.teamId));
-    return allTeams?.filter((team) => !assignedTeamIds.has(team.id)) || [];
+  // Collect all team IDs assigned to any credential
+  const allAssignedTeamIds = useMemo(() => {
+    const teamIds = new Set<string>();
+    for (const user of userDetails) {
+      for (const team of user.teams) {
+        teamIds.add(team.teamId);
+      }
+    }
+    return teamIds;
+  }, [userDetails]);
+
+  const getUnassignedTeamsForUser = () => {
+    // Filter out teams already assigned to any credential
+    return allTeams?.filter((team) => !allAssignedTeamIds.has(team.id)) || [];
   };
 
   if (!liveServer) {

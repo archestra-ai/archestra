@@ -372,15 +372,24 @@ test.describe("SSO Role Mapping E2E", () => {
       .fill("contains(groups || `[]`, 'archestra-admins')");
 
     // Select admin role
-    await page.locator('[data-testid="role-mapping-rules"]').isVisible().catch(() => {});
+    await page
+      .locator('[data-testid="role-mapping-rules"]')
+      .isVisible()
+      .catch(() => {});
     // The role selector is the second Select in the rule form
-    const roleSelect = page.locator('button[role="combobox"]').filter({ hasText: /member|admin/i }).last();
+    const roleSelect = page
+      .locator('button[role="combobox"]')
+      .filter({ hasText: /member|admin/i })
+      .last();
     await roleSelect.click();
     await page.getByRole("option", { name: "Admin" }).click();
 
     // Set default role to member
     // Find the default role select (has "Default Role" label before it)
-    const defaultRoleSelect = page.getByLabel("Default Role").locator('..').locator('button[role="combobox"]');
+    const defaultRoleSelect = page
+      .getByLabel("Default Role")
+      .locator("..")
+      .locator('button[role="combobox"]');
     if (await defaultRoleSelect.isVisible()) {
       await defaultRoleSelect.click();
       await page.getByRole("option", { name: "Member" }).click();

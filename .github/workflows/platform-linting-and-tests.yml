@@ -96,22 +96,15 @@ jobs:
           echo "=== Kubectl cluster info ==="
           kubectl cluster-info || echo "Cluster info failed"
 
-      - name: Setup Blacksmith Builder
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
-          file: ./platform/Dockerfile
-          push: false
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          load: true
+          load: "true"
           tags: archestra/platform:ci-test
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Load Docker image into kind
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -310,22 +303,15 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Setup Blacksmith Builder
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
       - name: Build Docker image
         if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/build-platform-docker-image
         with:
           context: ./platform
-          file: ./platform/Dockerfile
-          push: false
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          load: true
+          load: "true"
           tags: archestra/platform:ci-test
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       # Run docker scout to check for vulnerabilities and recommendations
       # https://github.com/docker/scout-action

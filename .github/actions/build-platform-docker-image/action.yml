@@ -1,0 +1,80 @@
+name: Build Platform Docker Image
+description: Build the Archestra platform Docker image using Blacksmith builder
+
+inputs:
+  context:
+    description: "Directory containing the Dockerfile"
+    required: true
+  dockerfile:
+    description: "Path to Dockerfile (defaults to {context}/Dockerfile)"
+    required: false
+    default: ""
+  push:
+    description: "Whether to push the image to a registry"
+    required: false
+    default: "false"
+  load:
+    description: "Whether to load the image into the local Docker daemon"
+    required: false
+    default: "false"
+  platforms:
+    description: "Target platforms for the build (e.g., linux/amd64,linux/arm64)"
+    required: false
+    default: ""
+  tags:
+    description: "Image tags (newline or comma separated)"
+    required: false
+    default: ""
+  outputs:
+    description: "Custom outputs configuration (e.g., for push-by-digest)"
+    required: false
+    default: ""
+  version:
+    description: "Version to pass as VERSION build arg"
+    required: false
+    default: ""
+  # Secrets must be passed as regular inputs in composite actions
+  turbo-team:
+    description: "Turborepo remote caching team"
+    required: true
+  turbo-token:
+    description: "Turborepo remote caching token"
+    required: true
+  sentry-auth-token:
+    description: "Sentry auth token for source map uploads (optional)"
+    required: false
+    default: ""
+
+outputs:
+  digest:
+    description: "Image digest"
+    value: ${{ steps.build.outputs.digest }}
+  imageid:
+    description: "Image ID"
+    value: ${{ steps.build.outputs.imageid }}
+  metadata:
+    description: "Build metadata"
+    value: ${{ steps.build.outputs.metadata }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Blacksmith Builder
+      uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
+
+    - name: Build Docker image
+      id: build
+      uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile != '' && inputs.dockerfile || format('{0}/Dockerfile', inputs.context) }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tags }}
+        outputs: ${{ inputs.outputs }}
+        build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
+        secrets: |
+          turbo_team=${{ inputs.turbo-team }}
+          turbo_token=${{ inputs.turbo-token }}
+          ${{ inputs.sentry-auth-token != '' && format('sentry_auth_token={0}', inputs.sentry-auth-token) || '' }}

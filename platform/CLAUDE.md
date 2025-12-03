@@ -119,10 +119,12 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
-# Authentication Secret (auto-generated in Helm/Docker if not set)
+# Authentication Secret (REQUIRED, must be at least 32 characters)
+# Generate with: openssl rand -base64 32
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
-ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
+# For local dev: Must be set manually in .env file
+ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
 
 # Disable Basic Authentication (username/password login form)
 ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO

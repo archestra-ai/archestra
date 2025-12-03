@@ -14,35 +14,8 @@ else:
 # Load .env file FIRST, before any env var syncing
 dotenv('./.env')
 
-# Disable analytics in local development
-os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
-
-# Sync ARCHESTRA_* env vars to NEXT_PUBLIC_ARCHESTRA_* so they're accessible by the frontend
-# These must come AFTER dotenv() loads the .env file
-
-# API Base URL
-api_base_url = os.getenv("ARCHESTRA_API_BASE_URL")
-next_public_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
-if not next_public_api_base_url and api_base_url and api_base_url != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
-
-# Sentry Environment
-sentry_env = os.getenv("ARCHESTRA_SENTRY_ENVIRONMENT")
-next_public_sentry_env = os.getenv("NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT")
-if not next_public_sentry_env and sentry_env and sentry_env != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT', sentry_env)
-
-# Enterprise License
-enterprise_license = os.getenv("ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED")
-next_public_enterprise_license = os.getenv("NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED")
-if not next_public_enterprise_license and enterprise_license and enterprise_license != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED', enterprise_license)
-
-# Disable Basic Auth
-disable_basic_auth = os.getenv("ARCHESTRA_DISABLE_BASIC_AUTH")
-next_public_disable_basic_auth = os.getenv("NEXT_PUBLIC_ARCHESTRA_DISABLE_BASIC_AUTH")
-if not next_public_disable_basic_auth and disable_basic_auth and disable_basic_auth != "":
-  os.putenv('NEXT_PUBLIC_ARCHESTRA_DISABLE_BASIC_AUTH', disable_basic_auth)
+# Watch .env file for changes - triggers Tiltfile re-evaluation and restarts pnpm-dev
+watch_file('.env')
 
 # Load sub-Tiltfiles by label
 load_dynamic('./dev/Tiltfile.database')

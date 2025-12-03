@@ -61,7 +61,7 @@ importers:
         version: 9.6.1
       '@google/genai':
         specifier: ^1.29.1
-        version: 1.30.0(@modelcontextprotocol/sdk@1.22.0)
+        version: 1.30.0(@modelcontextprotocol/sdk@1.24.1(zod@4.1.13))
       '@kubernetes/client-node':
         specifier: ^1.4.0
         version: 1.4.0
@@ -69,8 +69,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0(@opentelemetry/api@1.9.0)(drizzle-orm@0.44.7(@electric-sql/pglite@0.3.14)(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(kysely@0.28.8)(pg@8.16.3))
       '@modelcontextprotocol/sdk':
-        specifier: ^1.22.0
-        version: 1.22.0
+        specifier: ^1.24.0
+        version: 1.24.1(zod@4.1.13)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -1377,11 +1377,12 @@ packages:
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
 
-  '@modelcontextprotocol/sdk@1.22.0':
-    resolution: {integrity: sha512-VUpl106XVTCpDmTBil2ehgJZjhyLY2QZikzF8NvTXtLRF1CvO5iEE2UNZdVIUer35vFOwMKYeUGbjJtvPWan3g==}
+  '@modelcontextprotocol/sdk@1.24.1':
+    resolution: {integrity: sha512-YTg4v6bKSst8EJM8NXHC3nGm8kgHD08IbIBbognUeLAgGLVgLpYrgQswzLQd4OyTL4l614ejhqsDrV1//t02Qw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
@@ -7375,9 +7376,6 @@ packages:
     peerDependencies:
       zod: ^3.25 || ^4
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
   zod@4.1.13:
     resolution: {integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==}
 
@@ -7961,12 +7959,12 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@google/genai@1.30.0(@modelcontextprotocol/sdk@1.22.0)':
+  '@google/genai@1.30.0(@modelcontextprotocol/sdk@1.24.1(zod@4.1.13))':
     dependencies:
       google-auth-library: 10.5.0
       ws: 8.18.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.22.0
+      '@modelcontextprotocol/sdk': 1.24.1(zod@4.1.13)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -8251,7 +8249,7 @@ snapshots:
     dependencies:
       langium: 3.3.1
 
-  '@modelcontextprotocol/sdk@1.22.0':
+  '@modelcontextprotocol/sdk@1.24.1(zod@4.1.13)':
     dependencies:
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
@@ -8262,10 +8260,11 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.0
       express-rate-limit: 7.5.1(express@5.2.0)
+      jose: 6.1.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.0(zod@3.25.76)
+      zod: 4.1.13
+      zod-to-json-schema: 3.25.0(zod@4.1.13)
     transitivePeerDependencies:
       - supports-color
 
@@ -14847,11 +14846,9 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod-to-json-schema@3.25.0(zod@3.25.76):
+  zod-to-json-schema@3.25.0(zod@4.1.13):
     dependencies:
-      zod: 3.25.76
-
-  zod@3.25.76: {}
+      zod: 4.1.13
 
   zod@4.1.13: {}
 

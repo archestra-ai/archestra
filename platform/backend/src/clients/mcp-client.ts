@@ -73,18 +73,24 @@ class McpClient {
         secrets,
       );
 
-      // Use catalog ID + secret ID as cache key for connection reuse
-      let secretId: string | null = null;
-      if (tool.credentialSourceMcpServerId) {
-        const credentialSourceServer = await McpServerModel.findById(
-          tool.credentialSourceMcpServerId,
-        );
-        secretId = credentialSourceServer?.secretId || null;
+      // Build connection cache key:
+      // - Local servers: use targetMcpServerId (each pod needs its own connection)
+      // - Remote servers: use catalogId + secretId (credential-based caching)
+      let connectionKey: string;
+      if (catalogItem.serverType === "local") {
+        connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+      } else {
+        let secretId: string | null = null;
+        if (tool.credentialSourceMcpServerId) {
+          const credentialSourceServer = await McpServerModel.findById(
+            tool.credentialSourceMcpServerId,
+          );
+          secretId = credentialSourceServer?.secretId || null;
+        }
+        connectionKey = secretId
+          ? `${catalogItem.id}:${secretId}`
+          : catalogItem.id;
       }
-
-      const connectionKey = secretId
-        ? `${catalogItem.id}:${secretId}`
-        : catalogItem.id;
 
       // Get or create client
       const client = await this.getOrCreateClient(connectionKey, transport);

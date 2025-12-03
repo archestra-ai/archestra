@@ -1,5 +1,6 @@
 import { desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { secretManager } from "@/secretsmanager";
 import type {
   InsertInternalMcpCatalog,
   InternalMcpCatalog,
@@ -8,6 +9,42 @@ import type {
 import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
+  /**
+   * Enrich catalog item with secrets from secret table.
+   * This allows the UI to display secret values in edit forms.
+   * Enriches both OAuth client_secret and local config secret env vars.
+   */
+  private static async enrichWithSecrets(
+    catalogItem: InternalMcpCatalog,
+  ): Promise<void> {
+    // Enrich OAuth client_secret
+    if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+      const secret = await secretManager.getSecret(catalogItem.clientSecretId);
+      if (secret?.secret.client_secret) {
+        catalogItem.oauthConfig.client_secret = String(
+          secret.secret.client_secret,
+        );
+      }
+    }
+
+    // Enrich local config secret env vars (both prompted and non-prompted)
+    // Frontend will mask these with password inputs
+    if (
+      catalogItem.localConfigSecretId &&
+      catalogItem.localConfig?.environment
+    ) {
+      const secret = await secretManager.getSecret(
+        catalogItem.localConfigSecretId,
+      );
+      if (secret) {
+        for (const envVar of catalogItem.localConfig.environment) {
+          if (envVar.type === "secret" && secret.secret[envVar.key]) {
+            envVar.value = String(secret.secret[envVar.key]);
+          }
+        }
+      }
+    }
+  }
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -20,14 +57,21 @@ class InternalMcpCatalogModel {
   }
 
   static async findAll(): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+
+    // Enrich all catalog items with secret values for edit forms
+    await Promise.all(
+      catalogItems.map((item) => this.enrichWithSecrets(item)),
+    );
+
+    return catalogItems;
   }
 
   static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -36,6 +80,13 @@ class InternalMcpCatalogModel {
           ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
         ),
       );
+
+    // Enrich all catalog items with secret values for edit forms
+    await Promise.all(
+      catalogItems.map((item) => this.enrichWithSecrets(item)),
+    );
+
+    return catalogItems;
   }
 
   static async findById(id: string): Promise<InternalMcpCatalog | null> {
@@ -44,7 +95,14 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    return catalogItem || null;
+    if (!catalogItem) {
+      return null;
+    }
+
+    // Enrich with secret values for edit forms (OAuth client_secret and env vars)
+    await InternalMcpCatalogModel.enrichWithSecrets(catalogItem);
+
+    return catalogItem;
   }
 
   /**

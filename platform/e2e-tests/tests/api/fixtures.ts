@@ -321,6 +321,7 @@ const waitForAgentTool = async (
       request,
       method: "get",
       urlSuffix: "/api/agent-tools",
+      ignoreStatusCheck: true,
     });
 
     if (agentToolsResponse.ok()) {

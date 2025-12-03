@@ -14,6 +14,7 @@ test.describe("LLM Proxy - OpenAI", () => {
     createTrustedDataPolicy,
     createToolInvocationPolicy,
     makeApiRequest,
+    waitForAgentTool,
   }) => {
     // 1. Create a test agent
     const createResponse = await createAgent(request, "OpenAI Test Agent");
@@ -67,19 +68,12 @@ test.describe("LLM Proxy - OpenAI", () => {
       );
     }
 
-    // Get the agent-tool relationship ID from the backend
-    const agentToolsResponse = await makeApiRequest({
+    // Get the agent-tool relationship ID from the backend (with retry/polling for eventual consistency)
+    const readFileAgentTool = await waitForAgentTool(
       request,
-      method: "get",
-      urlSuffix: "/api/agent-tools",
-    });
-    expect(agentToolsResponse.ok()).toBeTruthy();
-    const agentTools = await agentToolsResponse.json();
-    const readFileAgentTool = agentTools.data.find(
-      (at: { agent: { id: string }; tool: { name: string } }) =>
-        at.agent.id === agentId && at.tool.name === "read_file",
+      agentId,
+      "read_file",
     );
-    expect(readFileAgentTool).toBeDefined();
     toolId = readFileAgentTool.id;
 
     // 3. Create a trusted data policy that marks messages with "untrusted" in content as untrusted
@@ -407,6 +401,7 @@ test.describe("LLM Proxy - Anthropic", () => {
     createTrustedDataPolicy,
     createToolInvocationPolicy,
     makeApiRequest,
+    waitForAgentTool,
   }) => {
     // 1. Create a test agent
     const createResponse = await createAgent(request, "Anthropic Test Agent");
@@ -458,19 +453,12 @@ test.describe("LLM Proxy - Anthropic", () => {
       );
     }
 
-    // Get the agent-tool relationship ID from the backend
-    const agentToolsResponse = await makeApiRequest({
+    // Get the agent-tool relationship ID from the backend (with retry/polling for eventual consistency)
+    const readFileAgentTool = await waitForAgentTool(
       request,
-      method: "get",
-      urlSuffix: "/api/agent-tools",
-    });
-    expect(agentToolsResponse.ok()).toBeTruthy();
-    const agentTools = await agentToolsResponse.json();
-    const readFileAgentTool = agentTools.data.find(
-      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
-      (at: any) => at.agent.id === agentId && at.tool.name === "read_file",
+      agentId,
+      "read_file",
     );
-    expect(readFileAgentTool).toBeDefined();
     toolId = readFileAgentTool.id;
 
     // 3. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted

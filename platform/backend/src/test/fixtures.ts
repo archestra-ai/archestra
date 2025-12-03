@@ -645,6 +645,9 @@ async function makeSsoProvider(
         ? (JSON.stringify(overrides.samlConfig) as unknown as undefined)
         : undefined,
       userId: overrides.userId ?? null,
+      // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true
+      // See: https://github.com/better-auth/better-auth/issues/6481
+      domainVerified: true,
     })
     .returning();
 

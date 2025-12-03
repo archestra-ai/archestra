@@ -1,6 +1,10 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { getDatabaseUrl, getOtlpAuthHeaders } from "./config";
+import {
+  getDatabaseUrl,
+  getOtlpAuthHeaders,
+  getTrustedOrigins,
+} from "./config";
 
 // Mock the logger
 vi.mock("./logging", () => ({
@@ -228,6 +232,56 @@ describe("getOtlpAuthHeaders", () => {
 
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("getTrustedOrigins", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("development mode (default localhost origins)", () => {
+    // Note: NODE_ENV is determined at module load time, so tests run in development mode
+    // since the test environment is not production
+
+    test("should return localhost wildcards in development", () => {
+      const result = getTrustedOrigins();
+
+      expect(result).toEqual([
+        "http://localhost:*",
+        "https://localhost:*",
+        "http://127.0.0.1:*",
+        "https://127.0.0.1:*",
+      ]);
+    });
+  });
+
+  describe("production mode (specific frontend URL)", () => {
+    // Note: These tests use dynamic imports with vi.resetModules() to test production behavior
+    // because NODE_ENV is evaluated at module load time
+
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    test("should return frontend URL in production", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.ARCHESTRA_FRONTEND_URL = "https://app.example.com";
+
+      const { getTrustedOrigins: getTrustedOriginsProd } = await import(
+        "./config"
+      );
+      const result = getTrustedOriginsProd();
+
+      expect(result).toEqual(["https://app.example.com"]);
     });
   });
 });

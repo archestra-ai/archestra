@@ -459,4 +459,60 @@ describe("SsoProviderModel", () => {
       expect(keys).toContain("providerId");
     });
   });
+
+  /**
+   * Test for domainVerified workaround.
+   * With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
+   * all SSO providers need `domainVerified: true` for sign-in to work.
+   * See: https://github.com/better-auth/better-auth/issues/6481
+   * TODO: Remove this test once the upstream issue is fixed.
+   */
+  describe("domainVerified workaround", () => {
+    test("SAML providers are created with domainVerified: true", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      const samlProvider = await makeSsoProvider(org.id, {
+        providerId: "SAML-Test",
+        samlConfig: {
+          issuer: "https://idp.example.com",
+          entryPoint: "https://idp.example.com/sso",
+          cert: "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----",
+          callbackUrl: "https://app.example.com/callback",
+          spMetadata: {},
+        },
+      });
+
+      const provider = await SsoProviderModel.findById(samlProvider.id, org.id);
+
+      expect(provider).not.toBeNull();
+      expect(provider?.domainVerified).toBe(true);
+    });
+
+    test("OIDC providers are created with domainVerified: true", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      const oidcProvider = await makeSsoProvider(org.id, {
+        providerId: "OIDC-Test",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint: "https://idp.example.com/.well-known",
+        },
+      });
+
+      const provider = await SsoProviderModel.findById(oidcProvider.id, org.id);
+
+      expect(provider).not.toBeNull();
+      // With domainVerification enabled, OIDC providers also need domainVerified: true
+      expect(provider?.domainVerified).toBe(true);
+    });
+  });
 });

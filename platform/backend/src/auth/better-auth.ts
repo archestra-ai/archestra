@@ -38,7 +38,8 @@ const isHttps = () => {
   return frontendBaseUrl.startsWith("https://");
 };
 
-export const auth = betterAuth({
+// biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
+export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
@@ -137,6 +138,11 @@ export const auth = betterAuth({
       disableImplicitSignUp: false,
       providersLimit: 10,
       trustEmailVerified: true, // Trust email verification from SSO providers
+      // Enable domain verification to allow SAML account linking for non-trusted providers
+      // When enabled, providers with domainVerified: true can link accounts by email domain
+      domainVerification: {
+        enabled: true,
+      },
     }),
   ],
 

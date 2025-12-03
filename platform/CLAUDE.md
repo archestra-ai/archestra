@@ -125,7 +125,7 @@ ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
 
 # Disable Basic Authentication (username/password login form)
-ARCHESTRA_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
+ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
@@ -415,4 +415,5 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
   await deleteAgent(request, agent.id);
 });
 ```
+
 - never amend commits

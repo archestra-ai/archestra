@@ -12,7 +12,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, beforeEach, vi } from "vitest";
 
-process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests";
+process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

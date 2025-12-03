@@ -29,6 +29,7 @@ metadata:
   labels:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Release.Name }}-keycloak
 spec:
   replicas: 1
   selector:
@@ -40,6 +41,7 @@ spec:
       labels:
         app.kubernetes.io/name: keycloak
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app: {{ .Release.Name }}-keycloak
     spec:
       containers:
         - name: keycloak
@@ -59,10 +61,14 @@ spec:
               value: "8080"
             - name: KC_HEALTH_ENABLED
               value: "true"
-            # Allow Keycloak to be accessed from any hostname
+            # Keycloak 26+ v2 hostname configuration
+            # Forces Keycloak to always return consistent issuer in tokens
+            # regardless of how it's accessed (internal K8s service vs NodePort)
+            # In v2, KC_HOSTNAME can be a full URL: scheme://hostname:port
+            # See: https://www.keycloak.org/server/hostname
+            - name: KC_HOSTNAME
+              value: "http://localhost:30081"
             - name: KC_HOSTNAME_STRICT
-              value: "false"
-            - name: KC_HOSTNAME_STRICT_HTTPS
               value: "false"
           ports:
             - containerPort: 8080
@@ -106,7 +112,156 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   archestra-realm.json: |
-{{ .Values.keycloak.realm.config | indent 4 }}
+    {
+      "realm": "archestra",
+      "enabled": true,
+      "sslRequired": "none",
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "editUsernameAllowed": false,
+      "bruteForceProtected": false,
+      "clients": [
+        {
+          "clientId": "archestra-oidc",
+          "name": "Archestra OIDC Client",
+          "enabled": true,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "archestra-oidc-secret",
+          "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:9000/*"
+          ],
+          "webOrigins": [
+            "http://localhost:3000",
+            "http://localhost:9000"
+          ],
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": true,
+          "publicClient": false,
+          "protocol": "openid-connect",
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "email",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-property-mapper",
+              "consentRequired": false,
+              "config": {
+                "userinfo.token.claim": "true",
+                "user.attribute": "email",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "email",
+                "jsonType.label": "String"
+              }
+            },
+            {
+              "name": "name",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-full-name-mapper",
+              "consentRequired": false,
+              "config": {
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "name",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "clientId": "http://localhost:3000",
+          "name": "Archestra SAML Client",
+          "enabled": true,
+          "protocol": "saml",
+          "frontchannelLogout": true,
+          "attributes": {
+            "saml.assertion.signature": "true",
+            "saml.force.post.binding": "true",
+            "saml.multivalued.roles": "false",
+            "saml.encrypt": "false",
+            "saml.server.signature": "true",
+            "saml.server.signature.keyinfo.ext": "false",
+            "saml.signing.certificate": "",
+            "saml_force_name_id_format": "true",
+            "saml.client.signature": "false",
+            "saml.authnstatement": "true",
+            "saml_name_id_format": "email",
+            "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
+          },
+          "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:9000/*"
+          ],
+          "protocolMappers": [
+            {
+              "name": "email",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "email",
+                "friendly.name": "email",
+                "attribute.name": "email"
+              }
+            },
+            {
+              "name": "firstName",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "firstName",
+                "friendly.name": "firstName",
+                "attribute.name": "firstName"
+              }
+            },
+            {
+              "name": "lastName",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "lastName",
+                "friendly.name": "lastName",
+                "attribute.name": "lastName"
+              }
+            },
+            {
+              "name": "name",
+              "protocol": "saml",
+              "protocolMapper": "saml-user-property-idp-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.attribute": "username",
+                "friendly.name": "name",
+                "attribute.name": "name"
+              }
+            }
+          ]
+        }
+      ],
+      "users": [
+        {
+          "username": {{ .Values.keycloak.testUser.username | quote }},
+          "email": {{ .Values.keycloak.testUser.email | quote }},
+          "firstName": {{ .Values.keycloak.testUser.firstName | quote }},
+          "lastName": {{ .Values.keycloak.testUser.lastName | quote }},
+          "enabled": true,
+          "emailVerified": true,
+          "credentials": [
+            {
+              "type": "password",
+              "value": {{ .Values.keycloak.testUser.password | quote }},
+              "temporary": false
+            }
+          ]
+        }
+      ]
+    }
 {{- end }}
 {{- end }}
-

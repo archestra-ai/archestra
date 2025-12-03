@@ -134,8 +134,21 @@ class SsoProviderModel {
       throw new Error("Failed to create SSO provider");
     }
 
+    /**
+     * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
+     * all SSO providers require `domainVerified: true` for sign-in to work without DNS verification.
+     * We auto-set this for all providers to bypass the DNS verification requirement.
+     * See: https://github.com/better-auth/better-auth/issues/6481
+     * TODO: Remove this workaround once the upstream issue is fixed.
+     */
+    await db
+      .update(schema.ssoProvidersTable)
+      .set({ domainVerified: true })
+      .where(eq(schema.ssoProvidersTable.id, provider.id));
+
     return {
       ...provider,
+      domainVerified: true,
       oidcConfig: provider.oidcConfig
         ? JSON.parse(provider.oidcConfig as unknown as string)
         : undefined,

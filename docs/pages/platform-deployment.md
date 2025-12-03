@@ -340,7 +340,7 @@ The following environment variables can be used to configure Archestra Platform:
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens and passwords.
 
-  - Auto-generated once on first run. Set manually if you need to control the secret value.
+  - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
@@ -352,7 +352,7 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
-- **`ARCHESTRA_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
+- **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
 
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only

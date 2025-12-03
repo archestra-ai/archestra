@@ -39,9 +39,25 @@ local_resource(
 
 # E2E test dependencies (WireMock, Keycloak)
 # Use a local_resource to deploy/redeploy the helm chart on demand
+# The Keycloak test user is configured to match the Archestra admin user from .env
+# so that SSO login can link to an existing account
+#
+# Environment variables (loaded from .env via dotenv extension in main Tiltfile):
+#   ARCHESTRA_AUTH_ADMIN_EMAIL (default: admin@example.com)
+#   ARCHESTRA_AUTH_ADMIN_PASSWORD (default: password)
+
+# Read admin credentials from environment (loaded from .env by main Tiltfile)
+_admin_email = os.getenv('ARCHESTRA_AUTH_ADMIN_EMAIL', 'admin@example.com')
+_admin_password = os.getenv('ARCHESTRA_AUTH_ADMIN_PASSWORD', 'password')
+# Extract username from email (e.g., "admin@example.com" -> "admin")
+_admin_username = _admin_email.split('@')[0]
+
 local_resource(
   'e2e-test-dependencies',
-  cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait',
+  cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait ' +
+      '--set keycloak.testUser.email=' + _admin_email + ' ' +
+      '--set keycloak.testUser.password=' + _admin_password + ' ' +
+      '--set keycloak.testUser.username=' + _admin_username,
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False

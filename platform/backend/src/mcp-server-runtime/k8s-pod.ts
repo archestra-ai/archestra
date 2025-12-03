@@ -402,10 +402,10 @@ export default class K8sPod {
             );
           }
         }
-        // Add to envMap if value exists
-        // (Only non-secret plain_text vars will be used directly in pod env)
-        if (value) {
-          envMap.set(envDef.key, value);
+        // Add to envMap if value exists, OR if it's a secret-type (needs secretKeyRef even without value)
+        // Secret-type vars will reference K8s Secret via secretKeyRef, plain_text vars use value directly
+        if (value || envDef.type === "secret") {
+          envMap.set(envDef.key, value || "");
         }
       }
     } else if (this.environmentValues) {

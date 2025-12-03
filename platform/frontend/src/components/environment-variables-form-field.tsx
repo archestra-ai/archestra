@@ -272,6 +272,7 @@ export function EnvironmentVariablesFormField<
                         <FormItem>
                           <FormControl>
                             <Input
+                              type={envType === "secret" ? "password" : "text"}
                               placeholder="your-value"
                               className="font-mono"
                               {...field}

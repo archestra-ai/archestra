@@ -57,8 +57,9 @@ export type VaultAuthMethod = "token" | "kubernetes";
 
 /**
  * Error thrown when Vault configuration is invalid or incomplete
- * TODO: we can go with a generic error, but just create one for speed and simplicity
  */
+// TODO: Separate SecretsManagerConfigurationError is obsolete.
+// We should create a centralized error class instead. Leaving it for the sake of simplicity for now.
 export class SecretsManagerConfigurationError extends Error {
   constructor(message: string) {
     super(message);

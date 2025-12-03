@@ -25,6 +25,7 @@ export interface TestFixtures {
   uninstallMcpServer: typeof uninstallMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
+  waitForAgentTool: typeof waitForAgentTool;
 }
 
 const makeApiRequest = async ({
@@ -299,6 +300,51 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
     urlSuffix: `/api/roles/${roleId}`,
   });
 
+/**
+ * Wait for an agent-tool to be registered with retry/polling logic.
+ * This helps avoid race conditions when a tool is registered asynchronously.
+ */
+const waitForAgentTool = async (
+  request: APIRequestContext,
+  agentId: string,
+  toolName: string,
+  options?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  },
+): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
+  const maxAttempts = options?.maxAttempts ?? 10;
+  const delayMs = options?.delayMs ?? 500;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const agentToolsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agent-tools",
+    });
+
+    if (agentToolsResponse.ok()) {
+      const agentTools = await agentToolsResponse.json();
+      const foundTool = agentTools.data.find(
+        (at: { agent: { id: string }; tool: { name: string } }) =>
+          at.agent.id === agentId && at.tool.name === toolName,
+      );
+
+      if (foundTool) {
+        return foundTool;
+      }
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error(
+    `Agent-tool '${toolName}' for agent '${agentId}' not found after ${maxAttempts} attempts`,
+  );
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -345,5 +391,8 @@ export const test = base.extend<TestFixtures>({
   },
   deleteRole: async ({}, use) => {
     await use(deleteRole);
+  },
+  waitForAgentTool: async ({}, use) => {
+    await use(waitForAgentTool);
   },
 });

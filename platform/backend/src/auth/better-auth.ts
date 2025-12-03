@@ -395,7 +395,8 @@ export const auth: any = betterAuth({
 
           try {
             if (!newSession.session.activeOrganizationId) {
-              const userMembership = await MemberModel.getByUserId(userId);
+              const userMembership =
+                await MemberModel.getFirstMembershipForUser(userId);
 
               if (userMembership) {
                 await SessionModel.patch(sessionId, {

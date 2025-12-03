@@ -179,14 +179,17 @@ class SsoProviderModel {
       if (ssoProvider?.roleMapping) {
         const roleMapping = ssoProvider.roleMapping;
 
-        // Handle skipRoleSync: If enabled and user already has a membership, keep their current role
+        // Handle skipRoleSync: If enabled and user already has a membership in this organization, keep their current role
         if (roleMapping.skipRoleSync && user?.id) {
-          const existingMember = await MemberModel.getByUserId(user.id);
+          const existingMember = ssoProvider.organizationId
+            ? await MemberModel.getByUserId(user.id, ssoProvider.organizationId)
+            : null;
           if (existingMember) {
             logger.info(
               {
                 providerId: provider.providerId,
                 userId: user.id,
+                organizationId: ssoProvider.organizationId,
                 currentRole: existingMember.role,
               },
               "Skip role sync enabled - keeping existing role",

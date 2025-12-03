@@ -224,13 +224,22 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const response = await betterAuth.handler(req);
 
-      // Log SSO callback response status
+      // Log SSO callback response status and body for debugging
       if (request.url.includes("/sso/") || request.url.includes("/saml")) {
+        // Clone response to read body without consuming it
+        const responseClone = response.clone();
+        let responseBody = "";
+        try {
+          responseBody = await responseClone.text();
+        } catch {
+          responseBody = "(could not read body)";
+        }
         logger.info(
           {
             url: request.url,
             status: response.status,
             origin: request.headers.origin ?? "(not set)",
+            responseBody: responseBody.substring(0, 1000), // Truncate for logging
           },
           "SSO response",
         );

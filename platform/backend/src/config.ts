@@ -181,6 +181,17 @@ export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
   const ssoOrigins = parseSsoTrustedOrigins();
 
+  // Log for debugging
+  logger.info(
+    {
+      isDevelopment,
+      origins,
+      ssoOrigins,
+      envVar: process.env.ARCHESTRA_AUTH_SSO_TRUSTED_ORIGINS || "(not set)",
+    },
+    "getTrustedOrigins called",
+  );
+
   // Default: allow localhost wildcards for development
   if (origins.length === 0) {
     const defaultOrigins = [
@@ -190,11 +201,15 @@ export const getTrustedOrigins = (): string[] => {
       "https://127.0.0.1:*",
     ];
 
-    return [...new Set([...defaultOrigins, ...ssoOrigins])];
+    const result = [...new Set([...defaultOrigins, ...ssoOrigins])];
+    logger.info({ result }, "getTrustedOrigins result (development)");
+    return result;
   }
 
   // Production: use configured origins + SSO origins
-  return [...new Set([...origins, ...ssoOrigins])];
+  const result = [...new Set([...origins, ...ssoOrigins])];
+  logger.info({ result }, "getTrustedOrigins result (production)");
+  return result;
 };
 
 export default {

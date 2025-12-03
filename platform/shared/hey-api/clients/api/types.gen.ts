@@ -13380,6 +13380,7 @@ export type GetSsoProvidersResponses = {
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     }>;
 };
 
@@ -13480,6 +13481,7 @@ export type CreateSsoProviderData = {
         userId?: string | null;
         providerId: string;
         domain: string;
+        domainVerified?: boolean | null;
     };
     path?: never;
     query?: never;
@@ -13645,6 +13647,7 @@ export type CreateSsoProviderResponses = {
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13897,6 +13900,7 @@ export type GetSsoProviderResponses = {
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13996,6 +14000,7 @@ export type UpdateSsoProviderData = {
         };
         providerId?: string;
         domain?: string;
+        domainVerified?: boolean | null;
     };
     path: {
         id: string;
@@ -14163,6 +14168,7 @@ export type UpdateSsoProviderResponses = {
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 

@@ -20,16 +20,14 @@ class InternalMcpCatalogModel {
   }
 
   static async findAll(): Promise<InternalMcpCatalog[]> {
-    const catalogItems = await db
+    return await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
-
-    return catalogItems;
   }
 
   static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
-    const catalogItems = await db
+    return await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -38,8 +36,6 @@ class InternalMcpCatalogModel {
           ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
         ),
       );
-
-    return catalogItems;
   }
 
   static async findById(id: string): Promise<InternalMcpCatalog | null> {
@@ -48,11 +44,7 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    if (!catalogItem) {
-      return null;
-    }
-
-    return catalogItem;
+    return catalogItem || null;
   }
 
   /**

@@ -44,13 +44,21 @@ WITH catalog_with_secrets AS (
     jsonb_object_agg(
       elem->>'key',
       elem->>'value'
-    ) FILTER (WHERE elem->>'type' = 'secret' AND elem->>'value' IS NOT NULL) as secret_env_vars
+    ) FILTER (
+      WHERE elem->>'type' = 'secret'
+        AND elem->>'value' IS NOT NULL
+        AND (elem->>'promptOnInstallation')::boolean = false
+    ) as secret_env_vars
   FROM internal_mcp_catalog c
   CROSS JOIN LATERAL jsonb_array_elements(c.local_config->'environment') AS elem
   WHERE c.local_config->'environment' IS NOT NULL
     AND c.local_config_secret_id IS NULL
   GROUP BY c.id, c.name, c.local_config
-  HAVING COUNT(*) FILTER (WHERE elem->>'type' = 'secret' AND elem->>'value' IS NOT NULL) > 0
+  HAVING COUNT(*) FILTER (
+    WHERE elem->>'type' = 'secret'
+      AND elem->>'value' IS NOT NULL
+      AND (elem->>'promptOnInstallation')::boolean = false
+  ) > 0
 ),
 new_secrets AS (
   INSERT INTO secret (id, name, secret, is_vault, created_at, updated_at)
@@ -73,7 +81,11 @@ SET
     (
       SELECT jsonb_agg(
         CASE
-          WHEN elem->>'type' = 'secret' THEN elem - 'value'
+          -- Only remove value from non-prompted secret-type env vars
+          WHEN elem->>'type' = 'secret'
+            AND (elem->>'promptOnInstallation')::boolean = false
+          THEN elem - 'value'
+          -- Keep everything else as-is (including prompted secrets)
           ELSE elem
         END
       )

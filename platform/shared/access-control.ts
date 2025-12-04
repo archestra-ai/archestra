@@ -347,6 +347,10 @@ export const RouteId = {
   CreateOptimizationRule: "createOptimizationRule",
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
+
+  // Secrets Routes
+  GetSecretsType: "getSecretsType",
+  CheckSecretsConnectivity: "checkSecretsConnectivity",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];
@@ -776,6 +780,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOptimizationRule]: {
     profile: ["delete"],
   },
+
+  // Secrets Routes
+  [RouteId.GetSecretsType]: {
+    organization: ["read"],
+  },
+  [RouteId.CheckSecretsConnectivity]: {
+    organization: ["update"],
+  },
 };
 
 /**
@@ -844,6 +856,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   },
   "/settings/sso-providers": {
     ssoProvider: ["read"],
+  },
+  "/settings/secrets": {
+    organization: ["update"],
   },
 
   // Cost & Limits

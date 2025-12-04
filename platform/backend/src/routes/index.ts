@@ -23,6 +23,7 @@ export { default as promptRoutes } from "./prompts";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";
+export { default as secretsRoutes } from "./secrets";
 export { default as ssoProviderRoutes } from "./sso-provider";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";

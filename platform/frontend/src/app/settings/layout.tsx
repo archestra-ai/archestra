@@ -3,6 +3,7 @@
 import { PageLayout } from "@/components/page-layout";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
+import { useSecretsType } from "@/lib/secrets.query";
 
 export default function SettingsLayout({
   children,
@@ -16,6 +17,12 @@ export default function SettingsLayout({
   const { data: userCanReadSsoProviders } = useHasPermissions({
     ssoProvider: ["read"],
   });
+
+  const { data: userCanUpdateOrganization } = useHasPermissions({
+    organization: ["update"],
+  });
+
+  const { data: secretsType } = useSecretsType();
 
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
@@ -36,6 +43,13 @@ export default function SettingsLayout({
             : []),
           { label: "Appearance", href: "/settings/appearance" },
         ]
+      : []),
+    /**
+     * Secrets tab is only shown when using Vault storage (not DB)
+     * and the user has permission to update organization settings.
+     */
+    ...(userCanUpdateOrganization && secretsType?.type === "Vault"
+      ? [{ label: "Secrets", href: "/settings/secrets" }]
       : []),
   ];
 

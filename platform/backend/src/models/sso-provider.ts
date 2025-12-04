@@ -271,14 +271,6 @@ class SsoProviderModel {
               ssoProvider.organizationId,
               groups,
             );
-            logger.debug(
-              {
-                providerId: provider.providerId,
-                email: user.email,
-                groupCount: groups.length,
-              },
-              "Cached SSO groups for team sync",
-            );
           }
         }
 

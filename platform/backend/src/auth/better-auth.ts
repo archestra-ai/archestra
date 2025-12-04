@@ -23,7 +23,8 @@ import {
   SessionModel,
   TeamModel,
 } from "@/models";
-import { retrieveSsoGroups } from "./sso-team-sync-cache";
+import { jwtDecode } from "jwt-decode";
+import { extractGroupsFromClaims } from "./sso-team-sync-cache";
 
 const APP_NAME = "Archestra";
 const {
@@ -442,7 +443,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       // SSO Team Sync: Synchronize team memberships based on SSO groups
       // Only applies to SSO logins (not regular email/password logins)
       if (path.startsWith("/sso/callback")) {
-        await syncSsoTeams(userId, user.email, path);
+        await syncSsoTeams(userId, user.email);
       }
     }
   }
@@ -455,36 +456,84 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 async function syncSsoTeams(
   userId: string,
   userEmail: string,
-  callbackPath: string,
 ): Promise<void> {
   // Only sync if enterprise license is activated
   if (!config.enterpriseLicenseActivated) {
     return;
   }
 
-  // Extract provider ID from callback path (e.g., /sso/callback/keycloak-local)
-  const pathParts = callbackPath.split("/");
-  const providerId = pathParts[pathParts.length - 1];
+  // Get the user's SSO account to find the provider ID and idToken
+  // We query the account table to find an SSO provider (not "credential")
+  const ssoAccounts = await db
+    .select()
+    .from(schema.accountsTable)
+    .where(eq(schema.accountsTable.userId, userId));
 
-  if (!providerId) {
+  // Find an SSO account (provider_id != "credential")
+  const ssoAccount = ssoAccounts.find((acc) => acc.providerId !== "credential");
+
+  if (!ssoAccount) {
     logger.debug(
-      "No provider ID found in SSO callback path, skipping team sync",
+      { userId, userEmail },
+      "No SSO account found for user, skipping team sync",
     );
     return;
   }
 
-  // Retrieve cached SSO groups
-  const cachedData = retrieveSsoGroups(providerId, userEmail);
+  const providerId = ssoAccount.providerId;
 
-  if (!cachedData || cachedData.groups.length === 0) {
+  // Decode the idToken to get groups
+  // Note: better-auth stores the idToken in the account table
+  if (!ssoAccount.idToken) {
     logger.debug(
       { providerId, userEmail },
-      "No SSO groups found in cache, skipping team sync",
+      "No idToken in SSO account, skipping team sync",
     );
     return;
   }
 
-  const { groups, organizationId } = cachedData;
+  let groups: string[] = [];
+  try {
+    const idTokenClaims = jwtDecode<Record<string, unknown>>(ssoAccount.idToken);
+    groups = extractGroupsFromClaims(idTokenClaims);
+    logger.debug(
+      {
+        providerId,
+        userEmail,
+        groups,
+        hasGroups: groups.length > 0,
+      },
+      "Decoded idToken claims for team sync",
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, providerId, userEmail },
+      "Failed to decode idToken for team sync",
+    );
+    return;
+  }
+
+  if (groups.length === 0) {
+    logger.debug(
+      { providerId, userEmail },
+      "No groups found in idToken, skipping team sync",
+    );
+    return;
+  }
+
+  // Get the SSO provider to find the organization ID
+  const { default: SsoProviderModel } = await import("@/models/sso-provider");
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  const organizationId = ssoProvider.organizationId;
 
   try {
     const { added, removed } = await TeamModel.syncUserTeams(

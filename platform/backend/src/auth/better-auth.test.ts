@@ -64,6 +64,12 @@ describe("handleBeforeHook", () => {
     });
   });
 
+  // Note: Tests for ARCHESTRA_AUTH_DISABLE_INVITATIONS=true require mocking
+  // the config module. When disableInvitations is true:
+  // - POST /organization/invite-member returns FORBIDDEN "User invitations are disabled"
+  // - POST /organization/cancel-invitation returns FORBIDDEN "User invitations are disabled"
+  // These scenarios can be tested via E2E tests with the environment variable set.
+
   describe("sign-up invitation validation", () => {
     test("should throw FORBIDDEN when no invitation ID is provided", async () => {
       const ctx = createMockContext({

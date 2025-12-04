@@ -39,6 +39,12 @@ To disable basic authentication, set the `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` env
 
 > **Important:** Ensure at least one SSO provider is configured and working before disabling basic authentication. Otherwise, users (including administrators) will not be able to sign in.
 
+## Disabling User Invitations
+
+For organizations using SSO with automatic user provisioning, you may want to disable the manual invitation system entirely. This hides the invitation UI and blocks invitation API endpoints.
+
+To disable invitations, set the `ARCHESTRA_AUTH_DISABLE_INVITATIONS` environment variable to `true`. See [Deployment - Environment Variables](/platform-deployment#environment-variables) for configuration details.
+
 ## Callback URLs
 
 ### OIDC Callback URL

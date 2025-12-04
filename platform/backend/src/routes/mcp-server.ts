@@ -9,7 +9,6 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
   McpServerTeamModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secretsmanager";

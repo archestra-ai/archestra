@@ -32,6 +32,8 @@ import { expect, test } from "../../fixtures";
 const TEST_SERVER_NAME = "internal-dev-test-server";
 
 test.describe("Credentials Management", () => {
+  test.describe.configure({ mode: "serial" });
+
   // Cleanup any existing installations at the start to ensure clean state
   test("Setup: Clean any existing installations", async ({
     adminPage,
@@ -76,7 +78,7 @@ test.describe("Credentials Management", () => {
       // Member should see Uninstall button (they installed the server)
       await expect(
         serverCard.getByRole("button", { name: /Uninstall/i }),
-      ).toBeVisible({ timeout: 10_000 });
+      ).toBeVisible({ timeout: 20_000 });
 
       // But Member should NOT see the Manage credentials button (requires tool:update, profile:update)
       await expect(

@@ -47,5 +47,5 @@ docker build -t mcp-server-base .
 ## Security
 
 - Runs as non-root user (uid: 1000, gid: 1000)
-- Minimal Alpine Linux base
+- Minimal Debian-slim base (more reliable for multi-architecture builds)
 - Only essential runtime dependencies included

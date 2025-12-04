@@ -87,9 +87,15 @@ platform/
 - **Default Admin**: admin@example.com / admin123
 
 ## MCP UI Integration (Bounty $900)
-**Status**: Implemented (Dec 4, 2025)
+**Status**: Complete and Approved (Dec 4, 2025)
 
 The platform now supports rendering interactive UIs from MCP servers via the mcpui.dev protocol.
+
+### Demo Page
+Access the demo at `/mcp-ui-demo` (no authentication required):
+- 4-user switcher (Alice, Bob, Charlie, Diana)
+- Interactive MCP UI widgets (weather, task manager, data chart)
+- Action log showing tool/prompt/intent callbacks
 
 ### Supported Rendering Modes
 1. **text/html** - Inline HTML rendered in sandboxed iframe
@@ -97,19 +103,28 @@ The platform now supports rendering interactive UIs from MCP servers via the mcp
 3. **application/vnd.mcp-ui.remote-dom** - Not yet supported
 
 ### Key Components
-- `platform/frontend/src/components/ai-elements/mcp-ui-wrapper.tsx` - Core iframe wrapper with postMessage handling
+- `platform/frontend/src/components/ai-elements/mcp-ui-wrapper.tsx` - Core iframe wrapper with nonce authentication and postMessage handling
 - `platform/frontend/src/components/ai-elements/tool.tsx` - Updated ToolOutput to detect and render UIResource content
-- `platform/frontend/src/components/chat/chat-messages.tsx` - Updated to pass MCP UI action handlers
+- `platform/frontend/src/app/mcp-ui-demo/page.tsx` - Public demo page showcasing MCP UI integration
+
+### Security Implementation
+The McpUiWrapper uses a nonce handshake protocol for iframe authentication:
+1. Iframe sends `ui-lifecycle-iframe-ready` message
+2. Parent responds with `ui-lifecycle-iframe-authenticated` containing session nonce
+3. Iframe caches nonce and includes `_nonce` field in all subsequent messages
+4. Parent validates nonce and origin on all incoming messages
 
 ### postMessage Protocol Support
 The implementation supports bidirectional communication:
 - **Inbound**: `tool`, `prompt`, `intent`, `ui-lifecycle-iframe-ready`, `ui-size-change`, `ui-request-data`
-- **Outbound**: `ui-message-received`, `ui-message-response`, `ui-lifecycle-iframe-render-data`
+- **Outbound**: `ui-message-received`, `ui-message-response`, `ui-lifecycle-iframe-render-data`, `ui-lifecycle-iframe-authenticated`
 
 ### UIResource Detection
 Tool outputs are automatically detected for UIResource content based on:
 - `type: "resource"` with `resource.uri` starting with `ui://`
 - Or mimeType: `text/html`, `text/uri-list`, or `application/vnd.mcp-ui.remote-dom`
+
+Recursive traversal handles nested content arrays from OpenAI/Anthropic tool result formats.
 
 ## Known Limitations in Replit Environment
 1. **Kubernetes features disabled**: MCP orchestrator requires a K8s cluster

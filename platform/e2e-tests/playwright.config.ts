@@ -81,6 +81,7 @@ export default defineConfig({
       },
       // Run all setup projects before tests
       dependencies: ["setup-teams"],
+      grep: /@firefox/,
     },
     {
       name: "webkit",
@@ -92,6 +93,7 @@ export default defineConfig({
       },
       // Run all setup projects before tests
       dependencies: ["setup-teams"],
+      grep: /@webkit/,
     },
   ],
 });

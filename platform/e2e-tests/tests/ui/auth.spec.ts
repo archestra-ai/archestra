@@ -1,4 +1,9 @@
-import { ADMIN_EMAIL, EDITOR_EMAIL, MEMBER_EMAIL } from "../../consts";
+import {
+  ADMIN_EMAIL,
+  E2eTestId,
+  EDITOR_EMAIL,
+  MEMBER_EMAIL,
+} from "../../consts";
 import { expect, test } from "../../fixtures";
 
 test.describe("Multi-user authentication", () => {
@@ -16,12 +21,24 @@ test.describe("Multi-user authentication", () => {
     ]);
 
     // Verify admin sees admin email
-    await expect(adminPage.getByText(ADMIN_EMAIL)).toBeVisible();
+    await expect(
+      adminPage
+        .getByTestId(E2eTestId.SidebarUserProfile)
+        .getByText(ADMIN_EMAIL),
+    ).toBeVisible();
 
     // Verify editor sees editor email
-    await expect(editorPage.getByText(EDITOR_EMAIL)).toBeVisible();
+    await expect(
+      editorPage
+        .getByTestId(E2eTestId.SidebarUserProfile)
+        .getByText(EDITOR_EMAIL),
+    ).toBeVisible();
 
     // Verify member sees member email
-    await expect(memberPage.getByText(MEMBER_EMAIL)).toBeVisible();
+    await expect(
+      memberPage
+        .getByTestId(E2eTestId.SidebarUserProfile)
+        .getByText(MEMBER_EMAIL),
+    ).toBeVisible();
   });
 });

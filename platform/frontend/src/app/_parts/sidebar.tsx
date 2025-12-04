@@ -1,6 +1,6 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
-import { requiredPagePermissionsMap } from "@shared";
+import { E2eTestId, requiredPagePermissionsMap } from "@shared";
 import {
   BookOpen,
   Bot,
@@ -243,12 +243,14 @@ const FooterSideBarSection = ({ pathname }: { pathname: string }) => (
     <SignedIn>
       <SidebarGroup className="mt-auto">
         <SidebarGroupContent>
-          <UserButton
-            size="default"
-            align="center"
-            className="w-full bg-transparent hover:bg-transparent text-foreground"
-            disableDefaultLinks
-          />
+          <div data-testid={E2eTestId.SidebarUserProfile}>
+            <UserButton
+              size="default"
+              align="center"
+              className="w-full bg-transparent hover:bg-transparent text-foreground"
+              disableDefaultLinks
+            />
+          </div>
         </SidebarGroupContent>
       </SidebarGroup>
     </SignedIn>

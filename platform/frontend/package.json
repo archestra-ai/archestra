@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack -H 0.0.0.0",
+    "dev": "next dev --turbopack -H 0.0.0.0 -p 5000",
     "build": "next build --turbopack",
-    "start": "NODE_ENV=production next start",
+    "start": "NODE_ENV=production next start -H 0.0.0.0 -p 5000",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",

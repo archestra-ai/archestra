@@ -20,6 +20,20 @@ const nextConfig: NextConfig = {
   httpAgentOptions: {
     keepAlive: true,
   },
+  // Allow all hosts for Replit proxy/iframe
+  headers: async () => {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'ALLOWALL',
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     const backendUrl =
       process.env.ARCHESTRA_API_BASE_URL || "http://localhost:9000";

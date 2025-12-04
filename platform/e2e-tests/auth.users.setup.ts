@@ -7,7 +7,6 @@ import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
-  adminAuthFile,
   EDITOR_EMAIL,
   EDITOR_PASSWORD,
   editorAuthFile,
@@ -184,35 +183,7 @@ async function userExists(
   return signedIn;
 }
 
-// Setup admin authentication
-setup("authenticate as admin", async ({ page }) => {
-  // Sign in admin via API
-  const signedIn = await signInUser(page.request, ADMIN_EMAIL, ADMIN_PASSWORD);
-  expect(signedIn, "Admin sign-in failed").toBe(true);
-
-  // Navigate to trigger cookie storage
-  await page.goto(`${UI_BASE_URL}/chat`);
-  await page.waitForLoadState("networkidle");
-
-  // Mark onboarding as complete via API
-  await page.request.patch(`${UI_BASE_URL}/api/organization`, {
-    data: { onboardingComplete: true },
-  });
-
-  // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
-  await page.reload();
-  await page.waitForLoadState("networkidle");
-
-  // Verify we're authenticated
-  await expect(page.getByRole("link", { name: /Tools/i })).toBeVisible({
-    timeout: 30000,
-  });
-
-  // Save admin auth state
-  await page.context().storageState({ path: adminAuthFile });
-});
-
-// Setup editor authentication
+// Setup editor authentication - runs after admin setup
 setup("authenticate as editor", async ({ page }) => {
   // Check if editor user already exists
   const editorExists = await userExists(
@@ -274,7 +245,7 @@ setup("authenticate as editor", async ({ page }) => {
   await page.context().storageState({ path: editorAuthFile });
 });
 
-// Setup member authentication
+// Setup member authentication - runs after admin setup
 setup("authenticate as member", async ({ page }) => {
   // Check if member user already exists
   const memberExists = await userExists(

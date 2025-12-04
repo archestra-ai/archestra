@@ -27,11 +27,18 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
-    // Setup project - runs authentication once before all tests
+    // Setup projects - run authentication in correct order
     {
-      name: "setup",
-      testMatch: /.*\.setup\.ts/,
+      name: "setup-admin",
+      testMatch: /auth\.admin\.setup\.ts/,
       testDir: "./",
+    },
+    {
+      name: "setup-users",
+      testMatch: /auth\.users\.setup\.ts/,
+      testDir: "./",
+      // Users setup needs admin to be authenticated first
+      dependencies: ["setup-admin"],
     },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
     {
@@ -42,8 +49,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run the setup project before tests
-      dependencies: ["setup"],
+      // Run both setup projects before tests
+      dependencies: ["setup-users"],
     },
     // UI tests run on all browsers
     {
@@ -54,8 +61,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run the setup project before tests
-      dependencies: ["setup"],
+      // Run both setup projects before tests
+      dependencies: ["setup-users"],
     },
     {
       name: "firefox",
@@ -65,8 +72,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run the setup project before tests
-      dependencies: ["setup"],
+      // Run both setup projects before tests
+      dependencies: ["setup-users"],
     },
     {
       name: "webkit",
@@ -76,8 +83,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run the setup project before tests
-      dependencies: ["setup"],
+      // Run both setup projects before tests
+      dependencies: ["setup-users"],
     },
   ],
 });

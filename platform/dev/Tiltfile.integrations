@@ -257,7 +257,7 @@ spec:
             - name: ARCHESTRA_HASHICORP_VAULT_ADDR
               value: "http://vault.archestra-dev.svc:8200"
             - name: ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD
-              value: "k8s"
+              value: "K8S"
             - name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
               value: "archestra"
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER

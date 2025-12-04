@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { middleware } from "./middleware";
+import { proxy } from "./proxy";
 
 /**
  * Helper to create a mock NextRequest
@@ -17,7 +17,7 @@ function createMockRequest(options: {
   return request;
 }
 
-describe("middleware", () => {
+describe("proxy", () => {
   const originalEnv = {
     ARCHESTRA_FRONTEND_URL: process.env.ARCHESTRA_FRONTEND_URL,
     ARCHESTRA_API_BASE_URL: process.env.ARCHESTRA_API_BASE_URL,
@@ -53,7 +53,7 @@ describe("middleware", () => {
         url: "/api/profiles",
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // NextResponse.next() returns a response that continues the middleware chain
       expect(response.headers.get("x-middleware-next")).toBe("1");
@@ -66,7 +66,7 @@ describe("middleware", () => {
         headers: { Origin: "http://localhost:3000" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       expect(response.headers.get("x-middleware-next")).toBe("1");
     });
@@ -77,7 +77,7 @@ describe("middleware", () => {
         url: "/settings",
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       expect(response.headers.get("x-middleware-next")).toBe("1");
     });
@@ -91,7 +91,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // Should be a rewrite response (not next())
       expect(response.headers.get("x-middleware-next")).toBeNull();
@@ -108,7 +108,7 @@ describe("middleware", () => {
         // No Origin header
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       expect(response.headers.get("x-middleware-next")).toBeNull();
       expect(response.headers.get("x-middleware-rewrite")).toContain(
@@ -123,7 +123,7 @@ describe("middleware", () => {
         headers: { Origin: "http://localhost:3000" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // Should pass through (not rewrite)
       expect(response.headers.get("x-middleware-next")).toBe("1");
@@ -136,7 +136,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // GET requests should pass through even with null origin
       expect(response.headers.get("x-middleware-next")).toBe("1");
@@ -149,7 +149,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // Non-ACS paths should pass through
       expect(response.headers.get("x-middleware-next")).toBe("1");
@@ -162,7 +162,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       const rewriteUrl = response.headers.get("x-middleware-rewrite");
       expect(rewriteUrl).toContain("state=abc123");
@@ -178,7 +178,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       // The rewrite should happen with the custom frontend origin
       expect(response.headers.get("x-middleware-next")).toBeNull();
@@ -193,7 +193,7 @@ describe("middleware", () => {
         headers: { Origin: "null" },
       });
 
-      const response = middleware(request);
+      const response = proxy(request);
 
       expect(response.headers.get("x-middleware-rewrite")).toContain(
         "api.example.com",
@@ -209,7 +209,7 @@ describe("middleware", () => {
         url: "/api/profiles",
       });
 
-      middleware(request);
+      proxy(request);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining("API Request: GET"),
@@ -223,7 +223,7 @@ describe("middleware", () => {
         url: "/v1/chat/completions",
       });
 
-      middleware(request);
+      proxy(request);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining("API Request: POST"),
@@ -237,7 +237,7 @@ describe("middleware", () => {
         url: "/_next/static/chunk.js",
       });
 
-      middleware(request);
+      proxy(request);
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });
@@ -249,7 +249,7 @@ describe("middleware", () => {
         url: "/settings",
       });
 
-      middleware(request);
+      proxy(request);
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });

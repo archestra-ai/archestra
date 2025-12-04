@@ -2,13 +2,16 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import config from "@/config";
 import { AgentToolModel, TeamModel } from "@/models";
 import {
+  AddTeamExternalGroupBodySchema,
   AddTeamMemberBodySchema,
   ApiError,
   CreateTeamBodySchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  SelectTeamExternalGroupSchema,
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
@@ -249,6 +252,139 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch (cleanupError) {
         // Log the error but don't fail the request
         fastify.log.error(cleanupError, "Error cleaning up credential sources");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/teams/:id/external-groups",
+    {
+      schema: {
+        operationId: RouteId.GetTeamExternalGroups,
+        description:
+          "Get all external groups mapped to a team for SSO team sync",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.array(SelectTeamExternalGroupSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      // Verify enterprise license
+      if (!config.enterpriseLicenseActivated) {
+        throw new ApiError(
+          403,
+          "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+        );
+      }
+
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      return reply.send(await TeamModel.getExternalGroups(id));
+    },
+  );
+
+  fastify.post(
+    "/api/teams/:id/external-groups",
+    {
+      schema: {
+        operationId: RouteId.AddTeamExternalGroup,
+        description:
+          "Add an external group mapping to a team for SSO team sync",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+        }),
+        body: AddTeamExternalGroupBodySchema,
+        response: constructResponseSchema(SelectTeamExternalGroupSchema),
+      },
+    },
+    async (
+      { params: { id }, body: { groupIdentifier }, organizationId },
+      reply,
+    ) => {
+      // Verify enterprise license
+      if (!config.enterpriseLicenseActivated) {
+        throw new ApiError(
+          403,
+          "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+        );
+      }
+
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      // Normalize group identifier to lowercase for case-insensitive matching
+      const normalizedGroupIdentifier = groupIdentifier.toLowerCase();
+
+      // Check if the mapping already exists
+      const existingGroups = await TeamModel.getExternalGroups(id);
+      if (
+        existingGroups.some(
+          (g) => g.groupIdentifier.toLowerCase() === normalizedGroupIdentifier,
+        )
+      ) {
+        throw new ApiError(
+          409,
+          "This external group is already mapped to this team",
+        );
+      }
+
+      const externalGroup = await TeamModel.addExternalGroup(
+        id,
+        normalizedGroupIdentifier,
+      );
+
+      return reply.send(externalGroup);
+    },
+  );
+
+  fastify.delete(
+    "/api/teams/:id/external-groups/:groupId",
+    {
+      schema: {
+        operationId: RouteId.RemoveTeamExternalGroup,
+        description:
+          "Remove an external group mapping from a team for SSO team sync",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+          groupId: z.string(),
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, groupId }, organizationId }, reply) => {
+      // Verify enterprise license
+      if (!config.enterpriseLicenseActivated) {
+        throw new ApiError(
+          403,
+          "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+        );
+      }
+
+      // Verify the team exists and belongs to the user's organization
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      const success = await TeamModel.removeExternalGroupById(id, groupId);
+
+      if (!success) {
+        throw new ApiError(404, "External group mapping not found");
       }
 
       return reply.send({ success: true });

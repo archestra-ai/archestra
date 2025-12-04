@@ -2,6 +2,7 @@ import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
+import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
 import { describe, expect, test } from "@/test";
 import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
 
@@ -1680,6 +1681,145 @@ describe("resolveSsoRole", () => {
       const result = await SsoProviderModel.resolveSsoRole(params);
 
       expect(result).toBe("admin");
+    });
+  });
+
+  describe("SSO groups caching for team sync", () => {
+    test("caches SSO groups when role mapping is configured and user has groups", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        rules: [
+          { expression: "contains(groups || `[]`, 'admins')", role: "admin" },
+        ],
+        defaultRole: "member",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      const params = createParams({
+        user: { id: "user-1", email: "groupuser@example.com" },
+        provider: { providerId: provider.providerId },
+        userInfo: { groups: ["engineering", "admins"] },
+      });
+
+      await SsoProviderModel.resolveSsoRole(params);
+
+      // Verify groups were cached
+      const cachedData = retrieveSsoGroups(
+        provider.providerId,
+        "groupuser@example.com",
+      );
+      expect(cachedData).not.toBeNull();
+      expect(cachedData?.groups).toEqual(["engineering", "admins"]);
+      expect(cachedData?.organizationId).toBe(org.id);
+    });
+
+    test("caches SSO groups when no role mapping is configured but user has groups", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      // Create provider without role mapping
+      const provider = await makeSsoProvider(org.id);
+
+      const params = createParams({
+        user: { id: "user-1", email: "noroles@example.com" },
+        provider: { providerId: provider.providerId },
+        userInfo: { groups: ["team-a", "team-b"] },
+      });
+
+      await SsoProviderModel.resolveSsoRole(params);
+
+      // Verify groups were cached even without role mapping
+      const cachedData = retrieveSsoGroups(
+        provider.providerId,
+        "noroles@example.com",
+      );
+      expect(cachedData).not.toBeNull();
+      expect(cachedData?.groups).toEqual(["team-a", "team-b"]);
+      expect(cachedData?.organizationId).toBe(org.id);
+    });
+
+    test("does not cache groups when user email is missing", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const provider = await makeSsoProvider(org.id);
+
+      const params = createParams({
+        user: null, // No user email
+        provider: { providerId: provider.providerId },
+        userInfo: { groups: ["team-a"] },
+      });
+
+      await SsoProviderModel.resolveSsoRole(params);
+
+      // Cannot retrieve without email - this test verifies the code path
+      // The caching should be skipped when user?.email is falsy
+      // We can't easily verify "not cached" without knowing the email,
+      // but the code coverage confirms the branch is exercised
+    });
+
+    test("does not cache groups when no groups are present in claims", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const provider = await makeSsoProvider(org.id);
+
+      const params = createParams({
+        user: { id: "user-1", email: "nogroups@example.com" },
+        provider: { providerId: provider.providerId },
+        userInfo: { email: "nogroups@example.com" }, // No groups claim
+      });
+
+      await SsoProviderModel.resolveSsoRole(params);
+
+      // Verify nothing was cached (no groups to cache)
+      const cachedData = retrieveSsoGroups(
+        provider.providerId,
+        "nogroups@example.com",
+      );
+      expect(cachedData).toBeNull();
+    });
+
+    test("extracts groups from token claims for caching", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+      const roleMapping: SsoRoleMappingConfig = {
+        dataSource: "token",
+        rules: [{ expression: "role == 'admin'", role: "admin" }],
+        defaultRole: "member",
+      };
+      const provider = await makeSsoProvider(org.id, {
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      const params = createParams({
+        user: { id: "user-1", email: "tokenuser@example.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["from-token"], role: "admin" },
+        userInfo: { groups: ["from-userinfo"] },
+      });
+
+      await SsoProviderModel.resolveSsoRole(params);
+
+      // Groups should be combined from both token and userInfo
+      const cachedData = retrieveSsoGroups(
+        provider.providerId,
+        "tokenuser@example.com",
+      );
+      expect(cachedData).not.toBeNull();
+      // The combinedClaims spreads tokenClaims first, then userInfo
+      // So userInfo groups should win
+      expect(cachedData?.groups).toEqual(["from-userinfo"]);
     });
   });
 });

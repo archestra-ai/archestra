@@ -554,6 +554,13 @@
       "when": 1764798610912,
       "tag": "0078_wakeful_nightcrawler",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1764806886044,
+      "tag": "0079_mature_deathbird",
+      "breakpoints": true
     }
   ]
 }

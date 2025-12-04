@@ -6,6 +6,10 @@ import { and, eq } from "drizzle-orm";
 import jmespath from "jmespath";
 import { jwtDecode } from "jwt-decode";
 import { auth } from "@/auth/better-auth";
+import {
+  cacheSsoGroups,
+  extractGroupsFromClaims,
+} from "@/auth/sso-team-sync-cache";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -208,6 +212,34 @@ class SsoProviderModel {
               },
               "Skip role sync enabled - keeping existing role",
             );
+
+            // Cache SSO groups for team sync before returning (even when skipping role sync)
+            if (user.email && ssoProvider.organizationId) {
+              const tokenClaims =
+                idTokenClaims || (token as Record<string, unknown>) || {};
+              const combinedClaims = {
+                ...tokenClaims,
+                ...((userInfo as Record<string, unknown>) || {}),
+              };
+              const groups = extractGroupsFromClaims(combinedClaims);
+              if (groups.length > 0) {
+                cacheSsoGroups(
+                  provider.providerId,
+                  user.email,
+                  ssoProvider.organizationId,
+                  groups,
+                );
+                logger.debug(
+                  {
+                    providerId: provider.providerId,
+                    email: user.email,
+                    groupCount: groups.length,
+                  },
+                  "Cached SSO groups for team sync (skipRoleSync path)",
+                );
+              }
+            }
+
             return existingMember.role;
           }
         }
@@ -253,7 +285,50 @@ class SsoProviderModel {
           "SSO role mapping evaluated",
         );
 
+        // Cache SSO groups for team sync (if user email is available)
+        if (user?.email && ssoProvider.organizationId) {
+          const combinedClaims = {
+            ...tokenClaims,
+            ...((userInfo as Record<string, unknown>) || {}),
+          };
+          const groups = extractGroupsFromClaims(combinedClaims);
+          if (groups.length > 0) {
+            cacheSsoGroups(
+              provider.providerId,
+              user.email,
+              ssoProvider.organizationId,
+              groups,
+            );
+          }
+        }
+
         return result.role as string;
+      }
+
+      // If no role mapping is configured but we still have groups, cache them for team sync
+      if (ssoProvider?.organizationId && user?.email) {
+        const combinedClaims = {
+          ...idTokenClaims,
+          ...(token as Record<string, unknown>),
+          ...((userInfo as Record<string, unknown>) || {}),
+        };
+        const groups = extractGroupsFromClaims(combinedClaims);
+        if (groups.length > 0) {
+          cacheSsoGroups(
+            provider.providerId,
+            user.email,
+            ssoProvider.organizationId,
+            groups,
+          );
+          logger.debug(
+            {
+              providerId: provider.providerId,
+              email: user.email,
+              groupCount: groups.length,
+            },
+            "Cached SSO groups for team sync (no role mapping configured)",
+          );
+        }
       }
     } catch (error) {
       // Re-throw APIError (for strict mode)

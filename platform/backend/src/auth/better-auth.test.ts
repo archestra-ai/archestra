@@ -1,7 +1,22 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import config from "@/config";
+import { TeamModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { handleAfterHook, handleBeforeHook } from "./better-auth";
+
+/**
+ * Creates a mock JWT idToken with the given claims.
+ * This is a simple base64-encoded JWT for testing purposes.
+ */
+function createMockIdToken(claims: Record<string, unknown>): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "HS256", typ: "JWT" }),
+  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = "test-signature";
+  return `${header}.${payload}.${signature}`;
+}
 
 /**
  * Helper to create a minimal mock context for testing.
@@ -456,6 +471,281 @@ describe("handleAfterHook", () => {
       // The function will call InvitationModel.accept which might fail
       // depending on test setup, but it shouldn't throw unhandled errors
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+    });
+  });
+
+  describe("SSO team sync", () => {
+    const originalEnterpriseValue = config.enterpriseLicenseActivated;
+
+    // Helper to set enterprise license config
+    function setEnterpriseLicense(value: boolean) {
+      Object.defineProperty(config, "enterpriseLicenseActivated", {
+        value,
+        writable: true,
+        configurable: true,
+      });
+    }
+
+    test("should sync teams when SSO callback path with SSO account", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "sso-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "SSO Team" });
+
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local" });
+
+      // Create SSO account with idToken containing groups
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["engineering"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local",
+        idToken,
+      });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was added to the team
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should not sync teams when enterprise license is disabled", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      // Disable enterprise license
+      setEnterpriseLicense(false);
+
+      const user = await makeUser({ email: "sso-user2@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "SSO Team 2" });
+
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-2" });
+
+      // Create SSO account with idToken containing groups
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["developers"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-2",
+        idToken,
+      });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "developers");
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local-2",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was NOT added to the team (enterprise license disabled)
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should not sync teams for regular sign-in (non-SSO)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "regular-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, {
+        name: "Team for Regular",
+      });
+
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-3" });
+
+      // Create SSO account with idToken containing groups (but shouldn't be used for regular sign-in)
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["staff"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-3",
+        idToken,
+      });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "staff");
+
+      const ctx = createMockContext({
+        path: "/sign-in", // Regular sign-in, not SSO callback
+        method: "POST",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was NOT added to the team (regular sign-in doesn't sync teams)
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should handle missing SSO account gracefully", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "no-sso-account@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Don't create any SSO account
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should not throw, just skip team sync
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should remove user from teams when SSO groups change", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+      makeAccount,
+      makeSsoProvider,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "sync-remove@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "Removal Team" });
+
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-4" });
+
+      // Create SSO account with idToken containing NEW groups (user was removed from old-group)
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["new-group"], // old-group is no longer present
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-4",
+        idToken,
+      });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "old-group");
+
+      // Add user to team via SSO sync initially
+      await TeamModel.addMember(team.id, user.id, "member", true); // syncedFromSso = true
+
+      // Verify user is in team
+      let isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local-4",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was removed from the team
+      isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
     });
   });
 });

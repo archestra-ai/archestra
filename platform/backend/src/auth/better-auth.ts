@@ -12,12 +12,19 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { InvitationModel, MemberModel, SessionModel } from "@/models";
+import {
+  InvitationModel,
+  MemberModel,
+  SessionModel,
+  TeamModel,
+} from "@/models";
+import { extractGroupsFromClaims } from "./sso-team-sync-cache";
 
 const APP_NAME = "Archestra";
 const {
@@ -432,6 +439,147 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
       }
+
+      // SSO Team Sync: Synchronize team memberships based on SSO groups
+      // Only applies to SSO logins (not regular email/password logins)
+      if (path.startsWith("/sso/callback")) {
+        await syncSsoTeams(userId, user.email);
+      }
     }
+  }
+}
+
+/**
+ * Synchronize user's team memberships based on their SSO groups.
+ * This is called after successful SSO login in the after hook.
+ *
+ * @param userId - The user's ID
+ * @param userEmail - The user's email
+ */
+async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
+  logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
+
+  // Only sync if enterprise license is activated
+  if (!config.enterpriseLicenseActivated) {
+    logger.info("🔄 Enterprise license not activated, skipping team sync");
+    return;
+  }
+
+  // Get the user's accounts and find the most recently used SSO account
+  // Order by updatedAt DESC to get the account from the current login
+  const allAccounts = await db
+    .select()
+    .from(schema.accountsTable)
+    .where(eq(schema.accountsTable.userId, userId))
+    .orderBy(desc(schema.accountsTable.updatedAt));
+
+  // Find an SSO account (providerId != "credential") - first match is most recent due to ordering
+  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+
+  logger.info(
+    {
+      allAccountsCount: allAccounts.length,
+      ssoAccountFound: !!ssoAccount,
+      providerId: ssoAccount?.providerId,
+    },
+    "🔄 Found accounts for user",
+  );
+
+  if (!ssoAccount) {
+    logger.warn(
+      { userId, userEmail },
+      "🔄 No SSO account found for user, skipping team sync",
+    );
+    return;
+  }
+
+  const providerId = ssoAccount.providerId;
+
+  // Decode the idToken to get groups
+  // Note: better-auth stores the idToken in the account table
+  if (!ssoAccount.idToken) {
+    logger.debug(
+      { providerId, userEmail },
+      "No idToken in SSO account, skipping team sync",
+    );
+    return;
+  }
+
+  let groups: string[] = [];
+  try {
+    const idTokenClaims = jwtDecode<Record<string, unknown>>(
+      ssoAccount.idToken,
+    );
+    groups = extractGroupsFromClaims(idTokenClaims);
+    logger.debug(
+      {
+        providerId,
+        userEmail,
+        groups,
+        hasGroups: groups.length > 0,
+      },
+      "Decoded idToken claims for team sync",
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, providerId, userEmail },
+      "Failed to decode idToken for team sync",
+    );
+    return;
+  }
+
+  if (groups.length === 0) {
+    logger.debug(
+      { providerId, userEmail },
+      "No groups found in idToken, skipping team sync",
+    );
+    return;
+  }
+
+  // Get the SSO provider to find the organization ID
+  const { default: SsoProviderModel } = await import("@/models/sso-provider");
+  const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
+
+  if (!ssoProvider?.organizationId) {
+    logger.debug(
+      { providerId, userEmail },
+      "SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  const organizationId = ssoProvider.organizationId;
+
+  try {
+    const { added, removed } = await TeamModel.syncUserTeams(
+      userId,
+      organizationId,
+      groups,
+    );
+
+    if (added.length > 0 || removed.length > 0) {
+      logger.info(
+        {
+          userId,
+          email: userEmail,
+          providerId,
+          organizationId,
+          groupCount: groups.length,
+          teamsAdded: added.length,
+          teamsRemoved: removed.length,
+        },
+        "✅ SSO team sync completed",
+      );
+    } else {
+      logger.debug(
+        { userId, email: userEmail, providerId },
+        "SSO team sync - no changes needed",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error, userId, email: userEmail, providerId },
+      "❌ Failed to sync SSO teams",
+    );
   }
 }

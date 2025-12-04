@@ -1,7 +1,13 @@
 import { MEMBER_ROLE_NAME } from "@shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTeam, Team, TeamMember, UpdateTeam } from "@/types";
+import type {
+  InsertTeam,
+  Team,
+  TeamExternalGroup,
+  TeamMember,
+  UpdateTeam,
+} from "@/types";
 
 class TeamModel {
   /**
@@ -122,6 +128,7 @@ class TeamModel {
     teamId: string,
     userId: string,
     role: string = MEMBER_ROLE_NAME,
+    syncedFromSso = false,
   ): Promise<TeamMember> {
     const memberId = crypto.randomUUID();
     const now = new Date();
@@ -133,6 +140,7 @@ class TeamModel {
         teamId,
         userId,
         role,
+        syncedFromSso,
         createdAt: now,
       })
       .returning();
@@ -223,6 +231,243 @@ class TeamModel {
       ...result.team,
       members: [], // Members not needed for compression logic
     }));
+  }
+
+  // ==========================================
+  // External Group Sync Methods
+  // ==========================================
+
+  /**
+   * Get all external groups mapped to a team
+   */
+  static async getExternalGroups(teamId: string): Promise<TeamExternalGroup[]> {
+    return db
+      .select()
+      .from(schema.teamExternalGroupsTable)
+      .where(eq(schema.teamExternalGroupsTable.teamId, teamId));
+  }
+
+  /**
+   * Add an external group mapping to a team
+   */
+  static async addExternalGroup(
+    teamId: string,
+    groupIdentifier: string,
+  ): Promise<TeamExternalGroup> {
+    const id = crypto.randomUUID();
+
+    const [group] = await db
+      .insert(schema.teamExternalGroupsTable)
+      .values({
+        id,
+        teamId,
+        groupIdentifier,
+      })
+      .returning();
+
+    return group;
+  }
+
+  /**
+   * Remove an external group mapping from a team
+   */
+  static async removeExternalGroup(
+    teamId: string,
+    groupIdentifier: string,
+  ): Promise<boolean> {
+    const result = await db
+      .delete(schema.teamExternalGroupsTable)
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+          eq(schema.teamExternalGroupsTable.groupIdentifier, groupIdentifier),
+        ),
+      );
+
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /**
+   * Remove an external group mapping by ID.
+   * Requires both the groupId and teamId to prevent IDOR attacks.
+   */
+  static async removeExternalGroupById(
+    teamId: string,
+    groupId: string,
+  ): Promise<boolean> {
+    const result = await db
+      .delete(schema.teamExternalGroupsTable)
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.id, groupId),
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+        ),
+      );
+
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  /**
+   * Find all teams in an organization that have a specific external group mapped.
+   * Used during SSO login to find which teams a user should be added to.
+   */
+  static async findTeamsByExternalGroup(
+    organizationId: string,
+    groupIdentifier: string,
+  ): Promise<Team[]> {
+    const results = await db
+      .select({
+        team: schema.teamsTable,
+      })
+      .from(schema.teamExternalGroupsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamExternalGroupsTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(
+            schema.teamExternalGroupsTable.groupIdentifier,
+            groupIdentifier.toLowerCase(),
+          ),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    return results.map((r) => ({
+      ...r.team,
+      members: [],
+    }));
+  }
+
+  /**
+   * Find all teams in an organization that have any of the given external groups mapped.
+   * Used during SSO login to find which teams a user should be added to based on their groups.
+   */
+  static async findTeamsByExternalGroups(
+    organizationId: string,
+    groupIdentifiers: string[],
+  ): Promise<Map<string, Team[]>> {
+    if (groupIdentifiers.length === 0) {
+      return new Map();
+    }
+
+    // Normalize group identifiers to lowercase for case-insensitive matching
+    const normalizedGroups = groupIdentifiers.map((g) => g.toLowerCase());
+
+    const results = await db
+      .select({
+        team: schema.teamsTable,
+        groupIdentifier: schema.teamExternalGroupsTable.groupIdentifier,
+      })
+      .from(schema.teamExternalGroupsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamExternalGroupsTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          inArray(
+            schema.teamExternalGroupsTable.groupIdentifier,
+            normalizedGroups,
+          ),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    // Group results by team ID to avoid duplicates
+    const teamMap = new Map<string, Team>();
+    for (const result of results) {
+      if (!teamMap.has(result.team.id)) {
+        teamMap.set(result.team.id, {
+          ...result.team,
+          members: [],
+        });
+      }
+    }
+
+    // Return map of group -> teams for debugging/logging
+    const groupToTeams = new Map<string, Team[]>();
+    for (const result of results) {
+      const team = teamMap.get(result.team.id);
+      if (team) {
+        const existing = groupToTeams.get(result.groupIdentifier) || [];
+        existing.push(team);
+        groupToTeams.set(result.groupIdentifier, existing);
+      }
+    }
+
+    return groupToTeams;
+  }
+
+  /**
+   * Synchronize a user's team memberships based on their SSO groups.
+   * - Adds user to teams mapped to their groups (if not already a member)
+   * - Removes user from teams they were previously synced to but no longer have groups for
+   * - Does NOT remove manually added memberships (syncedFromSso = false)
+   *
+   * @returns Object containing added and removed team IDs
+   */
+  static async syncUserTeams(
+    userId: string,
+    organizationId: string,
+    ssoGroups: string[],
+  ): Promise<{ added: string[]; removed: string[] }> {
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    // Get all teams in this organization the user should be in based on SSO groups
+    const groupToTeams = await TeamModel.findTeamsByExternalGroups(
+      organizationId,
+      ssoGroups,
+    );
+
+    // Flatten to unique team IDs
+    const shouldBeInTeamIds = new Set<string>();
+    for (const teams of groupToTeams.values()) {
+      for (const team of teams) {
+        shouldBeInTeamIds.add(team.id);
+      }
+    }
+
+    // Get user's current SSO-synced team memberships in this organization
+    const currentSyncedMemberships = await db
+      .select({
+        teamMember: schema.teamMembersTable,
+        team: schema.teamsTable,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.syncedFromSso, true),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    // Add user to teams they should be in but aren't
+    for (const teamId of shouldBeInTeamIds) {
+      // Check if user is already a member (synced or manual)
+      const isAlreadyMember = await TeamModel.isUserInTeam(teamId, userId);
+      if (!isAlreadyMember) {
+        await TeamModel.addMember(teamId, userId, MEMBER_ROLE_NAME, true);
+        added.push(teamId);
+      }
+    }
+
+    // Remove user from teams they were synced to but should no longer be in
+    for (const membership of currentSyncedMemberships) {
+      if (!shouldBeInTeamIds.has(membership.teamMember.teamId)) {
+        await TeamModel.removeMember(membership.teamMember.teamId, userId);
+        removed.push(membership.teamMember.teamId);
+      }
+    }
+
+    return { added, removed };
   }
 }
 

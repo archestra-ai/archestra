@@ -33,6 +33,18 @@ export const AddTeamMemberBodySchema = z.object({
   role: z.string().default(MEMBER_ROLE_NAME),
 });
 
+// Team External Group schemas for SSO team sync
+export const SelectTeamExternalGroupSchema = createSelectSchema(
+  schema.teamExternalGroupsTable,
+);
+export const InsertTeamExternalGroupSchema = createInsertSchema(
+  schema.teamExternalGroupsTable,
+);
+
+export const AddTeamExternalGroupBodySchema = z.object({
+  groupIdentifier: z.string().min(1, "Group identifier is required"),
+});
+
 export type Team = z.infer<typeof SelectTeamSchema>;
 export type InsertTeam = z.infer<typeof InsertTeamSchema>;
 export type UpdateTeam = z.infer<typeof UpdateTeamSchema>;
@@ -40,3 +52,10 @@ export type TeamMember = z.infer<typeof SelectTeamMemberSchema>;
 export type CreateTeamBody = z.infer<typeof CreateTeamBodySchema>;
 export type UpdateTeamBody = z.infer<typeof UpdateTeamBodySchema>;
 export type AddTeamMemberBody = z.infer<typeof AddTeamMemberBodySchema>;
+export type TeamExternalGroup = z.infer<typeof SelectTeamExternalGroupSchema>;
+export type InsertTeamExternalGroup = z.infer<
+  typeof InsertTeamExternalGroupSchema
+>;
+export type AddTeamExternalGroupBody = z.infer<
+  typeof AddTeamExternalGroupBodySchema
+>;

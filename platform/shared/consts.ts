@@ -13,6 +13,7 @@ export const E2eTestId = {
   InvitationLinkInput: "invitation-link-input",
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
+  ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

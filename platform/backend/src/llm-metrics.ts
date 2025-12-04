@@ -3,6 +3,9 @@
  * To instrument OpenAI or Anthropic clients, pass observable fetch to the fetch option.
  * For OpenAI or Anthropic streaming mode, proxy handlers call reportLLMTokens() after consuming the stream.
  * To instrument Gemini, provide its instance to getObservableGenAI, which will wrap around its model calls.
+ *
+ * To calculate queries per second (QPS), use the rate() function on the histogram counter in Prometheus:
+ * rate(llm_request_duration_seconds_count{provider="openai"}[10s])
  */
 
 import type { GoogleGenAI } from "@google/genai";
@@ -21,6 +24,7 @@ type Fetch = (
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
+let llmCostTotal: client.Counter<string>;
 
 // Store current label keys for comparison
 let currentLabelKeys: string[] = [];
@@ -45,7 +49,8 @@ export function initializeMetrics(labelKeys: string[]): void {
     !labelKeysChanged &&
     llmRequestDuration &&
     llmTokensCounter &&
-    llmBlockedToolCounter
+    llmBlockedToolCounter &&
+    llmCostTotal
   ) {
     logger.info(
       "Metrics already initialized with same label keys, skipping reinitialization",
@@ -66,6 +71,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     if (llmBlockedToolCounter) {
       client.register.removeSingleMetric("llm_blocked_tools_total");
     }
+    if (llmCostTotal) {
+      client.register.removeSingleMetric("llm_cost_total");
+    }
   } catch (_error) {
     // Ignore errors if metrics don't exist
   }
@@ -76,6 +84,7 @@ export function initializeMetrics(labelKeys: string[]): void {
   // Both are emitted during the transition period to allow dashboards/alerts to migrate.
   const baseLabelNames = [
     "provider",
+    "model",
     "agent_id",
     "agent_name",
     "profile_id",
@@ -102,6 +111,12 @@ export function initializeMetrics(labelKeys: string[]): void {
     labelNames: [...baseLabelNames, ...nextLabelKeys],
   });
 
+  llmCostTotal = new client.Counter({
+    name: "llm_cost_total",
+    help: "Total estimated cost in USD",
+    labelNames: [...baseLabelNames, ...nextLabelKeys],
+  });
+
   logger.info(
     `Metrics initialized with ${nextLabelKeys.length} agent label keys: ${nextLabelKeys.join(", ")}`,
   );
@@ -113,6 +128,7 @@ export function initializeMetrics(labelKeys: string[]): void {
 function buildMetricLabels(
   agent: Agent,
   additionalLabels: Record<string, string>,
+  model?: string,
 ): Record<string, string> {
   // NOTE: profile_id and profile_name are the preferred labels going forward.
   // agent_id and agent_name are deprecated and will be removed in a future release.
@@ -121,6 +137,7 @@ function buildMetricLabels(
     agent_name: agent.name,
     profile_id: agent.id,
     profile_name: agent.name,
+    model: model ?? "unknown",
     ...additionalLabels,
   };
 
@@ -143,6 +160,7 @@ export function reportLLMTokens(
   provider: SupportedProvider,
   agent: Agent,
   usage: { input?: number; output?: number },
+  model: string | undefined,
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
@@ -151,13 +169,13 @@ export function reportLLMTokens(
 
   if (usage.input && usage.input > 0) {
     llmTokensCounter.inc(
-      buildMetricLabels(agent, { provider, type: "input" }),
+      buildMetricLabels(agent, { provider, type: "input" }, model),
       usage.input,
     );
   }
   if (usage.output && usage.output > 0) {
     llmTokensCounter.inc(
-      buildMetricLabels(agent, { provider, type: "output" }),
+      buildMetricLabels(agent, { provider, type: "output" }, model),
       usage.output,
     );
   }
@@ -172,6 +190,7 @@ export function reportBlockedTools(
   provider: SupportedProvider,
   agent: Agent,
   count: number,
+  model?: string,
 ) {
   if (!llmBlockedToolCounter) {
     logger.warn(
@@ -179,7 +198,29 @@ export function reportBlockedTools(
     );
     return;
   }
-  llmBlockedToolCounter.inc(buildMetricLabels(agent, { provider }), count);
+  llmBlockedToolCounter.inc(
+    buildMetricLabels(agent, { provider }, model),
+    count,
+  );
+}
+
+/**
+ * Reports estimated cost for LLM request in USD
+ */
+export function reportLLMCost(
+  provider: SupportedProvider,
+  agent: Agent,
+  model: string,
+  cost: number | null | undefined,
+): void {
+  if (!llmCostTotal) {
+    logger.warn("LLM metrics not initialized, skipping cost reporting");
+    return;
+  } else if (!cost) {
+    logger.warn("Cost not specified when reporting");
+    return;
+  }
+  llmCostTotal.inc(buildMetricLabels(agent, { provider }, model), cost);
 }
 
 /**
@@ -198,22 +239,35 @@ export function getObservableFetch(
       return fetch(url, init);
     }
 
+    // Extract model from request body if available
+    let requestModel: string | undefined;
+    try {
+      if (init?.body && typeof init.body === "string") {
+        const requestBody = JSON.parse(init.body);
+        requestModel = requestBody.model;
+      }
+    } catch (_error) {
+      // Ignore JSON parse errors
+    }
+
     const startTime = Date.now();
     let response: Response;
+    let model = requestModel;
 
     try {
       response = await fetch(url, init);
       const duration = Math.round((Date.now() - startTime) / 1000);
       const status = response.status.toString();
+
       llmRequestDuration.observe(
-        buildMetricLabels(agent, { provider, status_code: status }),
+        buildMetricLabels(agent, { provider, status_code: status }, model),
         duration,
       );
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
       const duration = Math.round((Date.now() - startTime) / 1000);
       llmRequestDuration.observe(
-        buildMetricLabels(agent, { provider, status_code: "0" }),
+        buildMetricLabels(agent, { provider, status_code: "0" }, model),
         duration,
       );
       throw error;
@@ -227,6 +281,10 @@ export function getObservableFetch(
       const cloned = response.clone();
       try {
         const data = await cloned.json();
+        // Extract model from response if not in request
+        if (!model && data.model) {
+          model = data.model;
+        }
         if (!data.usage) {
           return response;
         }
@@ -234,12 +292,12 @@ export function getObservableFetch(
           const { input, output } = utils.adapters.openai.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, { input, output });
+          reportLLMTokens(provider, agent, { input, output }, model);
         } else if (provider === "anthropic") {
           const { input, output } = utils.adapters.anthropic.getUsageTokens(
             data.usage,
           );
-          reportLLMTokens(provider, agent, { input, output });
+          reportLLMTokens(provider, agent, { input, output }, model);
         } else {
           throw new Error("Unknown provider when logging usage token metrics");
         }
@@ -264,6 +322,16 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
       return originalGenerateContent.apply(genAI.models, args);
     }
 
+    // Extract model from args - first arg should contain model info
+    let model: string | undefined;
+    try {
+      if (args[0] && typeof args[0] === "object" && "model" in args[0]) {
+        model = args[0].model as string;
+      }
+    } catch (_error) {
+      // Ignore extraction errors
+    }
+
     const startTime = Date.now();
 
     try {
@@ -272,7 +340,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
       llmRequestDuration.observe(
-        buildMetricLabels(agent, { provider, status_code: "200" }),
+        buildMetricLabels(agent, { provider, status_code: "200" }, model),
         duration,
       );
 
@@ -280,7 +348,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportLLMTokens(provider, agent, { input, output });
+        reportLLMTokens(provider, agent, { input, output }, model);
       }
 
       return result;
@@ -294,7 +362,7 @@ export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
           : "0";
 
       llmRequestDuration.observe(
-        buildMetricLabels(agent, { provider, status_code: statusCode }),
+        buildMetricLabels(agent, { provider, status_code: statusCode }, model),
         duration,
       );
 

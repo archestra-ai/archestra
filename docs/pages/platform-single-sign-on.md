@@ -375,6 +375,106 @@ contains(memberOf || `[]`, 'CN=Admins,OU=Groups,DC=example,DC=com')
 - Use the "combined" data source to ensure you're checking both token and userinfo
 - Handle null/missing arrays with `|| \`[]\`` fallback
 
+## Team Synchronization
+
+Archestra supports automatic team membership synchronization based on user group memberships from your identity provider. When users log in via SSO, they can be automatically added to or removed from Archestra teams based on their IdP groups.
+
+### How Team Sync Works
+
+1. Admin configures an Archestra team and links it to one or more external IdP groups
+2. When a user logs in via SSO, their group memberships are extracted from the SSO token (typically from the `groups` claim)
+3. Archestra compares the user's IdP groups against the external groups linked to each team
+4. **Added**: Users in a linked group are automatically added to the team
+5. **Removed**: Users no longer in any linked group are automatically removed (if they were added via sync)
+6. **Manual members preserved**: Members added manually to a team are never removed by sync
+
+### Configuring Team Sync
+
+1. Navigate to **Settings > Teams**
+2. Create a team or select an existing team
+3. Click the **link icon** (Configure SSO Team Sync) button next to the team
+4. In the dialog, enter the external group identifier(s) to link:
+   - For OIDC/OAuth: The group name as it appears in the `groups` claim (e.g., `engineering`, `archestra-admins`)
+   - For LDAP-style groups: The full DN (e.g., `cn=admins,ou=groups,dc=example,dc=com`)
+   - For Azure AD: The group object ID or display name
+5. Click **Add** to create the mapping
+6. Repeat for additional groups if needed
+
+### Group Identifier Matching
+
+- Group matching is **case-insensitive** (e.g., `Engineering` matches `engineering`)
+- The identifier must exactly match what your IdP sends in the token
+- A single team can be linked to multiple external groups
+- Multiple teams can share the same external group mapping
+
+### Provider-Specific Configuration
+
+#### Keycloak
+
+Ensure your Keycloak client has a groups mapper:
+
+1. In Keycloak Admin Console, go to your Client
+2. Navigate to **Client scopes** > your client's dedicated scope
+3. Add or configure a **Group Membership** mapper:
+   - **Token Claim Name**: `groups`
+   - **Full group path**: Off (recommended for simpler matching)
+   - **Add to ID token**: Yes
+   - **Add to userinfo**: Yes
+
+Users must be assigned to groups in Keycloak for team sync to work.
+
+#### Okta
+
+Configure a Groups claim in your authorization server:
+
+1. Go to **Security > API > Authorization Servers**
+2. Select your authorization server and go to **Claims**
+3. Add/edit the `groups` claim to include in the ID token
+
+#### Microsoft Entra ID (Azure AD)
+
+Configure group claims in your App Registration:
+
+1. Go to **Token configuration**
+2. Add a groups claim
+3. Choose whether to include all groups or specific security groups
+4. Note: Group Object IDs are returned by default; configure optional claims for group names
+
+#### Generic SAML
+
+For SAML providers, ensure group attributes are included in the SAML assertion. The attribute name must match what you configure as external group identifiers.
+
+### Example: Development Team Setup
+
+Let's say you have a Keycloak group called `dev-team` and want all members to automatically join the "Development" team in Archestra:
+
+1. Ensure Keycloak sends the `groups` claim with group names
+2. In Archestra, create a team called "Development"
+3. Click the link icon for the team
+4. Enter `dev-team` as the external group identifier
+5. Click Add
+
+Now, when users with the `dev-team` group log in via SSO, they'll automatically be added to the Development team.
+
+### Troubleshooting Team Sync
+
+**Users not being added to teams:**
+
+1. Verify your IdP is sending the `groups` claim in the SSO token
+2. Check that the group identifier in Archestra exactly matches the IdP group name
+3. Ensure the enterprise license is activated
+4. Check backend logs for sync errors
+
+**Users not being removed from teams:**
+
+- Only members with `syncedFromSso = true` are removed by sync
+- Members added manually are never removed
+- Verify the user's IdP groups have actually changed
+
+**Checking SSO token groups:**
+
+Use your IdP's token introspection or a JWT decoder to inspect the ID token and verify the `groups` claim contains the expected values.
+
 ## User Provisioning
 
 When a user authenticates via SSO for the first time:

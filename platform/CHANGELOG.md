@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.19](https://github.com/archestra-ai/archestra/compare/platform-v0.6.18...platform-v0.6.19) (2025-12-04)
+
+
+### Features
+
+* vault k8s connectivity check ([#1400](https://github.com/archestra-ai/archestra/issues/1400)) ([50d6c13](https://github.com/archestra-ai/archestra/commit/50d6c1344672508302b55afb733eebea150c0a8e))
+
+
+### Bug Fixes
+
+* fix tests ([#1397](https://github.com/archestra-ai/archestra/issues/1397)) ([dc09030](https://github.com/archestra-ai/archestra/commit/dc09030d8e455bdd28fa8e9fceddd773a22477d7))
+* SSO provider issue ([#1392](https://github.com/archestra-ai/archestra/issues/1392)) ([11dd7ec](https://github.com/archestra-ai/archestra/commit/11dd7ec353dd44d035b0bcd670f8a18b37088ade))
+
+
+### Miscellaneous Chores
+
+* debugging SSO configuration ([#1401](https://github.com/archestra-ai/archestra/issues/1401)) ([bc5990f](https://github.com/archestra-ai/archestra/commit/bc5990fd0f28fdf538b8131faa764f12925de9e1))
+* team-based access control for mcp credentials ([#1382](https://github.com/archestra-ai/archestra/issues/1382)) ([301ea25](https://github.com/archestra-ai/archestra/commit/301ea259c82065c801bb6ad67261edf3fc772d3f))
+
 ## [0.6.18](https://github.com/archestra-ai/archestra/compare/platform-v0.6.17...platform-v0.6.18) (2025-12-04)
 
 

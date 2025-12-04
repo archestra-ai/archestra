@@ -596,26 +596,35 @@ test.describe("SSO Team Sync E2E", () => {
       });
 
       // STEP 5: Verify user was automatically added to the team
+      // Team sync is async, so poll for member count change
       await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
       await ssoPage.waitForLoadState("networkidle");
 
-      // Find the team and check the member count
-      // The team row should now show "1 member" or more (the SSO user)
-      const syncedTeamRow = ssoPage
-        .locator("div")
+      // Poll for team member count to increase (max 15 seconds)
+      const teamMemberLocator = ssoPage
+        .locator(".rounded-lg.border.p-4")
         .filter({ hasText: teamName })
-        .last();
+        .locator("text=/\\d+ member/");
 
-      // Click "Manage Members" to see the membership
+      await expect(async () => {
+        await ssoPage.reload();
+        const memberText = await teamMemberLocator.textContent();
+        // Team should have at least 1 member after sync
+        expect(memberText).not.toBe("0 members");
+      }).toPass({ timeout: 15000, intervals: [1000, 2000, 3000] });
+
+      // Click "Manage Members" to verify the specific user
+      const syncedTeamRow = ssoPage
+        .locator(".rounded-lg.border.p-4")
+        .filter({ hasText: teamName });
+
       await syncedTeamRow
         .getByRole("button", { name: "Manage Members" })
         .click();
 
-      // Wait for dialog
       await expect(ssoPage.getByRole("dialog")).toBeVisible();
 
       // Verify the SSO user (admin@example.com) is in the team members list
-      // The user email should be visible in the members dialog
       await expect(
         ssoPage.getByRole("dialog").getByText(/admin@example\.com/i),
       ).toBeVisible({ timeout: 5000 });

@@ -1,3 +1,4 @@
+import { E2eTestId } from "@shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
 import { expect, type Page, test } from "./fixtures";
 
@@ -534,14 +535,18 @@ test.describe("SSO Team Sync E2E", () => {
     await expect(page.getByText(teamName)).toBeVisible({ timeout: 5000 });
 
     // STEP 3: Link external group to the team
-    // Find the team row and click the External Groups button (link icon)
-    const teamRow = page.locator("div").filter({ hasText: teamName }).last();
+    // First get the team ID from the API since we need it for the testid
+    const teamResponse = await page.request.get(
+      `http://localhost:9000/api/teams`,
+    );
+    const teams = await teamResponse.json();
+    const createdTeam = teams.find(
+      (t: { name: string }) => t.name === teamName,
+    );
 
-    // Click the link icon button (Configure SSO Team Sync tooltip)
-    await teamRow
-      .getByRole("button")
-      .filter({ has: page.locator("svg") })
-      .nth(1)
+    // Click the SSO Team Sync button using data-testid
+    await page
+      .getByTestId(`${E2eTestId.ConfigureSsoTeamSyncButton}-${createdTeam.id}`)
       .click();
 
     // Wait for dialog to appear

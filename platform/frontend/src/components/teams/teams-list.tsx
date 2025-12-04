@@ -1,5 +1,5 @@
 "use client";
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
@@ -188,6 +188,7 @@ export function TeamsList() {
                             permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
+                            data-testid={`${E2eTestId.ConfigureSsoTeamSyncButton}-${team.id}`}
                             onClick={() => {
                               setSelectedTeam(team);
                               setExternalGroupsDialogOpen(true);

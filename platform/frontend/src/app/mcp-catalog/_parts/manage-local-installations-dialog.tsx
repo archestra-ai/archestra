@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import { format } from "date-fns";
 import { Info, Server, Trash, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -193,7 +193,10 @@ export function ManageLocalInstallationsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px]">
+      <DialogContent
+        className="sm:max-w-[900px]"
+        data-testid={E2eTestId.LocalInstallationsDialog}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
@@ -219,7 +222,7 @@ export function ManageLocalInstallationsDialog({
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
+              <Table data-testid={E2eTestId.LocalInstallationsTable}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Owner</TableHead>
@@ -250,11 +253,19 @@ export function ManageLocalInstallationsDialog({
                     );
 
                     return (
-                      <TableRow key={installation.userId}>
+                      <TableRow
+                        key={installation.userId}
+                        data-testid={E2eTestId.CredentialRow}
+                        data-user-email={installation.email}
+                      >
                         <TableCell className="font-medium">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              {installation.email}
+                              <span
+                                data-testid={E2eTestId.CredentialOwnerEmail}
+                              >
+                                {installation.email}
+                              </span>
                               {currentUserId === installation.userId && (
                                 <Badge
                                   variant="secondary"
@@ -338,7 +349,10 @@ export function ManageLocalInstallationsDialog({
                                 }
                                 disabled={grantTeamAccessMutation.isPending}
                               >
-                                <SelectTrigger className="h-6 w-[130px] text-xs">
+                                <SelectTrigger
+                                  className="h-6 w-[130px] text-xs"
+                                  data-testid={E2eTestId.CredentialTeamSelect}
+                                >
                                   <SelectValue placeholder="Add team..." />
                                 </SelectTrigger>
                                 <SelectContent>

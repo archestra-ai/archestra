@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
   FileText,
   Info,
@@ -288,6 +288,7 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs"
+          data-testid={E2eTestId.ManageCredentialsButton}
         >
           Manage
         </Button>

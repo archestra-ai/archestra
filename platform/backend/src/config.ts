@@ -137,17 +137,29 @@ export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
 
   // Default: allow localhost wildcards for development
-  if (origins.length === 0) {
-    return [
-      "http://localhost:*",
-      "https://localhost:*",
-      "http://127.0.0.1:*",
-      "https://127.0.0.1:*",
-    ];
+  const defaultOrigins = [
+    "http://localhost:*",
+    "https://localhost:*",
+    "http://127.0.0.1:*",
+    "https://127.0.0.1:*",
+  ];
+
+  // Add Replit domain if available (for Replit environment)
+  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (replitDevDomain) {
+    defaultOrigins.push(`https://${replitDevDomain}`);
+    defaultOrigins.push(`http://${replitDevDomain}`);
+    // Also add wildcard for Replit subdomains
+    defaultOrigins.push("https://*.replit.dev");
+    defaultOrigins.push("https://*.pike.replit.dev");
   }
 
-  // Production: use configured origins
-  return origins;
+  if (origins.length === 0) {
+    return defaultOrigins;
+  }
+
+  // Production: use configured origins + Replit origins
+  return [...origins, ...defaultOrigins];
 };
 
 /**

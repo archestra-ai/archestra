@@ -183,6 +183,10 @@ export interface VaultConfig {
   awsStsEndpoint?: string;
   /** Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security) */
   awsIamServerIdHeader?: string;
+  /** Path prefix for secrets in Vault KV v2 engine (defaults to "secret/data/archestra") */
+  secretPath: string;
+  /** Path prefix for secret metadata in Vault KV v2 engine (defaults to secretPath with /data/ replaced by /metadata/) */
+  secretMetadataPath?: string;
 }
 
 /**
@@ -426,11 +430,16 @@ export class VaultSecretManager implements SecretManager {
   }
 
   private getVaultPath(name: string, id: string): string {
-    return `secret/data/archestra/${name}-${id}`;
+    const basePath = this.config.secretPath;
+    return `${basePath}/${name}-${id}`;
   }
 
   private getVaultMetadataPath(name: string, id: string): string {
-    return `secret/metadata/archestra/${name}-${id}`;
+    // Use configured metadata path, or fallback to replacing /data/ with /metadata/
+    const metadataPath =
+      this.config.secretMetadataPath ??
+      this.config.secretPath.replace("/data/", "/metadata/");
+    return `${metadataPath}/${name}-${id}`;
   }
 
   async createSecret(
@@ -626,6 +635,9 @@ const DEFAULT_AWS_REGION = "us-east-1";
 /** Default AWS STS endpoint - uses global endpoint to match Vault's default sts_endpoint */
 const DEFAULT_AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
 
+/** Default path prefix for secrets in Vault KV v2 engine */
+const DEFAULT_SECRET_PATH = "secret/data/archestra";
+
 /**
  * Get Vault configuration from environment variables
  *
@@ -649,6 +661,9 @@ const DEFAULT_AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
  * - ARCHESTRA_HASHICORP_VAULT_AWS_REGION: AWS region for STS signing (optional, defaults to "us-east-1")
  * - ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT: STS endpoint URL (optional, defaults to "https://sts.amazonaws.com" to match Vault's default)
  * - ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID: Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security)
+ *
+ * Common (all auth methods):
+ * - ARCHESTRA_HASHICORP_VAULT_SECRET_PATH: Path prefix for secrets in Vault KV v2 (optional, defaults to "secret/data/archestra")
  *
  * @returns VaultConfig if ARCHESTRA_HASHICORP_VAULT_ADDR is set and configuration is valid, null if VAULT_ADDR is not set
  * @throws SecretsManagerConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
@@ -675,6 +690,11 @@ export function getVaultConfigFromEnv(): VaultConfig {
       address: address as string,
       authMethod: "token",
       token: token as string,
+      secretPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
+        DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 
@@ -700,6 +720,11 @@ export function getVaultConfigFromEnv(): VaultConfig {
       k8sMountPoint:
         process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ??
         DEFAULT_K8S_MOUNT_POINT,
+      secretPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
+        DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 
@@ -729,6 +754,11 @@ export function getVaultConfigFromEnv(): VaultConfig {
         DEFAULT_AWS_STS_ENDPOINT,
       awsIamServerIdHeader:
         process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID,
+      secretPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
+        DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 

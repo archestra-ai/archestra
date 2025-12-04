@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.18](https://github.com/archestra-ai/archestra/compare/platform-v0.6.17...platform-v0.6.18) (2025-12-04)
+
+
+### Miscellaneous Chores
+
+* configurable vault secret path ([#1393](https://github.com/archestra-ai/archestra/issues/1393)) ([b7d11fe](https://github.com/archestra-ai/archestra/commit/b7d11feb83391e930334605a21c2c8a5b85059ae))
+
 ## [0.6.17](https://github.com/archestra-ai/archestra/compare/platform-v0.6.16...platform-v0.6.17) (2025-12-04)
 
 

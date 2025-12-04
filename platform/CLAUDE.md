@@ -152,7 +152,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 # Secrets Manager Configuration
 ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
 ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
-ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default) or "K8S"
+ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
 
 # Vault Token Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set)
 ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
@@ -161,6 +161,13 @@ ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
 ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=  # Required for K8S auth: Vault role bound to K8s service account
 ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH=  # Optional: Path to SA token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
 ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT=  # Optional: Vault K8S auth mount point (default: kubernetes)
+
+# Vault AWS IAM Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS)
+ARCHESTRA_HASHICORP_VAULT_AWS_ROLE=  # Required for AWS auth: Vault role bound to AWS IAM principal
+ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT=  # Optional: Vault AWS auth mount point (default: aws)
+ARCHESTRA_HASHICORP_VAULT_AWS_REGION=  # Optional: AWS region for STS signing (default: us-east-1)
+ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT=  # Optional: STS endpoint URL (default: https://sts.amazonaws.com, matches Vault's default)
+ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID=  # Optional: Value for X-Vault-AWS-IAM-Server-ID header (additional security)
 
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN

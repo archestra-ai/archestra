@@ -1,3 +1,4 @@
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import Vault from "node-vault";
 import config from "@/config";
 import logger from "@/logging";
@@ -156,7 +157,7 @@ export class DbSecretsManager implements SecretManager {
   }
 }
 
-export type VaultAuthMethod = "token" | "kubernetes";
+export type VaultAuthMethod = "token" | "kubernetes" | "aws";
 
 export interface VaultConfig {
   /** Vault server address (default: http://localhost:8200) */
@@ -171,6 +172,16 @@ export interface VaultConfig {
   k8sTokenPath?: string;
   /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
   k8sMountPoint?: string;
+  /** AWS IAM auth role (required for aws auth) */
+  awsRole?: string;
+  /** AWS auth mount point in Vault (defaults to "aws") */
+  awsMountPoint?: string;
+  /** AWS region for STS signing (defaults to us-east-1) */
+  awsRegion?: string;
+  /** AWS STS endpoint URL (defaults to https://sts.amazonaws.com to match Vault's default) */
+  awsStsEndpoint?: string;
+  /** Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security) */
+  awsIamServerIdHeader?: string;
 }
 
 /**
@@ -198,6 +209,13 @@ export class VaultSecretManager implements SecretManager {
         );
       }
       this.initialized = this.loginWithKubernetes();
+    } else if (config.authMethod === "aws") {
+      if (!config.awsRole) {
+        throw new Error(
+          "VaultSecretManager: awsRole is required for AWS IAM authentication",
+        );
+      }
+      this.initialized = this.loginWithAws();
     } else if (config.authMethod === "token") {
       if (!config.token) {
         throw new Error(
@@ -239,6 +257,120 @@ export class VaultSecretManager implements SecretManager {
       );
       throw error;
     }
+  }
+
+  /**
+   * Authenticate with Vault using AWS IAM credentials
+   * Uses the default AWS credential provider chain (env vars, shared credentials, IAM role, etc.)
+   */
+  private async loginWithAws(): Promise<void> {
+    const region = this.config.awsRegion ?? DEFAULT_AWS_REGION;
+    const mountPoint = this.config.awsMountPoint ?? DEFAULT_AWS_MOUNT_POINT;
+    // Use the STS endpoint from config, or construct based on region
+    // Default to global endpoint (sts.amazonaws.com) which matches Vault's default sts_endpoint
+    const stsEndpoint = this.config.awsStsEndpoint ?? DEFAULT_AWS_STS_ENDPOINT;
+
+    try {
+      // Get credentials from the default provider chain
+      const credentialProvider = fromNodeProviderChain();
+      const credentials = await credentialProvider();
+
+      // Build the signed request for Vault
+      // Vault expects the IAM request to be signed and sent as base64-encoded data
+      const stsUrl = stsEndpoint.endsWith("/")
+        ? stsEndpoint
+        : `${stsEndpoint}/`;
+
+      // Create the request body for GetCallerIdentity
+      const requestBody = "Action=GetCallerIdentity&Version=2011-06-15";
+
+      // Sign the request using AWS Signature V4
+      const signedRequest = await this.signAwsRequest({
+        method: "POST",
+        url: stsUrl,
+        body: requestBody,
+        region,
+        credentials,
+        serverIdHeader: this.config.awsIamServerIdHeader,
+      });
+
+      // Prepare the login payload for Vault
+      const loginPayload = {
+        role: this.config.awsRole,
+        iam_http_request_method: "POST",
+        iam_request_url: Buffer.from(stsUrl).toString("base64"),
+        iam_request_body: Buffer.from(requestBody).toString("base64"),
+        iam_request_headers: Buffer.from(
+          JSON.stringify(signedRequest.headers),
+        ).toString("base64"),
+      };
+
+      // Authenticate with Vault
+      const result = await this.client.write(
+        `auth/${mountPoint}/login`,
+        loginPayload,
+      );
+
+      this.client.token = result.auth.client_token;
+      logger.info(
+        { role: this.config.awsRole, region, mountPoint },
+        "VaultSecretManager: authenticated via AWS IAM auth",
+      );
+    } catch (error) {
+      logger.error(
+        { error, role: this.config.awsRole, region, mountPoint },
+        "VaultSecretManager: AWS IAM authentication failed",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Sign an AWS request using Signature V4
+   */
+  private async signAwsRequest(options: {
+    method: string;
+    url: string;
+    body: string;
+    region: string;
+    credentials: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    };
+    serverIdHeader?: string;
+  }): Promise<{ headers: Record<string, string> }> {
+    const { SignatureV4 } = await import("@smithy/signature-v4");
+    const { Sha256 } = await import("@aws-crypto/sha256-js");
+
+    const url = new URL(options.url);
+    const headers: Record<string, string> = {
+      host: url.host,
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    };
+
+    // Add server ID header if configured (for additional security)
+    if (options.serverIdHeader) {
+      headers["x-vault-aws-iam-server-id"] = options.serverIdHeader;
+    }
+
+    const signer = new SignatureV4({
+      service: "sts",
+      region: options.region,
+      credentials: options.credentials,
+      sha256: Sha256,
+    });
+
+    const signedRequest = await signer.sign({
+      method: options.method,
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: url.pathname,
+      headers,
+      body: options.body,
+    });
+
+    return { headers: signedRequest.headers as Record<string, string> };
   }
 
   /**
@@ -440,6 +572,15 @@ const DEFAULT_K8S_TOKEN_PATH =
 /** Default Vault Kubernetes auth mount point */
 const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
 
+/** Default Vault AWS auth mount point */
+const DEFAULT_AWS_MOUNT_POINT = "aws";
+
+/** Default AWS region for STS requests */
+const DEFAULT_AWS_REGION = "us-east-1";
+
+/** Default AWS STS endpoint - uses global endpoint to match Vault's default sts_endpoint */
+const DEFAULT_AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
+
 /**
  * Get Vault configuration from environment variables
  *
@@ -447,7 +588,7 @@ const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
  * - ARCHESTRA_HASHICORP_VAULT_ADDR: Vault server address
  *
  * Optional:
- * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN" (default) or "K8S"
+ * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN" (default), "K8S", or "AWS"
  *
  * For token auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set):
  * - ARCHESTRA_HASHICORP_VAULT_TOKEN: Vault token (required)
@@ -456,6 +597,13 @@ const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
  * - ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: Vault role bound to K8s service account (required)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH: Path to SA token (optional, defaults to /var/run/secrets/kubernetes.io/serviceaccount/token)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT: Vault K8s auth mount point (optional, defaults to "kubernetes")
+ *
+ * For AWS IAM auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS):
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_ROLE: Vault role bound to AWS IAM principal (required)
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT: Vault AWS auth mount point (optional, defaults to "aws")
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_REGION: AWS region for STS signing (optional, defaults to "us-east-1")
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT: STS endpoint URL (optional, defaults to "https://sts.amazonaws.com" to match Vault's default)
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID: Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security)
  *
  * @returns VaultConfig if ARCHESTRA_HASHICORP_VAULT_ADDR is set and configuration is valid, null if VAULT_ADDR is not set
  * @throws SecretsManagerConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
@@ -510,8 +658,37 @@ export function getVaultConfigFromEnv(): VaultConfig {
     };
   }
 
+  if (authMethod === "AWS") {
+    const address = process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    if (!address) {
+      errors.push("ARCHESTRA_HASHICORP_VAULT_ADDR is not set.");
+    }
+    const awsRole = process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
+    if (!awsRole) {
+      errors.push("ARCHESTRA_HASHICORP_VAULT_AWS_ROLE is not set.");
+    }
+    if (errors.length > 0) {
+      throw new SecretsManagerConfigurationError(errors.join(" "));
+    }
+    return {
+      address: address as string,
+      authMethod: "aws",
+      awsRole: awsRole as string,
+      awsMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        DEFAULT_AWS_MOUNT_POINT,
+      awsRegion:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+      awsStsEndpoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        DEFAULT_AWS_STS_ENDPOINT,
+      awsIamServerIdHeader:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID,
+    };
+  }
+
   throw new SecretsManagerConfigurationError(
-    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "TOKEN" or "K8S".`,
+    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "TOKEN", "K8S", or "AWS".`,
   );
 }
 

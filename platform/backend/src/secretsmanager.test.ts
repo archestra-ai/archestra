@@ -477,6 +477,10 @@ describe("getVaultConfigFromEnv", () => {
   });
 
   test("should use custom secret path when ARCHESTRA_HASHICORP_VAULT_SECRET_PATH is set (K8S auth)", () => {
+    // Ensure K8S optional vars are not set so defaults are used
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT;
+
     process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
     process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE = "archestra";

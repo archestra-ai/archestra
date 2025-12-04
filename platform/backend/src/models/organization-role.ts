@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
   type Permissions,
   type PredefinedRoleName,
@@ -248,6 +249,7 @@ class OrganizationRoleModel {
   ): Promise<Array<OrganizationRole>> {
     const predefinedRoles = [
       generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
+      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
       generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
     ];
 

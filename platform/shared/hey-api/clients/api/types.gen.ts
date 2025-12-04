@@ -12074,7 +12074,7 @@ export type GetRoleData = {
         /**
          * Predefined role name or custom role ID
          */
-        roleId: 'admin' | 'member' | string;
+        roleId: 'admin' | 'editor' | 'member' | string;
     };
     query?: never;
     url: '/api/roles/{roleId}';
@@ -12170,7 +12170,7 @@ export type UpdateRoleData = {
         /**
          * Predefined role name or custom role ID
          */
-        roleId: 'admin' | 'member' | string;
+        roleId: 'admin' | 'editor' | 'member' | string;
     };
     query?: never;
     url: '/api/roles/{roleId}';

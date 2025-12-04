@@ -4,6 +4,7 @@ import {
   ac,
   adminRole,
   allAvailableActions,
+  editorRole,
   MEMBER_ROLE_NAME,
   memberRole,
   SSO_TRUSTED_PROVIDER_IDS,
@@ -69,6 +70,7 @@ export const auth: any = betterAuth({
       },
       roles: {
         admin: adminRole,
+        editor: editorRole,
         member: memberRole,
       },
       schema: {
@@ -87,6 +89,7 @@ export const auth: any = betterAuth({
           ac,
           roles: {
             admin: adminRole,
+            editor: editorRole,
             member: memberRole,
           },
         },

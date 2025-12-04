@@ -3,9 +3,11 @@ import { defaultStatements } from "better-auth/plugins/organization/access";
 import { z } from "zod";
 
 export const ADMIN_ROLE_NAME = "admin";
+export const EDITOR_ROLE_NAME = "editor";
 export const MEMBER_ROLE_NAME = "member";
 export const PredefinedRoleNameSchema = z.enum([
   ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 ]);
 export const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
@@ -96,6 +98,26 @@ export const adminRole = ac.newRole({
   ...allAvailableActions,
 });
 
+export const editorRole = ac.newRole({
+  profile: ["create", "read", "update", "delete"],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["create", "read", "update", "delete"],
+  dualLlmResult: ["create", "read", "update", "delete"],
+  internalMcpCatalog: ["create", "read", "update", "delete"],
+  mcpServer: ["create", "read", "update", "delete"],
+  mcpServerInstallationRequest: ["create", "read", "update", "delete"],
+  organization: ["read"],
+  team: ["read"],
+  mcpToolCall: ["read"],
+  conversation: ["create", "read", "update", "delete"],
+  limit: ["create", "read", "update", "delete"],
+  tokenPrice: ["create", "read", "update", "delete"],
+  chatSettings: ["read", "update"],
+  prompt: ["create", "read", "update", "delete"],
+});
+
 export const memberRole = ac.newRole({
   profile: ["read"],
   tool: ["create", "read", "update", "delete"],
@@ -119,6 +141,7 @@ export const memberRole = ac.newRole({
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
     [ADMIN_ROLE_NAME]: adminRole.statements,
+    [EDITOR_ROLE_NAME]: editorRole.statements,
     [MEMBER_ROLE_NAME]: memberRole.statements,
   };
 

@@ -153,7 +153,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(llm_tokens_total{type=\"input\"}[1m])",
+          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"input\"}[1m]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{profile_name}} (input)",
@@ -166,7 +166,7 @@
             "type": "prometheus",
             "uid": "$metrics_datasource"
           },
-          "expr": "rate(llm_tokens_total{type=\"output\"}[1m])",
+          "expr": "sum by (profile_name) (rate(llm_tokens_total{type=\"output\"}[1m]))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{profile_name}} (output)",
@@ -176,6 +176,138 @@
         }
       ],
       "title": "LLM Token Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$metrics_datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*claude.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-red",
+                  "mode": "shades"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*gpt.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-blue",
+                  "mode": "shades"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$metrics_datasource"
+          },
+          "editorMode": "code",
+          "expr": "sum by (model) (rate(llm_request_duration_seconds_count[1m]))",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{model}}",
+          "queryType": "range",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LLM Queries Per Second",
       "type": "timeseries"
     },
     {
@@ -243,8 +375,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 1
+        "x": 0,
+        "y": 9
       },
       "id": 25,
       "options": {
@@ -320,139 +452,6 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/anthropic/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "semi-dark-red",
-                  "mode": "shades"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/openai/"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "semi-dark-blue",
-                  "mode": "shades"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 9
-      },
-      "id": 26,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "sum"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$metrics_datasource"
-          },
-          "editorMode": "code",
-          "expr": "sum by (provider) (rate(llm_cost_total[5m]) * 3600)",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{provider}}",
-          "queryType": "range",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "LLM Costs",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$metrics_datasource"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
               "mode": "none"
             },
             "thresholdsStyle": {
@@ -475,7 +474,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/anthropic/"
+              "options": ".*claude.*"
             },
             "properties": [
               {
@@ -490,7 +489,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/openai/"
+              "options": ".*gpt.*"
             },
             "properties": [
               {
@@ -535,17 +534,17 @@
             "uid": "$metrics_datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (provider) (rate(llm_cost_total[5m])) / sum by (provider) (rate(llm_request_duration_seconds_count[5m]))",
+          "expr": "sum by (model) (rate(llm_cost_total[5m]) * 3600)",
           "hide": false,
           "instant": false,
           "interval": "",
-          "legendFormat": "{{provider}}",
+          "legendFormat": "{{model}}",
           "queryType": "range",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "LLM Cost Per Request",
+      "title": "LLM Cost by Model",
       "type": "timeseries"
     },
     {
@@ -1410,5 +1409,5 @@
   "timezone": "",
   "title": "Archestra Platform",
   "uid": "archestra-platform",
-  "version": 34
+  "version": 52
 }

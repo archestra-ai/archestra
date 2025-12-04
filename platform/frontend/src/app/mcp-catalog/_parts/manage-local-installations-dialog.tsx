@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
 import { Info, Server, Trash, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
+import { WithoutPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -197,6 +198,10 @@ export function ManageLocalInstallationsDialog({
           <DialogTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
             Local installations
+            <WithoutPermissions permissions={{ profile: ["admin"] }}>
+              {" "}
+              of your team
+            </WithoutPermissions>
             <span className="text-muted-foreground font-normal">
               {label || liveServer.name}
             </span>

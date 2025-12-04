@@ -1,6 +1,73 @@
+import { ENGINEERING_TEAM_NAME, MARKETING_TEAM_NAME } from "../../consts";
 import { expect, test } from "./fixtures";
 
 test.describe("Teams API", () => {
+  test.describe("Permission-based Team Visibility", () => {
+    test("Admin sees all teams in the organization", async ({
+      request,
+      makeApiRequest,
+    }) => {
+      // Admin has team:update permission, so should see all teams
+      const response = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/teams",
+      });
+      expect(response.status()).toBe(200);
+
+      const teams = await response.json();
+      expect(Array.isArray(teams)).toBe(true);
+
+      // Admin should see both Engineering and Marketing teams (created in auth setup)
+      const teamNames = teams.map((t: { name: string }) => t.name);
+      expect(teamNames).toContain(ENGINEERING_TEAM_NAME);
+      expect(teamNames).toContain(MARKETING_TEAM_NAME);
+    });
+
+    test("Member only sees teams they are a member of", async ({
+      memberRequest,
+      makeApiRequest,
+    }) => {
+      // Member has limited permissions - should only see teams they're members of
+      const response = await makeApiRequest({
+        request: memberRequest,
+        method: "get",
+        urlSuffix: "/api/teams",
+      });
+      expect(response.status()).toBe(200);
+
+      const teams = await response.json();
+      expect(Array.isArray(teams)).toBe(true);
+
+      // Member is only in Marketing Team (per auth setup)
+      const teamNames = teams.map((t: { name: string }) => t.name);
+      expect(teamNames).toContain(MARKETING_TEAM_NAME);
+      // Member should NOT see Engineering Team (they're not a member)
+      expect(teamNames).not.toContain(ENGINEERING_TEAM_NAME);
+    });
+
+    test("Editor sees teams they are a member of", async ({
+      editorRequest,
+      makeApiRequest,
+    }) => {
+      // Editor has limited permissions - should only see teams they're members of
+      const response = await makeApiRequest({
+        request: editorRequest,
+        method: "get",
+        urlSuffix: "/api/teams",
+      });
+      expect(response.status()).toBe(200);
+
+      const teams = await response.json();
+      expect(Array.isArray(teams)).toBe(true);
+
+      // Editor is in both Engineering and Marketing Teams (per auth setup)
+      const teamNames = teams.map((t: { name: string }) => t.name);
+      expect(teamNames).toContain(ENGINEERING_TEAM_NAME);
+      expect(teamNames).toContain(MARKETING_TEAM_NAME);
+    });
+  });
+
   test.describe("Team CRUD Operations", () => {
     test("should create, read, update, and delete a team", async ({
       request,

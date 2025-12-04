@@ -447,8 +447,11 @@ async function seedDefaultTeam(): Promise<void> {
  * This creates a simple MCP server in the catalog that has one tool: print_archestra_test
  */
 async function seedTestMcpServer(): Promise<void> {
-  // Only seed in development
-  if (process.env.NODE_ENV === "production") {
+  // Only seed in development, or when ENABLE_TEST_MCP_SERVER is explicitly set (e.g., in CI e2e tests)
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_MCP_SERVER !== "true"
+  ) {
     return;
   }
 

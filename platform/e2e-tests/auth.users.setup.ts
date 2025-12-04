@@ -214,6 +214,9 @@ async function userExists(
   return signedIn;
 }
 
+// Run user setup tests sequentially to avoid rate limiting
+setup.describe.configure({ mode: "serial" });
+
 // Setup editor authentication - runs after admin setup
 setup("authenticate as editor", async ({ page }) => {
   // Check if editor user already exists

@@ -50,44 +50,80 @@ export interface SecretManager {
   ): Promise<SelectSecret | null>;
 }
 
-/**
- * Vault authentication method
- */
-export type VaultAuthMethod = "token" | "kubernetes";
-
-/**
- * Error thrown when Vault configuration is invalid or incomplete
- */
-// TODO: Separate SecretsManagerConfigurationError is obsolete.
-// We should create a centralized error class instead. Leaving it for the sake of simplicity for now.
 export class SecretsManagerConfigurationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "InvalidVaultConfigurationError";
+    this.name = "SecretsManagerConfigurationError";
   }
 }
 
 /**
- * Configuration for Vault SecretManager
+ * Supported secrets manager types
  */
-export interface VaultConfig {
-  /** Vault server address (default: http://localhost:8200) */
-  address: string;
-  /** Authentication method to use */
-  authMethod: VaultAuthMethod;
-  /** Vault token for authentication (required for token auth) */
-  token?: string;
-  /** Kubernetes auth role (required for kubernetes auth) */
-  k8sRole?: string;
-  /** Path to service account token file (defaults to /var/run/secrets/kubernetes.io/serviceaccount/token) */
-  k8sTokenPath?: string;
-  /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
-  k8sMountPoint?: string;
+export enum SecretsManagerType {
+  DB = "DB",
+  Vault = "Vault",
+}
+
+/**
+ * Create a secret manager based on environment configuration
+ * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
+ * - "Vault": Uses VaultSecretManager (see getVaultConfigFromEnv for required env vars)
+ * - "DB" or not set: Uses DbSecretsManager (default)
+ */
+export function createSecretManager(): SecretManager {
+  const managerType = getSecretsManagerType();
+
+  if (managerType === SecretsManagerType.Vault) {
+    if (!config.enterpriseLicenseActivated) {
+      logger.warn(
+        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
+      );
+      return new DbSecretsManager();
+    }
+
+    let vaultConfig: VaultConfig;
+    try {
+      vaultConfig = getVaultConfigFromEnv();
+    } catch (error) {
+      if (error instanceof SecretsManagerConfigurationError) {
+        logger.warn(
+          { error: error.message },
+          "createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager.",
+        );
+        return new DbSecretsManager();
+      }
+      throw error;
+    }
+
+    logger.info(
+      { address: vaultConfig.address, authMethod: vaultConfig.authMethod },
+      "createSecretManager: using VaultSecretManager",
+    );
+    return new VaultSecretManager(vaultConfig);
+  }
+
+  logger.info("createSecretManager: using DbSecretsManager");
+  return new DbSecretsManager();
+}
+
+/**
+ * Get the secrets manager type from environment variables
+ * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
+ */
+export function getSecretsManagerType(): SecretsManagerType {
+  const envValue = process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase();
+
+  if (envValue === "VAULT") {
+    return SecretsManagerType.Vault;
+  }
+
+  return SecretsManagerType.DB;
 }
 
 /**
  * Database-backed implementation of SecretManager
- * Stores secrets in PostgreSQL database using SecretModel
+ * Stores secrets in the database using SecretModel
  */
 export class DbSecretsManager implements SecretManager {
   async createSecret(
@@ -120,37 +156,22 @@ export class DbSecretsManager implements SecretManager {
   }
 }
 
-/**
- * Sanitize a name to conform to Vault secret naming rules:
- * - Must be between 1 and 64 characters
- * - Must start with ASCII letter or '_'
- * - Must only contain ASCII letters, digits, or '_'
- */
-function sanitizeVaultSecretName(name: string): string {
-  if (!name || name.trim().length === 0) {
-    return "secret";
-  }
+export type VaultAuthMethod = "token" | "kubernetes";
 
-  // Replace any non-alphanumeric character (except underscore) with underscore
-  let sanitized = name.replace(/[^a-zA-Z0-9_]/g, "_");
-
-  // Ensure it starts with a letter or underscore
-  if (!/^[a-zA-Z_]/.test(sanitized)) {
-    sanitized = `_${sanitized}`;
-  }
-
-  // Trim to 64 characters
-  sanitized = sanitized.slice(0, 64);
-
-  return sanitized;
+export interface VaultConfig {
+  /** Vault server address (default: http://localhost:8200) */
+  address: string;
+  /** Authentication method to use */
+  authMethod: VaultAuthMethod;
+  /** Vault token for authentication (required for token auth) */
+  token?: string;
+  /** Kubernetes auth role (required for kubernetes auth) */
+  k8sRole?: string;
+  /** Path to service account token file (defaults to /var/run/secrets/kubernetes.io/serviceaccount/token) */
+  k8sTokenPath?: string;
+  /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
+  k8sMountPoint?: string;
 }
-
-/** Default path to Kubernetes service account token */
-const DEFAULT_K8S_TOKEN_PATH =
-  "/var/run/secrets/kubernetes.io/serviceaccount/token";
-
-/** Default Vault Kubernetes auth mount point */
-const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
 
 /**
  * Vault-backed implementation of SecretManager
@@ -388,32 +409,64 @@ export class VaultSecretManager implements SecretManager {
 }
 
 /**
+ * Sanitize a name to conform to Vault secret naming rules:
+ * - Must be between 1 and 64 characters
+ * - Must start with ASCII letter or '_'
+ * - Must only contain ASCII letters, digits, or '_'
+ */
+function sanitizeVaultSecretName(name: string): string {
+  if (!name || name.trim().length === 0) {
+    return "secret";
+  }
+
+  // Replace any non-alphanumeric character (except underscore) with underscore
+  let sanitized = name.replace(/[^a-zA-Z0-9_]/g, "_");
+
+  // Ensure it starts with a letter or underscore
+  if (!/^[a-zA-Z_]/.test(sanitized)) {
+    sanitized = `_${sanitized}`;
+  }
+
+  // Trim to 64 characters
+  sanitized = sanitized.slice(0, 64);
+
+  return sanitized;
+}
+
+/** Default path to Kubernetes service account token */
+const DEFAULT_K8S_TOKEN_PATH =
+  "/var/run/secrets/kubernetes.io/serviceaccount/token";
+
+/** Default Vault Kubernetes auth mount point */
+const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
+
+/**
  * Get Vault configuration from environment variables
  *
  * Required:
  * - ARCHESTRA_HASHICORP_VAULT_ADDR: Vault server address
  *
  * Optional:
- * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "token" (default) or "k8s"
+ * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN" (default) or "K8S"
  *
- * For token auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=token or not set):
+ * For token auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set):
  * - ARCHESTRA_HASHICORP_VAULT_TOKEN: Vault token (required)
  *
- * For Kubernetes auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=k8s):
+ * For Kubernetes auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=K8S):
  * - ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: Vault role bound to K8s service account (required)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH: Path to SA token (optional, defaults to /var/run/secrets/kubernetes.io/serviceaccount/token)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT: Vault K8s auth mount point (optional, defaults to "kubernetes")
  *
  * @returns VaultConfig if ARCHESTRA_HASHICORP_VAULT_ADDR is set and configuration is valid, null if VAULT_ADDR is not set
- * @throws InvalidVaultConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
+ * @throws SecretsManagerConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
  */
 export function getVaultConfigFromEnv(): VaultConfig {
   const errors: string[] = [];
 
   const authMethod =
-    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD ?? "token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD?.toUpperCase() ?? "TOKEN";
 
-  if (authMethod === "token") {
+  if (authMethod === "TOKEN") {
     const address = process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
     if (!address) {
       errors.push("ARCHESTRA_HASHICORP_VAULT_ADDR is not set.");
@@ -432,7 +485,7 @@ export function getVaultConfigFromEnv(): VaultConfig {
     };
   }
 
-  if (authMethod === "k8s") {
+  if (authMethod === "K8S") {
     const address = process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
     if (!address) {
       errors.push("ARCHESTRA_HASHICORP_VAULT_ADDR is not set.");
@@ -458,72 +511,8 @@ export function getVaultConfigFromEnv(): VaultConfig {
   }
 
   throw new SecretsManagerConfigurationError(
-    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "token" or "k8s".`,
+    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "TOKEN" or "K8S".`,
   );
-}
-
-/**
- * Supported secrets manager types
- */
-export enum SecretsManagerType {
-  DB = "DB",
-  Vault = "Vault",
-}
-
-/**
- * Get the secrets manager type from environment variables
- * @returns SecretsManagerType based on ARCHESTRA_SECRETS_MANAGER env var, defaults to DB
- */
-export function getSecretsManagerType(): SecretsManagerType {
-  const envValue = process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase();
-
-  if (envValue === "VAULT") {
-    return SecretsManagerType.Vault;
-  }
-
-  return SecretsManagerType.DB;
-}
-
-/**
- * Create a secret manager based on environment configuration
- * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
- * - "Vault": Uses VaultSecretManager (see getVaultConfigFromEnv for required env vars)
- * - "DB" or not set: Uses DbSecretsManager (default)
- */
-export function createSecretManager(): SecretManager {
-  const managerType = getSecretsManagerType();
-
-  if (managerType === SecretsManagerType.Vault) {
-    if (!config.enterpriseLicenseActivated) {
-      logger.warn(
-        "createSecretManager: ARCHESTRA_SECRETS_MANAGER=Vault configured but Archestra enterprise license is not activated, falling back to DbSecretsManager.",
-      );
-      return new DbSecretsManager();
-    }
-
-    let vaultConfig: VaultConfig;
-    try {
-      vaultConfig = getVaultConfigFromEnv();
-    } catch (error) {
-      if (error instanceof SecretsManagerConfigurationError) {
-        logger.warn(
-          { error: error.message },
-          "createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager.",
-        );
-        return new DbSecretsManager();
-      }
-      throw error;
-    }
-
-    logger.info(
-      { address: vaultConfig.address, authMethod: vaultConfig.authMethod },
-      "createSecretManager: using VaultSecretManager",
-    );
-    return new VaultSecretManager(vaultConfig);
-  }
-
-  logger.info("createSecretManager: using DbSecretsManager");
-  return new DbSecretsManager();
 }
 
 /**

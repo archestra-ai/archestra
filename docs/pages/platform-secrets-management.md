@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Archestra Platform
 description: "Configure external secrets storage for sensitive data"
 order: 6
-lastUpdated: 2025-12-01
+lastUpdated: 2025-12-03
 ---
 
 <!--
@@ -12,28 +12,45 @@ Check ../docs_writer_prompt.md before changing this file.
 This document covers Vault secret manager configuration. Include:
 - Overview of secret storage options (DB vs Vault)
 - Environment variables
+- Token and Kubernetes authentication for Vault
 - Secret storage paths
-- How the hybrid storage approach works
 -->
 
-Archestra supports external secrets storage. When enabled, sensitive data like chat API keys and MCP server credentials are stored externally.
+Archestra supports external secrets storage. When enabled, sensitive data like API keys and MCP server credentials are stored externally.
 
-> **Note:** Existing secrets are not migrated when you enable external storage. Recreate secrets after changing secret manager.
+> **Note:** Existing secrets are not migrated when you enable external storage. Recreate secrets after changing the secrets manager.
 
 ## HashiCorp Vault
 
-> **Enterprise feature:** Please reach out to sales@archestra.ai for instructions about how to enable the feature.
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
-To enable Vault secrets management, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` and configure Vault address and auth token:
+To enable Vault, set `ARCHESTRA_SECRETS_MANAGER` to `VAULT` and configure the address and authentication method.
+See the documentation below for supported authentication methods and configuration instructions.
 
-| Variable                                 | Value                                        |
-| ---------------------------------------- | -------------------------------------------- |
-| `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                                      |
-| `HASHICORP_VAULT_ADDR`                   | `<Your Vault server address>`                |
-| `HASHICORP_VAULT_TOKEN`                  | `<Your Vault Authentication token>`          |
-| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | `set to the value according to your license` |
+| Variable                                 | Value                            |
+| ---------------------------------------- | -------------------------------- |
+| `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                          |
+| `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address        |
+| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN` or `K8S`                 |
+| `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value               |
 
-> **Note:** If `ARCHESTRA_SECRETS_MANAGER` is set to `Vault` but the required environment variables are missing, the system automatically falls back to database storage.
+### Token Authentication
+
+| Variable                           | Required | Description                |
+| ---------------------------------- | -------- | -------------------------- |
+| `ARCHESTRA_HASHICORP_VAULT_TOKEN`  | Yes      | Vault authentication token |
+
+### Kubernetes Authentication
+
+| Variable                                    | Required | Description                                                                       |
+| ------------------------------------------- | -------- | --------------------------------------------------------------------------------- |
+| `ARCHESTRA_HASHICORP_VAULT_K8S_ROLE`        | Yes      | Vault role bound to the Kubernetes service account                                |
+| `ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH`  | No       | Path to SA token (default: `/var/run/secrets/kubernetes.io/serviceaccount/token`) |
+| `ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT` | No       | Vault K8S auth mount point (default: `kubernetes`)                                |
+
+The K8S auth method requires a Vault role configured with a bound service account. The role must have permissions to read and write secrets under `secret/data/archestra/*`.
+
+> **Note:** If `ARCHESTRA_SECRETS_MANAGER` is set to `VAULT` but the required environment variables are missing, the system falls back to database storage.
 
 ### Secret Storage Paths
 

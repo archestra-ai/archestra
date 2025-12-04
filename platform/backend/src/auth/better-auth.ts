@@ -13,6 +13,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
+import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -23,7 +24,6 @@ import {
   SessionModel,
   TeamModel,
 } from "@/models";
-import { jwtDecode } from "jwt-decode";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache";
 
 const APP_NAME = "Archestra";
@@ -453,10 +453,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
  * Synchronize user's team memberships based on their SSO groups.
  * This is called after successful SSO login in the after hook.
  */
-async function syncSsoTeams(
-  userId: string,
-  userEmail: string,
-): Promise<void> {
+async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
   // Only sync if enterprise license is activated
   if (!config.enterpriseLicenseActivated) {
     return;
@@ -494,7 +491,9 @@ async function syncSsoTeams(
 
   let groups: string[] = [];
   try {
-    const idTokenClaims = jwtDecode<Record<string, unknown>>(ssoAccount.idToken);
+    const idTokenClaims = jwtDecode<Record<string, unknown>>(
+      ssoAccount.idToken,
+    );
     groups = extractGroupsFromClaims(idTokenClaims);
     logger.debug(
       {

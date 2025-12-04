@@ -1,0 +1,238 @@
+Alright, let’s not overcomplicate this. You’ve basically got **two choices**:
+
+* **Path 1:** Seriously try to win this $900 bounty
+* **Path 2:** Leave it and focus on something closer to your current skill level
+
+From what you usually tell me about your skills, this bounty is **not beginner-level**. It touches **TypeScript, React, gateways, JSON-RPC, MCP, MCP-UI, MCP Apps, iframe postMessage protocols, LLM + MCP proxies**. If you don’t already know at least half of that, you’re walking into a gunfight with a spoon.
+
+I’ll assume you still want to try. So here’s **exactly what to do and how**, step by step.
+
+---
+
+## 1. Reality check (brutal but necessary)
+
+Ask yourself honestly:
+
+* Can you:
+
+  * Run a big TS/Next.js/React monorepo locally?
+  * Read TypeScript code and follow data flow between frontend ↔ backend ↔ gateways?
+  * Understand an iframe `postMessage` protocol and implement a handler around it?
+  * Debug JSON-RPC calls in browser devtools / logs?
+
+If your answer is mostly **no**, then:
+
+* Use this bounty as a **learning roadmap**, not something you expect to win.
+* You’ll be too slow compared to the people already commenting with solid plans.
+
+If your answer is **yes / kind of**, then continue.
+
+---
+
+## 2. Minimum you must understand before even commenting `/attempt`
+
+You need to read and at least somewhat understand:
+
+1. **MCP UI docs** – how embedding works, postMessage protocol, UIResources
+
+   * mcpui.dev (embedding guides, remote-dom, etc.)
+
+2. **MCP Apps** – since maintainers explicitly asked about compatibility.
+
+3. **Archestra docs:**
+
+   * Platform LLM proxy ([Algora][1])
+   * MCP Gateway docs ([Algora][1])
+
+4. The **GitHub repo**: `archestra-ai/archestra`
+
+   * Frontend (Chat UI)
+   * MCP Gateway
+   * LLM Gateway
+
+If you’re not willing to actually read these, don’t bother with the bounty.
+
+---
+
+## 3. Concrete steps: what to do *today*
+
+### Step 1 – Clone and run the project
+
+1. Fork `archestra-ai/archestra` on GitHub.
+2. Clone your fork locally.
+3. Follow their `README` / contributing docs to run:
+
+   * The platform
+   * The Chat UI
+
+If you can’t get it running, you’re dead in the water. Fix that first.
+
+---
+
+### Step 2 – Find where Chat UI renders tools / MCP responses
+
+You need to locate:
+
+* The **chat page** (probably something like):
+
+  * `/platform/frontend/src/app/chat/page.tsx` (this was mentioned in another dev’s plan)
+* The **tool / MCP rendering components**:
+
+  * Something like `mcp-tools-display.tsx` or similar
+
+Your job later will be to:
+
+* Detect `UIResource` / `mcpui.dev/ui-*` metadata in responses
+* Render an **iframe** with MCP UI client instead of plain HTML / text
+* Wire up postMessage events to Archestra actions
+
+---
+
+### Step 3 – Understand MCP UI embedding
+
+From MCP UI docs, the core you must grasp:
+
+* You embed their UI as an **iframe**
+* You talk via `window.postMessage`:
+
+  * MCP UI → host (Chat UI)
+  * Host → MCP UI
+* You must handle events like:
+
+  * `intent`
+  * `tool`
+  * `prompt`
+  * `notify`
+  * `link`
+  * `data` requests
+  * `size` updates
+
+In practice, you’ll probably create something like:
+
+```tsx
+// Pseudo-code
+<McpUiWrapper resource={uiResource} onAction={handleUiAction} />
+```
+
+That component:
+
+* Creates an iframe
+* Initializes MCP UI client
+* Hooks postMessage events to your handler
+* Forwards actions through Archestra’s existing MCP / LLM gateways
+
+---
+
+### Step 4 – MCP Gateway + LLM Gateway
+
+The bounty explicitly says:
+
+> Make sure it works in 3rd-party UI via MCP Gateway
+> Make sure it works in 3rd-party UI via LLM Gateway
+
+This means:
+
+* Not just Archestra’s own Chat UI
+* But **other UIs** using:
+
+  * MCP Gateway → MCP server
+  * LLM Gateway → LLM + MCP combo
+
+You need to ensure:
+
+1. **Gateway does not break UIResource**:
+
+   * No stripping `_meta`, `uiMetadata`, `blob`, etc.
+   * JSON-RPC payloads must pass through unchanged.
+
+2. **Actions from the third-party UI**:
+
+   * When user interacts (clicks buttons in MCP UI iframe),
+   * Requests go → gateway → MCP/LLM → back → UI
+
+You’re basically making sure the gateways treat UIResources like first-class citizens instead of “just text”.
+
+---
+
+### Step 5 – Two MCP servers testing
+
+You must:
+
+* Pick at least **two MCP servers** that support MCP UI / MCP Apps
+* Or:
+
+  * Use their demo MCP-UI server (one dev mentioned this)
+  * Build or configure another MCP with UI-capable resources
+
+Then verify **all four paths**:
+
+1. Archestra Chat UI + MCP UI + MCP server
+2. Third-party UI + MCP Gateway + MCP server
+3. Third-party UI + LLM Gateway + LLM-generated UIResource
+4. Both sample MCPs added to Archestra’s catalog
+
+And you must be able to **demo** this.
+
+---
+
+## 4. What you should *actually do next*, step-by-step
+
+Here’s the exact order I’d suggest for you:
+
+1. **Decide honestly**:
+
+   * If this feels like alien language, don’t chase the bounty.
+   * Use it as a roadmap to learn: TS, React, gateways, MCP.
+
+2. If you still want to try:
+
+   1. Fork + clone repo, get Archestra running.
+
+   2. Find Chat UI + tools display component.
+
+   3. Skim MCP UI embed docs and MCP Apps docs.
+
+   4. Write a **short but clear implementation plan**.
+
+   5. Comment on the issue with:
+
+      ```text
+      /attempt #1301
+
+      <your implementation plan here>
+      ```
+
+   6. Wait and see if they **assign** you.
+
+      * If they don’t assign you → do NOT waste a week building it.
+      * If they do → then start coding gradually:
+
+        * First: iframe wrapper in Chat UI
+        * Second: wire to MCP Gateway
+        * Third: wire to LLM Gateway
+        * Finally: test with two MCPs + record demo
+
+---
+
+## 5. If you want, I’ll do the hard part for you
+
+If you’re serious and still want to take a swing:
+
+* I can write a **ready-to-paste implementation plan** tailored to:
+
+  * Your current lack of deep MCP knowledge
+  * Still looking credible and structured
+
+You will just paste it under:
+
+```text
+/attempt #1301
+<plan>
+```
+
+and post.
+
+If you want that, just say:
+**“Write the implementation plan for me so I can post it as /attempt #1301.”**
+
+[1]: https://algora.io/bounties/?utm_source=chatgpt.com "Bounties"

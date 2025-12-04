@@ -506,13 +506,6 @@ class SsoProviderModel {
       throw new Error("Failed to create SSO provider");
     }
 
-    /**
-     * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
-     * all SSO providers require `domainVerified: true` for sign-in to work without DNS verification.
-     * We auto-set this for all providers to bypass the DNS verification requirement.
-     * See: https://github.com/better-auth/better-auth/issues/6481
-     * TODO: Remove this workaround once the upstream issue is fixed.
-     */
     // Also store roleMapping if provided (Better Auth doesn't handle this field)
     // Note: roleMapping is stored as JSON text but typed as object in Drizzle schema
     const roleMappingJson = data.roleMapping
@@ -523,7 +516,6 @@ class SsoProviderModel {
     await db
       .update(schema.ssoProvidersTable)
       .set({
-        domainVerified: true,
         ...(roleMappingJson && {
           roleMapping: roleMappingJson as unknown as typeof data.roleMapping,
         }),
@@ -532,7 +524,6 @@ class SsoProviderModel {
 
     return {
       ...provider,
-      domainVerified: true,
       oidcConfig: provider.oidcConfig
         ? JSON.parse(provider.oidcConfig as unknown as string)
         : undefined,
@@ -572,13 +563,10 @@ class SsoProviderModel {
         : undefined;
 
     // Update in database
-    // WORKAROUND: Always ensure domainVerified is true to enable account linking
-    // See: https://github.com/better-auth/better-auth/issues/6481
     const [updatedProvider] = await db
       .update(schema.ssoProvidersTable)
       .set({
         ...restData,
-        domainVerified: true,
         ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof roleMapping,
         }),

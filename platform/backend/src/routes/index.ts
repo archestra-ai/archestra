@@ -19,6 +19,7 @@ export { default as oauthRoutes } from "./oauth";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
+export { default as profileTokenRoutes } from "./profile-token";
 export { default as promptRoutes } from "./prompts";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";

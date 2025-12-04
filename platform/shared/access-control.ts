@@ -190,6 +190,13 @@ export const RouteId = {
   UpdateAgentTool: "updateAgentTool",
   GetAgentAvailableTokens: "getAgentAvailableTokens",
 
+  // Profile Token Routes
+  GetProfileTokens: "getProfileTokens",
+  CreateProfileToken: "createProfileToken",
+  UpdateProfileToken: "updateProfileToken",
+  RotateProfileToken: "rotateProfileToken",
+  DeleteProfileToken: "deleteProfileToken",
+
   // Features Routes
   GetFeatures: "getFeatures",
 
@@ -441,6 +448,22 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetLabelValues]: {
     profile: ["read"],
+  },
+  // Profile Token permissions - require profile update permission
+  [RouteId.GetProfileTokens]: {
+    profile: ["read"],
+  },
+  [RouteId.CreateProfileToken]: {
+    profile: ["update"],
+  },
+  [RouteId.UpdateProfileToken]: {
+    profile: ["update"],
+  },
+  [RouteId.RotateProfileToken]: {
+    profile: ["update"],
+  },
+  [RouteId.DeleteProfileToken]: {
+    profile: ["update"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],

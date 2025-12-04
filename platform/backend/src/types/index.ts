@@ -21,6 +21,7 @@ export * from "./member";
 export * from "./message";
 export * from "./optimization-rule";
 export * from "./organization";
+export * from "./profile-token";
 export * from "./prompt";
 export * from "./role";
 export * from "./secret";

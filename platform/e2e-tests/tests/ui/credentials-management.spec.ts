@@ -6,11 +6,15 @@
  * - Editor - Editor Role - Engineering and Marketing Team
  * - Member - Member Role - Marketing Team
  *
- * Tests credential visibility and team-based access control for local MCP server installations.
+ * The Local Installations dialog requires `tool:update` and `profile:update` permissions.
+ * Admin and Editor have these permissions and can manage credentials
+ * Member cannot see the "Manage" button
  *
- * Note: The Local Installations dialog requires `tool:update` and `profile:update` permissions.
- * - Admin and Editor have these permissions and can manage credentials
- * - Member does NOT have these permissions, so they cannot see the "Manage" button
+ * Admin sees all credentials in Local Installations dialog
+ * Editor sees only their own and Member's credentials (team-based visibility)
+ *
+ * Admin can grant their credential to any team
+ * Editor can see options that belong to his team / teams
  */
 
 import type { Page } from "@playwright/test";
@@ -64,19 +68,21 @@ test.describe("Credentials Management", () => {
       await memberPage.waitForLoadState("networkidle");
 
       // Find the test server card
-      const serverCard = memberPage.locator('[data-slot="card"]', {
-        has: memberPage.getByText(TEST_SERVER_NAME, { exact: true }),
-      });
+      const serverCard = memberPage.getByTestId(
+        `${E2eTestId.McpServerCard}-${TEST_SERVER_NAME}`,
+      );
       await expect(serverCard).toBeVisible();
 
       // Member should see Uninstall button (they installed the server)
       await expect(
         serverCard.getByRole("button", { name: /Uninstall/i }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 10_000 });
 
       // But Member should NOT see the Manage credentials button (requires tool:update, profile:update)
       await expect(
-        memberPage.getByTestId(E2eTestId.ManageCredentialsButton),
+        memberPage.getByTestId(
+          `${E2eTestId.ManageCredentialsButton}-${TEST_SERVER_NAME}`,
+        ),
       ).not.toBeVisible();
     });
 
@@ -126,7 +132,7 @@ test.describe("Credentials Management", () => {
       expect(adminOptions).toContain(MARKETING_TEAM_NAME);
     });
 
-    test("Editor can see team select options for their credentials", async ({
+    test("Editor can see options that belong to his team / teams", async ({
       editorPage,
     }) => {
       await openLocalInstallationsDialog(editorPage);
@@ -183,9 +189,9 @@ async function installTestServer(page: Page, userName: string): Promise<void> {
   await page.waitForLoadState("networkidle");
 
   // Find the test server card using data-slot attribute
-  const serverCard = page.locator('[data-slot="card"]', {
-    has: page.getByText(TEST_SERVER_NAME, { exact: true }),
-  });
+  const serverCard = page.getByTestId(
+    `${E2eTestId.McpServerCard}-${TEST_SERVER_NAME}`,
+  );
   await expect(serverCard).toBeVisible();
 
   // Click Connect button within that card
@@ -214,9 +220,9 @@ async function uninstallTestServer(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle");
 
   // Find the test server card
-  const serverCard = page.locator('[data-slot="card"]', {
-    has: page.getByText(TEST_SERVER_NAME, { exact: true }),
-  });
+  const serverCard = page.getByTestId(
+    `${E2eTestId.McpServerCard}-${TEST_SERVER_NAME}`,
+  );
   await expect(serverCard).toBeVisible();
 
   // Click Uninstall button
@@ -251,7 +257,9 @@ async function openLocalInstallationsDialog(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle");
 
   // Find and click the Manage button for credentials
-  const manageButton = page.getByTestId(E2eTestId.ManageCredentialsButton);
+  const manageButton = page.getByTestId(
+    `${E2eTestId.ManageCredentialsButton}-${TEST_SERVER_NAME}`,
+  );
   await expect(manageButton).toBeVisible();
   await manageButton.click();
 

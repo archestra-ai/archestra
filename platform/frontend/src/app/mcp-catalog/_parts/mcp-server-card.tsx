@@ -288,7 +288,7 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs"
-          data-testid={E2eTestId.ManageCredentialsButton}
+          data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
         >
           Manage
         </Button>
@@ -628,7 +628,10 @@ export function McpServerCard({
   );
 
   return (
-    <Card className="flex flex-col relative pt-4">
+    <Card
+      className="flex flex-col relative pt-4"
+      data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
+    >
       <CardHeader>
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">

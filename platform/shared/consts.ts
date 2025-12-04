@@ -21,6 +21,7 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
+  McpServerCard: "mcp-server-card",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

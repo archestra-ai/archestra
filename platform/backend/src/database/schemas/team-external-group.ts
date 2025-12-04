@@ -36,4 +36,3 @@ const teamExternalGroupsTable = pgTable(
 );
 
 export default teamExternalGroupsTable;
-

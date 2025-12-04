@@ -288,12 +288,21 @@ class TeamModel {
   }
 
   /**
-   * Remove an external group mapping by ID
+   * Remove an external group mapping by ID.
+   * Requires both the groupId and teamId to prevent IDOR attacks.
    */
-  static async removeExternalGroupById(id: string): Promise<boolean> {
+  static async removeExternalGroupById(
+    teamId: string,
+    groupId: string,
+  ): Promise<boolean> {
     const result = await db
       .delete(schema.teamExternalGroupsTable)
-      .where(eq(schema.teamExternalGroupsTable.id, id));
+      .where(
+        and(
+          eq(schema.teamExternalGroupsTable.id, groupId),
+          eq(schema.teamExternalGroupsTable.teamId, teamId),
+        ),
+      );
 
     return result.rowCount !== null && result.rowCount > 0;
   }
@@ -440,10 +449,6 @@ class TeamModel {
         ),
       );
 
-    const currentSyncedTeamIds = new Set(
-      currentSyncedMemberships.map((m) => m.teamMember.teamId),
-    );
-
     // Add user to teams they should be in but aren't
     for (const teamId of shouldBeInTeamIds) {
       // Check if user is already a member (synced or manual)
@@ -457,10 +462,7 @@ class TeamModel {
     // Remove user from teams they were synced to but should no longer be in
     for (const membership of currentSyncedMemberships) {
       if (!shouldBeInTeamIds.has(membership.teamMember.teamId)) {
-        await TeamModel.removeMember(
-          membership.teamMember.teamId,
-          userId,
-        );
+        await TeamModel.removeMember(membership.teamMember.teamId, userId);
         removed.push(membership.teamMember.teamId);
       }
     }

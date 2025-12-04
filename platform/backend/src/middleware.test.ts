@@ -2,7 +2,10 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import config from "@/config";
 import { ApiError } from "@/types/api";
-import { enterpriseLicenseMiddleware, isEnterpriseOnlyRoute } from "./middleware";
+import {
+  enterpriseLicenseMiddleware,
+  isEnterpriseOnlyRoute,
+} from "./middleware";
 
 /**
  * Creates a Fastify instance with the same error handler as the production server
@@ -183,18 +186,15 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
         await fastify.register(enterpriseLicenseMiddleware);
 
         // Team external groups routes
-        fastify.get(
-          "/api/teams/:id/external-groups",
-          async () => ({ groups: [] }),
-        );
-        fastify.post(
-          "/api/teams/:id/external-groups",
-          async () => ({ created: true }),
-        );
-        fastify.delete(
-          "/api/teams/:id/external-groups/:groupId",
-          async () => ({ success: true }),
-        );
+        fastify.get("/api/teams/:id/external-groups", async () => ({
+          groups: [],
+        }));
+        fastify.post("/api/teams/:id/external-groups", async () => ({
+          created: true,
+        }));
+        fastify.delete("/api/teams/:id/external-groups/:groupId", async () => ({
+          success: true,
+        }));
 
         // Regular team routes should still work
         fastify.get("/api/teams", async () => ({ teams: [] }));
@@ -266,18 +266,15 @@ describe.sequential("enterpriseLicenseMiddleware", () => {
         fastify = createTestFastify();
         await fastify.register(enterpriseLicenseMiddleware);
 
-        fastify.get(
-          "/api/teams/:id/external-groups",
-          async () => ({ groups: [] }),
-        );
-        fastify.post(
-          "/api/teams/:id/external-groups",
-          async () => ({ created: true }),
-        );
-        fastify.delete(
-          "/api/teams/:id/external-groups/:groupId",
-          async () => ({ success: true }),
-        );
+        fastify.get("/api/teams/:id/external-groups", async () => ({
+          groups: [],
+        }));
+        fastify.post("/api/teams/:id/external-groups", async () => ({
+          created: true,
+        }));
+        fastify.delete("/api/teams/:id/external-groups/:groupId", async () => ({
+          success: true,
+        }));
 
         await fastify.ready();
       });
@@ -324,9 +321,9 @@ describe("isEnterpriseOnlyRoute", () => {
   });
 
   it("should return true for team external groups routes", () => {
-    expect(
-      isEnterpriseOnlyRoute("/api/teams/team-123/external-groups"),
-    ).toBe(true);
+    expect(isEnterpriseOnlyRoute("/api/teams/team-123/external-groups")).toBe(
+      true,
+    );
     expect(
       isEnterpriseOnlyRoute("/api/teams/team-123/external-groups/group-456"),
     ).toBe(true);
@@ -336,9 +333,9 @@ describe("isEnterpriseOnlyRoute", () => {
     expect(isEnterpriseOnlyRoute("/api/teams")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/teams/team-123")).toBe(false);
     expect(isEnterpriseOnlyRoute("/api/teams/team-123/members")).toBe(false);
-    expect(
-      isEnterpriseOnlyRoute("/api/teams/team-123/members/user-456"),
-    ).toBe(false);
+    expect(isEnterpriseOnlyRoute("/api/teams/team-123/members/user-456")).toBe(
+      false,
+    );
   });
 
   it("should return false for other routes", () => {

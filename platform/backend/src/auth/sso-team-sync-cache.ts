@@ -31,7 +31,7 @@ export function cacheSsoGroups(
   providerId: string,
   email: string,
   organizationId: string,
-  groups: string[]
+  groups: string[],
 ): void {
   const key = getCacheKey(providerId, email);
   SSO_GROUPS_CACHE.set(key, {
@@ -47,7 +47,7 @@ export function cacheSsoGroups(
  */
 export function retrieveSsoGroups(
   providerId: string,
-  email: string
+  email: string,
 ): { groups: string[]; organizationId: string } | null {
   const key = getCacheKey(providerId, email);
   const entry = SSO_GROUPS_CACHE.get(key);
@@ -78,18 +78,18 @@ export function retrieveSsoGroups(
  * - Space-separated string: "group1 group2"
  */
 export function extractGroupsFromClaims(
-  claims: Record<string, unknown>
+  claims: Record<string, unknown>,
 ): string[] {
   // Common claim names for groups
   const groupClaimNames = [
-    'groups',
-    'group',
-    'memberOf',
-    'member_of',
-    'roles',
-    'role',
-    'teams',
-    'team',
+    "groups",
+    "group",
+    "memberOf",
+    "member_of",
+    "roles",
+    "role",
+    "teams",
+    "team",
   ];
 
   for (const claimName of groupClaimNames) {
@@ -97,21 +97,21 @@ export function extractGroupsFromClaims(
 
     if (Array.isArray(value)) {
       // Filter to only strings and flatten if nested
-      return value.flat().filter((v) => typeof v === 'string') as string[];
+      return value.flat().filter((v) => typeof v === "string") as string[];
     }
 
-    if (typeof value === 'string' && value.trim()) {
+    if (typeof value === "string" && value.trim()) {
       // Try comma-separated first
-      if (value.includes(',')) {
+      if (value.includes(",")) {
         return value
-          .split(',')
+          .split(",")
           .map((s) => s.trim())
           .filter(Boolean);
       }
       // Try space-separated
-      if (value.includes(' ')) {
+      if (value.includes(" ")) {
         return value
-          .split(' ')
+          .split(" ")
           .map((s) => s.trim())
           .filter(Boolean);
       }

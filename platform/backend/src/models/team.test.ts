@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
 import TeamModel from "./team";
 
@@ -176,11 +176,33 @@ describe("TeamModel", () => {
       let groups = await TeamModel.getExternalGroups(team.id);
       expect(groups).toHaveLength(1);
 
-      await TeamModel.removeExternalGroupById(group.id);
+      await TeamModel.removeExternalGroupById(team.id, group.id);
 
       // Verify group was removed
       groups = await TeamModel.getExternalGroups(team.id);
       expect(groups).toEqual([]);
+    });
+
+    test("should not remove external group from different team (IDOR protection)", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      // Add group to team2
+      const group = await TeamModel.addExternalGroup(team2.id, "engineering");
+
+      // Try to delete using team1's ID but team2's group ID - should fail
+      const result = await TeamModel.removeExternalGroupById(team1.id, group.id);
+      expect(result).toBe(false);
+
+      // Verify group still exists on team2
+      const groups = await TeamModel.getExternalGroups(team2.id);
+      expect(groups).toHaveLength(1);
     });
   });
 
@@ -400,7 +422,12 @@ describe("TeamModel", () => {
 
       // Add user manually (syncedFromSso = false)
       const manualUser = await makeUser({ email: "manual@test.com" });
-      await TeamModel.addMember(team.id, manualUser.id, MEMBER_ROLE_NAME, false);
+      await TeamModel.addMember(
+        team.id,
+        manualUser.id,
+        MEMBER_ROLE_NAME,
+        false,
+      );
 
       // Sync with empty groups - should NOT remove manually added member
       const { added, removed } = await TeamModel.syncUserTeams(
@@ -441,4 +468,3 @@ describe("TeamModel", () => {
     });
   });
 });
-

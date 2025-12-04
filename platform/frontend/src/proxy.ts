@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (shouldLogApiRequest(req)) {
     // biome-ignore lint/suspicious/noConsole: Intentional console log of API requests
     console.log(`API Request: ${req.method} ${req.nextUrl.href}`);

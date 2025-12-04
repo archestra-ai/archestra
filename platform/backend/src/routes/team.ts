@@ -381,7 +381,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      const success = await TeamModel.removeExternalGroupById(groupId);
+      const success = await TeamModel.removeExternalGroupById(id, groupId);
 
       if (!success) {
         throw new ApiError(404, "External group mapping not found");

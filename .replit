@@ -60,3 +60,8 @@ externalPort = 3000
 [[ports]]
 localPort = 39009
 externalPort = 3001
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd platform && pnpm --filter @backend start & pnpm --filter @frontend start"]
+build = ["bash", "-c", "cd platform && pnpm install && pnpm build"]

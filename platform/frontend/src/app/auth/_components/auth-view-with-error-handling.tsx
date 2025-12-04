@@ -239,9 +239,10 @@ export function AuthViewWithErrorHandling({
           variant="ghost"
           onClick={() => {
             setSsoError(null);
-            // Clear the error from URL without page reload
+            // Clear the error params from URL without page reload
             const url = new URL(window.location.href);
             url.searchParams.delete("error");
+            url.searchParams.delete("error_description");
             window.history.replaceState({}, "", url.toString());
           }}
           className="mt-2 hover:bg-amber-100 dark:hover:bg-amber-900"

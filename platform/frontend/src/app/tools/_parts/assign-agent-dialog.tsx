@@ -5,7 +5,10 @@ import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { InstallationSelect } from "@/components/installation-select";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -76,6 +79,10 @@ export function AssignProfileDialog({
       );
     };
 
+    // Check if dynamic credential is selected
+    const useDynamicCredential =
+      credentialSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE;
+
     const results = await Promise.allSettled(
       selectedProfileIds.map((agentId) =>
         assignMutation.mutateAsync({
@@ -83,10 +90,13 @@ export function AssignProfileDialog({
           toolId: tool.tool.id,
           credentialSourceMcpServerId: isLocalServer
             ? null
-            : credentialSourceMcpServerId || null,
+            : useDynamicCredential
+              ? null
+              : credentialSourceMcpServerId || null,
           executionSourceMcpServerId: isLocalServer
             ? executionSourceMcpServerId || null
             : null,
+          useDynamicTeamCredential: useDynamicCredential,
         }),
       ),
     );
@@ -238,8 +248,8 @@ export function AssignProfileDialog({
                   Credential to use *
                 </Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select which token will be used when these profiles execute
-                  this tool
+                  Select which credential will be used when these profiles
+                  execute this tool
                 </p>
                 <TokenSelect
                   value={credentialSourceMcpServerId}
@@ -247,6 +257,7 @@ export function AssignProfileDialog({
                   className="w-full"
                   catalogId={catalogId}
                   shouldSetDefaultValue
+                  showDynamicOption
                 />
               </>
             )}

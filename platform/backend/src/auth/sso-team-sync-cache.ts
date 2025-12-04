@@ -97,7 +97,13 @@ export function extractGroupsFromClaims(
 
     if (Array.isArray(value)) {
       // Filter to only strings and flatten if nested
-      return value.flat().filter((v) => typeof v === "string") as string[];
+      const groups = value
+        .flat()
+        .filter((v) => typeof v === "string") as string[];
+      // Only return if we found non-empty groups, otherwise continue checking other claim names
+      if (groups.length > 0) {
+        return groups;
+      }
     }
 
     if (typeof value === "string" && value.trim()) {

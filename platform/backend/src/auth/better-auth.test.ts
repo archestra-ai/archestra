@@ -4,7 +4,19 @@ import config from "@/config";
 import { TeamModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { handleAfterHook, handleBeforeHook } from "./better-auth";
-import { cacheSsoGroups } from "./sso-team-sync-cache";
+
+/**
+ * Creates a mock JWT idToken with the given claims.
+ * This is a simple base64-encoded JWT for testing purposes.
+ */
+function createMockIdToken(claims: Record<string, unknown>): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "HS256", typ: "JWT" }),
+  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = "test-signature";
+  return `${header}.${payload}.${signature}`;
+}
 
 /**
  * Helper to create a minimal mock context for testing.
@@ -474,11 +486,13 @@ describe("handleAfterHook", () => {
       });
     }
 
-    test("should sync teams when SSO callback path with cached groups", async ({
+    test("should sync teams when SSO callback path with SSO account", async ({
       makeUser,
       makeOrganization,
       makeMember,
       makeTeam,
+      makeAccount,
+      makeSsoProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -488,11 +502,22 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "member" });
       const team = await makeTeam(org.id, user.id, { name: "SSO Team" });
 
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local" });
+
+      // Create SSO account with idToken containing groups
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["engineering"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local",
+        idToken,
+      });
+
       // Link an external group to the team
       await TeamModel.addExternalGroup(team.id, "engineering");
-
-      // Cache SSO groups for this user (simulates what happens during SSO login)
-      cacheSsoGroups("keycloak-local", user.email, org.id, ["engineering"]);
 
       const ctx = createMockContext({
         path: "/sso/callback/keycloak-local",
@@ -521,6 +546,8 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeTeam,
+      makeAccount,
+      makeSsoProvider,
     }) => {
       // Disable enterprise license
       setEnterpriseLicense(false);
@@ -530,14 +557,25 @@ describe("handleAfterHook", () => {
       await makeMember(user.id, org.id, { role: "member" });
       const team = await makeTeam(org.id, user.id, { name: "SSO Team 2" });
 
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-2" });
+
+      // Create SSO account with idToken containing groups
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["developers"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-2",
+        idToken,
+      });
+
       // Link an external group to the team
       await TeamModel.addExternalGroup(team.id, "developers");
 
-      // Cache SSO groups for this user
-      cacheSsoGroups("keycloak-local", user.email, org.id, ["developers"]);
-
       const ctx = createMockContext({
-        path: "/sso/callback/keycloak-local",
+        path: "/sso/callback/keycloak-local-2",
         method: "GET",
         body: {},
         context: {
@@ -563,6 +601,8 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeTeam,
+      makeAccount,
+      makeSsoProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -574,11 +614,22 @@ describe("handleAfterHook", () => {
         name: "Team for Regular",
       });
 
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-3" });
+
+      // Create SSO account with idToken containing groups (but shouldn't be used for regular sign-in)
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["staff"],
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-3",
+        idToken,
+      });
+
       // Link an external group to the team
       await TeamModel.addExternalGroup(team.id, "staff");
-
-      // Cache SSO groups (shouldn't be used for regular sign-in)
-      cacheSsoGroups("keycloak-local", user.email, org.id, ["staff"]);
 
       const ctx = createMockContext({
         path: "/sign-in", // Regular sign-in, not SSO callback
@@ -602,7 +653,7 @@ describe("handleAfterHook", () => {
       setEnterpriseLicense(originalEnterpriseValue);
     });
 
-    test("should handle missing cached groups gracefully", async ({
+    test("should handle missing SSO account gracefully", async ({
       makeUser,
       makeOrganization,
       makeMember,
@@ -610,11 +661,11 @@ describe("handleAfterHook", () => {
       // Enable enterprise license
       setEnterpriseLicense(true);
 
-      const user = await makeUser({ email: "no-cache-user@example.com" });
+      const user = await makeUser({ email: "no-sso-account@example.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
 
-      // Don't cache any SSO groups
+      // Don't create any SSO account
 
       const ctx = createMockContext({
         path: "/sso/callback/keycloak-local",
@@ -640,6 +691,8 @@ describe("handleAfterHook", () => {
       makeOrganization,
       makeMember,
       makeTeam,
+      makeAccount,
+      makeSsoProvider,
     }) => {
       // Enable enterprise license
       setEnterpriseLicense(true);
@@ -648,6 +701,20 @@ describe("handleAfterHook", () => {
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
       const team = await makeTeam(org.id, user.id, { name: "Removal Team" });
+
+      // Create SSO provider for this organization
+      await makeSsoProvider(org.id, { providerId: "keycloak-local-4" });
+
+      // Create SSO account with idToken containing NEW groups (user was removed from old-group)
+      const idToken = createMockIdToken({
+        sub: user.id,
+        email: user.email,
+        groups: ["new-group"], // old-group is no longer present
+      });
+      await makeAccount(user.id, {
+        providerId: "keycloak-local-4",
+        idToken,
+      });
 
       // Link an external group to the team
       await TeamModel.addExternalGroup(team.id, "old-group");
@@ -659,11 +726,8 @@ describe("handleAfterHook", () => {
       let isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
       expect(isInTeam).toBe(true);
 
-      // Cache SSO groups WITHOUT the old-group (simulates user removed from group)
-      cacheSsoGroups("keycloak-local", user.email, org.id, ["new-group"]);
-
       const ctx = createMockContext({
-        path: "/sso/callback/keycloak-local",
+        path: "/sso/callback/keycloak-local-4",
         method: "GET",
         body: {},
         context: {

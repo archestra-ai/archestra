@@ -185,6 +185,8 @@ export interface VaultConfig {
   awsIamServerIdHeader?: string;
   /** Path prefix for secrets in Vault KV v2 engine (defaults to "secret/data/archestra") */
   secretPath: string;
+  /** Path prefix for secret metadata in Vault KV v2 engine (defaults to secretPath with /data/ replaced by /metadata/) */
+  secretMetadataPath?: string;
 }
 
 /**
@@ -433,9 +435,10 @@ export class VaultSecretManager implements SecretManager {
   }
 
   private getVaultMetadataPath(name: string, id: string): string {
-    const basePath = this.config.secretPath;
-    // Replace 'data' with 'metadata' for KV v2 metadata operations
-    const metadataPath = basePath.replace("/data/", "/metadata/");
+    // Use configured metadata path, or fallback to replacing /data/ with /metadata/
+    const metadataPath =
+      this.config.secretMetadataPath ??
+      this.config.secretPath.replace("/data/", "/metadata/");
     return `${metadataPath}/${name}-${id}`;
   }
 
@@ -690,6 +693,8 @@ export function getVaultConfigFromEnv(): VaultConfig {
       secretPath:
         process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
         DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 
@@ -718,6 +723,8 @@ export function getVaultConfigFromEnv(): VaultConfig {
       secretPath:
         process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
         DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 
@@ -750,6 +757,8 @@ export function getVaultConfigFromEnv(): VaultConfig {
       secretPath:
         process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
         DEFAULT_SECRET_PATH,
+      secretMetadataPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
     };
   }
 

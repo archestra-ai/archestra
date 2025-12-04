@@ -65,7 +65,6 @@ export enum SecretsManagerType {
   Vault = "Vault",
 }
 
-
 /**
  * Create a secret manager based on environment configuration
  * Uses ARCHESTRA_SECRETS_MANAGER env var to determine the backend:
@@ -157,8 +156,6 @@ export class DbSecretsManager implements SecretManager {
   }
 }
 
-
-
 export type VaultAuthMethod = "token" | "kubernetes";
 
 export interface VaultConfig {
@@ -175,7 +172,6 @@ export interface VaultConfig {
   /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
   k8sMountPoint?: string;
 }
-
 
 /**
  * Vault-backed implementation of SecretManager
@@ -411,7 +407,6 @@ export class VaultSecretManager implements SecretManager {
     };
   }
 }
-
 
 /**
  * Sanitize a name to conform to Vault secret naming rules:

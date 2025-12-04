@@ -67,8 +67,10 @@ function ChatSettingsContent() {
       } else {
         setApiKey("");
       }
-    } catch (_error) {
-      toast.error("Failed to save API key");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save API key";
+      toast.error(message);
     }
   }, [
     chatSettings?.anthropicApiKeySecretId,
@@ -103,8 +105,10 @@ function ChatSettingsContent() {
       toast.success("API key reset successfully");
       setApiKey("");
       setHasApiKeyChanged(false);
-    } catch (_error) {
-      toast.error("Failed to reset API key");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to reset API key";
+      toast.error(message);
     }
   }, [updateChatSettings]);
 

@@ -4,6 +4,7 @@ import config from "@/config";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import type { SecretValue, SelectSecret } from "@/types";
+import { ApiError } from "@/types/api";
 
 /**
  * SecretManager interface for managing secrets
@@ -89,8 +90,8 @@ export function createSecretManager(): SecretManager {
     } catch (error) {
       if (error instanceof SecretsManagerConfigurationError) {
         logger.warn(
-          { error: error.message },
-          "createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager.",
+          { reason: error.message },
+          `createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager. ${error.message}`,
         );
         return new DbSecretsManager();
       }
@@ -190,7 +191,7 @@ export interface VaultConfig {
  */
 export class VaultSecretManager implements SecretManager {
   private client: ReturnType<typeof Vault>;
-  private initialized: Promise<void>;
+  private initialized = false;
   private config: VaultConfig;
 
   constructor(config: VaultConfig) {
@@ -202,20 +203,21 @@ export class VaultSecretManager implements SecretManager {
       endpoint: normalizedEndpoint,
     });
 
+    // Validate config but defer authentication for k8s/aws
     if (config.authMethod === "kubernetes") {
       if (!config.k8sRole) {
         throw new Error(
           "VaultSecretManager: k8sRole is required for Kubernetes authentication",
         );
       }
-      this.initialized = this.loginWithKubernetes();
+      // Authentication deferred to ensureInitialized()
     } else if (config.authMethod === "aws") {
       if (!config.awsRole) {
         throw new Error(
           "VaultSecretManager: awsRole is required for AWS IAM authentication",
         );
       }
-      this.initialized = this.loginWithAws();
+      // Authentication deferred to ensureInitialized()
     } else if (config.authMethod === "token") {
       if (!config.token) {
         throw new Error(
@@ -223,7 +225,7 @@ export class VaultSecretManager implements SecretManager {
         );
       }
       this.client.token = config.token;
-      this.initialized = Promise.resolve();
+      this.initialized = true;
     } else {
       throw new Error("VaultSecretManager: invalid authentication method");
     }
@@ -374,10 +376,53 @@ export class VaultSecretManager implements SecretManager {
   }
 
   /**
-   * Ensure authentication is complete before any operation
+   * Ensure authentication is complete before any operation.
+   * For k8s/aws auth, this triggers the login on first call (lazy initialization).
+   * Each call retries authentication if not yet initialized, allowing recovery if Vault becomes available.
    */
   private async ensureInitialized(): Promise<void> {
-    await this.initialized;
+    if (this.initialized) {
+      return;
+    }
+
+    try {
+      if (this.config.authMethod === "kubernetes") {
+        await this.loginWithKubernetes();
+      } else if (this.config.authMethod === "aws") {
+        await this.loginWithAws();
+      }
+      this.initialized = true;
+    } catch (error) {
+      logger.error({ error }, "VaultSecretManager: initialization failed");
+      throw new ApiError(
+        500,
+        "Failed to connect to secrets vault. Please try again later or contact your administrator.",
+      );
+    }
+  }
+
+  /**
+   * Handle Vault operation errors by logging and throwing user-friendly ApiError
+   */
+  private handleVaultError(
+    error: unknown,
+    operationName: string,
+    context: Record<string, unknown> = {},
+  ): never {
+    logger.error(
+      { error, ...context },
+      `VaultSecretManager.${operationName}: failed`,
+    );
+
+    // Re-throw ApiError as-is (e.g., from ensureInitialized)
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(
+      500,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+    );
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -392,7 +437,11 @@ export class VaultSecretManager implements SecretManager {
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "createSecret", { name });
+    }
 
     // Sanitize name to conform to Vault naming rules
     const sanitizedName = sanitizeVaultSecretName(name);
@@ -413,12 +462,8 @@ export class VaultSecretManager implements SecretManager {
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.createSecret: failed, rolling back",
-      );
       await SecretModel.delete(dbRecord.id);
-      throw error;
+      this.handleVaultError(error, "createSecret", { vaultPath });
     }
 
     return {
@@ -428,7 +473,11 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async deleteSecret(secid: string): Promise<boolean> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "deleteSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -445,11 +494,7 @@ export class VaultSecretManager implements SecretManager {
           "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
-        logger.error(
-          { metadataPath, error },
-          "VaultSecretManager.deleteSecret: failed",
-        );
-        throw error;
+        this.handleVaultError(error, "deleteSecret", { metadataPath });
       }
     }
 
@@ -461,7 +506,11 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async getSecret(secid: string): Promise<SelectSecret | null> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "getSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -488,11 +537,7 @@ export class VaultSecretManager implements SecretManager {
         secret: secretValue,
       };
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.getSecret: failed",
-      );
-      throw error;
+      this.handleVaultError(error, "getSecret", { vaultPath });
     }
   }
 
@@ -500,7 +545,11 @@ export class VaultSecretManager implements SecretManager {
     secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "updateSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -521,11 +570,7 @@ export class VaultSecretManager implements SecretManager {
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.updateSecret: failed",
-      );
-      throw error;
+      this.handleVaultError(error, "updateSecret", { vaultPath });
     }
 
     const updatedRecord = await SecretModel.update(secid, { secret: {} });

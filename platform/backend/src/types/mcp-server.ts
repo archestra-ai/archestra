@@ -29,7 +29,6 @@ export const SelectMcpServerSchema = createSelectSchema(
         userId: z.string(),
         email: z.string(),
         createdAt: z.coerce.date(),
-        canManage: z.boolean().optional(),
       }),
     )
     .optional(),

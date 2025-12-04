@@ -78,18 +78,38 @@ describe("MemberModel", () => {
       const org = await makeOrganization();
       await makeMember(user.id, org.id);
 
-      const member = await MemberModel.getByUserId(user.id);
+      const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member).toBeDefined();
       expect(member?.userId).toBe(user.id);
       expect(member?.organizationId).toBe(org.id);
     });
 
-    test("should return undefined when user is not a member", async ({
+    test("should return undefined when user is not a member of specified org", async ({
       makeUser,
+      makeOrganization,
     }) => {
       const user = await makeUser();
-      const member = await MemberModel.getByUserId(user.id);
+      const org = await makeOrganization();
+      const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member).toBeUndefined();
+    });
+
+    test("should return correct member when user is in multiple orgs", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      await makeMember(user.id, org1.id, { role: "admin" });
+      await makeMember(user.id, org2.id, { role: "member" });
+
+      const member1 = await MemberModel.getByUserId(user.id, org1.id);
+      const member2 = await MemberModel.getByUserId(user.id, org2.id);
+
+      expect(member1?.role).toBe("admin");
+      expect(member2?.role).toBe("member");
     });
   });
 });

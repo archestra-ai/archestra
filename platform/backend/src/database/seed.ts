@@ -30,7 +30,7 @@ export async function seedDefaultUserAndOrg(
     throw new Error("Failed to seed admin user and default organization");
   }
 
-  const existingMember = await MemberModel.getByUserId(user.id);
+  const existingMember = await MemberModel.getByUserId(user.id, org.id);
 
   if (!existingMember) {
     await MemberModel.create(user.id, org.id, config.role || ADMIN_ROLE_NAME);

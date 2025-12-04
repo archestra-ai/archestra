@@ -105,7 +105,13 @@ const parseAllowedOrigins = (): string[] => {
     return [];
   }
 
-  return [frontendBaseUrl];
+  // ARCHESTRA_FRONTEND_URL if set
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl && frontendUrl !== "") {
+    return [frontendUrl];
+  }
+
+  return [];
 };
 
 /**
@@ -127,7 +133,7 @@ const getCorsOrigins = (): RegExp | boolean | string[] => {
  * Get trusted origins for better-auth.
  * Returns wildcard patterns for localhost (development) or specific origins for production.
  */
-const getTrustedOrigins = (): string[] | undefined => {
+export const getTrustedOrigins = (): string[] => {
   const origins = parseAllowedOrigins();
 
   // Default: allow localhost wildcards for development
@@ -140,6 +146,7 @@ const getTrustedOrigins = (): string[] | undefined => {
     ];
   }
 
+  // Production: use configured origins
   return origins;
 };
 

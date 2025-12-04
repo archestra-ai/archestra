@@ -65,24 +65,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@f9b57e1c7d5a57eed0b5609e1ffeadbf3bb0b726 # v1.1.0
-
-      - name: Build and push Docker image
+      - name: Build Docker image
         id: build
-        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        uses: ./.github/actions/build-platform-docker-image
         with:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
-          file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
-          build-args: |
-            VERSION=${{ inputs.version }}
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-            sentry_auth_token=${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+          version: ${{ inputs.version }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
 
       - name: Export digest
         if: inputs.push_image

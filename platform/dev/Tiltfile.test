@@ -20,7 +20,7 @@ local_resource(
 
 local_resource(
   'e2e-tests',
-  cmd='pnpm test:e2e',
+  cmd='Cnpm test:e2e',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
@@ -38,7 +38,15 @@ local_resource(
 )
 
 # E2E test dependencies (WireMock, Keycloak)
-# Use a local_resource to deploy/redeploy the helm chart on demand
+# Deploys the e2e-tests helm chart which includes:
+#   - WireMock for API mocking
+#   - Keycloak for SSO testing with pre-configured test users
+#
+# Test users are defined in helm/e2e-tests/values.yaml:
+#   - admin@example.com (archestra-admins group) - matches default Archestra admin
+#   - member@example.com (archestra-users group) - for role mapping tests
+#
+# The defaults align with Archestra's default admin credentials, so no overrides needed.
 local_resource(
   'e2e-test-dependencies',
   cmd='helm upgrade --install e2e-tests ../helm/e2e-tests --namespace default --wait',

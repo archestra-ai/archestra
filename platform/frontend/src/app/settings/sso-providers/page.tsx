@@ -400,7 +400,7 @@ function SsoProvidersSettingsContent() {
                     cert: createConfig.config.defaultSamlConfig?.cert || "",
                     callbackUrl:
                       createConfig.config.defaultSamlConfig?.callbackUrl ||
-                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/callback/saml`,
+                      `${typeof window !== "undefined" ? window.location.origin : ""}/api/auth/sso/saml2/sp/acs/{providerId}`,
                     spMetadata: {},
                     mapping:
                       createConfig.config.defaultSamlConfig?.mapping || {},

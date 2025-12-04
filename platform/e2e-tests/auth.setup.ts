@@ -1,23 +1,8 @@
 import path from "node:path";
 import { expect, test as setup } from "@playwright/test";
-import dotenv from "dotenv";
-import {
-  DEFAULT_ADMIN_EMAIL,
-  DEFAULT_ADMIN_PASSWORD,
-  UI_BASE_URL,
-} from "./consts";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "./consts";
 
 const authFile = path.join(__dirname, "playwright/.auth/user.json");
-
-/**
- * Load .env from platform root
- */
-dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
-
-const ADMIN_EMAIL =
-  process.env.ARCHESTRA_AUTH_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
-const ADMIN_PASSWORD =
-  process.env.ARCHESTRA_AUTH_ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
 
 setup("authenticate", async ({ page }) => {
   // Perform authentication steps

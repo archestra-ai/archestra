@@ -1,5 +1,5 @@
-import { UI_BASE_URL } from "../../consts";
-import { expect, test } from "./fixtures";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
+import { expect, type Page, test } from "./fixtures";
 
 // Run tests in this file serially to avoid conflicts when both tests
 // manipulate SSO providers in the same Keycloak realm.
@@ -13,17 +13,36 @@ test.skip(
 
 // Keycloak configuration for e2e tests
 // These match the values in helm/e2e-tests/values.yaml
-// KEYCLOAK_EXTERNAL_URL is used for browser redirects (accessible from CI host)
-// KEYCLOAK_INTERNAL_URL is used for backend discovery (accessible from within K8s cluster)
+// KEYCLOAK_EXTERNAL_URL is used for browser redirects (accessible from host machine)
+// KEYCLOAK_BACKEND_URL is what the backend uses to reach Keycloak:
+//   - In CI: backend runs in K8s, so it uses the internal K8s service name
+//   - In local dev: backend runs on host, so it uses localhost:30081
 const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
-const KEYCLOAK_INTERNAL_URL = "http://e2e-tests-keycloak:8080";
+// Detect if we're running in CI (backend is in K8s) or local dev (backend is on host)
+// In CI, the ARCHESTRA_AUTH_ADMIN_EMAIL env var is set via GitHub Actions secrets
+const IS_CI = process.env.CI === "true";
+const KEYCLOAK_BACKEND_URL = IS_CI
+  ? "http://e2e-tests-keycloak:8080"
+  : "http://localhost:30081";
 const KEYCLOAK_REALM = "archestra";
 const KEYCLOAK_OIDC_CLIENT_ID = "archestra-oidc";
 const KEYCLOAK_OIDC_CLIENT_SECRET = "archestra-oidc-secret";
 const KEYCLOAK_SAML_ENTITY_ID = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
 const KEYCLOAK_SAML_SSO_URL = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/saml`;
-const KEYCLOAK_TEST_USER = "testuser";
-const KEYCLOAK_TEST_PASSWORD = "testpassword";
+
+// Keycloak test user credentials - match the Archestra admin user so SSO can link accounts.
+// Test users are defined in helm/e2e-tests/values.yaml:
+//   - admin@example.com (archestra-admins group) - for admin role mapping
+//   - member@example.com (archestra-users group) - for member role mapping
+// Extract username from email (e.g., "admin@example.com" -> "admin")
+const KEYCLOAK_TEST_USER = ADMIN_EMAIL.split("@")[0];
+const KEYCLOAK_TEST_PASSWORD = ADMIN_PASSWORD;
+
+// SSO Domain - extracted from admin email for account linking to work.
+// Better Auth's SSO plugin requires the provider's domain to match the user's email domain
+// for non-trusted providers to enable account linking.
+// e.g., "joey@archestra.ai" -> "archestra.ai"
+const SSO_DOMAIN = ADMIN_EMAIL.split("@")[1];
 
 /**
  * Fetch the IdP metadata from Keycloak dynamically.
@@ -50,6 +69,70 @@ async function fetchKeycloakSamlMetadata(): Promise<string> {
 }
 
 /**
+ * Ensure a clean slate by deleting any existing SSO provider of the given type.
+ * This makes tests idempotent - they can be retried or re-run without manual cleanup.
+ *
+ * @param page - The Playwright page (logged in as admin, on SSO providers page)
+ * @param providerType - Either "Generic OIDC" or "Generic SAML"
+ */
+async function deleteExistingProviderIfExists(
+  page: Page,
+  providerType: "Generic OIDC" | "Generic SAML",
+): Promise<void> {
+  const providerCard = page.getByText(providerType, { exact: true });
+  await providerCard.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  // Check if this is edit or create dialog by looking for Update Provider button
+  const updateButton = page.getByRole("button", { name: "Update Provider" });
+  const isEditDialog = await updateButton.isVisible().catch(() => false);
+
+  if (isEditDialog) {
+    // Delete existing provider first
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // Reload and wait for page to update
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+
+    // Now click again to open create dialog
+    await providerCard.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+  }
+  // If not an edit dialog, it's already a create dialog - nothing to delete
+}
+
+/**
+ * Perform SSO login via Keycloak in the given page context.
+ * This handles the Keycloak login form and waits for redirect back to Archestra.
+ * Works for both OIDC and SAML flows since Keycloak uses the same login UI.
+ *
+ * @param ssoPage - The Playwright page that has been redirected to Keycloak
+ */
+async function loginViaKeycloak(ssoPage: Page): Promise<void> {
+  // Wait for redirect to Keycloak (external URL for browser)
+  await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
+    timeout: 15000,
+  });
+
+  // Fill in Keycloak login form
+  await ssoPage.getByLabel("Username or email").fill(KEYCLOAK_TEST_USER);
+  // Password field - use getByRole which works for type="password" inputs
+  await ssoPage
+    .getByRole("textbox", { name: "Password" })
+    .fill(KEYCLOAK_TEST_PASSWORD);
+  await ssoPage.getByRole("button", { name: "Sign In" }).click();
+
+  // Wait for redirect back to Archestra - should land on a logged-in page (not sign-in)
+  await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 15000 });
+}
+
+/**
  * Extract the X509 certificate from the IdP metadata XML.
  */
 function extractCertFromMetadata(metadata: string): string {
@@ -72,39 +155,16 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     test.slow();
 
     // Use a unique provider name to avoid conflicts with existing providers
-    const providerName = `KeycloakE2E${Date.now()}`;
+    const providerName = `KeycloakOIDC${Date.now()}`;
 
     // STEP 1: Navigate to SSO providers page
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
 
-    // STEP 2: Check if Generic OIDC already has a provider configured
-    // If so, delete it first
-    const genericOidcCard = page.getByText("Generic OIDC", { exact: true });
-    await genericOidcCard.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Check if this is edit or create dialog by looking for Update Provider button
-    const updateButton = page.getByRole("button", { name: "Update Provider" });
-    const isEditDialog = await updateButton.isVisible().catch(() => false);
-
-    if (isEditDialog) {
-      // Delete existing provider first
-      await page.getByRole("button", { name: "Delete" }).click();
-      await expect(page.getByText(/Are you sure/i)).toBeVisible();
-      await page.getByRole("button", { name: "Delete", exact: true }).click();
-      await expect(page.getByRole("dialog")).not.toBeVisible({
-        timeout: 10000,
-      });
-
-      // Reload and wait for page to update
-      await page.reload();
-      await page.waitForLoadState("networkidle");
-
-      // Now click again to create
-      await genericOidcCard.click();
-      await expect(page.getByRole("dialog")).toBeVisible();
-    }
+    // STEP 2: Delete any existing Generic OIDC provider (ensures idempotency)
+    // This opens the dialog - either create (if none exists) or edit (if one exists)
+    // If edit, it deletes the provider and reopens as create dialog
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
 
     // Now we should have a create dialog
     // Fill in Keycloak OIDC configuration
@@ -116,32 +176,34 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     await page
       .getByLabel("Issuer")
       .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
-    await page.getByLabel("Domain").fill("archestra.test");
+    // Domain must match the admin user's email domain for account linking to work
+    // Better Auth requires domain matching for non-trusted SSO providers
+    await page.getByLabel("Domain").fill(SSO_DOMAIN);
     await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
     await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
-    // Discovery endpoint - backend fetches this (must be internal URL)
+    // Discovery endpoint - backend fetches this
     await page
       .getByLabel("Discovery Endpoint")
       .fill(
-        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
       );
-    // Authorization endpoint - browser redirects here (external URL)
+    // Authorization endpoint - browser redirects here (always external URL)
     await page
       .getByLabel("Authorization Endpoint")
       .fill(
         `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
       );
-    // Token endpoint - backend calls this (internal URL)
+    // Token endpoint - backend calls this
     await page
       .getByLabel("Token Endpoint")
       .fill(
-        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
       );
-    // JWKS endpoint - backend validates tokens (internal URL)
+    // JWKS endpoint - backend validates tokens
     await page
       .getByLabel("JWKS Endpoint")
       .fill(
-        `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
       );
 
     // Submit the form
@@ -175,26 +237,15 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
         .getByRole("button", { name: new RegExp(providerName, "i") })
         .click();
 
-      // Wait for redirect to Keycloak (external URL for browser)
-      // Match either localhost:30081 or the Keycloak hostname
-      await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
+      // Login via Keycloak and wait for redirect back to Archestra
+      await loginViaKeycloak(ssoPage);
+
+      // Verify we're logged in by checking for authenticated UI elements
+      // The sidebar navigation only appears when logged in
+      await ssoPage.waitForLoadState("networkidle");
+      // Use text locator as fallback since getByRole can be flaky with complex UIs
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
         timeout: 15000,
-      });
-
-      // Fill in Keycloak login form
-      await ssoPage.getByLabel("Username or email").fill(KEYCLOAK_TEST_USER);
-      // Use role selector for password field to avoid conflict with "Show password" button
-      await ssoPage
-        .getByRole("textbox", { name: "Password" })
-        .fill(KEYCLOAK_TEST_PASSWORD);
-      await ssoPage.getByRole("button", { name: "Sign In" }).click();
-
-      // Wait for redirect back to Archestra - should land on a logged-in page (not sign-in)
-      await ssoPage.waitForURL(`${UI_BASE_URL}/**`, { timeout: 15000 });
-
-      // Verify we're logged in by checking for user menu (email contains @)
-      await expect(ssoPage.locator('button:has-text("@")')).toBeVisible({
-        timeout: 10000,
       });
 
       // SSO login successful - user is now logged in
@@ -211,9 +262,9 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
     await page.getByText("Generic OIDC", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
 
-    // Update the domain
+    // Update the domain (use a subdomain to keep it valid for the same email domain)
     await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill("updated.archestra.test");
+    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
 
     // Save changes
     await page.getByRole("button", { name: "Update Provider" }).click();
@@ -254,6 +305,154 @@ test.describe("SSO OIDC E2E Flow with Keycloak", () => {
   });
 });
 
+test.describe("SSO Role Mapping E2E", () => {
+  test("should map admin group to admin role via OIDC", async ({
+    page,
+    browser,
+    goToPage,
+  }) => {
+    // Role mapping involves SSO flow, so triple the timeout
+    test.slow();
+
+    // Use a unique provider name to avoid conflicts
+    const providerName = `RoleMappingOIDC${Date.now()}`;
+
+    // STEP 1: Navigate to SSO providers page and create OIDC provider with role mapping
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    // Delete any existing Generic OIDC provider first
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // Fill in Keycloak OIDC configuration
+    await page.getByLabel("Provider ID").fill(providerName);
+    await page
+      .getByLabel("Issuer")
+      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
+    await page.getByLabel("Domain").fill(SSO_DOMAIN);
+    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
+    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
+    await page
+      .getByLabel("Discovery Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+      );
+    await page
+      .getByLabel("Authorization Endpoint")
+      .fill(
+        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+      );
+    await page
+      .getByLabel("Token Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+      );
+    await page
+      .getByLabel("JWKS Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+      );
+
+    // STEP 2: Configure Role Mapping
+    // Expand the Role Mapping accordion
+    await page.getByText("Role Mapping (Optional)").click();
+
+    // Wait for accordion to expand
+    await expect(page.getByLabel("Data Source")).toBeVisible();
+
+    // Add a rule to map archestra-admins group to admin role
+    await page.getByRole("button", { name: "Add Rule" }).click();
+
+    // Fill in the JMESPath expression
+    // Keycloak sends groups as an array, so we check if 'archestra-admins' is in it
+    await page
+      .getByLabel("JMESPath Expression")
+      .fill("contains(groups || `[]`, 'archestra-admins')");
+
+    // Select admin role
+    await page
+      .locator('[data-testid="role-mapping-rules"]')
+      .isVisible()
+      .catch(() => {});
+    // The role selector is the second Select in the rule form
+    const roleSelect = page
+      .locator('button[role="combobox"]')
+      .filter({ hasText: /member|admin/i })
+      .last();
+    await roleSelect.click();
+    await page.getByRole("option", { name: "Admin" }).click();
+
+    // Set default role to member
+    // Find the default role select (has "Default Role" label before it)
+    const defaultRoleSelect = page
+      .getByLabel("Default Role")
+      .locator("..")
+      .locator('button[role="combobox"]');
+    if (await defaultRoleSelect.isVisible()) {
+      await defaultRoleSelect.click();
+      await page.getByRole("option", { name: "Member" }).click();
+    }
+
+    // Submit the form
+    await page.getByRole("button", { name: "Create Provider" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 3: Test SSO login with admin user (in archestra-admins group)
+    // The admin user is configured in Keycloak with the archestra-admins group
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Click SSO button and login via Keycloak
+      await ssoPage
+        .getByRole("button", { name: new RegExp(providerName, "i") })
+        .click();
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      await loginViaKeycloak(ssoPage);
+
+      // Wait for redirect back to Archestra
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // Verify the user has admin role by checking they can access admin-only pages
+      // The Roles settings page is only accessible to admins
+      await ssoPage.goto(`${UI_BASE_URL}/settings/roles`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // If user has admin role, they should see the Roles page
+      // If not, they would be redirected or see an error
+      await expect(
+        ssoPage.getByText("Roles", { exact: true }).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Success! The admin user was mapped to admin role via JMESPath
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 4: Cleanup - delete the provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+  });
+});
+
 test.describe("SSO SAML E2E Flow with Keycloak", () => {
   test("should configure SAML provider, login via SSO, update, and delete", async ({
     page,
@@ -275,33 +474,10 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
 
-    // STEP 2: Check if Generic SAML already has a provider configured
-    // If so, delete it first
-    const genericSamlCard = page.getByText("Generic SAML", { exact: true });
-    await genericSamlCard.click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Check if this is edit or create dialog by looking for Update Provider button
-    const updateButton = page.getByRole("button", { name: "Update Provider" });
-    const isEditDialog = await updateButton.isVisible().catch(() => false);
-
-    if (isEditDialog) {
-      // Delete existing provider first
-      await page.getByRole("button", { name: "Delete" }).click();
-      await expect(page.getByText(/Are you sure/i)).toBeVisible();
-      await page.getByRole("button", { name: "Delete", exact: true }).click();
-      await expect(page.getByRole("dialog")).not.toBeVisible({
-        timeout: 10000,
-      });
-
-      // Reload and wait for page to update
-      await page.reload();
-      await page.waitForLoadState("networkidle");
-
-      // Now click again to create
-      await genericSamlCard.click();
-      await expect(page.getByRole("dialog")).toBeVisible();
-    }
+    // STEP 2: Delete any existing Generic SAML provider (ensures idempotency)
+    // This opens the dialog - either create (if none exists) or edit (if one exists)
+    // If edit, it deletes the provider and reopens as create dialog
+    await deleteExistingProviderIfExists(page, "Generic SAML");
 
     // Now we should have a create dialog
     // Fill in Keycloak SAML configuration
@@ -309,7 +485,9 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page
       .getByLabel("Issuer", { exact: true })
       .fill(KEYCLOAK_SAML_ENTITY_ID);
-    await page.getByLabel("Domain").fill("archestra.test");
+    // Domain must match the admin user's email domain for account linking to work
+    // Better Auth requires domain matching for non-trusted SSO providers
+    await page.getByLabel("Domain").fill(SSO_DOMAIN);
     await page
       .getByLabel("SAML Issuer / Entity ID")
       .fill(KEYCLOAK_SAML_ENTITY_ID);
@@ -323,6 +501,8 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page
       .getByLabel("Callback URL (ACS URL)")
       .fill(`http://localhost:3000/api/auth/sso/saml2/sp/acs/${providerName}`);
+    // Audience should match what Keycloak sends in the SAML assertion
+    await page.getByLabel("Audience (Optional)").fill("http://localhost:3000");
     // SP Entity ID is required for Better Auth to generate proper SP metadata
     // See: https://github.com/better-auth/better-auth/issues/4833
     await page.getByLabel("SP Entity ID").fill("http://localhost:3000");
@@ -341,6 +521,14 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
 </md:EntityDescriptor>`;
     await page.getByLabel("SP Metadata XML (Optional)").fill(spMetadataXml);
 
+    // Configure attribute mapping to match Keycloak's SAML attribute names
+    // These match the simple attribute names configured in helm/e2e-tests/values.yaml
+    // Keycloak sends: email, firstName, lastName, name
+    await page.getByLabel("Email Attribute").fill("email");
+    await page.getByLabel("Display Name Attribute").fill("name");
+    await page.getByLabel("First Name Attribute (Optional)").fill("firstName");
+    await page.getByLabel("Last Name Attribute (Optional)").fill("lastName");
+
     // Submit the form
     await page.getByRole("button", { name: "Create Provider" }).click();
 
@@ -351,11 +539,10 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page.reload();
     await page.waitForLoadState("networkidle");
 
-    // STEP 3: Verify SSO button appears on login page
-    // Note: Full SAML login flow is skipped due to known Better Auth SSO plugin limitations
-    // with SAML attribute parsing and user provisioning.
-    // See: https://github.com/better-auth/better-auth/issues/3615
-    // The OIDC test verifies the full login flow works; this test verifies SAML CRUD operations.
+    // STEP 3: Verify SSO button appears on login page and test SSO login
+    // NOTE: SAML account linking works because the backend automatically sets
+    // `domainVerified: true` for SAML providers as a workaround for:
+    // https://github.com/better-auth/better-auth/issues/6481
     const ssoContext = await browser.newContext({
       storageState: undefined,
     });
@@ -370,13 +557,30 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
         ssoPage.getByRole("button", { name: new RegExp(providerName, "i") }),
       ).toBeVisible({ timeout: 5000 });
 
-      // SAML provider is configured and SSO button is visible
-      // Full login flow skipped due to Better Auth SAML limitations
+      // STEP 4: Click SSO button and login via Keycloak SAML
+      await ssoPage
+        .getByRole("button", { name: new RegExp(providerName, "i") })
+        .click();
+
+      // Login via Keycloak and wait for redirect back to Archestra
+      await loginViaKeycloak(ssoPage);
+
+      // Verify we're logged in by checking for authenticated UI elements
+      // The Keycloak test user matches the Archestra admin user, so SSO should link
+      // to the existing account and log us in successfully.
+      // The sidebar navigation only appears when logged in
+      await ssoPage.waitForLoadState("networkidle");
+      // Use text locator as fallback since getByRole can be flaky with complex UIs
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // SSO login successful - user is now logged in
     } finally {
       await ssoContext.close();
     }
 
-    // STEP 4: Use the original admin page context to update the provider
+    // STEP 5: Use the original admin page context to update the provider
     // (the original page context is still logged in as admin)
     await goToPage(page, "/settings/sso-providers");
     await page.waitForLoadState("networkidle");
@@ -385,9 +589,9 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page.getByText("Generic SAML", { exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
 
-    // Update the domain
+    // Update the domain (use a subdomain to keep it valid for the same email domain)
     await page.getByLabel("Domain").clear();
-    await page.getByLabel("Domain").fill("updated.archestra.test");
+    await page.getByLabel("Domain").fill(`updated.${SSO_DOMAIN}`);
 
     // Save changes
     await page.getByRole("button", { name: "Update Provider" }).click();

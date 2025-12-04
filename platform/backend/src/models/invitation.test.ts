@@ -150,7 +150,7 @@ describe("InvitationModel", () => {
       await InvitationModel.accept(testSession, testUser, invitation.id);
 
       // Check that member was created
-      const member = await MemberModel.getByUserId(user.id);
+      const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member).toBeDefined();
       expect(member?.organizationId).toBe(org.id);
       expect(member?.role).toBe(MEMBER_ROLE_NAME);

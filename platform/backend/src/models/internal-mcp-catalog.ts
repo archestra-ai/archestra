@@ -8,6 +8,59 @@ import type {
 import McpServerModel from "./mcp-server";
 
 class InternalMcpCatalogModel {
+  /**
+   * Expands secrets and adds them to the catalog items, mutating the items.
+   */
+  private static async expandSecrets(
+    catalogItems: InternalMcpCatalog[],
+  ): Promise<void> {
+    // Collect all unique secret IDs
+    const secretIds = new Set<string>();
+    for (const item of catalogItems) {
+      if (item.clientSecretId) secretIds.add(item.clientSecretId);
+      if (item.localConfigSecretId) secretIds.add(item.localConfigSecretId);
+    }
+
+    if (secretIds.size === 0) return;
+
+    // Fetch all secrets in one query
+    const secrets = await db
+      .select()
+      .from(schema.secretsTable)
+      .where(inArray(schema.secretsTable.id, Array.from(secretIds)));
+
+    // Create a map for O(1) lookups
+    const secretMap = new Map(secrets.map((s) => [s.id, s]));
+
+    // Enrich each catalog item
+    for (const catalogItem of catalogItems) {
+      // Enrich OAuth client_secret
+      if (catalogItem.clientSecretId && catalogItem.oauthConfig) {
+        const secret = secretMap.get(catalogItem.clientSecretId);
+        const value = secret?.secret.client_secret;
+        if (value) {
+          catalogItem.oauthConfig.client_secret = String(value);
+        }
+      }
+
+      // Enrich local config secret env vars
+      if (
+        catalogItem.localConfigSecretId &&
+        catalogItem.localConfig?.environment
+      ) {
+        const secret = secretMap.get(catalogItem.localConfigSecretId);
+        if (secret) {
+          for (const envVar of catalogItem.localConfig.environment) {
+            const value = secret.secret[envVar.key];
+            if (envVar.type === "secret" && value) {
+              envVar.value = String(value);
+            }
+          }
+        }
+      }
+    }
+  }
+
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
@@ -20,14 +73,19 @@ class InternalMcpCatalogModel {
   }
 
   static async findAll(): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+
+    // Batch enrich all catalog items to avoid N+1 queries
+    await InternalMcpCatalogModel.expandSecrets(catalogItems);
+
+    return catalogItems;
   }
 
   static async searchByQuery(query: string): Promise<InternalMcpCatalog[]> {
-    return await db
+    const catalogItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(
@@ -36,6 +94,11 @@ class InternalMcpCatalogModel {
           ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
         ),
       );
+
+    // Batch enrich all catalog items to avoid N+1 queries
+    await InternalMcpCatalogModel.expandSecrets(catalogItems);
+
+    return catalogItems;
   }
 
   static async findById(id: string): Promise<InternalMcpCatalog | null> {
@@ -44,7 +107,14 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
 
-    return catalogItem || null;
+    if (!catalogItem) {
+      return null;
+    }
+
+    // Enrich with secret values for edit forms (OAuth client_secret and env vars)
+    await InternalMcpCatalogModel.expandSecrets([catalogItem]);
+
+    return catalogItem;
   }
 
   /**

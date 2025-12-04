@@ -1,6 +1,6 @@
+import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
 import {
-  ADMIN_ROLE_NAME,
   ac,
   adminRole,
   allAvailableActions,
@@ -38,7 +38,8 @@ const isHttps = () => {
   return frontendBaseUrl.startsWith("https://");
 };
 
-export const auth = betterAuth({
+// biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
+export const auth: any = betterAuth({
   appName: APP_NAME,
   baseURL: frontendBaseUrl,
   secret,
@@ -116,27 +117,26 @@ export const auth = betterAuth({
       organizationProvisioning: {
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
-        // TODO: allow configuration of these provisioning options dynamically..
-        getRole: async (_data) => {
-          // Custom role assignment logic based on user attributes
-          // const { user, token, provider, userInfo } = data;
-
-          // Look for admin indicators in user attributes
-          // const isAdmin =
-          //   userInfo.role === "admin" ||
-          //   userInfo.groups?.includes("admin") ||
-          //   userInfo.department === "IT" ||
-          //   userInfo.title?.toLowerCase().includes("admin") ||
-          //   userInfo.title?.toLowerCase().includes("manager");
-          const isAdmin = false;
-
-          return isAdmin ? ADMIN_ROLE_NAME : MEMBER_ROLE_NAME;
+        getRole: async (data) => {
+          // Dynamic import to avoid circular dependency
+          // (sso-provider.ts imports auth from this file)
+          const { default: SsoProviderModel } = await import(
+            "@/models/sso-provider"
+          );
+          const role = await SsoProviderModel.resolveSsoRole(data);
+          // Cast to the expected union type (better-auth expects "member" | "admin")
+          return role as "member" | "admin";
         },
       },
       defaultOverrideUserInfo: true,
       disableImplicitSignUp: false,
       providersLimit: 10,
       trustEmailVerified: true, // Trust email verification from SSO providers
+      // Enable domain verification to allow SAML account linking for non-trusted providers
+      // When enabled, providers with domainVerified: true can link accounts by email domain
+      domainVerification: {
+        enabled: true,
+      },
     }),
   ],
 
@@ -240,182 +240,198 @@ export const auth = betterAuth({
   },
 
   hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      const { path, method, body } = ctx;
-
-      // Validate email format for invitations
-      if (path === "/organization/invite-member" && method === "POST") {
-        if (!z.email().safeParse(body.email).success) {
-          throw new APIError("BAD_REQUEST", {
-            message: "Invalid email format",
-          });
-        }
-
-        return ctx;
-      }
-
-      // Block direct sign-up without invitation (invitation-only registration)
-      if (path.startsWith("/sign-up/email") && method === "POST") {
-        const invitationId = body.callbackURL
-          ?.split("invitationId=")[1]
-          ?.split("&")[0];
-
-        if (!invitationId) {
-          throw new APIError("FORBIDDEN", {
-            message:
-              "Direct sign-up is disabled. You need an invitation to create an account.",
-          });
-        }
-
-        // Validate the invitation exists and is pending
-        const invitation = await InvitationModel.getById(invitationId);
-
-        if (!invitation) {
-          throw new APIError("BAD_REQUEST", {
-            message: "Invalid invitation ID",
-          });
-        }
-
-        const { status, expiresAt } = invitation;
-
-        if (status !== "pending") {
-          throw new APIError("BAD_REQUEST", {
-            message: `This invitation has already been ${status}`,
-          });
-        }
-
-        // Check if invitation is expired
-        if (expiresAt && expiresAt < new Date()) {
-          throw new APIError("BAD_REQUEST", {
-            message:
-              "The invitation link has expired, please contact your admin for a new invitation",
-          });
-        }
-
-        // Validate email matches invitation
-        if (body.email && invitation.email !== body.email) {
-          throw new APIError("BAD_REQUEST", {
-            message:
-              "Email address does not match the invitation. You must use the invited email address.",
-          });
-        }
-
-        return ctx;
-      }
-    }),
-    after: createAuthMiddleware(async ({ path, method, body, context }) => {
-      // Delete invitation from DB when canceled (instead of marking as canceled)
-      if (path === "/organization/cancel-invitation" && method === "POST") {
-        const invitationId = body.invitationId;
-
-        if (invitationId) {
-          try {
-            await InvitationModel.delete(invitationId);
-            logger.info(`✅ Invitation ${invitationId} deleted from database`);
-          } catch (error) {
-            logger.error({ err: error }, "❌ Failed to delete invitation:");
-          }
-        }
-      }
-
-      // Invalidate all sessions when user is deleted
-      if (path === "/admin/remove-user" && method === "POST") {
-        const userId = body.userId;
-
-        if (userId) {
-          // Delete all sessions for this user
-          try {
-            await SessionModel.deleteAllByUserId(userId);
-            logger.info(`✅ All sessions for user ${userId} invalidated`);
-          } catch (error) {
-            logger.error(
-              { err: error },
-              "❌ Failed to invalidate user sessions:",
-            );
-          }
-        }
-      }
-
-      // NOTE: User deletion on member removal is handled in routes/auth.ts
-      // Better-auth handles member deletion, we just clean up orphaned users
-
-      if (path.startsWith("/sign-up")) {
-        const { newSession } = context;
-
-        if (newSession) {
-          const { user, session } = newSession;
-
-          // Check if this is an invitation sign-up
-          const invitationId = body.callbackURL
-            ?.split("invitationId=")[1]
-            ?.split("&")[0];
-
-          // If there is no invitation ID, it means this is a direct sign-up which is not allowed
-          if (!invitationId) {
-            return;
-          }
-
-          return await InvitationModel.accept(session, user, invitationId);
-        }
-      }
-
-      if (path.startsWith("/sign-in")) {
-        const { newSession } = context;
-
-        if (newSession?.user && newSession?.session) {
-          const sessionId = newSession.session.id;
-          const userId = newSession.user.id;
-          const { user, session } = newSession;
-
-          // Auto-accept any pending invitations for this user's email
-          try {
-            const pendingInvitations = await db
-              .select()
-              .from(schema.invitationsTable)
-              .where(
-                eq(schema.invitationsTable.email, user.email.toLowerCase()),
-              );
-
-            const pendingInvitation = pendingInvitations.find(
-              (inv) => inv.status === "pending",
-            );
-
-            if (pendingInvitation) {
-              logger.info(
-                `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
-              );
-              await InvitationModel.accept(session, user, pendingInvitation.id);
-              return;
-            }
-          } catch (error) {
-            logger.error(
-              { err: error },
-              "❌ Failed to auto-accept invitation:",
-            );
-          }
-
-          try {
-            if (!newSession.session.activeOrganizationId) {
-              const userMembership = await MemberModel.getByUserId(userId);
-
-              if (userMembership) {
-                await SessionModel.patch(sessionId, {
-                  activeOrganizationId: userMembership.organizationId,
-                });
-
-                logger.info(
-                  `✅ Active organization set for user ${newSession.user.email}`,
-                );
-              }
-            }
-          } catch (error) {
-            logger.error(
-              { err: error },
-              "❌ Failed to set active organization:",
-            );
-          }
-        }
-      }
-    }),
+    before: createAuthMiddleware(async (ctx) => handleBeforeHook(ctx)),
+    after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },
 });
+
+/**
+ * Validates requests before they are processed by better-auth.
+ *
+ * Handles:
+ * - Email validation for invitation requests
+ * - Invitation-only sign-up enforcement
+ */
+export async function handleBeforeHook(ctx: HookEndpointContext) {
+  const { path, method, body } = ctx;
+
+  // Validate email format for invitations
+  if (path === "/organization/invite-member" && method === "POST") {
+    if (!z.email().safeParse(body.email).success) {
+      throw new APIError("BAD_REQUEST", {
+        message: "Invalid email format",
+      });
+    }
+
+    return ctx;
+  }
+
+  // Block direct sign-up without invitation (invitation-only registration)
+  if (path.startsWith("/sign-up/email") && method === "POST") {
+    const callbackURL = body.callbackURL as string | undefined;
+    const invitationId = callbackURL?.split("invitationId=")[1]?.split("&")[0];
+
+    if (!invitationId) {
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Direct sign-up is disabled. You need an invitation to create an account.",
+      });
+    }
+
+    // Validate the invitation exists and is pending
+    const invitation = await InvitationModel.getById(invitationId);
+
+    if (!invitation) {
+      throw new APIError("BAD_REQUEST", {
+        message: "Invalid invitation ID",
+      });
+    }
+
+    const { status, expiresAt } = invitation;
+
+    if (status !== "pending") {
+      throw new APIError("BAD_REQUEST", {
+        message: `This invitation has already been ${status}`,
+      });
+    }
+
+    // Check if invitation is expired
+    if (expiresAt && expiresAt < new Date()) {
+      throw new APIError("BAD_REQUEST", {
+        message:
+          "The invitation link has expired, please contact your admin for a new invitation",
+      });
+    }
+
+    // Validate email matches invitation
+    if (body.email && invitation.email !== body.email) {
+      throw new APIError("BAD_REQUEST", {
+        message:
+          "Email address does not match the invitation. You must use the invited email address.",
+      });
+    }
+
+    return ctx;
+  }
+
+  return ctx;
+}
+
+/**
+ * Handles post-processing after better-auth operations.
+ *
+ * Handles:
+ * - Deleting canceled invitations
+ * - Invalidating sessions when users are deleted
+ * - Accepting invitations after sign-up
+ * - Auto-accepting pending invitations on sign-in
+ * - Setting active organization for new sessions
+ */
+export async function handleAfterHook(ctx: HookEndpointContext) {
+  const { path, method, body, context } = ctx;
+
+  // Delete invitation from DB when canceled (instead of marking as canceled)
+  if (path === "/organization/cancel-invitation" && method === "POST") {
+    const invitationId = body.invitationId as string | undefined;
+
+    if (invitationId) {
+      try {
+        await InvitationModel.delete(invitationId);
+        logger.info(`✅ Invitation ${invitationId} deleted from database`);
+      } catch (error) {
+        logger.error({ err: error }, "❌ Failed to delete invitation:");
+      }
+    }
+  }
+
+  // Invalidate all sessions when user is deleted
+  if (path === "/admin/remove-user" && method === "POST") {
+    const userId = body.userId as string | undefined;
+
+    if (userId) {
+      // Delete all sessions for this user
+      try {
+        await SessionModel.deleteAllByUserId(userId);
+        logger.info(`✅ All sessions for user ${userId} invalidated`);
+      } catch (error) {
+        logger.error({ err: error }, "❌ Failed to invalidate user sessions:");
+      }
+    }
+  }
+
+  // NOTE: User deletion on member removal is handled in routes/auth.ts
+  // Better-auth handles member deletion, we just clean up orphaned users
+
+  if (path.startsWith("/sign-up")) {
+    const newSession = context?.newSession;
+
+    if (newSession) {
+      const { user, session } = newSession;
+
+      // Check if this is an invitation sign-up
+      const callbackURL = body.callbackURL as string | undefined;
+      const invitationId = callbackURL
+        ?.split("invitationId=")[1]
+        ?.split("&")[0];
+
+      // If there is no invitation ID, it means this is a direct sign-up which is not allowed
+      if (!invitationId) {
+        return;
+      }
+
+      return await InvitationModel.accept(session, user, invitationId);
+    }
+  }
+
+  // Handle both regular sign-in and SSO callback
+  if (path.startsWith("/sign-in") || path.startsWith("/sso/callback")) {
+    const newSession = context?.newSession;
+
+    if (newSession?.user && newSession?.session) {
+      const sessionId = newSession.session.id;
+      const userId = newSession.user.id;
+      const { user, session } = newSession;
+
+      // Auto-accept any pending invitations for this user's email
+      try {
+        const pendingInvitations = await db
+          .select()
+          .from(schema.invitationsTable)
+          .where(eq(schema.invitationsTable.email, user.email.toLowerCase()));
+
+        const pendingInvitation = pendingInvitations.find(
+          (inv) => inv.status === "pending",
+        );
+
+        if (pendingInvitation) {
+          logger.info(
+            `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
+          );
+          await InvitationModel.accept(session, user, pendingInvitation.id);
+          return;
+        }
+      } catch (error) {
+        logger.error({ err: error }, "❌ Failed to auto-accept invitation:");
+      }
+
+      try {
+        if (!newSession.session.activeOrganizationId) {
+          const userMembership =
+            await MemberModel.getFirstMembershipForUser(userId);
+
+          if (userMembership) {
+            await SessionModel.patch(sessionId, {
+              activeOrganizationId: userMembership.organizationId,
+            });
+
+            logger.info(
+              `✅ Active organization set for user ${newSession.user.email}`,
+            );
+          }
+        }
+      } catch (error) {
+        logger.error({ err: error }, "❌ Failed to set active organization:");
+      }
+    }
+  }
+}

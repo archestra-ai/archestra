@@ -7286,6 +7286,8 @@ export type GetInternalMcpCatalogResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7363,6 +7365,8 @@ export type CreateInternalMcpCatalogItemData = {
         serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7502,6 +7506,8 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7730,6 +7736,8 @@ export type GetInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -7807,6 +7815,8 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        clientSecretId?: string | null;
+        localConfigSecretId?: string | null;
         localConfig?: {
             command?: string;
             arguments?: Array<string>;
@@ -7948,6 +7958,8 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        clientSecretId: string | null;
+        localConfigSecretId: string | null;
         localConfig: {
             command?: string;
             arguments?: Array<string>;
@@ -13372,10 +13384,21 @@ export type GetSsoProvidersResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     }>;
 };
 
@@ -13473,9 +13496,20 @@ export type CreateSsoProviderData = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         userId?: string | null;
         providerId: string;
         domain: string;
+        domainVerified?: boolean | null;
     };
     path?: never;
     query?: never;
@@ -13637,10 +13671,21 @@ export type CreateSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13889,10 +13934,21 @@ export type GetSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 
@@ -13990,8 +14046,19 @@ export type UpdateSsoProviderData = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         providerId?: string;
         domain?: string;
+        domainVerified?: boolean | null;
     };
     path: {
         id: string;
@@ -14155,10 +14222,21 @@ export type UpdateSsoProviderResponses = {
                 };
             };
         };
+        roleMapping?: {
+            rules?: Array<{
+                expression: string;
+                role: string;
+            }>;
+            defaultRole?: string;
+            dataSource?: 'userInfo' | 'token' | 'combined';
+            strictMode?: boolean;
+            skipRoleSync?: boolean;
+        };
         userId: string | null;
         providerId: string;
         organizationId: string | null;
         domain: string;
+        domainVerified: boolean | null;
     };
 };
 

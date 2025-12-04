@@ -20,7 +20,28 @@ class MemberModel {
       .returning();
   }
 
-  static async getByUserId(userId: string) {
+  /**
+   * Get a member by user ID and organization ID.
+   */
+  static async getByUserId(userId: string, organizationId: string) {
+    const [member] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return member;
+  }
+
+  /**
+   * Get the first membership for a user (any organization).
+   * Used when setting initial active organization on sign-in.
+   */
+  static async getFirstMembershipForUser(userId: string) {
     const [member] = await db
       .select()
       .from(schema.membersTable)

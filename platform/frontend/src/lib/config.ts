@@ -3,8 +3,31 @@ import type { PostHogConfig } from "posthog-js";
 
 const environment = process.env.NODE_ENV?.toLowerCase() ?? "";
 
-const getBackendBaseUrl = (): string | undefined =>
-  env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+const DEFAULT_BACKEND_URL = "http://localhost:9000";
+
+/**
+ * Get the backend API base URL.
+ * Returns the configured URL or defaults to localhost:9000 for development.
+ *
+ * Priority:
+ * 1. NEXT_PUBLIC_ARCHESTRA_API_BASE_URL (runtime env var for client/server)
+ * 2. ARCHESTRA_API_BASE_URL (server-side only, for SSR/API routes)
+ * 3. Default: http://localhost:9000
+ */
+export const getBackendBaseUrl = (): string => {
+  // Try runtime env var first (works in both client and server)
+  const publicUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
+  if (publicUrl) {
+    return publicUrl;
+  }
+
+  // Server-side only: try non-public env var (for API routes and SSR)
+  if (typeof window === "undefined" && process.env.ARCHESTRA_API_BASE_URL) {
+    return process.env.ARCHESTRA_API_BASE_URL;
+  }
+
+  return DEFAULT_BACKEND_URL;
+};
 
 /**
  * Get the display proxy URL for showing to users.
@@ -14,9 +37,7 @@ export const getDisplayProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
   const backendBaseUrl = getBackendBaseUrl();
 
-  if (!backendBaseUrl) {
-    return `http://localhost:9000${proxyUrlSuffix}`;
-  } else if (backendBaseUrl.endsWith(proxyUrlSuffix)) {
+  if (backendBaseUrl.endsWith(proxyUrlSuffix)) {
     return backendBaseUrl;
   } else if (backendBaseUrl.endsWith("/")) {
     return `${backendBaseUrl.slice(0, -1)}${proxyUrlSuffix}`;
@@ -27,13 +48,8 @@ export const getDisplayProxyUrl = (): string => {
 /**
  * Get the WebSocket URL
  */
-const getWebSocketUrl = (): string => {
+export const getWebSocketUrl = (): string => {
   const backendBaseUrl = getBackendBaseUrl();
-
-  // In development, use localhost
-  if (!backendBaseUrl || typeof window === "undefined") {
-    return "ws://localhost:9000/ws";
-  }
 
   // Convert http(s) to ws(s)
   const wsUrl = backendBaseUrl.replace(/^http/, "ws");
@@ -102,7 +118,7 @@ export default {
    * When true, hides the username/password login form and requires SSO for authentication.
    */
   get disableBasicAuth() {
-    return env("NEXT_PUBLIC_ARCHESTRA_DISABLE_BASIC_AUTH") === "true";
+    return env("NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH") === "true";
   },
   sentry: {
     get dsn() {

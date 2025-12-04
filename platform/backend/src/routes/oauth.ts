@@ -293,6 +293,14 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let clientId = oauthConfig.client_id;
       let clientSecret = oauthConfig.client_secret;
 
+      logger.info(
+        {
+          catalogId: catalogItem.id,
+          hasClientSecret: !!clientSecret,
+        },
+        "OAuth init - using client_secret",
+      );
+
       // Discover actual scopes from the OAuth server (like desktop app does)
       const discoveredScopes = await discoverScopes(
         oauthConfig.server_url,

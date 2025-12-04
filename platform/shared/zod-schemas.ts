@@ -199,6 +199,54 @@ export const SsoProviderSamlConfigSchema = z
     "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40",
   );
 
+/**
+ * Role Mapping Configuration Schema
+ * Supports JMESPath expressions for mapping SSO attributes to Archestra roles
+ *
+ * Similar to Grafana's role mapping:
+ * https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/generic-oauth/#configure-role-mapping
+ */
+export const SsoRoleMappingRuleSchema = z.object({
+  /** JMESPath expression to evaluate against userInfo/token claims */
+  expression: z.string().min(1, "Expression is required"),
+  /** Archestra role to assign when expression evaluates to true */
+  role: z.string().min(1, "Role is required"),
+});
+
+export const SsoRoleMappingConfigSchema = z.object({
+  /**
+   * Ordered list of role mapping rules.
+   * First matching rule wins. If no rules match, defaultRole is used.
+   */
+  rules: z.array(SsoRoleMappingRuleSchema).optional(),
+  /**
+   * Default role when no mapping rules match.
+   * If not specified, falls back to organization default (usually "member")
+   */
+  defaultRole: z.string().optional(),
+  /**
+   * Path to extract the data object for JMESPath evaluation.
+   * Options: "userInfo" (OIDC userinfo), "token" (ID token claims), "combined" (merged)
+   * Default: "combined"
+   */
+  dataSource: z.enum(["userInfo", "token", "combined"]).optional(),
+  /**
+   * Strict mode: If enabled, denies user login when no role mapping rule matches.
+   * Without strict mode, users who don't match any rule are assigned the default role.
+   * Default: false
+   */
+  strictMode: z.boolean().optional(),
+  /**
+   * Skip role sync: If enabled, the user's role is only set on their first login.
+   * Subsequent logins will not update their role, allowing manual role management.
+   * Default: false (role is synced on every login)
+   */
+  skipRoleSync: z.boolean().optional(),
+});
+
+export type SsoRoleMappingRule = z.infer<typeof SsoRoleMappingRuleSchema>;
+export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
+
 // Form schemas for UI
 export const SsoProviderFormSchema = z
   .object({
@@ -208,6 +256,7 @@ export const SsoProviderFormSchema = z
     providerType: z.enum(["oidc", "saml"]),
     oidcConfig: SsoProviderOidcConfigSchema.optional(),
     samlConfig: SsoProviderSamlConfigSchema.optional(),
+    roleMapping: SsoRoleMappingConfigSchema.optional(),
   })
   .refine(
     (data) => {

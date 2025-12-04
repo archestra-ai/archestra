@@ -89,7 +89,7 @@ export default function RootLayout({
                           <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
                         </header>
                         <div className="flex-1 min-w-0 flex flex-col">
-                          <div className="flex-1">
+                          <div className="flex-1 flex flex-col">
                             <WithPagePermissions>
                               {children}
                             </WithPagePermissions>

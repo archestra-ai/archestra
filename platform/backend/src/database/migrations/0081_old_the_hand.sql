@@ -1,1 +1,0 @@
-ALTER TABLE "sso_provider" DROP COLUMN "domain_verified";

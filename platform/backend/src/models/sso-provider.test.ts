@@ -1,8 +1,10 @@
 import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
 
@@ -545,6 +547,47 @@ describe("SsoProviderModel", () => {
       expect(provider).not.toBeNull();
       // With domainVerification enabled, OIDC providers also need domainVerified: true
       expect(provider?.domainVerified).toBe(true);
+    });
+
+    test("updating a provider ensures domainVerified remains true", async ({
+      makeOrganization,
+      makeSsoProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      // Create a provider (will have domainVerified: true from create)
+      const provider = await makeSsoProvider(org.id, {
+        providerId: "Update-Test",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint: "https://idp.example.com/.well-known",
+        },
+      });
+
+      // Manually set domainVerified to false to simulate old data
+      // (This simulates providers created before the workaround was added)
+      await db
+        .update(schema.ssoProvidersTable)
+        .set({ domainVerified: false })
+        .where(eq(schema.ssoProvidersTable.id, provider.id));
+
+      // Verify it's now false
+      const beforeUpdate = await SsoProviderModel.findById(provider.id, org.id);
+      expect(beforeUpdate?.domainVerified).toBe(false);
+
+      // Update the provider (change domain)
+      await SsoProviderModel.update(
+        provider.id,
+        { domain: "updated.example.com" },
+        org.id,
+      );
+
+      // After update, domainVerified should be set back to true
+      const afterUpdate = await SsoProviderModel.findById(provider.id, org.id);
+      expect(afterUpdate?.domainVerified).toBe(true);
     });
   });
 });

@@ -572,10 +572,13 @@ class SsoProviderModel {
         : undefined;
 
     // Update in database
+    // WORKAROUND: Always ensure domainVerified is true to enable account linking
+    // See: https://github.com/better-auth/better-auth/issues/6481
     const [updatedProvider] = await db
       .update(schema.ssoProvidersTable)
       .set({
         ...restData,
+        domainVerified: true,
         ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof roleMapping,
         }),

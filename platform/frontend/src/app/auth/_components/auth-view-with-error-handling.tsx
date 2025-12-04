@@ -32,6 +32,11 @@ const SSO_ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
     message:
       "Your SSO account could not be linked to an existing account. Please contact your administrator to verify the SSO provider configuration.",
   },
+  invalid_provider: {
+    title: "SSO Provider Error",
+    message:
+      "There was a problem with the SSO provider configuration. Please contact your administrator to verify the SSO settings.",
+  },
   invalid_state: {
     title: "Invalid Session State",
     message:
@@ -112,6 +117,8 @@ export function AuthViewWithErrorHandling({
   // Check for SSO error in query params
   useEffect(() => {
     const errorParam = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
+
     if (errorParam) {
       const decodedError = decodeURIComponent(errorParam).toLowerCase();
       const errorInfo =
@@ -122,9 +129,16 @@ export function AuthViewWithErrorHandling({
         setSsoError(errorInfo);
       } else {
         // Generic fallback for unknown errors
+        // Include error_description if available for more context
+        const decodedDescription = errorDescription
+          ? decodeURIComponent(errorDescription).replace(/_/g, " ")
+          : null;
+
         setSsoError({
           title: "Sign-In Failed",
-          message: `An error occurred during sign-in: ${decodeURIComponent(errorParam)}. Please try again or contact your administrator.`,
+          message: decodedDescription
+            ? `An error occurred during sign-in: ${decodedDescription}. Please try again or contact your administrator.`
+            : `An error occurred during sign-in: ${decodeURIComponent(errorParam)}. Please try again or contact your administrator.`,
         });
       }
     }
@@ -225,9 +239,10 @@ export function AuthViewWithErrorHandling({
           variant="ghost"
           onClick={() => {
             setSsoError(null);
-            // Clear the error from URL without page reload
+            // Clear the error params from URL without page reload
             const url = new URL(window.location.href);
             url.searchParams.delete("error");
+            url.searchParams.delete("error_description");
             window.history.replaceState({}, "", url.toString());
           }}
           className="mt-2 hover:bg-amber-100 dark:hover:bg-amber-900"

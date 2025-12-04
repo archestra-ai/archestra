@@ -32,7 +32,12 @@ const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
   production,
-  auth: { secret, cookieDomain, trustedOrigins },
+  auth: {
+    secret,
+    cookieDomain,
+    trustedOrigins,
+    additionalTrustedSsoProviderIds,
+  },
 } = config;
 
 const isHttps = () => {
@@ -191,8 +196,14 @@ export const auth: any = betterAuth({
       /**
        * Trust SSO providers for automatic account linking
        * This allows existing users to sign in with SSO without manual linking
+       *
+       * Combines default trusted providers from @shared with additional ones
+       * configured via ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS env var
        */
-      trustedProviders: SSO_TRUSTED_PROVIDER_IDS,
+      trustedProviders: [
+        ...SSO_TRUSTED_PROVIDER_IDS,
+        ...additionalTrustedSsoProviderIds,
+      ],
       /**
        * Don't allow linking accounts with different emails. From the better-auth typescript
        * annotations they mention for this attribute:

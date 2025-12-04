@@ -150,6 +150,28 @@ export const getTrustedOrigins = (): string[] => {
   return origins;
 };
 
+/**
+ * Parse additional trusted SSO provider IDs from environment variable.
+ * These will be appended to the default SSO_TRUSTED_PROVIDER_IDS from @shared.
+ *
+ * Format: Comma-separated list of provider IDs (e.g., "okta,auth0,custom-provider")
+ * Whitespace around each provider ID is trimmed.
+ *
+ * @returns Array of additional trusted SSO provider IDs
+ */
+export const getAdditionalTrustedSsoProviderIds = (): string[] => {
+  const envValue = process.env.ARCHESTRA_AUTH_TRUSTED_SSO_PROVIDER_IDS?.trim();
+
+  if (!envValue) {
+    return [];
+  }
+
+  return envValue
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+};
+
 export default {
   frontendBaseUrl,
   api: {
@@ -177,6 +199,7 @@ export default {
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    additionalTrustedSsoProviderIds: getAdditionalTrustedSsoProviderIds(),
   },
   database: {
     url: getDatabaseUrl(),

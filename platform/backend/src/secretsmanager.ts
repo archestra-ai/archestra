@@ -7,10 +7,26 @@ import type { SecretValue, SelectSecret } from "@/types";
 import { ApiError } from "@/types/api";
 
 /**
+ * Result of checking connectivity to the secrets storage
+ */
+export interface SecretsConnectivityResult {
+  /** The type of secrets manager being used */
+  type: SecretsManagerType;
+  /** Whether the connection was successful */
+  connected: true;
+  /** Number of secrets stored (only available for Vault) */
+  secretCount: number;
+}
+
+/**
  * SecretManager interface for managing secrets
  * Can be implemented for different secret storage backends (database, AWS Secrets Manager, etc.)
  */
 export interface SecretManager {
+  /**
+   * The type of secrets manager
+   */
+  readonly type: SecretsManagerType;
   /**
    * Create a new secret
    * @param secretValue - The secret value as JSON
@@ -50,6 +66,13 @@ export interface SecretManager {
     secretId: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null>;
+
+  /**
+   * Check connectivity to the secrets storage and return secret count
+   * @returns Connectivity result with secret count
+   * @throws ApiError if connectivity check fails or is not supported
+   */
+  checkConnectivity(): Promise<SecretsConnectivityResult>;
 }
 
 export class SecretsManagerConfigurationError extends Error {
@@ -128,6 +151,8 @@ export function getSecretsManagerType(): SecretsManagerType {
  * Stores secrets in the database using SecretModel
  */
 export class DbSecretsManager implements SecretManager {
+  readonly type = SecretsManagerType.DB;
+
   async createSecret(
     secretValue: SecretValue,
     name: string,
@@ -155,6 +180,13 @@ export class DbSecretsManager implements SecretManager {
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
     return await SecretModel.update(secid, { secret: secretValue });
+  }
+
+  async checkConnectivity(): Promise<SecretsConnectivityResult> {
+    throw new ApiError(
+      501,
+      "Connectivity check not implemented for database storage",
+    );
   }
 }
 
@@ -194,6 +226,7 @@ export interface VaultConfig {
  * Stores secret metadata in PostgreSQL with isVault=true, actual secrets in HashiCorp Vault
  */
 export class VaultSecretManager implements SecretManager {
+  readonly type = SecretsManagerType.Vault;
   private client: ReturnType<typeof Vault>;
   private initialized = false;
   private config: VaultConfig;
@@ -591,6 +624,46 @@ export class VaultSecretManager implements SecretManager {
       ...updatedRecord,
       secret: secretValue,
     };
+  }
+
+  async checkConnectivity(): Promise<SecretsConnectivityResult> {
+    await this.ensureInitialized();
+
+    // List secrets at metadata path to get count
+    const metadataBasePath =
+      this.config.secretMetadataPath ??
+      this.config.secretPath.replace("/data/", "/metadata/");
+
+    try {
+      const result = await this.client.list(metadataBasePath);
+      const keys = (result?.data?.keys as string[] | undefined) ?? [];
+      return {
+        type: SecretsManagerType.Vault,
+        connected: true,
+        secretCount: keys.length,
+      };
+    } catch (error) {
+      // Vault returns 404 when the path doesn't exist (no secrets created yet)
+      // This is expected and means we're connected with 0 secrets
+      const vaultError = error as { response?: { statusCode?: number } };
+      if (vaultError.response?.statusCode === 404) {
+        logger.info(
+          { metadataBasePath },
+          "VaultSecretManager.checkConnectivity: path not found, no secrets exist yet",
+        );
+        return {
+          type: SecretsManagerType.Vault,
+          connected: true,
+          secretCount: 0,
+        };
+      }
+
+      logger.error(
+        { error, metadataBasePath },
+        "VaultSecretManager.checkConnectivity: failed to list secrets",
+      );
+      throw new ApiError(500, "Failed to connect to Vault or list secrets");
+    }
   }
 }
 

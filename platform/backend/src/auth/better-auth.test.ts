@@ -1,7 +1,10 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import config from "@/config";
+import { TeamModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { handleAfterHook, handleBeforeHook } from "./better-auth";
+import { cacheSsoGroups } from "./sso-team-sync-cache";
 
 /**
  * Helper to create a minimal mock context for testing.
@@ -456,6 +459,229 @@ describe("handleAfterHook", () => {
       // The function will call InvitationModel.accept which might fail
       // depending on test setup, but it shouldn't throw unhandled errors
       await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+    });
+  });
+
+  describe("SSO team sync", () => {
+    const originalEnterpriseValue = config.enterpriseLicenseActivated;
+
+    // Helper to set enterprise license config
+    function setEnterpriseLicense(value: boolean) {
+      Object.defineProperty(config, "enterpriseLicenseActivated", {
+        value,
+        writable: true,
+        configurable: true,
+      });
+    }
+
+    test("should sync teams when SSO callback path with cached groups", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "sso-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "SSO Team" });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      // Cache SSO groups for this user (simulates what happens during SSO login)
+      cacheSsoGroups("keycloak-local", user.email, org.id, ["engineering"]);
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was added to the team
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should not sync teams when enterprise license is disabled", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+    }) => {
+      // Disable enterprise license
+      setEnterpriseLicense(false);
+
+      const user = await makeUser({ email: "sso-user2@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "SSO Team 2" });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "developers");
+
+      // Cache SSO groups for this user
+      cacheSsoGroups("keycloak-local", user.email, org.id, ["developers"]);
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was NOT added to the team (enterprise license disabled)
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should not sync teams for regular sign-in (non-SSO)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "regular-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, {
+        name: "Team for Regular",
+      });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "staff");
+
+      // Cache SSO groups (shouldn't be used for regular sign-in)
+      cacheSsoGroups("keycloak-local", user.email, org.id, ["staff"]);
+
+      const ctx = createMockContext({
+        path: "/sign-in", // Regular sign-in, not SSO callback
+        method: "POST",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was NOT added to the team (regular sign-in doesn't sync teams)
+      const isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should handle missing cached groups gracefully", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "no-cache-user@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+
+      // Don't cache any SSO groups
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      // Should not throw, just skip team sync
+      await expect(handleAfterHook(ctx)).resolves.not.toThrow();
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
+    });
+
+    test("should remove user from teams when SSO groups change", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeTeam,
+    }) => {
+      // Enable enterprise license
+      setEnterpriseLicense(true);
+
+      const user = await makeUser({ email: "sync-remove@example.com" });
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: "member" });
+      const team = await makeTeam(org.id, user.id, { name: "Removal Team" });
+
+      // Link an external group to the team
+      await TeamModel.addExternalGroup(team.id, "old-group");
+
+      // Add user to team via SSO sync initially
+      await TeamModel.addMember(team.id, user.id, "member", true); // syncedFromSso = true
+
+      // Verify user is in team
+      let isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(true);
+
+      // Cache SSO groups WITHOUT the old-group (simulates user removed from group)
+      cacheSsoGroups("keycloak-local", user.email, org.id, ["new-group"]);
+
+      const ctx = createMockContext({
+        path: "/sso/callback/keycloak-local",
+        method: "GET",
+        body: {},
+        context: {
+          newSession: {
+            user: { id: user.id, email: user.email },
+            session: { id: "test-session-id", activeOrganizationId: org.id },
+          },
+        },
+      });
+
+      await handleAfterHook(ctx);
+
+      // Verify user was removed from the team
+      isInTeam = await TeamModel.isUserInTeam(team.id, user.id);
+      expect(isInTeam).toBe(false);
+
+      // Restore original value
+      setEnterpriseLicense(originalEnterpriseValue);
     });
   });
 });

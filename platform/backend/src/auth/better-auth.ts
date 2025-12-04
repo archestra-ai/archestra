@@ -17,7 +17,13 @@ import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import { InvitationModel, MemberModel, SessionModel } from "@/models";
+import {
+  InvitationModel,
+  MemberModel,
+  SessionModel,
+  TeamModel,
+} from "@/models";
+import { retrieveSsoGroups } from "./sso-team-sync-cache";
 
 const APP_NAME = "Archestra";
 const {
@@ -432,6 +438,84 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       } catch (error) {
         logger.error({ err: error }, "❌ Failed to set active organization:");
       }
+
+      // SSO Team Sync: Synchronize team memberships based on SSO groups
+      // Only applies to SSO logins (not regular email/password logins)
+      if (path.startsWith("/sso/callback")) {
+        await syncSsoTeams(userId, user.email, path);
+      }
     }
+  }
+}
+
+/**
+ * Synchronize user's team memberships based on their SSO groups.
+ * This is called after successful SSO login in the after hook.
+ */
+async function syncSsoTeams(
+  userId: string,
+  userEmail: string,
+  callbackPath: string,
+): Promise<void> {
+  // Only sync if enterprise license is activated
+  if (!config.enterpriseLicenseActivated) {
+    return;
+  }
+
+  // Extract provider ID from callback path (e.g., /sso/callback/keycloak-local)
+  const pathParts = callbackPath.split("/");
+  const providerId = pathParts[pathParts.length - 1];
+
+  if (!providerId) {
+    logger.debug(
+      "No provider ID found in SSO callback path, skipping team sync",
+    );
+    return;
+  }
+
+  // Retrieve cached SSO groups
+  const cachedData = retrieveSsoGroups(providerId, userEmail);
+
+  if (!cachedData || cachedData.groups.length === 0) {
+    logger.debug(
+      { providerId, userEmail },
+      "No SSO groups found in cache, skipping team sync",
+    );
+    return;
+  }
+
+  const { groups, organizationId } = cachedData;
+
+  try {
+    const { added, removed } = await TeamModel.syncUserTeams(
+      userId,
+      organizationId,
+      groups,
+    );
+
+    if (added.length > 0 || removed.length > 0) {
+      logger.info(
+        {
+          userId,
+          email: userEmail,
+          providerId,
+          organizationId,
+          groupCount: groups.length,
+          teamsAdded: added.length,
+          teamsRemoved: removed.length,
+        },
+        "✅ SSO team sync completed",
+      );
+    } else {
+      logger.debug(
+        { userId, email: userEmail, providerId },
+        "SSO team sync - no changes needed",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error, userId, email: userEmail, providerId },
+      "❌ Failed to sync SSO teams",
+    );
   }
 }

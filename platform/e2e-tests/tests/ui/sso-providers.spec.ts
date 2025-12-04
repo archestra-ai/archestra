@@ -453,6 +453,194 @@ test.describe("SSO Role Mapping E2E", () => {
   });
 });
 
+test.describe("SSO Team Sync E2E", () => {
+  test("should sync user to team based on SSO group membership", async ({
+    page,
+    browser,
+    goToPage,
+    makeRandomString,
+  }) => {
+    // Team sync involves SSO flow + team operations, so triple the timeout
+    test.slow();
+
+    // Use unique names to avoid conflicts
+    const providerName = `TeamSyncOIDC${Date.now()}`;
+    const teamName = makeRandomString(8, "SyncTeam");
+    // This group matches the Keycloak admin user's group in values.yaml
+    const externalGroup = "archestra-admins";
+
+    // STEP 1: Navigate to SSO providers page and create OIDC provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    // Delete any existing Generic OIDC provider first
+    await deleteExistingProviderIfExists(page, "Generic OIDC");
+
+    // Fill in Keycloak OIDC configuration
+    await page.getByLabel("Provider ID").fill(providerName);
+    await page
+      .getByLabel("Issuer")
+      .fill(`${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`);
+    await page.getByLabel("Domain").fill(SSO_DOMAIN);
+    await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC_CLIENT_ID);
+    await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC_CLIENT_SECRET);
+    await page
+      .getByLabel("Discovery Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration`,
+      );
+    await page
+      .getByLabel("Authorization Endpoint")
+      .fill(
+        `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+      );
+    await page
+      .getByLabel("Token Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`,
+      );
+    await page
+      .getByLabel("JWKS Endpoint")
+      .fill(
+        `${KEYCLOAK_BACKEND_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+      );
+
+    // Submit the form
+    await page.getByRole("button", { name: "Create Provider" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // STEP 2: Navigate to teams page and create a team
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    // Click Create Team button
+    await page.getByRole("button", { name: "Create Team" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    // Fill in team details
+    await page.getByLabel("Team Name").fill(teamName);
+    await page
+      .getByLabel("Description")
+      .fill("Team for testing SSO group sync");
+
+    // Submit
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create Team" })
+      .click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // Wait for team to appear in the list
+    await expect(page.getByText(teamName)).toBeVisible({ timeout: 5000 });
+
+    // STEP 3: Link external group to the team
+    // Find the team row and click the External Groups button (link icon)
+    const teamRow = page.locator("div").filter({ hasText: teamName }).last();
+
+    // Click the link icon button (Configure SSO Team Sync tooltip)
+    await teamRow.getByRole("button").filter({ has: page.locator("svg") }).nth(1).click();
+
+    // Wait for dialog to appear
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByText("External Group Sync")).toBeVisible();
+
+    // Add the external group mapping
+    await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);
+    await page.getByRole("button", { name: "Add" }).click();
+
+    // Wait for the group to be added
+    await expect(
+      page.getByRole("dialog").getByText(externalGroup),
+    ).toBeVisible({ timeout: 5000 });
+
+    // Close the dialog
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
+
+    // STEP 4: Test SSO login with admin user (in archestra-admins group)
+    const ssoContext = await browser.newContext({
+      storageState: undefined,
+    });
+    const ssoPage = await ssoContext.newPage();
+
+    try {
+      await ssoPage.goto(`${UI_BASE_URL}/auth/sign-in`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Click SSO button and login via Keycloak
+      await ssoPage
+        .getByRole("button", { name: new RegExp(providerName, "i") })
+        .click();
+
+      // Login via Keycloak (admin user is in archestra-admins group)
+      await loginViaKeycloak(ssoPage);
+
+      // Wait for redirect back to Archestra
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Verify we're logged in
+      await expect(ssoPage.locator("text=Tools").first()).toBeVisible({
+        timeout: 15000,
+      });
+
+      // STEP 5: Verify user was automatically added to the team
+      await ssoPage.goto(`${UI_BASE_URL}/settings/teams`);
+      await ssoPage.waitForLoadState("networkidle");
+
+      // Find the team and check the member count
+      // The team row should now show "1 member" or more (the SSO user)
+      const syncedTeamRow = ssoPage
+        .locator("div")
+        .filter({ hasText: teamName })
+        .last();
+
+      // Click "Manage Members" to see the membership
+      await syncedTeamRow
+        .getByRole("button", { name: "Manage Members" })
+        .click();
+
+      // Wait for dialog
+      await expect(ssoPage.getByRole("dialog")).toBeVisible();
+
+      // Verify the SSO user (admin@example.com) is in the team members list
+      // The user email should be visible in the members dialog
+      await expect(
+        ssoPage.getByRole("dialog").getByText(/admin@example\.com/i),
+      ).toBeVisible({ timeout: 5000 });
+
+      // Success! The SSO user was automatically synced to the team
+    } finally {
+      await ssoContext.close();
+    }
+
+    // STEP 6: Cleanup
+    // Delete the team
+    await goToPage(page, "/settings/teams");
+    await page.waitForLoadState("networkidle");
+
+    const teamRowForDelete = page
+      .locator("div")
+      .filter({ hasText: teamName })
+      .last();
+    await teamRowForDelete.getByRole("button").last().click(); // Delete button is last
+
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+
+    // Delete the SSO provider
+    await goToPage(page, "/settings/sso-providers");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByText("Generic OIDC", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/Are you sure/i)).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+  });
+});
+
 test.describe("SSO SAML E2E Flow with Keycloak", () => {
   test("should configure SAML provider, login via SSO, update, and delete", async ({
     page,

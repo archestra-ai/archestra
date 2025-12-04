@@ -370,7 +370,6 @@ The following environment variables can be used to configure Archestra Platform:
   - Default: `false`
   - Set to `true` to hide invitation-related UI and block invitation API endpoints
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
-  - Existing invitations created before this setting was enabled will still be valid
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.

@@ -63,12 +63,14 @@ function MembersSettingsContent() {
         </Dialog>
       )}
       <OrganizationMembersCard
+        {...(!invitationsEnabled && {
+          actionLabel: null,
+          instructions: null,
+        })}
         action={
           invitationsEnabled
             ? () => {
-                if (hasPermissionTodo) {
-                  setInviteDialogOpen(true);
-                }
+                setInviteDialogOpen(true);
               }
             : undefined
         }

@@ -1,7 +1,30 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
-import { describe, expect, test } from "@/test";
-import { handleAfterHook, handleBeforeHook } from "./better-auth";
+import { vi } from "vitest";
+import type * as originalConfigModule from "@/config";
+import { beforeEach, describe, expect, test } from "@/test";
+
+// Create a hoisted ref to control disableInvitations in tests
+const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
+
+// Mock config module before importing better-auth
+vi.mock("@/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof originalConfigModule>();
+  return {
+    default: {
+      ...actual.default,
+      auth: {
+        ...actual.default.auth,
+        get disableInvitations() {
+          return mockDisableInvitations.value;
+        },
+      },
+    },
+  };
+});
+
+// Import after mock setup
+const { handleAfterHook, handleBeforeHook } = await import("./better-auth");
 
 /**
  * Helper to create a minimal mock context for testing.
@@ -27,6 +50,11 @@ function createMockContext(overrides: {
 }
 
 describe("handleBeforeHook", () => {
+  // Reset mock to default before each test for proper isolation
+  beforeEach(() => {
+    mockDisableInvitations.value = false;
+  });
+
   describe("invitation email validation", () => {
     test("should throw BAD_REQUEST for invalid email format", async () => {
       const ctx = createMockContext({
@@ -64,11 +92,37 @@ describe("handleBeforeHook", () => {
     });
   });
 
-  // Note: Tests for ARCHESTRA_AUTH_DISABLE_INVITATIONS=true require mocking
-  // the config module. When disableInvitations is true:
-  // - POST /organization/invite-member returns FORBIDDEN "User invitations are disabled"
-  // - POST /organization/cancel-invitation returns FORBIDDEN "User invitations are disabled"
-  // These scenarios can be tested via E2E tests with the environment variable set.
+  describe("disabled invitations (ARCHESTRA_AUTH_DISABLE_INVITATIONS=true)", () => {
+    beforeEach(() => {
+      mockDisableInvitations.value = true;
+    });
+
+    test("should throw FORBIDDEN for invite-member when invitations are disabled", async () => {
+      const ctx = createMockContext({
+        path: "/organization/invite-member",
+        method: "POST",
+        body: { email: "valid@example.com" },
+      });
+
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: "User invitations are disabled" },
+      });
+    });
+
+    test("should throw FORBIDDEN for cancel-invitation when invitations are disabled", async () => {
+      const ctx = createMockContext({
+        path: "/organization/cancel-invitation",
+        method: "POST",
+        body: { invitationId: "some-id" },
+      });
+
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: "User invitations are disabled" },
+      });
+    });
+  });
 
   describe("sign-up invitation validation", () => {
     test("should throw FORBIDDEN when no invitation ID is provided", async () => {

@@ -264,6 +264,7 @@ describe("getVaultConfigFromEnv", () => {
       address: "http://localhost:8200",
       authMethod: "token",
       token: "dev-root-token",
+      secretPath: "secret/data/archestra",
     });
   });
 
@@ -304,6 +305,7 @@ describe("getVaultConfigFromEnv", () => {
       address: "http://localhost:8200",
       authMethod: "token",
       token: "dev-root-token",
+      secretPath: "secret/data/archestra",
     });
   });
 
@@ -322,6 +324,7 @@ describe("getVaultConfigFromEnv", () => {
       k8sRole: "archestra",
       k8sTokenPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
       k8sMountPoint: "kubernetes",
+      secretPath: "secret/data/archestra",
     });
   });
 
@@ -382,6 +385,7 @@ describe("getVaultConfigFromEnv", () => {
       awsRegion: "us-east-1",
       awsStsEndpoint: "https://sts.amazonaws.com",
       awsIamServerIdHeader: undefined,
+      secretPath: "secret/data/archestra",
     });
   });
 
@@ -432,6 +436,7 @@ describe("getVaultConfigFromEnv", () => {
       awsRegion: "eu-west-1",
       awsStsEndpoint: "https://sts.eu-west-1.amazonaws.com",
       awsIamServerIdHeader: "vault.example.com",
+      secretPath: "secret/data/archestra",
     });
   });
 
@@ -450,6 +455,43 @@ describe("getVaultConfigFromEnv", () => {
       k8sRole: "archestra",
       k8sTokenPath: "/custom/token/path",
       k8sMountPoint: "custom-k8s",
+      secretPath: "secret/data/archestra",
+    });
+  });
+
+  test("should use custom secret path when ARCHESTRA_HASHICORP_VAULT_SECRET_PATH is set (TOKEN auth)", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
+    process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "dev-root-token";
+    process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH =
+      "custom/data/my-secrets";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "token",
+      token: "dev-root-token",
+      secretPath: "custom/data/my-secrets",
+    });
+  });
+
+  test("should use custom secret path when ARCHESTRA_HASHICORP_VAULT_SECRET_PATH is set (K8S auth)", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "K8S";
+    process.env.ARCHESTRA_HASHICORP_VAULT_K8S_ROLE = "archestra";
+    process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH =
+      "custom/data/my-secrets";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "kubernetes",
+      k8sRole: "archestra",
+      k8sTokenPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      k8sMountPoint: "kubernetes",
+      secretPath: "custom/data/my-secrets",
     });
   });
 });
@@ -459,6 +501,7 @@ describe("VaultSecretManager", () => {
     address: "http://localhost:8200",
     authMethod: "token" as const,
     token: "dev-root-token",
+    secretPath: "secret/data/archestra",
   };
 
   beforeEach(() => {

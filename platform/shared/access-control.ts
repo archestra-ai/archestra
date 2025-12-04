@@ -340,6 +340,9 @@ export const RouteId = {
   UpdateOrganization: "updateOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
 
+  // Appearance Routes (public/unauthenticated)
+  GetPublicAppearance: "getPublicAppearance",
+
   // SSO Provider Routes
   GetPublicSsoProviders: "getPublicSsoProviders",
   GetSsoProviders: "getSsoProviders",
@@ -739,6 +742,12 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicSsoProviders]: {},
+  /**
+   * Get public appearance settings (theme, logo, font) for login page
+   * Available to unauthenticated users
+   * Note: Auth is skipped in middleware for this route
+   */
+  [RouteId.GetPublicAppearance]: {},
   /**
    * Get all SSO providers with full config (admin only)
    * Returns sensitive data including client secrets

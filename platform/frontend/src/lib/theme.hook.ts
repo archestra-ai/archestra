@@ -6,6 +6,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
+import { usePublicAppearance } from "./appearance.query";
 import { useOrganization, useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
@@ -16,10 +17,24 @@ const DEFAULT_FONT: OrganizationCustomFont = "lato";
 export function useOrgTheme() {
   const pathname = usePathname();
 
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  // Check if we're on an auth page (login, signup, etc.)
   const isAuthPage = pathname?.startsWith("/auth/");
 
-  const { data, isLoading: isLoadingAppearance } = useOrganization(!isAuthPage);
+  // Use public appearance endpoint for auth pages (unauthenticated)
+  const { data: publicAppearance, isLoading: isLoadingPublicAppearance } =
+    usePublicAppearance(isAuthPage);
+
+  // Use authenticated organization endpoint for non-auth pages
+  const { data: organizationData, isLoading: isLoadingOrganization } =
+    useOrganization(!isAuthPage);
+
+  // Determine loading state based on which endpoint we're using
+  const isLoadingAppearance = isAuthPage
+    ? isLoadingPublicAppearance
+    : isLoadingOrganization;
+
+  // Use data from the appropriate source
+  const data = isAuthPage ? publicAppearance : organizationData;
   const {
     theme: themeFromBackend,
     customFont: fontFromBackend,
@@ -110,9 +125,24 @@ export function useOrgTheme() {
     }
   }, [fontFromBackend, fontFromLocalStorage]);
 
-  // Don't load org theme on auth pages to avoid 401 errors during 2FA flow
+  // For auth pages, return limited data (read-only appearance, no update functions)
   if (isAuthPage) {
-    return null;
+    return {
+      currentUITheme: currentUITheme || DEFAULT_THEME,
+      currentUIFont: currentUIFont || DEFAULT_FONT,
+      themeFromBackend,
+      fontFromBackend,
+      setPreviewTheme: undefined,
+      setPreviewFont: undefined,
+      saveTheme: undefined,
+      saveFont: undefined,
+      logo,
+      DEFAULT_THEME,
+      DEFAULT_FONT,
+      isLoadingAppearance,
+      applyThemeOnUI,
+      applyFontOnUI,
+    };
   }
 
   return {

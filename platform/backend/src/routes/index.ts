@@ -1,5 +1,6 @@
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
+export { default as appearanceRoutes } from "./appearance";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat";

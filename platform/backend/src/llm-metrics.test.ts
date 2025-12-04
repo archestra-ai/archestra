@@ -5,7 +5,6 @@ import type { Agent } from "@/types";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();
-const gaugeSet = vi.fn();
 const registerRemoveSingleMetric = vi.fn();
 
 vi.mock("prom-client", () => {
@@ -19,11 +18,6 @@ vi.mock("prom-client", () => {
       Counter: class {
         inc(...args: unknown[]) {
           return counterInc(...args);
-        }
-      },
-      Gauge: class {
-        set(...args: unknown[]) {
-          return gaugeSet(...args);
         }
       },
       register: {

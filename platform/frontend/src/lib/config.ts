@@ -120,6 +120,12 @@ export default {
   get disableBasicAuth() {
     return env("NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_BASIC_AUTH") === "true";
   },
+  /**
+   * When true, hides invitation-related UI and blocks invitation API endpoints.
+   */
+  get disableInvitations() {
+    return env("NEXT_PUBLIC_ARCHESTRA_AUTH_DISABLE_INVITATIONS") === "true";
+  },
   sentry: {
     get dsn() {
       return env("NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN") || "";

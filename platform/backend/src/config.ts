@@ -175,6 +175,8 @@ export default {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    disableInvitations:
+      process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
   },
   database: {
     url: getDatabaseUrl(),

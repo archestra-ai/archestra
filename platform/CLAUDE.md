@@ -128,6 +128,7 @@ ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
 
 # Disable Basic Authentication (username/password login form)
 ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
+ARCHESTRA_AUTH_DISABLE_INVITATIONS=false  # Set to true to disable user invitations
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)

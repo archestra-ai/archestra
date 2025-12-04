@@ -249,14 +249,21 @@ export const auth: any = betterAuth({
  * Validates requests before they are processed by better-auth.
  *
  * Handles:
+ * - Blocking invitations when disabled via environment variable
  * - Email validation for invitation requests
  * - Invitation-only sign-up enforcement
  */
 export async function handleBeforeHook(ctx: HookEndpointContext) {
   const { path, method, body } = ctx;
 
-  // Validate email format for invitations
+  // Block invitation creation when invitations are disabled
   if (path === "/organization/invite-member" && method === "POST") {
+    if (config.auth.disableInvitations) {
+      throw new APIError("FORBIDDEN", {
+        message: "User invitations are disabled",
+      });
+    }
+
     if (!z.email().safeParse(body.email).success) {
       throw new APIError("BAD_REQUEST", {
         message: "Invalid email format",
@@ -264,6 +271,15 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     }
 
     return ctx;
+  }
+
+  // Block invitation cancellation when invitations are disabled
+  if (path === "/organization/cancel-invitation" && method === "POST") {
+    if (config.auth.disableInvitations) {
+      throw new APIError("FORBIDDEN", {
+        message: "User invitations are disabled",
+      });
+    }
   }
 
   // Block direct sign-up without invitation (invitation-only registration)

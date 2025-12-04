@@ -562,8 +562,11 @@ test.describe("SSO Team Sync E2E", () => {
       { timeout: 5000 },
     );
 
-    // Close the dialog
-    await page.getByRole("button", { name: "Close" }).click();
+    // Close the dialog - use first() to target the text button, not the X icon
+    await page
+      .getByRole("button", { name: "Close", exact: true })
+      .first()
+      .click();
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)

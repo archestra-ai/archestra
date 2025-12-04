@@ -477,7 +477,9 @@ describe("VaultSecretManager", () => {
 
       await expect(
         vaultManager.createSecret(secretValue, "testsecret"),
-      ).rejects.toThrow("Vault unavailable");
+      ).rejects.toThrow(
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      );
 
       // Verify that no secret remains in the database
       expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
@@ -641,7 +643,7 @@ describe("VaultSecretManager", () => {
       );
 
       await expect(vaultManager.deleteSecret(created.id)).rejects.toThrow(
-        "Vault unavailable",
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
       );
 
       // Verify the database record still exists
@@ -702,7 +704,7 @@ describe("VaultSecretManager", () => {
       );
 
       await expect(vaultManager.getSecret(created.id)).rejects.toThrow(
-        "Vault unavailable",
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
       );
 
       // Cleanup
@@ -767,7 +769,9 @@ describe("VaultSecretManager", () => {
 
       await expect(
         vaultManager.updateSecret(created.id, newSecretValue),
-      ).rejects.toThrow("Vault unavailable");
+      ).rejects.toThrow(
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      );
 
       // Verify the database record was not updated (updatedAt should be same)
       const dbRecord = await SecretModel.findById(created.id);

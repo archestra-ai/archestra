@@ -32,8 +32,17 @@ export function useUpdateChatSettings() {
       anthropicApiKey?: string;
       resetApiKey?: boolean;
     }) => {
-      const response = await updateChatSettings({ body: data });
-      return response.data;
+      const { data: responseData, error } = await updateChatSettings({
+        body: data,
+      });
+      if (error) {
+        const msg =
+          typeof error.error === "string"
+            ? error.error
+            : error.error?.message || "Unknown error";
+        throw new Error(msg);
+      }
+      return responseData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chat-settings"] });

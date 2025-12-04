@@ -54,6 +54,12 @@ export const EDITOR_PASSWORD = "editor-password-123";
 export const MEMBER_EMAIL = "member@e2e-test.local";
 export const MEMBER_PASSWORD = "member-password-123";
 
+/**
+ * Team names for e2e tests
+ */
+export const ENGINEERING_TEAM_NAME = "Engineering Team";
+export const MARKETING_TEAM_NAME = "Marketing Team";
+
 export {
   E2eTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,

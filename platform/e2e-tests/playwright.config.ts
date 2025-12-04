@@ -40,6 +40,13 @@ export default defineConfig({
       // Users setup needs admin to be authenticated first
       dependencies: ["setup-admin"],
     },
+    {
+      name: "setup-teams",
+      testMatch: /auth\.teams\.setup\.ts/,
+      testDir: "./",
+      // Teams setup needs users to be created first
+      dependencies: ["setup-users"],
+    },
     // API tests only run on chromium (browser doesn't matter for API integration tests)
     {
       name: "api",
@@ -49,8 +56,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run both setup projects before tests
-      dependencies: ["setup-users"],
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
     },
     // UI tests run on all browsers
     {
@@ -61,8 +68,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run both setup projects before tests
-      dependencies: ["setup-users"],
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
     },
     {
       name: "firefox",
@@ -72,8 +79,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run both setup projects before tests
-      dependencies: ["setup-users"],
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
     },
     {
       name: "webkit",
@@ -83,8 +90,8 @@ export default defineConfig({
         // Use the stored authentication state
         storageState: adminAuthFile,
       },
-      // Run both setup projects before tests
-      dependencies: ["setup-users"],
+      // Run all setup projects before tests
+      dependencies: ["setup-teams"],
     },
   ],
 });

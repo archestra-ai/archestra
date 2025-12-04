@@ -624,9 +624,10 @@ test.describe("SSO Team Sync E2E", () => {
 
       await expect(ssoPage.getByRole("dialog")).toBeVisible();
 
-      // Verify the SSO user (admin@example.com) is in the team members list
+      // Verify the SSO user is in the team members list
+      // Note: Use ADMIN_EMAIL which matches the Keycloak user we logged in with
       await expect(
-        ssoPage.getByRole("dialog").getByText(/admin@example\.com/i),
+        ssoPage.getByRole("dialog").getByText(new RegExp(ADMIN_EMAIL, "i")),
       ).toBeVisible({ timeout: 5000 });
 
       // Success! The SSO user was automatically synced to the team
@@ -639,11 +640,17 @@ test.describe("SSO Team Sync E2E", () => {
     await goToPage(page, "/settings/teams");
     await page.waitForLoadState("networkidle");
 
-    const teamRowForDelete = page
-      .locator("div")
-      .filter({ hasText: teamName })
-      .last();
-    await teamRowForDelete.getByRole("button").last().click(); // Delete button is last
+    // Find the team card by name and click the delete button
+    const teamCard = page
+      .locator(".rounded-lg.border.p-4")
+      .filter({ hasText: teamName });
+    await expect(teamCard).toBeVisible({ timeout: 5000 });
+    // The delete button has a Trash icon - find it within the team card
+    await teamCard
+      .getByRole("button")
+      .filter({ has: page.locator("svg") })
+      .last()
+      .click();
 
     await expect(page.getByText(/Are you sure/i)).toBeVisible();
     await page.getByRole("button", { name: "Delete", exact: true }).click();

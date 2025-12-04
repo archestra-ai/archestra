@@ -12,7 +12,7 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
@@ -452,27 +452,43 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 /**
  * Synchronize user's team memberships based on their SSO groups.
  * This is called after successful SSO login in the after hook.
+ *
+ * @param userId - The user's ID
+ * @param userEmail - The user's email
  */
 async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
+  logger.info({ userId, userEmail }, "🔄 syncSsoTeams called");
+
   // Only sync if enterprise license is activated
   if (!config.enterpriseLicenseActivated) {
+    logger.info("🔄 Enterprise license not activated, skipping team sync");
     return;
   }
 
-  // Get the user's SSO account to find the provider ID and idToken
-  // We query the account table to find an SSO provider (not "credential")
-  const ssoAccounts = await db
+  // Get the user's accounts and find the most recently used SSO account
+  // Order by updatedAt DESC to get the account from the current login
+  const allAccounts = await db
     .select()
     .from(schema.accountsTable)
-    .where(eq(schema.accountsTable.userId, userId));
+    .where(eq(schema.accountsTable.userId, userId))
+    .orderBy(desc(schema.accountsTable.updatedAt));
 
-  // Find an SSO account (provider_id != "credential")
-  const ssoAccount = ssoAccounts.find((acc) => acc.providerId !== "credential");
+  // Find an SSO account (providerId != "credential") - first match is most recent due to ordering
+  const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
+
+  logger.info(
+    {
+      allAccountsCount: allAccounts.length,
+      ssoAccountFound: !!ssoAccount,
+      providerId: ssoAccount?.providerId,
+    },
+    "🔄 Found accounts for user",
+  );
 
   if (!ssoAccount) {
-    logger.debug(
+    logger.warn(
       { userId, userEmail },
-      "No SSO account found for user, skipping team sync",
+      "🔄 No SSO account found for user, skipping team sync",
     );
     return;
   }

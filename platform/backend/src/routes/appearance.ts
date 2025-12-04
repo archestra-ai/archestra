@@ -8,10 +8,6 @@ import { constructResponseSchema, PublicAppearanceSchema } from "@/types";
  * Used by login pages to display custom branding (theme, logo, fonts).
  */
 const appearanceRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Public endpoint for login/auth pages - returns appearance settings.
-   * Does NOT require authentication (skipped in middleware).
-   */
   fastify.get(
     "/api/appearance/public",
     {
@@ -24,8 +20,7 @@ const appearanceRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const appearance = await OrganizationModel.getPublicAppearance();
-      return reply.send(appearance);
+      return reply.send(await OrganizationModel.getPublicAppearance());
     },
   );
 };

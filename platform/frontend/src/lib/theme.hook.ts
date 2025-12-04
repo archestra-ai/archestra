@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fontFamilyMap } from "@/config/themes";
 import { usePublicAppearance } from "./appearance.query";
-import { useOrganization, useUpdateOrganization } from "./organization.query";
+import { useUpdateOrganization } from "./organization.query";
 
 const THEME_STORAGE_KEY = "archestra-theme";
 const FONT_STORAGE_KEY = "archestra-font";
@@ -17,29 +17,17 @@ const DEFAULT_FONT: OrganizationCustomFont = "lato";
 export function useOrgTheme() {
   const pathname = usePathname();
 
-  // Check if we're on an auth page (login, signup, etc.)
-  const isAuthPage = pathname?.startsWith("/auth/");
+  // Always use public appearance endpoint - it returns the same data for all pages
+  // and works without authentication
+  const { data: appearance, isLoading: isLoadingAppearance } =
+    usePublicAppearance();
 
-  // Use public appearance endpoint for auth pages (unauthenticated)
-  const { data: publicAppearance, isLoading: isLoadingPublicAppearance } =
-    usePublicAppearance(isAuthPage);
-
-  // Use authenticated organization endpoint for non-auth pages
-  const { data: organizationData, isLoading: isLoadingOrganization } =
-    useOrganization(!isAuthPage);
-
-  // Determine loading state based on which endpoint we're using
-  const isLoadingAppearance = isAuthPage
-    ? isLoadingPublicAppearance
-    : isLoadingOrganization;
-
-  // Use data from the appropriate source
-  const data = isAuthPage ? publicAppearance : organizationData;
   const {
     theme: themeFromBackend,
     customFont: fontFromBackend,
     logo,
-  } = data ?? {};
+  } = appearance ?? {};
+
   const updateThemeMutation = useUpdateOrganization(
     "Appearance settings updated",
     "Failed to update appearance settings",
@@ -126,7 +114,7 @@ export function useOrgTheme() {
   }, [fontFromBackend, fontFromLocalStorage]);
 
   // For auth pages, return limited data (read-only appearance, no update functions)
-  if (isAuthPage) {
+  if (pathname?.startsWith("/auth/")) {
     return {
       currentUITheme: currentUITheme || DEFAULT_THEME,
       currentUIFont: currentUIFont || DEFAULT_FONT,

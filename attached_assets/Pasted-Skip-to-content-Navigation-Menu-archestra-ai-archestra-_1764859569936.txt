@@ -1,0 +1,353 @@
+Skip to content
+Navigation Menu
+archestra-ai
+archestra
+
+Type / to search
+Code
+Issues
+16
+Pull requests
+12
+Actions
+Security
+Insights
+Support MCP UI #1301
+Open
+@Matvey-Kuk
+Description
+Matvey-Kuk
+opened last week
+Contributor
+Dear community, let's build some cool stuff 🚀🚀🚀
+
+Bring the support of MCP UI (https://github.com/MCP-UI-Org/mcp-ui) in Archestra Chat UI.
+Make sure it works in 3'rd third-party UI via our MCP Gateway.
+Make sure it works in 3'rd third-party UI via our LLM Gateway.
+Test at least two MCPs with MCP UI and bring them to our catalog.
+The acceptance criteria is a demo showing all four steps working besides the PR itself 🏆
+
+Activity
+Matvey-Kuk
+Matvey-Kuk commented last week
+Matvey-Kuk
+last week
+Contributor
+Author
+/bounty 900
+
+
+algora-pbc
+added 
+💎 Bounty
+ 
+$900
+ last week
+algora-pbc
+algora-pbc commented last week
+algora-pbc
+bot
+last week – with Algora PBC · edited by algora-pbc
+💎 $900 bounty • Archestra
+Steps to solve:
+Comment /attempt #1301 with your implementation plan
+Make sure you're assigned to the issue by the core team member.
+Start working: Read contribution guideline: https://www.archestra.ai/docs/contributing
+Submit work: Create a pull request including /claim #1301 in the PR body to claim the bounty
+Receive payment: 100% of the bounty is received 2-5 days post-reward. Make sure you are eligible for payouts
+Thank you for contributing to archestra-ai/archestra!
+
+Attempt	Started (UTC)	Solution	Actions
+🟢 @Geetk172	Dec 01, 2025, 08:44:34 AM	#1366	Reward
+🟢 @developerfred	Dec 01, 2025, 03:40:47 PM	WIP	
+🟢 @SaikiranSurapalli17	Dec 02, 2025, 05:22:06 AM	WIP	
+🟢 @gs03-dev	Dec 02, 2025, 09:25:38 AM	WIP	
+🟢 @kajal1322705	Dec 04, 2025, 01:37:57 PM	WIP	
+🟢 @Pranjal6955	Nov 28, 2025, 05:30:16 PM	WIP	
+🟢 @devroy10	Nov 28, 2025, 06:07:42 PM	WIP	
+🟢 @guptapratykshh	Nov 29, 2025, 06:51:01 PM	WIP	
+🟢 @ethanwater	Nov 30, 2025, 09:22:37 PM	WIP	
+Pranjal6955
+Pranjal6955 commented last week
+Pranjal6955
+last week
+/attempt #1301
+
+devroy10
+devroy10 commented last week
+devroy10
+last week
+/attempt #1301
+
+Matvey-Kuk
+Matvey-Kuk commented last week
+Matvey-Kuk
+last week
+Contributor
+Author
+Hi @Pranjal6955 and @devroy10! Do you have an implementation plan in mind?
+
+Pranjal6955
+Pranjal6955 commented 5 days ago
+Pranjal6955
+5 days ago
+Hi @Matvey-Kuk
+Here is the implementation Plan :
+
+Research the MCP UI library, understand its structure and API, set up the development environment, and design where MCP UI will integrate inside Archestra Chat UI.
+
+Install the MCP UI package, replace existing tool display components with MCP UI components, improve how tools are rendered inside chat messages, and add resource or prompt UI if needed.
+
+Extend the MCP Gateway to support MCP UI, add discovery and metadata endpoints, create a test third-party UI for validation, and document the integration process.
+
+Extend the LLM Gateway to support MCP UI, add an MCP UI configuration endpoint, test the flow using a third-party UI, and document this integration as well.
+
+Choose at least two MCP servers, test them across all environments (Archestra Chat UI, MCP Gateway, and LLM Gateway), and add both MCPs to the catalog with proper documentation.
+
+guptapratykshh
+guptapratykshh commented 5 days ago
+guptapratykshh
+5 days ago
+/attempt 1301
+
+ethanwater
+ethanwater commented 4 days ago
+ethanwater
+4 days ago · edited by ethanwater
+/attempt #1301
+
+Looks fun, love adding new features. Here's my plan:
+
+1. Add MCP-UI rendering inside Chat UI
+first we want the chat UI to treat MCP-UI resources as VIP. The UI already handles generic MCP resources, so the logic becomes:
+
+detect UIResources carrying the mcpui.dev/ui-* metadata
+spin up an iframe with the MCP-UI client instead of treating the resource as static text/html
+hook the iframe into our existing event bus so UI actions → Archestra actions
+this means implementing the full postMessage contract (intent, notify, tool, prompt, link, data requests, render-data, and size updates). Chat UI basically becomes the “host” described in the MCP-UI spec.
+
+2. Ensure the MCP Gateway passes UIResources cleanly
+archestra’s MCP Gateway is the single ingress point, so we absolutely cannot mutate any UIResource payloads.
+i'll validate that:
+
+_meta, uiMetadata, blob encodings, and embedded resource fields survive the RPC boundary
+UI actions coming from the iframe route back through the gateway the same way normal tool calls do
+the gateway does not collapse/flatten/strip any fields that MCP-UI relies on
+so we want here 3rd-party UI → MCP Gateway → MCP server → back → UI, with interactive UI intact.
+
+3. Same thing for LLM Gateway
+the LLM Gateway needs to behave identically from the UI’s point of view. That means:
+
+if an LLM produces a UIResource, we normalize it so that Chat UI sees the same shape as if it came from a real MCP.
+when the user interacts with an MCP-UI iframe, those actions must route back through the LLM Gateway without any branching logic.
+If both gateways end up looking identical upstream, Chat UI stays simple and predictable.
+
+4. Test with two real MCPs and add em to the catalog
+i’ll use two very different MCPs so the whole protocol surface is exercised:
+
+MCP A: simple HTML/uri-list style UI
+MCP B: remote-dom / more interactive UI using the full MCP-UI event model (intents, data requests, etc....)
+validate the whole loop: render → user clicks → action hits gateway → MCP responds → iframe updates.
+
+5. Demo Time!
+speaks for itself! showcase the awesome chat enhancement.
+
+feel free to share any recs/changes. dope project and would love to be assigned to this. thanks! @Matvey-Kuk
+
+ethanwater
+ethanwater commented 4 days ago
+ethanwater
+4 days ago
+And just to be a bit more specific on step 1, I would spin up an MCPUIWrapper iframe that fully implements the MCP-UI postMessage contract, then hook it into chatSession.sendMessage / addToolResult so all UI actions flow seamlessly back to the MCP or LLM. Since /platform/frontend/src/app/chat/page.tsx already tracks conversation state, prompts, etc., we can manage the iframe lifecycle here—including dialog popups for MCP-UI-triggered tool calls. This way, we leverage existing gateways, preserve all current chat states, and keep the integration predictable 😎. MCP UI provides some helpful documentation on their embedding process: https://mcpui.dev/guide/embeddable-ui and in-depth app integration: https://mcpui.dev/guide/mcp-apps
+
+Geetk172
+Geetk172 commented 3 days ago
+Geetk172
+3 days ago
+/attempt #1301
+
+Implementation Plan
+I've created a comprehensive technical plan after analyzing the Archestra codebase. Here's my approach:
+
+Architecture Overview
+Frontend: Integrate MCP UI client with iframe-based rendering in Chat UI
+MCP Gateway: Preserve UIResource metadata and add UI action routing
+LLM Gateway: Generate normalized UIResources from LLM responses
+Catalog: Add 2 test MCPs with UI capabilities
+Key Implementation Details
+Phase 1 - Chat UI Integration:
+
+Create MCPUIRenderer component with full postMessage protocol
+Detect mcpui.dev/ui-* metadata in resources
+Handle all MCP UI events: intent, notify, tool, prompt, link, data
+Integrate into existing mcp-tools-display.tsx
+Phase 2 - MCP Gateway:
+
+Ensure _meta, uiMetadata, blob fields pass through unchanged
+Add POST /mcp-gateway/ui-action endpoint for UI interactions
+Add GET /mcp-gateway/servers/:id/ui-capabilities for discovery
+Support all UI resource ty
+developerfred
+developerfred commented 3 days ago
+developerfred
+3 days ago · edited by developerfred
+/attempt #1301
+
+My implementation plan is to use the following TypeScript libraries: @mcp-ui/server and @mcp-ui/client. I'll use the library guide https://mcpui.dev/guide/introduction to create a clean integration, respecting the entire project architecture.
+
+Code using project best practices
+Unit tests
+Once everything is ready, I'll make screen record.
+My environment is macOS. Is it necessary to test in other environments?
+
+iskhakov
+iskhakov commented 3 days ago
+iskhakov
+3 days ago
+Contributor
+@Pranjal6955 @ethanwater @Geetk172 @developerfred thank you for the plan, may I ask a few questions.
+
+Could you please confirm that it will work well with MCP Apps announced here and here https://github.com/modelcontextprotocol/ext-apps? As I see on https://mcpui.dev, it's already beginning to migrate to MCP Apps.
+
+Please specify which MCP servers you plan to use for testing.
+
+Also we need more comprehensive plan around:
+
+Make sure it works in 3'rd third-party UI via our MCP Gateway.
+Make sure it works in 3'rd third-party UI via our LLM Gateway.
+
+Because that's where the biggest complexity lies, since we need to process the MCPUI requests on LLM (https://archestra.ai/docs/platform-llm-proxy) and MCP proxies (https://archestra.ai/docs/platform-mcp-gateway)
+
+developerfred
+developerfred commented 3 days ago
+developerfred
+3 days ago
+@developerfred thank you for the plan, may I ask a few questions.
+
+Could you please confirm that it will work well with MCP Apps announced here and here https://github.com/modelcontextprotocol/ext-apps? As I see on https://mcpui.dev, it's already beginning to migrate to MCP Apps.
+Please specify which MCP servers you plan to use for testing.
+Also we need more comprehensive plan around:
+Make sure it works in 3'rd third-party UI via our MCP Gateway.
+Make sure it works in 3'rd third-party UI via our LLM Gateway.
+
+Because that's where the biggest complexity lies, since we need to process the MCPUI requests on LLM (https://archestra.ai/docs/platform-llm-proxy) and MCP proxies (https://archestra.ai/docs/platform-mcp-gateway)
+
+Hey @iskhakov, thanks for questions, let's go!
+
+1 - Yes, the MCP UI already supports the patterns of MCP Apps.
+
+2 - I thought about using the MCP-UI Demo Server (https://remote-mcp-server-authless.idosalomon.workers.dev/mcp) itself
+
+3 - MCP Gateway is a JSON-RPC pass-through proxy, so it only receives JSON-RPC requests from the client and forwards them to the MCP Server. Since UIResource is just another type of JSON-RPC, it will have full compatibility with the existing implementation.
+
+This also applies to the LLM Gateway, where UIResource comes within the JSON tool_result string. I believe we won't need to address this here.
+
+SaikiranSurapalli17
+SaikiranSurapalli17 commented 2 days ago
+SaikiranSurapalli17
+2 days ago
+/attempt #1301
+
+Geetk172
+Geetk172 commented 2 days ago
+Geetk172
+2 days ago
+Thank you @iskhakov for the detailed questions! Here are my answers:
+
+MCP Apps Compatibility
+Yes, this will be fully compatible with MCP Apps. Both MCP UI and MCP Apps use the same postMessage protocol and the application/remote-dom+json format. My MCPUIRenderer component will detect both the legacy mcpui.dev/ui-* metadata and the new MCP Apps format, so it'll work seamlessly with both as the ecosystem migrates.
+Test MCPs
+I'll use two MCPs:
+Filesystem MCP - The official one from modelcontextprotocol/servers. It's simple, uses text/html, and perfect for testing basic iframe rendering and tool calls like read_file and list_directory.
+Weather Dashboard MCP - I'll build a custom one using application/remote-dom+json with interactive charts. This tests the full MCP Apps protocol including intents, data requests, and complex user interactions.
+Both will be added to the catalog with documentation.
+MCP Gateway Integration
+The key challenge is preserving UIResources through the gateway without breaking the metadata. Here's my approach:
+UIResource Preservation - I'll modify the resources/read endpoint to pass through all fields including blob, _meta, and custom MCP UI fields unchanged.
+New UI Action Endpoint - Adding POST /mcp-gateway/:serverId/ui/action to route iframe interactions back to the MCP server. When users click buttons or interact with the UI, those actions get forwarded as tool calls, data requests, or prompts.
+Capabilities Discovery - New GET endpoint that checks which servers support UI by looking at their resource mimeTypes.
+For third-party apps, the flow is: discover capabilities → fetch UIResource → render iframe → handle postMessage events → route actions through gateway → update UI with responses.
+I'll build a test HTML page that connects to the gateway and validates the full loop works.
+LLM Gateway Integration
+This is trickier since LLMs don't return UIResources natively. My approach:
+Intent Detection - Parse LLM responses for UI intent (phrases like "I'll show you an interactive chart" or special markers).
+UIResource Generation - When detected, generate proper HTML with MCP protocol handlers embedded. The HTML includes postMessage setup and action routing back to the gateway.
+Action Handling - New POST /llm-gateway/ui/action endpoint that takes UI actions, routes them back to the LLM with context, and returns updated UI or text responses.
+For third-party apps: send message → LLM returns UIResource → render iframe → user interacts → route action through gateway → LLM processes → update UI.
+I'll test with scenarios like chart generation, form interactions, and multi-step workflows to ensure the context is maintained throughout.
+The main complexity in both gateways is ensuring UIResources survive the proxy layer without losing metadata, and properly routing UI actions back through the same gateway so third-party apps don't need to know about the underlying MCP servers or LLMs.
+
+@Pranjal6955 @ethanwater @Geetk172 @developerfred thank you for the plan, may I ask a few questions.
+
+1. Could you please confirm that it will work well with MCP Apps announced [here](https://blog.modelcontextprotocol.io/posts/2025-11-21-mcp-apps/) and here https://github.com/modelcontextprotocol/ext-apps? As I see on https://mcpui.dev, it's already beginning to migrate to MCP Apps.
+
+2. Please specify which MCP servers you plan to use for testing.
+
+3. Also we need more comprehensive plan around:
+Make sure it works in 3'rd third-party UI via our MCP Gateway.
+Make sure it works in 3'rd third-party UI via our LLM Gateway.
+
+Because that's where the biggest complexity lies, since we need to process the MCPUI requests on LLM (https://archestra.ai/docs/platform-llm-proxy) and MCP proxies (https://archestra.ai/docs/platform-mcp-gateway)
+
+gs03-dev
+gs03-dev commented 2 days ago
+gs03-dev
+2 days ago · edited by gs03-dev
+/attempt #1301
+
+
+Geetk172
+mentioned this yesterday
+Add MCP UI integration to Archestra Chat UI #1366
+kajal1322705
+kajal1322705 commented 1 hour ago
+kajal1322705
+1 hour ago
+/attempt #1301
+
+kajal1322705
+Add a comment
+new Comment
+Markdown input: edit mode selected.
+Write
+Preview
+Use Markdown to format your comment
+Metadata
+Assignees
+No one assigned
+Labels
+$900
+💎 Bounty
+Type
+No type
+Projects
+No projects
+Milestone
+No milestone
+Relationships
+None yet
+Development
+No branches or pull requests
+NotificationsCustomize
+You're receiving notifications because you're subscribed to this thread.
+
+Participants
+@iskhakov
+@Matvey-Kuk
+@developerfred
+@gs03-dev
+@SaikiranSurapalli17
+Issue actions
+Footer
+© 2025 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Community
+Docs
+Contact
+Manage cookies
+Do not share my personal information
+Copied!

@@ -41,39 +41,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { mcpServer: ["admin"] },
         headers,
       );
-      const { success: isProfileAdmin } = await hasPermission(
-        { profile: ["admin"] },
-        headers,
-      );
       const allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
       );
-
-      // For non-profile-admins, filter userDetails and users to only show teammates
-      if (!isProfileAdmin) {
-        const teammateIds = new Set(
-          await TeamModel.getTeammateUserIds(user.id),
-        );
-
-        const serversWithFilteredUsers = allServers.map((server) => {
-          // Filter to only include current user and teammates
-          const filteredUserDetails = server.userDetails?.filter(
-            (ud) => ud.userId === user.id || teammateIds.has(ud.userId),
-          );
-          const filteredUsers = server.users?.filter(
-            (userId) => userId === user.id || teammateIds.has(userId),
-          );
-
-          return {
-            ...server,
-            userDetails: filteredUserDetails,
-            users: filteredUsers,
-          };
-        });
-
-        return reply.send(serversWithFilteredUsers);
-      }
 
       return reply.send(allServers);
     },

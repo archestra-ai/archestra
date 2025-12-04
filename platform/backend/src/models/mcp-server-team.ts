@@ -210,6 +210,35 @@ class McpServerTeamModel {
   }
 
   /**
+   * Get all MCP server IDs owned by the user's teammates (users who share a team)
+   * This allows users to see credentials from people in their teams
+   */
+  static async getTeammateMcpServerIds(userId: string): Promise<string[]> {
+    // Get all users who share at least one team with the current user
+    // Then get all MCP servers owned by those users
+    const teammateServers = await db
+      .select({ serverId: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.mcpServersTable.ownerId, schema.teamMembersTable.userId),
+      )
+      .where(
+        inArray(
+          schema.teamMembersTable.teamId,
+          db
+            .select({ teamId: schema.teamMembersTable.teamId })
+            .from(schema.teamMembersTable)
+            .where(eq(schema.teamMembersTable.userId, userId)),
+        ),
+      );
+
+    // Dedupe and exclude the current user's own servers
+    const serverIds = new Set(teammateServers.map((s) => s.serverId));
+    return Array.from(serverIds);
+  }
+
+  /**
    * Remove a team assignment from an MCP server
    */
   static async removeTeamFromMcpServer(

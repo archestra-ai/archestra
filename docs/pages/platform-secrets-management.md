@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Archestra Platform
 description: "Configure external secrets storage for sensitive data"
 order: 6
-lastUpdated: 2025-12-03
+lastUpdated: 2025-12-04
 ---
 
 <!--
@@ -12,7 +12,7 @@ Check ../docs_writer_prompt.md before changing this file.
 This document covers Vault secret manager configuration. Include:
 - Overview of secret storage options (DB vs Vault)
 - Environment variables
-- Token and Kubernetes authentication for Vault
+- Token, Kubernetes, and AWS IAM authentication for Vault
 - Secret storage paths
 -->
 
@@ -31,7 +31,7 @@ See the documentation below for supported authentication methods and configurati
 | ---------------------------------------- | -------------------------------- |
 | `ARCHESTRA_SECRETS_MANAGER`              | `VAULT`                          |
 | `ARCHESTRA_HASHICORP_VAULT_ADDR`         | Your Vault server address        |
-| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN` or `K8S`                 |
+| `ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`  | `TOKEN`, `K8S`, or `AWS`         |
 | `ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED` | Your license value               |
 
 ### Token Authentication
@@ -49,6 +49,26 @@ See the documentation below for supported authentication methods and configurati
 | `ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT` | No       | Vault K8S auth mount point (default: `kubernetes`)                                |
 
 The K8S auth method requires a Vault role configured with a bound service account. The role must have permissions to read and write secrets under `secret/data/archestra/*`.
+
+### AWS IAM Authentication
+
+| Variable                                        | Required | Description                                                                                      |
+| ----------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_ROLE`            | Yes      | Vault role bound to the AWS IAM principal                                                        |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT`     | No       | Vault AWS auth mount point (default: `aws`)                                                      |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_REGION`          | No       | AWS region for STS signing (default: `us-east-1`)                                                |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT`    | No       | STS endpoint URL (default: `https://sts.amazonaws.com`)                                          |
+| `ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID`   | No       | Value for `X-Vault-AWS-IAM-Server-ID` header (additional security)                               |
+
+The AWS IAM auth method uses the [default AWS credential provider chain](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html) to obtain credentials. This includes:
+
+- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+- Shared credentials file (`~/.aws/credentials`)
+- EC2 instance metadata (IAM role)
+- ECS container credentials
+- EKS Pod Identity or IRSA (IAM Roles for Service Accounts)
+
+The role must have permissions to read and write secrets under `secret/data/archestra/*`.
 
 > **Note:** If `ARCHESTRA_SECRETS_MANAGER` is set to `VAULT` but the required environment variables are missing, the system falls back to database storage.
 

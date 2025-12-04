@@ -241,6 +241,10 @@ export const RouteId = {
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  // Team External Group Routes (SSO Team Sync)
+  GetTeamExternalGroups: "getTeamExternalGroups",
+  AddTeamExternalGroup: "addTeamExternalGroup",
+  RemoveTeamExternalGroup: "removeTeamExternalGroup",
 
   // Role Routes
   GetRoles: "getRoles",
@@ -604,6 +608,16 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["update"],
   },
   [RouteId.RemoveTeamMember]: {
+    team: ["update"],
+  },
+  // Team External Group Routes (SSO Team Sync) - requires team update permission
+  [RouteId.GetTeamExternalGroups]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamExternalGroup]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamExternalGroup]: {
     team: ["update"],
   },
   [RouteId.GetRoles]: {

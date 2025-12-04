@@ -1,8 +1,10 @@
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import Vault from "node-vault";
 import config from "@/config";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import type { SecretValue, SelectSecret } from "@/types";
+import { ApiError } from "@/types/api";
 
 /**
  * SecretManager interface for managing secrets
@@ -88,8 +90,8 @@ export function createSecretManager(): SecretManager {
     } catch (error) {
       if (error instanceof SecretsManagerConfigurationError) {
         logger.warn(
-          { error: error.message },
-          "createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager.",
+          { reason: error.message },
+          `createSecretManager: Invalid Vault configuration, falling back to DbSecretsManager. ${error.message}`,
         );
         return new DbSecretsManager();
       }
@@ -156,7 +158,7 @@ export class DbSecretsManager implements SecretManager {
   }
 }
 
-export type VaultAuthMethod = "token" | "kubernetes";
+export type VaultAuthMethod = "token" | "kubernetes" | "aws";
 
 export interface VaultConfig {
   /** Vault server address (default: http://localhost:8200) */
@@ -171,6 +173,16 @@ export interface VaultConfig {
   k8sTokenPath?: string;
   /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
   k8sMountPoint?: string;
+  /** AWS IAM auth role (required for aws auth) */
+  awsRole?: string;
+  /** AWS auth mount point in Vault (defaults to "aws") */
+  awsMountPoint?: string;
+  /** AWS region for STS signing (defaults to us-east-1) */
+  awsRegion?: string;
+  /** AWS STS endpoint URL (defaults to https://sts.amazonaws.com to match Vault's default) */
+  awsStsEndpoint?: string;
+  /** Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security) */
+  awsIamServerIdHeader?: string;
 }
 
 /**
@@ -179,7 +191,7 @@ export interface VaultConfig {
  */
 export class VaultSecretManager implements SecretManager {
   private client: ReturnType<typeof Vault>;
-  private initialized: Promise<void>;
+  private initialized = false;
   private config: VaultConfig;
 
   constructor(config: VaultConfig) {
@@ -191,13 +203,21 @@ export class VaultSecretManager implements SecretManager {
       endpoint: normalizedEndpoint,
     });
 
+    // Validate config but defer authentication for k8s/aws
     if (config.authMethod === "kubernetes") {
       if (!config.k8sRole) {
         throw new Error(
           "VaultSecretManager: k8sRole is required for Kubernetes authentication",
         );
       }
-      this.initialized = this.loginWithKubernetes();
+      // Authentication deferred to ensureInitialized()
+    } else if (config.authMethod === "aws") {
+      if (!config.awsRole) {
+        throw new Error(
+          "VaultSecretManager: awsRole is required for AWS IAM authentication",
+        );
+      }
+      // Authentication deferred to ensureInitialized()
     } else if (config.authMethod === "token") {
       if (!config.token) {
         throw new Error(
@@ -205,7 +225,7 @@ export class VaultSecretManager implements SecretManager {
         );
       }
       this.client.token = config.token;
-      this.initialized = Promise.resolve();
+      this.initialized = true;
     } else {
       throw new Error("VaultSecretManager: invalid authentication method");
     }
@@ -242,10 +262,167 @@ export class VaultSecretManager implements SecretManager {
   }
 
   /**
-   * Ensure authentication is complete before any operation
+   * Authenticate with Vault using AWS IAM credentials
+   * Uses the default AWS credential provider chain (env vars, shared credentials, IAM role, etc.)
+   */
+  private async loginWithAws(): Promise<void> {
+    const region = this.config.awsRegion ?? DEFAULT_AWS_REGION;
+    const mountPoint = this.config.awsMountPoint ?? DEFAULT_AWS_MOUNT_POINT;
+    // Use the STS endpoint from config, or construct based on region
+    // Default to global endpoint (sts.amazonaws.com) which matches Vault's default sts_endpoint
+    const stsEndpoint = this.config.awsStsEndpoint ?? DEFAULT_AWS_STS_ENDPOINT;
+
+    try {
+      // Get credentials from the default provider chain
+      const credentialProvider = fromNodeProviderChain();
+      const credentials = await credentialProvider();
+
+      // Build the signed request for Vault
+      // Vault expects the IAM request to be signed and sent as base64-encoded data
+      const stsUrl = stsEndpoint.endsWith("/")
+        ? stsEndpoint
+        : `${stsEndpoint}/`;
+
+      // Create the request body for GetCallerIdentity
+      const requestBody = "Action=GetCallerIdentity&Version=2011-06-15";
+
+      // Sign the request using AWS Signature V4
+      const signedRequest = await this.signAwsRequest({
+        method: "POST",
+        url: stsUrl,
+        body: requestBody,
+        region,
+        credentials,
+        serverIdHeader: this.config.awsIamServerIdHeader,
+      });
+
+      // Prepare the login payload for Vault
+      const loginPayload = {
+        role: this.config.awsRole,
+        iam_http_request_method: "POST",
+        iam_request_url: Buffer.from(stsUrl).toString("base64"),
+        iam_request_body: Buffer.from(requestBody).toString("base64"),
+        iam_request_headers: Buffer.from(
+          JSON.stringify(signedRequest.headers),
+        ).toString("base64"),
+      };
+
+      // Authenticate with Vault
+      const result = await this.client.write(
+        `auth/${mountPoint}/login`,
+        loginPayload,
+      );
+
+      this.client.token = result.auth.client_token;
+      logger.info(
+        { role: this.config.awsRole, region, mountPoint },
+        "VaultSecretManager: authenticated via AWS IAM auth",
+      );
+    } catch (error) {
+      logger.error(
+        { error, role: this.config.awsRole, region, mountPoint },
+        "VaultSecretManager: AWS IAM authentication failed",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Sign an AWS request using Signature V4
+   */
+  private async signAwsRequest(options: {
+    method: string;
+    url: string;
+    body: string;
+    region: string;
+    credentials: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken?: string;
+    };
+    serverIdHeader?: string;
+  }): Promise<{ headers: Record<string, string> }> {
+    const { SignatureV4 } = await import("@smithy/signature-v4");
+    const { Sha256 } = await import("@aws-crypto/sha256-js");
+
+    const url = new URL(options.url);
+    const headers: Record<string, string> = {
+      host: url.host,
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    };
+
+    // Add server ID header if configured (for additional security)
+    if (options.serverIdHeader) {
+      headers["x-vault-aws-iam-server-id"] = options.serverIdHeader;
+    }
+
+    const signer = new SignatureV4({
+      service: "sts",
+      region: options.region,
+      credentials: options.credentials,
+      sha256: Sha256,
+    });
+
+    const signedRequest = await signer.sign({
+      method: options.method,
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: url.pathname,
+      headers,
+      body: options.body,
+    });
+
+    return { headers: signedRequest.headers as Record<string, string> };
+  }
+
+  /**
+   * Ensure authentication is complete before any operation.
+   * For k8s/aws auth, this triggers the login on first call (lazy initialization).
+   * Each call retries authentication if not yet initialized, allowing recovery if Vault becomes available.
    */
   private async ensureInitialized(): Promise<void> {
-    await this.initialized;
+    if (this.initialized) {
+      return;
+    }
+
+    try {
+      if (this.config.authMethod === "kubernetes") {
+        await this.loginWithKubernetes();
+      } else if (this.config.authMethod === "aws") {
+        await this.loginWithAws();
+      }
+      this.initialized = true;
+    } catch (error) {
+      logger.error({ error }, "VaultSecretManager: initialization failed");
+      throw new ApiError(
+        500,
+        "Failed to connect to secrets vault. Please try again later or contact your administrator.",
+      );
+    }
+  }
+
+  /**
+   * Handle Vault operation errors by logging and throwing user-friendly ApiError
+   */
+  private handleVaultError(
+    error: unknown,
+    operationName: string,
+    context: Record<string, unknown> = {},
+  ): never {
+    logger.error(
+      { error, ...context },
+      `VaultSecretManager.${operationName}: failed`,
+    );
+
+    // Re-throw ApiError as-is (e.g., from ensureInitialized)
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(
+      500,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+    );
   }
 
   private getVaultPath(name: string, id: string): string {
@@ -260,7 +437,11 @@ export class VaultSecretManager implements SecretManager {
     secretValue: SecretValue,
     name: string,
   ): Promise<SelectSecret> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "createSecret", { name });
+    }
 
     // Sanitize name to conform to Vault naming rules
     const sanitizedName = sanitizeVaultSecretName(name);
@@ -281,12 +462,8 @@ export class VaultSecretManager implements SecretManager {
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.createSecret: failed, rolling back",
-      );
       await SecretModel.delete(dbRecord.id);
-      throw error;
+      this.handleVaultError(error, "createSecret", { vaultPath });
     }
 
     return {
@@ -296,7 +473,11 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async deleteSecret(secid: string): Promise<boolean> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "deleteSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -313,11 +494,7 @@ export class VaultSecretManager implements SecretManager {
           "VaultSecretManager.deleteSecret: secret permanently deleted",
         );
       } catch (error) {
-        logger.error(
-          { metadataPath, error },
-          "VaultSecretManager.deleteSecret: failed",
-        );
-        throw error;
+        this.handleVaultError(error, "deleteSecret", { metadataPath });
       }
     }
 
@@ -329,7 +506,11 @@ export class VaultSecretManager implements SecretManager {
   }
 
   async getSecret(secid: string): Promise<SelectSecret | null> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "getSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -356,11 +537,7 @@ export class VaultSecretManager implements SecretManager {
         secret: secretValue,
       };
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.getSecret: failed",
-      );
-      throw error;
+      this.handleVaultError(error, "getSecret", { vaultPath });
     }
   }
 
@@ -368,7 +545,11 @@ export class VaultSecretManager implements SecretManager {
     secid: string,
     secretValue: SecretValue,
   ): Promise<SelectSecret | null> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (error) {
+      this.handleVaultError(error, "updateSecret", { secid });
+    }
 
     const dbRecord = await SecretModel.findById(secid);
     if (!dbRecord) {
@@ -389,11 +570,7 @@ export class VaultSecretManager implements SecretManager {
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
-      logger.error(
-        { vaultPath, error },
-        "VaultSecretManager.updateSecret: failed",
-      );
-      throw error;
+      this.handleVaultError(error, "updateSecret", { vaultPath });
     }
 
     const updatedRecord = await SecretModel.update(secid, { secret: {} });
@@ -440,6 +617,15 @@ const DEFAULT_K8S_TOKEN_PATH =
 /** Default Vault Kubernetes auth mount point */
 const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
 
+/** Default Vault AWS auth mount point */
+const DEFAULT_AWS_MOUNT_POINT = "aws";
+
+/** Default AWS region for STS requests */
+const DEFAULT_AWS_REGION = "us-east-1";
+
+/** Default AWS STS endpoint - uses global endpoint to match Vault's default sts_endpoint */
+const DEFAULT_AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
+
 /**
  * Get Vault configuration from environment variables
  *
@@ -447,7 +633,7 @@ const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
  * - ARCHESTRA_HASHICORP_VAULT_ADDR: Vault server address
  *
  * Optional:
- * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN" (default) or "K8S"
+ * - ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD: "TOKEN" (default), "K8S", or "AWS"
  *
  * For token auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set):
  * - ARCHESTRA_HASHICORP_VAULT_TOKEN: Vault token (required)
@@ -456,6 +642,13 @@ const DEFAULT_K8S_MOUNT_POINT = "kubernetes";
  * - ARCHESTRA_HASHICORP_VAULT_K8S_ROLE: Vault role bound to K8s service account (required)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH: Path to SA token (optional, defaults to /var/run/secrets/kubernetes.io/serviceaccount/token)
  * - ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT: Vault K8s auth mount point (optional, defaults to "kubernetes")
+ *
+ * For AWS IAM auth (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS):
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_ROLE: Vault role bound to AWS IAM principal (required)
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT: Vault AWS auth mount point (optional, defaults to "aws")
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_REGION: AWS region for STS signing (optional, defaults to "us-east-1")
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT: STS endpoint URL (optional, defaults to "https://sts.amazonaws.com" to match Vault's default)
+ * - ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID: Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security)
  *
  * @returns VaultConfig if ARCHESTRA_HASHICORP_VAULT_ADDR is set and configuration is valid, null if VAULT_ADDR is not set
  * @throws SecretsManagerConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
@@ -510,8 +703,37 @@ export function getVaultConfigFromEnv(): VaultConfig {
     };
   }
 
+  if (authMethod === "AWS") {
+    const address = process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    if (!address) {
+      errors.push("ARCHESTRA_HASHICORP_VAULT_ADDR is not set.");
+    }
+    const awsRole = process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
+    if (!awsRole) {
+      errors.push("ARCHESTRA_HASHICORP_VAULT_AWS_ROLE is not set.");
+    }
+    if (errors.length > 0) {
+      throw new SecretsManagerConfigurationError(errors.join(" "));
+    }
+    return {
+      address: address as string,
+      authMethod: "aws",
+      awsRole: awsRole as string,
+      awsMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        DEFAULT_AWS_MOUNT_POINT,
+      awsRegion:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+      awsStsEndpoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        DEFAULT_AWS_STS_ENDPOINT,
+      awsIamServerIdHeader:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID,
+    };
+  }
+
   throw new SecretsManagerConfigurationError(
-    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "TOKEN" or "K8S".`,
+    `Invalid ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD="${authMethod}". Expected "TOKEN", "K8S", or "AWS".`,
   );
 }
 

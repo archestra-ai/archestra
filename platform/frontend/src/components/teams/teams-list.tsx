@@ -1,7 +1,7 @@
 "use client";
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Settings, Trash2, Users } from "lucide-react";
+import { Link2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import config from "@/lib/config";
+import { TeamExternalGroupsDialog } from "./team-external-groups-dialog";
 import { TeamMembersDialog } from "./team-members-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"][number];
@@ -33,6 +40,8 @@ export function TeamsList() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [externalGroupsDialogOpen, setExternalGroupsDialogOpen] =
+    useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
@@ -172,6 +181,25 @@ export function TeamsList() {
                       <Settings className="mr-2 h-4 w-4" />
                       Manage Members
                     </PermissionButton>
+                    {config.enterpriseLicenseActivated && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <PermissionButton
+                            permissions={{ team: ["update"] }}
+                            variant="outline"
+                            size="sm"
+                            data-testid={`${E2eTestId.ConfigureSsoTeamSyncButton}-${team.id}`}
+                            onClick={() => {
+                              setSelectedTeam(team);
+                              setExternalGroupsDialogOpen(true);
+                            }}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </PermissionButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Configure SSO Team Sync</TooltipContent>
+                      </Tooltip>
+                    )}
                     <PermissionButton
                       permissions={{ team: ["delete"] }}
                       variant="outline"
@@ -264,11 +292,18 @@ export function TeamsList() {
       </Dialog>
 
       {selectedTeam && (
-        <TeamMembersDialog
-          open={membersDialogOpen}
-          onOpenChange={setMembersDialogOpen}
-          team={selectedTeam}
-        />
+        <>
+          <TeamMembersDialog
+            open={membersDialogOpen}
+            onOpenChange={setMembersDialogOpen}
+            team={selectedTeam}
+          />
+          <TeamExternalGroupsDialog
+            open={externalGroupsDialogOpen}
+            onOpenChange={setExternalGroupsDialogOpen}
+            team={selectedTeam}
+          />
+        </>
       )}
     </>
   );

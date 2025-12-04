@@ -14764,6 +14764,7 @@ export type GetTeamsResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     }>;
@@ -14858,6 +14859,7 @@ export type CreateTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -15030,6 +15032,7 @@ export type GetTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -15127,6 +15130,7 @@ export type UpdateTeamResponses = {
             teamId: string;
             userId: string;
             role: string;
+            syncedFromSso: boolean;
             createdAt: string;
         }>;
     };
@@ -15211,6 +15215,7 @@ export type GetTeamMembersResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     }>;
 };
@@ -15297,6 +15302,7 @@ export type AddTeamMemberResponses = {
         teamId: string;
         userId: string;
         role: string;
+        syncedFromSso: boolean;
         createdAt: string;
     };
 };
@@ -15382,6 +15388,252 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTeamExternalGroupsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type GetTeamExternalGroupsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTeamExternalGroupsError = GetTeamExternalGroupsErrors[keyof GetTeamExternalGroupsErrors];
+
+export type GetTeamExternalGroupsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetTeamExternalGroupsResponse = GetTeamExternalGroupsResponses[keyof GetTeamExternalGroupsResponses];
+
+export type AddTeamExternalGroupData = {
+    body: {
+        groupIdentifier: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups';
+};
+
+export type AddTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type AddTeamExternalGroupError = AddTeamExternalGroupErrors[keyof AddTeamExternalGroupErrors];
+
+export type AddTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        groupIdentifier: string;
+        createdAt: string;
+    };
+};
+
+export type AddTeamExternalGroupResponse = AddTeamExternalGroupResponses[keyof AddTeamExternalGroupResponses];
+
+export type RemoveTeamExternalGroupData = {
+    body?: never;
+    path: {
+        id: string;
+        groupId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/external-groups/{groupId}';
+};
+
+export type RemoveTeamExternalGroupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RemoveTeamExternalGroupError = RemoveTeamExternalGroupErrors[keyof RemoveTeamExternalGroupErrors];
+
+export type RemoveTeamExternalGroupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
 
 export type GetTokenPricesData = {
     body?: never;

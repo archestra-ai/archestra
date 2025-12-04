@@ -212,6 +212,21 @@ describe("createSecretManager", () => {
 
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
+
+  // Note: AWS IAM auth integration test is skipped because it requires actual AWS credentials
+  // The AWS config parsing is tested in getVaultConfigFromEnv tests
+
+  test("should return DbSecretsManager when AUTH_METHOD=AWS but AWS_ROLE is missing", () => {
+    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
+    setEnterpriseLicenseActivated(true);
+
+    const manager = createSecretManager();
+
+    expect(manager).toBeInstanceOf(DbSecretsManager);
+  });
 });
 
 describe("getVaultConfigFromEnv", () => {
@@ -343,7 +358,81 @@ describe("getVaultConfigFromEnv", () => {
     expect(() => getVaultConfigFromEnv()).toThrow(
       SecretsManagerConfigurationError,
     );
-    expect(() => getVaultConfigFromEnv()).toThrow('Expected "TOKEN" or "K8S"');
+    expect(() => getVaultConfigFromEnv()).toThrow(
+      'Expected "TOKEN", "K8S", or "AWS"',
+    );
+  });
+
+  test("should return AWS auth config with defaults when AUTH_METHOD=AWS and role is set", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE = "archestra-role";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT;
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID;
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "aws",
+      awsRole: "archestra-role",
+      awsMountPoint: "aws",
+      awsRegion: "us-east-1",
+      awsStsEndpoint: "https://sts.amazonaws.com",
+      awsIamServerIdHeader: undefined,
+    });
+  });
+
+  test("should throw when AUTH_METHOD=AWS but role is missing", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
+
+    expect(() => getVaultConfigFromEnv()).toThrow(
+      SecretsManagerConfigurationError,
+    );
+    expect(() => getVaultConfigFromEnv()).toThrow(
+      "ARCHESTRA_HASHICORP_VAULT_AWS_ROLE is not set",
+    );
+  });
+
+  test("should throw with all errors when multiple env vars are missing (AWS auth)", () => {
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
+    delete process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE;
+
+    expect(() => getVaultConfigFromEnv()).toThrow(
+      SecretsManagerConfigurationError,
+    );
+    expect(() => getVaultConfigFromEnv()).toThrow(
+      "ARCHESTRA_HASHICORP_VAULT_ADDR is not set. ARCHESTRA_HASHICORP_VAULT_AWS_ROLE is not set.",
+    );
+  });
+
+  test("should include optional AWS config when AUTH_METHOD=AWS", () => {
+    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "AWS";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_ROLE = "archestra-role";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT = "custom-aws";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION = "eu-west-1";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT =
+      "https://sts.eu-west-1.amazonaws.com";
+    process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID =
+      "vault.example.com";
+
+    const config = getVaultConfigFromEnv();
+
+    expect(config).toEqual({
+      address: "http://localhost:8200",
+      authMethod: "aws",
+      awsRole: "archestra-role",
+      awsMountPoint: "custom-aws",
+      awsRegion: "eu-west-1",
+      awsStsEndpoint: "https://sts.eu-west-1.amazonaws.com",
+      awsIamServerIdHeader: "vault.example.com",
+    });
   });
 
   test("should include optional K8s config when AUTH_METHOD=K8S", () => {
@@ -388,7 +477,9 @@ describe("VaultSecretManager", () => {
 
       await expect(
         vaultManager.createSecret(secretValue, "testsecret"),
-      ).rejects.toThrow("Vault unavailable");
+      ).rejects.toThrow(
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      );
 
       // Verify that no secret remains in the database
       expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
@@ -552,7 +643,7 @@ describe("VaultSecretManager", () => {
       );
 
       await expect(vaultManager.deleteSecret(created.id)).rejects.toThrow(
-        "Vault unavailable",
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
       );
 
       // Verify the database record still exists
@@ -613,7 +704,7 @@ describe("VaultSecretManager", () => {
       );
 
       await expect(vaultManager.getSecret(created.id)).rejects.toThrow(
-        "Vault unavailable",
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
       );
 
       // Cleanup
@@ -678,7 +769,9 @@ describe("VaultSecretManager", () => {
 
       await expect(
         vaultManager.updateSecret(created.id, newSecretValue),
-      ).rejects.toThrow("Vault unavailable");
+      ).rejects.toThrow(
+        "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      );
 
       // Verify the database record was not updated (updatedAt should be same)
       const dbRecord = await SecretModel.findById(created.id);

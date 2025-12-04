@@ -365,6 +365,13 @@ The following environment variables can be used to configure Archestra Platform:
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
   - Note: Configure at least one SSO provider before enabling this option. See [Single Sign-On](/platform-single-sign-on) for SSO configuration.
 
+- **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
+
+  - Default: `false`
+  - Set to `true` to hide invitation-related UI and block invitation API endpoints
+  - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
+  - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
+
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
 
   - Default: `default`

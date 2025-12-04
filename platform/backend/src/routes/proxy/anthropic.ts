@@ -10,6 +10,7 @@ import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableFetch,
   reportBlockedTools,
+  reportLLMCost,
   reportLLMTokens,
 } from "@/llm-metrics";
 import {
@@ -585,6 +586,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "anthropic",
               resolvedAgent,
               accumulatedToolCalls.length,
+              model,
             );
           } else {
             // Tool calls are allowed - stream them now
@@ -732,7 +734,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
 
             if (messageStartEvent.message.usage) {
-              reportLLMTokens("anthropic", resolvedAgent, tokenUsage);
+              reportLLMTokens("anthropic", resolvedAgent, tokenUsage, model);
             }
 
             const baselineCost = await utils.costOptimization.calculateCost(
@@ -757,6 +759,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 outputTokens: tokenUsage.output,
               },
               "anthropic proxy routes: handle messages: costs",
+            );
+            reportLLMCost(
+              "anthropic",
+              resolvedAgent,
+              model,
+              costAfterModelOptimization,
             );
 
             // Record the interaction
@@ -835,7 +843,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ];
 
-            reportBlockedTools("anthropic", resolvedAgent, toolCalls.length);
+            reportBlockedTools(
+              "anthropic",
+              resolvedAgent,
+              toolCalls.length,
+              model,
+            );
 
             // Extract token usage and store the interaction with refusal
             const tokenUsage = response.usage
@@ -854,6 +867,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 tokenUsage.input,
                 tokenUsage.output,
               );
+            reportLLMCost(
+              "anthropic",
+              resolvedAgent,
+              model,
+              costAfterModelOptimization,
+            );
 
             await InteractionModel.create({
               agentId: resolvedAgentId,
@@ -900,6 +919,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenUsage.input,
             tokenUsage.output,
           );
+        reportLLMCost(
+          "anthropic",
+          resolvedAgent,
+          model,
+          costAfterModelOptimization,
+        );
 
         await InteractionModel.create({
           agentId: resolvedAgentId,

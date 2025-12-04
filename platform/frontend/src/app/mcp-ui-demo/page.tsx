@@ -43,14 +43,23 @@ const DEMO_MCP_UI_RESOURCES = {
       <div class="detail"><div class="label">Wind</div><div>12 mph</div></div>
       <div class="detail"><div class="label">UV Index</div><div>5</div></div>
     </div>
-    <button onclick="window.parent.postMessage({type:'tool',payload:{toolName:'refreshWeather',params:{city:'San Francisco'}}}, '*')">Refresh Weather</button>
+    <button id="refreshBtn">Refresh Weather</button>
   </div>
   <script>
+    let sessionNonce = null;
+    function sendMessage(msg) {
+      if (sessionNonce) msg._nonce = sessionNonce;
+      window.parent.postMessage(msg, '*');
+    }
     window.parent.postMessage({type:'ui-lifecycle-iframe-ready'}, '*');
     window.addEventListener('message', (e) => {
       if (e.data.type === 'ui-lifecycle-iframe-authenticated') {
+        sessionNonce = e.data.payload?.nonce;
         console.log('MCP UI authenticated with nonce');
       }
+    });
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      sendMessage({type:'tool',payload:{toolName:'refreshWeather',params:{city:'San Francisco'}}});
     });
   </script>
 </body>
@@ -71,7 +80,7 @@ const DEMO_MCP_UI_RESOURCES = {
     .task { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 12px; }
     .checkbox { width: 20px; height: 20px; border: 2px solid #3b82f6; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .checkbox.done { background: #3b82f6; }
-    .checkbox.done::after { content: '✓'; color: white; font-size: 14px; }
+    .checkbox.done::after { content: '\\2713'; color: white; font-size: 14px; }
     .task-text { flex: 1; }
     .task.done .task-text { text-decoration: line-through; opacity: 0.5; }
     .priority { font-size: 12px; padding: 4px 8px; border-radius: 4px; }
@@ -85,7 +94,7 @@ const DEMO_MCP_UI_RESOURCES = {
 <body>
   <div class="header">
     <h2>Today's Tasks</h2>
-    <button class="add-btn" onclick="addTask()">+ Add Task</button>
+    <button class="add-btn" id="addTaskBtn">+ Add Task</button>
   </div>
   <div class="task-list" id="tasks">
     <div class="task"><div class="checkbox done"></div><span class="task-text">Review MCP UI documentation</span><span class="priority high">High</span></div>
@@ -94,16 +103,27 @@ const DEMO_MCP_UI_RESOURCES = {
     <div class="task"><div class="checkbox done"></div><span class="task-text">Update documentation</span><span class="priority low">Low</span></div>
   </div>
   <script>
-    window.parent.postMessage({type:'ui-lifecycle-iframe-ready'}, '*');
-    function addTask() {
-      window.parent.postMessage({type:'prompt',payload:{promptName:'createTask',params:{}}}, '*');
+    let sessionNonce = null;
+    function sendMessage(msg) {
+      if (sessionNonce) msg._nonce = sessionNonce;
+      window.parent.postMessage(msg, '*');
     }
+    window.parent.postMessage({type:'ui-lifecycle-iframe-ready'}, '*');
+    window.addEventListener('message', (e) => {
+      if (e.data.type === 'ui-lifecycle-iframe-authenticated') {
+        sessionNonce = e.data.payload?.nonce;
+        console.log('MCP UI authenticated with nonce');
+      }
+    });
+    document.getElementById('addTaskBtn').addEventListener('click', () => {
+      sendMessage({type:'prompt',payload:{promptName:'createTask',params:{}}});
+    });
     document.querySelectorAll('.checkbox').forEach(cb => {
       cb.addEventListener('click', function() {
         const task = this.parentElement;
         this.classList.toggle('done');
         task.classList.toggle('done');
-        window.parent.postMessage({type:'tool',payload:{toolName:'toggleTask',params:{}}}, '*');
+        sendMessage({type:'tool',payload:{toolName:'toggleTask',params:{}}});
       });
     });
   </script>
@@ -142,11 +162,33 @@ const DEMO_MCP_UI_RESOURCES = {
     <div class="bar-container"><div class="value">88</div><div class="bar" style="height:176px"></div><div class="label">Fri</div></div>
   </div>
   <div class="actions">
-    <button onclick="window.parent.postMessage({type:'tool',payload:{toolName:'exportData',params:{format:'csv'}}}, '*')">Export CSV</button>
-    <button onclick="window.parent.postMessage({type:'tool',payload:{toolName:'exportData',params:{format:'pdf'}}}, '*')">Export PDF</button>
-    <button class="primary" onclick="window.parent.postMessage({type:'intent',payload:{intent:'viewDetails',params:{week:'current'}}}, '*')">View Details</button>
+    <button id="exportCsvBtn">Export CSV</button>
+    <button id="exportPdfBtn">Export PDF</button>
+    <button class="primary" id="viewDetailsBtn">View Details</button>
   </div>
-  <script>window.parent.postMessage({type:'ui-lifecycle-iframe-ready'}, '*');</script>
+  <script>
+    let sessionNonce = null;
+    function sendMessage(msg) {
+      if (sessionNonce) msg._nonce = sessionNonce;
+      window.parent.postMessage(msg, '*');
+    }
+    window.parent.postMessage({type:'ui-lifecycle-iframe-ready'}, '*');
+    window.addEventListener('message', (e) => {
+      if (e.data.type === 'ui-lifecycle-iframe-authenticated') {
+        sessionNonce = e.data.payload?.nonce;
+        console.log('MCP UI authenticated with nonce');
+      }
+    });
+    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+      sendMessage({type:'tool',payload:{toolName:'exportData',params:{format:'csv'}}});
+    });
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      sendMessage({type:'tool',payload:{toolName:'exportData',params:{format:'pdf'}}});
+    });
+    document.getElementById('viewDetailsBtn').addEventListener('click', () => {
+      sendMessage({type:'intent',payload:{intent:'viewDetails',params:{week:'current'}}});
+    });
+  </script>
 </body>
 </html>`,
     _meta: { "mcpui.dev/ui-preferred-frame-size": { width: 450, height: 350 } },

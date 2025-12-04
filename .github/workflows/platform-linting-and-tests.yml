@@ -399,6 +399,8 @@ jobs:
     name: MCP Server Base Image Build
     needs: paths-filter
     if: ${{ needs.paths-filter.outputs.mcp-server-base-image == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
     with:
       push_to_gcr: false

@@ -32,8 +32,18 @@ type McpToolWithServerMetadata = {
   mcpServerId: string | null;
   credentialSourceMcpServerId: string | null;
   executionSourceMcpServerId: string | null;
+  useDynamicTeamCredential: boolean;
   catalogId: string | null;
   catalogName: string | null;
+};
+
+/**
+ * Token authentication context for dynamic credential resolution
+ */
+export type TokenAuthContext = {
+  tokenId: string;
+  tokenTeamIds: string[];
+  isOrganizationToken: boolean;
 };
 
 class McpClient {
@@ -46,6 +56,7 @@ class McpClient {
   async executeToolCall(
     toolCall: CommonToolCall,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<CommonToolResult> {
     // Validate and get tool metadata
     const validationResult = await this.validateAndGetTool(toolCall, agentId);
@@ -59,6 +70,7 @@ class McpClient {
       tool,
       toolCall,
       agentId,
+      tokenAuth,
     );
     if ("error" in contextResult) {
       return contextResult.error;
@@ -237,6 +249,7 @@ class McpClient {
     tool: McpToolWithServerMetadata,
     toolCall: CommonToolCall,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<
     | { targetMcpServerId: string; secrets: Record<string, unknown> }
     | { error: CommonToolResult }
@@ -256,9 +269,82 @@ class McpClient {
       };
     }
 
-    // Load secrets
+    // Load secrets - use dynamic resolution if enabled
     let secrets: Record<string, unknown> = {};
-    if (tool.credentialSourceMcpServerId) {
+
+    if (tool.useDynamicTeamCredential) {
+      // Dynamic credential resolution based on token's team
+      if (!tokenAuth) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      if (!tool.catalogId) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Dynamic team credential is enabled but tool has no catalogId",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      // For organization tokens, use any available credential for the catalog
+      // For team tokens, find a matching team credential
+      let credentialServer: Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogIdWithMatchingTeams>
+      > = null;
+
+      if (tokenAuth.isOrganizationToken) {
+        // Organization token can use any available credential
+        const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
+        credentialServer = allServers.find((s) => s.secretId !== null) || null;
+      } else {
+        // Team token - find server with matching team
+        credentialServer =
+          await McpServerModel.findByCatalogIdWithMatchingTeams(
+            tool.catalogId,
+            tokenAuth.tokenTeamIds,
+          );
+      }
+
+      if (!credentialServer?.secretId) {
+        const teamInfo = tokenAuth.isOrganizationToken
+          ? "organization-wide"
+          : `teams: ${tokenAuth.tokenTeamIds.join(", ")}`;
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            `No credential found for catalog ${tool.catalogName || tool.catalogId} with ${teamInfo}. Ensure an MCP server installation with credentials exists for your team.`,
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      const secret = await secretManager.getSecret(credentialServer.secretId);
+      if (secret?.secret) {
+        secrets = secret.secret;
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            credentialServerId: credentialServer.id,
+            tokenId: tokenAuth.tokenId,
+            isOrganizationToken: tokenAuth.isOrganizationToken,
+          },
+          "Dynamic credential resolution: found matching credential",
+        );
+      }
+    } else if (tool.credentialSourceMcpServerId) {
+      // Static credential source
       const credentialSourceServer = await McpServerModel.findById(
         tool.credentialSourceMcpServerId,
       );

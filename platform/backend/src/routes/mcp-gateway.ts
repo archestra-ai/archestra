@@ -18,11 +18,27 @@ import {
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, McpToolCallModel, ToolModel } from "@/models";
+import {
+  AgentModel,
+  isProfileToken,
+  McpToolCallModel,
+  ProfileTokenModel,
+  ToolModel,
+} from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
+
+/**
+ * Token authentication result
+ */
+interface TokenAuthResult {
+  profileId: string;
+  tokenId: string;
+  tokenTeamIds: string[];
+  isOrganizationToken: boolean;
+}
 
 /**
  * Session management types
@@ -36,6 +52,12 @@ interface SessionData {
     id: string;
     name: string;
   }; // Cache agent data
+  // Token auth info (only present for archestra_ token auth)
+  tokenAuth?: {
+    tokenId: string;
+    tokenTeamIds: string[];
+    isOrganizationToken: boolean;
+  };
 }
 
 /**
@@ -76,6 +98,7 @@ async function createAgentServer(
   agentId: string,
   logger: { info: (obj: unknown, msg: string) => void },
   cachedAgent?: { name: string; id: string },
+  tokenAuth?: TokenAuthContext,
 ): Promise<{ server: Server; agent: { name: string; id: string } }> {
   const server = new Server(
     {
@@ -193,8 +216,12 @@ async function createAgentServer(
           arguments: args || {},
         };
 
-        // Execute the tool call via McpClient
-        const result = await mcpClient.executeToolCall(toolCall, agentId);
+        // Execute the tool call via McpClient (pass tokenAuth for dynamic credential resolution)
+        const result = await mcpClient.executeToolCall(
+          toolCall,
+          agentId,
+          tokenAuth,
+        );
 
         if (result.isError) {
           logger.info(
@@ -281,27 +308,77 @@ function createTransport(
 }
 
 /**
- * Extract and validate agent ID from Authorization header bearer token
+ * Authentication result type
  */
-function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
+type AuthResult =
+  | { type: "legacy"; agentId: string }
+  | { type: "token"; token: string }
+  | { type: "invalid" };
+
+/**
+ * Extract authentication info from Authorization header
+ * Supports both legacy UUID agent IDs and new archestra_ prefixed tokens
+ */
+function extractAuthFromHeader(authHeader: string | undefined): AuthResult {
   if (!authHeader) {
-    return null;
+    return { type: "invalid" };
   }
 
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    return null;
+    return { type: "invalid" };
   }
 
   const token = match[1];
 
-  // Validate that the token is a valid UUID (agent ID)
+  // Check if it's a new archestra_ prefixed token
+  if (isProfileToken(token)) {
+    return { type: "token", token };
+  }
+
+  // Try to validate as legacy UUID (agent ID)
   try {
     const parsed = UuidIdSchema.parse(token);
-    return parsed;
+    return { type: "legacy", agentId: parsed };
   } catch {
+    return { type: "invalid" };
+  }
+}
+
+/**
+ * Extract and validate agent ID from Authorization header bearer token
+ * @deprecated Use extractAuthFromHeader for new code
+ */
+function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
+  const result = extractAuthFromHeader(authHeader);
+  if (result.type === "legacy") {
+    return result.agentId;
+  }
+  return null;
+}
+
+/**
+ * Validate an archestra_ prefixed token for a specific profile
+ * Returns token auth info if valid, null otherwise
+ */
+async function validateProfileToken(
+  profileId: string,
+  tokenValue: string,
+): Promise<TokenAuthResult | null> {
+  const token = await ProfileTokenModel.validateToken(profileId, tokenValue);
+  if (!token) {
     return null;
   }
+
+  // Get team IDs for this token
+  const tokenTeamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
+
+  return {
+    profileId,
+    tokenId: token.id,
+    tokenTeamIds,
+    isOrganizationToken: token.isOrganizationToken,
+  };
 }
 
 /**
@@ -502,6 +579,8 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const { server: newServer, agent } = await createAgentServer(
             agentId,
             fastify.log,
+            undefined, // No cached agent
+            undefined, // No token auth for legacy endpoint
           );
           server = newServer;
           transport = createTransport(agentId, effectiveSessionId, fastify.log);
@@ -666,6 +745,387 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // Only send error response if headers not already sent
+        if (!reply.sent) {
+          reply.status(500);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32603,
+              message: "Internal server error",
+              data: error instanceof Error ? error.message : "Unknown error",
+            },
+            id: null,
+          };
+        }
+      }
+    },
+  );
+
+  // =============================================================================
+  // NEW: Profile-specific MCP Gateway endpoints with token authentication
+  // =============================================================================
+
+  // GET endpoint for server discovery with profile ID in URL
+  fastify.get(
+    `${endpoint}/:profileId`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        params: z.object({
+          profileId: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({
+            name: z.string(),
+            version: z.string(),
+            agentId: z.string(),
+            transport: z.string(),
+            capabilities: z.object({
+              tools: z.boolean(),
+            }),
+            tokenAuth: z
+              .object({
+                tokenId: z.string(),
+                isOrganizationToken: z.boolean(),
+                teamCount: z.number(),
+              })
+              .optional(),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params;
+      const authResult = extractAuthFromHeader(
+        request.headers.authorization as string | undefined,
+      );
+
+      // Handle different auth types
+      let tokenAuth: TokenAuthResult | null = null;
+
+      if (authResult.type === "invalid") {
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+        };
+      }
+
+      if (authResult.type === "token") {
+        // Validate archestra_ token against this profile
+        tokenAuth = await validateProfileToken(profileId, authResult.token);
+        if (!tokenAuth) {
+          reply.status(401);
+          return {
+            error: "Unauthorized",
+            message: "Invalid token for this profile",
+          };
+        }
+      } else if (authResult.type === "legacy") {
+        // Legacy UUID auth - verify it matches the profile ID
+        if (authResult.agentId !== profileId) {
+          reply.status(401);
+          return {
+            error: "Unauthorized",
+            message: "Agent ID does not match profile ID in URL",
+          };
+        }
+      }
+
+      reply.type("application/json");
+      return {
+        name: `archestra-agent-${profileId}`,
+        version: config.api.version,
+        agentId: profileId,
+        transport: "http",
+        capabilities: {
+          tools: true,
+        },
+        ...(tokenAuth && {
+          tokenAuth: {
+            tokenId: tokenAuth.tokenId,
+            isOrganizationToken: tokenAuth.isOrganizationToken,
+            teamCount: tokenAuth.tokenTeamIds.length,
+          },
+        }),
+      };
+    },
+  );
+
+  // POST endpoint for JSON-RPC requests with profile ID in URL
+  fastify.post(
+    `${endpoint}/:profileId`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        params: z.object({
+          profileId: UuidIdSchema,
+        }),
+        // Accept any JSON body - will be validated by MCP SDK
+        body: z.record(z.string(), z.unknown()),
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params;
+      const authResult = extractAuthFromHeader(
+        request.headers.authorization as string | undefined,
+      );
+
+      // Handle different auth types
+      let tokenAuth: TokenAuthResult | null = null;
+      let agentId = profileId;
+
+      if (authResult.type === "invalid") {
+        reply.status(401);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message:
+              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <archestra_token> or Bearer <agent-id>",
+          },
+          id: null,
+        };
+      }
+
+      if (authResult.type === "token") {
+        // Validate archestra_ token against this profile
+        tokenAuth = await validateProfileToken(profileId, authResult.token);
+        if (!tokenAuth) {
+          reply.status(401);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Unauthorized: Invalid token for this profile",
+            },
+            id: null,
+          };
+        }
+        agentId = profileId;
+      } else if (authResult.type === "legacy") {
+        // Legacy UUID auth - verify it matches the profile ID
+        if (authResult.agentId !== profileId) {
+          reply.status(401);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message:
+                "Unauthorized: Agent ID does not match profile ID in URL",
+            },
+            id: null,
+          };
+        }
+        agentId = authResult.agentId;
+      }
+
+      const sessionId = request.headers["mcp-session-id"] as string | undefined;
+      const isInitialize =
+        typeof request.body?.method === "string" &&
+        request.body.method === "initialize";
+
+      fastify.log.info(
+        {
+          agentId,
+          profileId,
+          sessionId,
+          method: request.body?.method,
+          isInitialize,
+          hasTokenAuth: !!tokenAuth,
+        },
+        "MCP gateway POST request received (profile route)",
+      );
+
+      try {
+        let server: Server | undefined;
+        let transport: StreamableHTTPServerTransport | undefined;
+
+        // Check if we have an existing session
+        if (sessionId && activeSessions.has(sessionId)) {
+          const sessionData = activeSessions.get(sessionId);
+          if (!sessionData) {
+            throw new Error("Session data not found");
+          }
+
+          fastify.log.info(
+            { agentId, sessionId },
+            "Reusing existing session (profile route)",
+          );
+
+          transport = sessionData.transport;
+          server = sessionData.server;
+          sessionData.lastAccess = Date.now();
+
+          if (isInitialize) {
+            fastify.log.info(
+              { agentId, sessionId },
+              "Re-initialize on existing session - will reuse existing server",
+            );
+          }
+        } else if (isInitialize) {
+          const effectiveSessionId =
+            sessionId || `session-${Date.now()}-${randomUUID()}`;
+
+          fastify.log.info(
+            {
+              agentId,
+              sessionId: effectiveSessionId,
+              hasTokenAuth: !!tokenAuth,
+            },
+            "Initialize request - creating NEW session (profile route)",
+          );
+
+          // Convert TokenAuthResult to TokenAuthContext for the server
+          const tokenAuthContext: TokenAuthContext | undefined = tokenAuth
+            ? {
+                tokenId: tokenAuth.tokenId,
+                tokenTeamIds: tokenAuth.tokenTeamIds,
+                isOrganizationToken: tokenAuth.isOrganizationToken,
+              }
+            : undefined;
+
+          const { server: newServer, agent } = await createAgentServer(
+            agentId,
+            fastify.log,
+            undefined, // No cached agent
+            tokenAuthContext, // Pass token auth for dynamic credential resolution
+          );
+          server = newServer;
+          transport = createTransport(agentId, effectiveSessionId, fastify.log);
+
+          const thisTransport = transport;
+          transport.onclose = () => {
+            fastify.log.info(
+              { agentId, sessionId: effectiveSessionId },
+              "Transport closed - checking if session should be cleaned up",
+            );
+            const currentSession = activeSessions.get(effectiveSessionId);
+            if (currentSession && currentSession.transport === thisTransport) {
+              activeSessions.delete(effectiveSessionId);
+              fastify.log.info(
+                {
+                  agentId,
+                  sessionId: effectiveSessionId,
+                  remainingSessions: activeSessions.size,
+                },
+                "Session cleaned up after transport close",
+              );
+            }
+          };
+
+          fastify.log.info({ agentId }, "Connecting server to transport");
+          await server.connect(transport);
+          fastify.log.info({ agentId }, "Server connected to transport");
+
+          // Store session with token auth info
+          activeSessions.set(effectiveSessionId, {
+            server,
+            transport,
+            lastAccess: Date.now(),
+            agentId,
+            agent,
+            // Include token auth info if using archestra_ token
+            ...(tokenAuth && {
+              tokenAuth: {
+                tokenId: tokenAuth.tokenId,
+                tokenTeamIds: tokenAuth.tokenTeamIds,
+                isOrganizationToken: tokenAuth.isOrganizationToken,
+              },
+            }),
+          });
+
+          fastify.log.info(
+            {
+              agentId,
+              sessionId: effectiveSessionId,
+              hasTokenAuth: !!tokenAuth,
+            },
+            "Session stored before handleRequest",
+          );
+        } else if (!server || !transport) {
+          fastify.log.error(
+            { agentId, sessionId, method: request.body?.method },
+            "Request received without valid session (profile route)",
+          );
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Bad Request: Invalid or expired session",
+            },
+            id: null,
+          };
+        }
+
+        fastify.log.info(
+          { agentId, sessionId },
+          "Calling transport.handleRequest (profile route)",
+        );
+
+        reply.hijack();
+
+        await transport.handleRequest(
+          request.raw as IncomingMessage,
+          reply.raw as ServerResponse,
+          request.body,
+        );
+
+        fastify.log.info(
+          { agentId, sessionId },
+          "Transport.handleRequest completed (profile route)",
+        );
+
+        if (isInitialize) {
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: "mcp-gateway",
+              method: "initialize",
+              toolCall: null,
+              toolResult: {
+                capabilities: {
+                  tools: { listChanged: false },
+                },
+                serverInfo: {
+                  name: `archestra-agent-${agentId}`,
+                  version: config.api.version,
+                },
+                // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
+              } as any,
+            });
+            fastify.log.info(
+              { agentId, sessionId },
+              "✅ Saved initialize request (profile route)",
+            );
+          } catch (dbError) {
+            fastify.log.error(
+              { err: dbError },
+              "Failed to persist initialize request:",
+            );
+          }
+        }
+
+        fastify.log.info(
+          { agentId, sessionId },
+          "Request handled successfully (profile route)",
+        );
+      } catch (error) {
+        fastify.log.error(
+          {
+            error,
+            errorMessage: error instanceof Error ? error.message : "Unknown",
+            agentId,
+          },
+          "Error handling MCP request (profile route)",
+        );
+
         if (!reply.sent) {
           reply.status(500);
           return {

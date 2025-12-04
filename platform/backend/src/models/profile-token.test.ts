@@ -102,6 +102,7 @@ describe("ProfileTokenModel", () => {
     test("should find all tokens for a profile", async ({ makeAgent }) => {
       const agent = await makeAgent();
 
+      // Note: makeAgent now auto-creates a default token, so we expect 3 total
       await ProfileTokenModel.create({
         profileId: agent.id,
         name: "Token 1",
@@ -115,15 +116,19 @@ describe("ProfileTokenModel", () => {
 
       const tokens = await ProfileTokenModel.findByProfileId(agent.id);
 
-      expect(tokens).toHaveLength(2);
+      // 1 default token + 2 created = 3 total
+      expect(tokens).toHaveLength(3);
     });
 
-    test("should return empty array for profile with no tokens", async ({
+    test("should return auto-created default token for new profile", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent();
       const tokens = await ProfileTokenModel.findByProfileId(agent.id);
-      expect(tokens).toHaveLength(0);
+      // makeAgent auto-creates a default token
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].name).toBe("Default");
+      expect(tokens[0].isOrganizationToken).toBe(true);
     });
   });
 
@@ -383,10 +388,12 @@ describe("ProfileTokenModel", () => {
     }) => {
       const agent = await makeAgent();
 
-      const { token } = await ProfileTokenModel.createDefaultToken(agent.id);
+      // makeAgent already creates a default token, so verify it exists
+      const tokens = await ProfileTokenModel.findByProfileId(agent.id);
+      const defaultToken = tokens.find((t) => t.name === "Default");
 
-      expect(token.name).toBe("Default");
-      expect(token.isOrganizationToken).toBe(true);
+      expect(defaultToken).toBeDefined();
+      expect(defaultToken?.isOrganizationToken).toBe(true);
     });
   });
 
@@ -421,22 +428,23 @@ describe("ProfileTokenModel", () => {
       makeAgent,
     }) => {
       const agent = await makeAgent();
-      await ProfileTokenModel.create({
-        profileId: agent.id,
-        name: "Token",
-        isOrganizationToken: false,
-      });
-
+      // makeAgent auto-creates a default token, so profile already has tokens
       const hasTokens = await ProfileTokenModel.hasTokens(agent.id);
       expect(hasTokens).toBe(true);
     });
 
-    test("should return false when profile has no tokens", async ({
+    test("should return true for auto-created default token", async ({
       makeAgent,
     }) => {
       const agent = await makeAgent();
+      // Verify the auto-created token exists
       const hasTokens = await ProfileTokenModel.hasTokens(agent.id);
-      expect(hasTokens).toBe(false);
+      expect(hasTokens).toBe(true);
+
+      // Verify it's the default token
+      const tokens = await ProfileTokenModel.findByProfileId(agent.id);
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].name).toBe("Default");
     });
   });
 

@@ -26,6 +26,8 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+import ProfileTokenModel from "./profile-token";
+import TeamModel from "./team";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -51,6 +53,9 @@ class AgentModel {
 
     // Assign Archestra built-in tools to the agent
     await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
+
+    // Create default token for MCP Gateway authentication
+    await ProfileTokenModel.createDefaultToken(createdAgent.id);
 
     return {
       ...createdAgent,
@@ -487,7 +492,21 @@ class AgentModel {
 
     // Sync team assignments if teams is provided
     if (teams !== undefined) {
+      // Get current teams before sync to detect newly added teams
+      const previousTeams = await AgentTeamModel.getTeamsForAgent(id);
+      const previousTeamSet = new Set(previousTeams);
+
       await AgentTeamModel.syncAgentTeams(id, teams);
+
+      // Create tokens for newly assigned teams
+      const newTeams = teams.filter((teamId) => !previousTeamSet.has(teamId));
+      for (const teamId of newTeams) {
+        // Get team name for the token
+        const team = await TeamModel.findById(teamId);
+        if (team) {
+          await ProfileTokenModel.createTeamToken(id, teamId, team.name);
+        }
+      }
     }
 
     // Sync label assignments if labels is provided

@@ -540,11 +540,11 @@ export default function McpUiDemoPage() {
                   <span className="text-sm">Multi-user demo</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">Pending</Badge>
+                  <Badge variant="default" className="bg-green-500">Done</Badge>
                   <span className="text-sm">MCP Gateway preservation</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">Pending</Badge>
+                  <Badge variant="default" className="bg-green-500">Done</Badge>
                   <span className="text-sm">LLM Gateway support</span>
                 </div>
               </CardContent>

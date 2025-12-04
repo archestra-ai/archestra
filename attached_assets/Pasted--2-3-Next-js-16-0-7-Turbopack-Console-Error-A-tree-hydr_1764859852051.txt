@@ -1,0 +1,117 @@
+
+
+2/3
+
+Next.js 16.0.7
+Turbopack
+Console Error
+
+A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+See more info here: https://nextjs.org/docs/messages/react-hydration-error
+
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/frontend/...">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" suppressHydrationWarning={true}>
+                          <head>
+                            <PublicEnvScript>
+                              <EnvScript>
+                                <Script strategy="beforeInte..." dangerouslySetInnerHTML={{__html:"wi..."}}>
+                                  <script
+                                    nonce={undefined}
+                                    dangerouslySetInnerHTML={{
++                                     __html: "(self.__next_s=self.__next_s||[]).push([0,{\"children\":\"window['__ENV..."
+-                                     __html: ""
+                                    }}
+-                                   src="/__replco/static/devtools/injected.js"
+-                                   onerror={"parent.postMessage({event:'error',payload:'script.onerror: Failed to lo..."}
+                                  >
+                          ...
+                  ...
+src/app/layout.tsx (67:9) @ RootLayout
+
+
+  65 |     <html lang="en" suppressHydrationWarning>
+  66 |       <head>
+> 67 |         <PublicEnvScript />
+     |         ^
+  68 |       </head>
+  69 |       <body
+  70 |         className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} font-sans antialiased`}
+Call Stack
+20
+
+Show 18 ignore-listed frame(s)
+script
+<anonymous>
+RootLayout
+src/app/layout.tsx (67:9)
+1
+2
+Was this helpful?
+
+
+
+Logo
+Archestra.AI
+Community
+Star us on GitHub
+299
+Documentation
+Talk to developers
+Report a bug
+User
+Sign in
+Default Admin Credentials Enabled
+- admin@example.com
+
+- password
+
+Change if not running locally!
+
+Sign In
+Enter your email below to login to your account
+admin@example.com
+password
+Login
+Version: 0.6.16

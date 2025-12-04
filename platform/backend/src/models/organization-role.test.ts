@@ -214,7 +214,7 @@ describe("OrganizationRoleModel", () => {
 
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(4); // 2 predefined + 2 custom
+      expect(result).toHaveLength(5); // 3 predefined + 2 custom
 
       // Check predefined roles
       expect(result[0]).toMatchObject({
@@ -250,7 +250,7 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
       expect(result[0].role).toBe(ADMIN_ROLE_NAME);
       expect(result[1].role).toBe(EDITOR_ROLE_NAME);
       expect(result[2].role).toBe(MEMBER_ROLE_NAME);

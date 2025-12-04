@@ -1,16 +1,13 @@
 # Multi-stage build for minimal final image
-# Using Debian-slim instead of Alpine for reliable cross-platform builds
-# (Alpine's musl libc has known issues with QEMU emulation for ARM64)
-FROM python:3.12-slim AS python-builder
+FROM python:3.12-alpine AS python-builder
 
 # Install Python build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
    gcc \
-   libc6-dev \
+   musl-dev \
    libffi-dev \
-   libssl-dev \
-   python3-dev \
-   && rm -rf /var/lib/apt/lists/*
+   openssl-dev \
+   python3-dev
 
 # Copy uv from the official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -28,7 +25,7 @@ RUN uv pip install --no-cache-dir \
    python-dotenv>=1.0.0
 
 # Node.js stage
-FROM node:20-slim AS node-builder
+FROM node:20-alpine AS node-builder
 
 # Install Node.js MCP dependencies globally
 RUN npm install -g \
@@ -38,18 +35,18 @@ RUN npm install -g \
    express
 
 # Final stage - minimal runtime image with Python 3.12
-FROM python:3.12-slim
+FROM python:3.12-alpine
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
    nodejs \
    npm \
-   libstdc++6 \
-   libgcc-s1 \
+   libstdc++ \
+   libgcc \
    openssl \
    ca-certificates \
    # Required for some Python packages
-   libffi8 \
+   libffi \
    # Process management
    tini \
    # Git for installing packages from git repositories
@@ -58,12 +55,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
    curl \
    wget \
    # DNS resolution
-   dnsutils \
+   bind-tools \
    # Additional SSL/TLS libraries
-   libssl-dev \
+   openssl-dev \
    # Go runtime for Go-based MCP servers
-   golang-go \
-   && rm -rf /var/lib/apt/lists/*
+   go
 
 # Copy Python environment from builder
 COPY --from=python-builder /opt/venv /opt/venv
@@ -90,8 +86,8 @@ COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=node-builder /usr/local/bin /usr/local/bin
 
 # Create non-root user for running MCP servers
-RUN groupadd -g 1000 mcp && \
-   useradd -u 1000 -g mcp -d /home/mcp -m mcp
+RUN addgroup -g 1000 mcp && \
+   adduser -u 1000 -G mcp -D -h /home/mcp mcp
 
 # Set up working directory
 WORKDIR /home/mcp
@@ -113,7 +109,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
    CMD node -e "process.exit(0)" && python3 -c "exit(0)" && go version
 
 # Use tini for proper signal handling
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--"]
 
 # Default command (override when running specific MCP server)
 CMD ["sh", "-c", "echo 'MCP base container ready. Override CMD to run your MCP server.'"]

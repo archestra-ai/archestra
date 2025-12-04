@@ -184,7 +184,8 @@ export function TeamsList() {
                     {config.enterpriseLicenseActivated && (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button
+                          <PermissionButton
+                            permissions={{ team: ["update"] }}
                             variant="outline"
                             size="sm"
                             onClick={() => {
@@ -193,7 +194,7 @@ export function TeamsList() {
                             }}
                           >
                             <Link2 className="h-4 w-4" />
-                          </Button>
+                          </PermissionButton>
                         </TooltipTrigger>
                         <TooltipContent>Configure SSO Team Sync</TooltipContent>
                       </Tooltip>

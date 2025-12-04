@@ -538,7 +538,11 @@ test.describe("SSO Team Sync E2E", () => {
     const teamRow = page.locator("div").filter({ hasText: teamName }).last();
 
     // Click the link icon button (Configure SSO Team Sync tooltip)
-    await teamRow.getByRole("button").filter({ has: page.locator("svg") }).nth(1).click();
+    await teamRow
+      .getByRole("button")
+      .filter({ has: page.locator("svg") })
+      .nth(1)
+      .click();
 
     // Wait for dialog to appear
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -549,9 +553,9 @@ test.describe("SSO Team Sync E2E", () => {
     await page.getByRole("button", { name: "Add" }).click();
 
     // Wait for the group to be added
-    await expect(
-      page.getByRole("dialog").getByText(externalGroup),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
+      { timeout: 5000 },
+    );
 
     // Close the dialog
     await page.getByRole("button", { name: "Close" }).click();

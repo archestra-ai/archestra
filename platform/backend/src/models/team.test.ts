@@ -197,7 +197,10 @@ describe("TeamModel", () => {
       const group = await TeamModel.addExternalGroup(team2.id, "engineering");
 
       // Try to delete using team1's ID but team2's group ID - should fail
-      const result = await TeamModel.removeExternalGroupById(team1.id, group.id);
+      const result = await TeamModel.removeExternalGroupById(
+        team1.id,
+        group.id,
+      );
       expect(result).toBe(false);
 
       // Verify group still exists on team2

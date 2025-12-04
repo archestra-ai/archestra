@@ -60,16 +60,6 @@ The K8S auth method requires a Vault role configured with a bound service accoun
 | `ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT`    | No       | STS endpoint URL (default: `https://sts.amazonaws.com`)                                          |
 | `ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID`   | No       | Value for `X-Vault-AWS-IAM-Server-ID` header (additional security)                               |
 
-The AWS IAM auth method uses the [default AWS credential provider chain](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html) to obtain credentials. This includes:
-
-- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
-- Shared credentials file (`~/.aws/credentials`)
-- EC2 instance metadata (IAM role)
-- ECS container credentials
-- EKS Pod Identity or IRSA (IAM Roles for Service Accounts)
-
-The role must have permissions to read and write secrets under `secret/data/archestra/*`.
-
 > **Note:** If `ARCHESTRA_SECRETS_MANAGER` is set to `VAULT` but the required environment variables are missing, the system falls back to database storage.
 
 ### Secret Storage Paths

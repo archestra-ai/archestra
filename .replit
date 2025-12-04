@@ -25,13 +25,13 @@ args = "Backend"
 name = "Frontend"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd platform && pnpm --filter @frontend start"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd platform && pnpm --filter @frontend dev"
+waitForPort = 5000
 
 [[workflows.workflow]]
 name = "Backend"
@@ -50,12 +50,12 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 9000
-externalPort = 9000
-
-[[ports]]
 localPort = 9050
 externalPort = 3000
+
+[[ports]]
+localPort = 37237
+externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"

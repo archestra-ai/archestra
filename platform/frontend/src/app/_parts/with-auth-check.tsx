@@ -23,6 +23,14 @@ const isSpecialAuthPage = (pathname: string) => {
   return pathname?.startsWith("/auth/two-factor");
 };
 
+/**
+ * Public demo pages that can be accessed without authentication
+ * Used for showcasing features like MCP UI integration
+ */
+const isPublicDemoPage = (pathname: string) => {
+  return pathname?.startsWith("/mcp-ui-demo");
+};
+
 export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
@@ -39,6 +47,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
   const isSpecialAuth = isSpecialAuthPage(pathname);
+  const isPublicDemo = isPublicDemoPage(pathname);
 
   // Track mount state to avoid hydration errors with isRefetching
   useEffect(() => {
@@ -80,10 +89,11 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     if (isAuthInitializing || isAuthRefetching) {
       // If auth check is pending, don't do anything
       return;
-    } else if (isSpecialAuth) {
-      // Special auth pages (like /auth/two-factor) can be accessed regardless of login state
+    } else if (isSpecialAuth || isPublicDemo) {
+      // Special auth pages (like /auth/two-factor) and public demo pages can be accessed regardless of login state
       // - During login: user needs to complete 2FA verification (not logged in yet)
       // - During setup: user is setting up 2FA (logged in)
+      // - Demo pages: for showcasing features without requiring authentication
       return;
     } else if (isAuthPage && isLoggedIn) {
       // User is logged in but on auth page (sign-in/sign-up), redirect to home
@@ -99,13 +109,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isLoggedIn,
     router,
     isSpecialAuth,
+    isPublicDemo,
   ]);
 
   // Show loading while checking auth/permissions
   if (inProgress) {
     return null;
-  } else if (isSpecialAuth) {
-    // Special auth pages are always rendered (handles both 2FA verification and setup)
+  } else if (isSpecialAuth || isPublicDemo) {
+    // Special auth pages and public demo pages are always rendered
     return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {
     // During redirects, show nothing to avoid flash

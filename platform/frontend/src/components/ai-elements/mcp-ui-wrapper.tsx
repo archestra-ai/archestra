@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface UIResource {
   uri: string;
@@ -16,6 +16,7 @@ interface McpUiMessage {
   type: string;
   messageId?: string;
   payload?: unknown;
+  _nonce?: string;
 }
 
 interface McpUiWrapperProps {
@@ -24,6 +25,10 @@ interface McpUiWrapperProps {
   onPrompt?: (promptName: string, params: Record<string, unknown>) => Promise<unknown>;
   onIntent?: (intent: string, params: Record<string, unknown>) => void;
   className?: string;
+}
+
+function generateNonce(): string {
+  return `mcp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
 
 export function McpUiWrapper({
@@ -37,6 +42,9 @@ export function McpUiWrapper({
   const [iframeHeight, setIframeHeight] = useState(300);
   const [iframeWidth, setIframeWidth] = useState<number | undefined>(undefined);
   const [isReady, setIsReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  const sessionNonce = useMemo(() => generateNonce(), []);
 
   const preferredSize = resource._meta?.["mcpui.dev/ui-preferred-frame-size"];
   const initialHeight = preferredSize?.height ?? 300;
@@ -94,10 +102,22 @@ export function McpUiWrapper({
 
       const data = event.data as McpUiMessage;
       if (!data || typeof data !== "object") return;
+      
+      if (resource.mimeType === "text/html" && data._nonce !== sessionNonce) {
+        if (data.type !== "ui-lifecycle-iframe-ready") {
+          console.warn("MCP UI: Ignoring message with invalid nonce");
+          return;
+        }
+      }
 
       switch (data.type) {
         case "ui-lifecycle-iframe-ready":
           setIsReady(true);
+          setIsAuthenticated(true);
+          sendMessageToIframe({
+            type: "ui-lifecycle-iframe-authenticated",
+            payload: { nonce: sessionNonce },
+          });
           break;
 
         case "ui-size-change": {
@@ -187,7 +207,7 @@ export function McpUiWrapper({
           break;
       }
     },
-    [onToolCall, onPrompt, onIntent, sendMessageToIframe, resource]
+    [onToolCall, onPrompt, onIntent, sendMessageToIframe, resource, sessionNonce]
   );
 
   useEffect(() => {

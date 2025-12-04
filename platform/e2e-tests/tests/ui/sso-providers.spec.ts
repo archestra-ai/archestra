@@ -1,5 +1,5 @@
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../../consts";
-import { expect, type Page, test } from "./fixtures";
+import { expect, type Page, test } from "../../fixtures";
 
 // Run tests in this file serially to avoid conflicts when both tests
 // manipulate SSO providers in the same Keycloak realm.

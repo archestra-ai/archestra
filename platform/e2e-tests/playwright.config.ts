@@ -1,7 +1,5 @@
-import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
-
-const authFile = path.join(__dirname, "playwright/.auth/user.json");
+import { adminAuthFile } from "./consts";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -42,7 +40,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
-        storageState: authFile,
+        storageState: adminAuthFile,
       },
       // Run the setup project before tests
       dependencies: ["setup"],
@@ -54,7 +52,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // Use the stored authentication state
-        storageState: authFile,
+        storageState: adminAuthFile,
       },
       // Run the setup project before tests
       dependencies: ["setup"],
@@ -65,7 +63,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Firefox"],
         // Use the stored authentication state
-        storageState: authFile,
+        storageState: adminAuthFile,
       },
       // Run the setup project before tests
       dependencies: ["setup"],
@@ -76,7 +74,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Safari"],
         // Use the stored authentication state
-        storageState: authFile,
+        storageState: adminAuthFile,
       },
       // Run the setup project before tests
       dependencies: ["setup"],

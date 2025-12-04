@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test.describe("Invitation functionality", () => {
   test("shows error message when email is invalid", async ({

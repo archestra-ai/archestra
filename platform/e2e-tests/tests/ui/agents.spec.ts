@@ -1,5 +1,5 @@
 import { E2eTestId } from "@shared";
-import { expect, test } from "./fixtures";
+import { expect, test } from "../../fixtures";
 
 test("can create and delete a profile", async ({
   page,

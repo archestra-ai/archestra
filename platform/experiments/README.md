@@ -1,5 +1,47 @@
 # Experiments
 
+## 🔒 Securing Azure AI Agents with Archestra Proxy
+
+**NEW**: Following the [Mastra security pattern](https://archestra.ai/docs/platform-mastra-example) to secure Azure AI Foundry agents.
+
+### The Approach
+
+1. **Deploy vulnerable Azure agent** (with Terraform)
+2. **Demonstrate the attack** (prompt injection succeeds)
+3. **Route through Archestra proxy** (one environment variable)
+4. **Add security policies** (UI configuration)
+5. **Re-test attack** (now blocked by Archestra)
+
+### Quick Links
+
+**Main Guide**: **[Securing Azure Agent](SECURING_AZURE_AGENT.md)** - Complete walkthrough (37 minutes)
+
+**Supporting Docs**:
+- [Article Outline](ARTICLE_OUTLINE_PROXY.md) - Full article structure for publication
+- [Azure Terraform Deployment](azure-terraform/DEPLOYMENT_GUIDE.md) - Infrastructure setup
+- [Archestra Setup](VULNERABLE_AGENT_DEMO.md) - Local MCP servers
+
+### What's Included
+
+- ✅ Azure Terraform deployment (AI Foundry + Functions + Logic Apps)
+- ✅ Mock CRM MCP server (simulates Salesforce)
+- ✅ Mock Email MCP server (sending capability)
+- ✅ Proxy configuration (routes Azure agent through Archestra)
+- ✅ Security policies (tool invocation, trusted data, dual LLM)
+- ✅ Attack scenarios (prompt injection demonstrations)
+
+### Key Results
+
+| Metric | Azure Alone | + Archestra Proxy |
+|--------|-------------|------------------|
+| Setup Time | 10 min | +27 min (total 37 min) |
+| Security Controls | 0/9 | 9/9 |
+| Attack Success | 100% | 0% |
+| Additional Cost | $0 | $0 (self-hosted) |
+| Code Changes | N/A | 0 (just env var) |
+
+---
+
 ## CLI Chat w/ Guardrails
 
 Try asking the model what tools it has access to, for example ask it to read your (fake) e-mails and go from there:

@@ -1,0 +1,13 @@
+[project]
+name = "dummy-crm-mcp-server"
+version = "0.1.0"
+description = "Mock CRM MCP server for security demonstration"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0"
+]
+
+[project.scripts]
+dummy-crm-mcp-server = "main:main"

@@ -13,7 +13,15 @@ export const E2eTestId = {
   InvitationLinkInput: "invitation-link-input",
   InvitationLinkCopyButton: "invitation-link-copy-button",
   InvitationErrorMessage: "invitation-error-message",
+  SidebarUserProfile: "sidebar-user-profile",
+  LocalInstallationsDialog: "local-installations-dialog",
+  LocalInstallationsTable: "local-installations-table",
+  CredentialRow: "credential-row",
+  CredentialOwnerEmail: "credential-owner-email",
+  CredentialTeamSelect: "credential-team-select",
+  ManageCredentialsButton: "manage-credentials-button",
   ConfigureSsoTeamSyncButton: "configure-sso-team-sync-button",
+  McpServerCard: "mcp-server-card",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
   predefinedPermissionsMap,
 } from "@shared";
@@ -10,6 +11,12 @@ describe("OrganizationRoleModel", () => {
   describe("isPredefinedRole", () => {
     test("should return true for admin role", () => {
       expect(OrganizationRoleModel.isPredefinedRole(ADMIN_ROLE_NAME)).toBe(
+        true,
+      );
+    });
+
+    test("should return true for editor role", () => {
+      expect(OrganizationRoleModel.isPredefinedRole(EDITOR_ROLE_NAME)).toBe(
         true,
       );
     });
@@ -35,6 +42,12 @@ describe("OrganizationRoleModel", () => {
       const permissions =
         OrganizationRoleModel.getPredefinedRolePermissions(ADMIN_ROLE_NAME);
       expect(permissions).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
+    });
+
+    test("should return editor permissions", () => {
+      const permissions =
+        OrganizationRoleModel.getPredefinedRolePermissions(EDITOR_ROLE_NAME);
+      expect(permissions).toEqual(predefinedPermissionsMap[EDITOR_ROLE_NAME]);
     });
 
     test("should return member permissions", () => {
@@ -63,6 +76,24 @@ describe("OrganizationRoleModel", () => {
       });
       expect(result?.createdAt).toBeInstanceOf(Date);
       expect(result?.updatedAt).toBeInstanceOf(Date);
+    });
+
+    test("should return predefined editor role", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const result = await OrganizationRoleModel.getById(
+        EDITOR_ROLE_NAME,
+        org.id,
+      );
+
+      expect(result).toMatchObject({
+        id: EDITOR_ROLE_NAME,
+        name: EDITOR_ROLE_NAME,
+        organizationId: org.id,
+        permission: predefinedPermissionsMap[EDITOR_ROLE_NAME],
+        predefined: true,
+      });
     });
 
     test("should return predefined member role", async ({
@@ -183,7 +214,7 @@ describe("OrganizationRoleModel", () => {
 
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(4); // 2 predefined + 2 custom
+      expect(result).toHaveLength(5); // 3 predefined + 2 custom
 
       // Check predefined roles
       expect(result[0]).toMatchObject({
@@ -192,6 +223,11 @@ describe("OrganizationRoleModel", () => {
         predefined: true,
       });
       expect(result[1]).toMatchObject({
+        id: EDITOR_ROLE_NAME,
+        name: EDITOR_ROLE_NAME,
+        predefined: true,
+      });
+      expect(result[2]).toMatchObject({
         id: MEMBER_ROLE_NAME,
         name: MEMBER_ROLE_NAME,
         predefined: true,
@@ -214,9 +250,10 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
       expect(result[0].role).toBe(ADMIN_ROLE_NAME);
-      expect(result[1].role).toBe(MEMBER_ROLE_NAME);
+      expect(result[1].role).toBe(EDITOR_ROLE_NAME);
+      expect(result[2].role).toBe(MEMBER_ROLE_NAME);
     });
   });
 

@@ -5,6 +5,23 @@ import dotenv from "dotenv";
 // Load .env from platform root - this runs once when the module is imported
 dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
 
+/**
+ * Auth state file paths for different user roles
+ * These are used by auth.setup.ts and can be used in tests with test.use({ storageState: ... })
+ */
+export const adminAuthFile = path.join(
+  __dirname,
+  "playwright/.auth/admin.json",
+);
+export const editorAuthFile = path.join(
+  __dirname,
+  "playwright/.auth/editor.json",
+);
+export const memberAuthFile = path.join(
+  __dirname,
+  "playwright/.auth/member.json",
+);
+
 export const UI_BASE_URL = "http://localhost:3000";
 export const API_BASE_URL = "http://localhost:9000";
 
@@ -22,6 +39,26 @@ export const ADMIN_EMAIL =
   process.env.ARCHESTRA_AUTH_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
 export const ADMIN_PASSWORD =
   process.env.ARCHESTRA_AUTH_ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+
+/**
+ * Editor credentials for e2e tests
+ * Editor role has limited permissions compared to admin
+ */
+export const EDITOR_EMAIL = "editor@e2e-test.local";
+export const EDITOR_PASSWORD = "editor-password-123";
+
+/**
+ * Member credentials for e2e tests
+ * Member role has the most restricted permissions
+ */
+export const MEMBER_EMAIL = "member@e2e-test.local";
+export const MEMBER_PASSWORD = "member-password-123";
+
+/**
+ * Team names for e2e tests
+ */
+export const ENGINEERING_TEAM_NAME = "Engineering Team";
+export const MARKETING_TEAM_NAME = "Marketing Team";
 
 export {
   E2eTestId,

@@ -428,4 +428,33 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
 });
 ```
 
+**Playwright Locator Best Practices**:
+
+Prefer Playwright's recommended locators over raw `locator()` calls. In priority order:
+1. `page.getByRole()` - Accessible elements by ARIA role (buttons, links, headings, etc.)
+2. `page.getByText()` - Find by text content
+3. `page.getByLabel()` - Form controls by label
+4. `page.getByPlaceholder()` - Input elements by placeholder
+5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
+
+Avoid:
+- Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`
+- XPath selectors
+- Arbitrary timeouts - use Playwright's auto-waiting instead
+
+Example:
+```typescript
+// Good
+await page.getByRole("button", { name: /Submit/i }).click();
+await page.getByLabel(/Email/i).fill("test@example.com");
+await page.getByTestId(E2eTestId.CreateAgentButton).click();
+
+// Avoid
+await page.locator('.submit-btn').click();
+await page.locator('#email-input').fill("test@example.com");
+await page.waitForTimeout(1000); // Use auto-waiting instead
+```
+
+Reference: https://playwright.dev/docs/locators#quick-guide
+
 - never amend commits

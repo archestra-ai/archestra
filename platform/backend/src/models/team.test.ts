@@ -325,6 +325,98 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("getTeammateUserIds", () => {
+    test("should return empty array when user is not in any team", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+
+      const teammateIds = await TeamModel.getTeammateUserIds(user.id);
+
+      expect(teammateIds).toEqual([]);
+    });
+
+    test("should return teammates from all teams the user belongs to", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      // Add the main user to both teams
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      // Add other users to teams
+      const teammate1 = await makeUser({ email: "teammate1@test.com" });
+      const teammate2 = await makeUser({ email: "teammate2@test.com" });
+      const teammate3 = await makeUser({ email: "teammate3@test.com" });
+
+      await TeamModel.addMember(team1.id, teammate1.id); // In team1 only
+      await TeamModel.addMember(team2.id, teammate2.id); // In team2 only
+      await TeamModel.addMember(team1.id, teammate3.id); // In team1
+      await TeamModel.addMember(team2.id, teammate3.id); // And team2
+
+      const teammateIds = await TeamModel.getTeammateUserIds(user.id);
+
+      // Should return all 3 teammates (deduplicated)
+      expect(teammateIds).toHaveLength(3);
+      expect(teammateIds).toContain(teammate1.id);
+      expect(teammateIds).toContain(teammate2.id);
+      expect(teammateIds).toContain(teammate3.id);
+      // Should NOT include the user themselves
+      expect(teammateIds).not.toContain(user.id);
+    });
+
+    test("should not include the user themselves", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Add the user to the team
+      await TeamModel.addMember(team.id, user.id);
+
+      const teammateIds = await TeamModel.getTeammateUserIds(user.id);
+
+      // Should not include the user themselves
+      expect(teammateIds).not.toContain(user.id);
+      expect(teammateIds).toEqual([]);
+    });
+
+    test("should return unique user IDs (deduplicated)", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      // Add user to both teams
+      await TeamModel.addMember(team1.id, user.id);
+      await TeamModel.addMember(team2.id, user.id);
+
+      // Add same teammate to both teams
+      const sharedTeammate = await makeUser({ email: "shared@test.com" });
+      await TeamModel.addMember(team1.id, sharedTeammate.id);
+      await TeamModel.addMember(team2.id, sharedTeammate.id);
+
+      const teammateIds = await TeamModel.getTeammateUserIds(user.id);
+
+      // Should only appear once even though they're in both teams
+      expect(teammateIds).toHaveLength(1);
+      expect(teammateIds).toContain(sharedTeammate.id);
+    });
+  });
+
   describe("syncUserTeams", () => {
     test("should add user to teams based on their SSO groups", async ({
       makeUser,

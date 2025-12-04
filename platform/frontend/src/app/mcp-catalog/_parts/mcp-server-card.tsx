@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import {
   FileText,
   Info,
@@ -14,6 +14,10 @@ import {
 import { useCallback, useState } from "react";
 import { AssignProfileDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { LoadingSpinner } from "@/components/loading";
+import {
+  WithoutPermissions,
+  WithPermissions,
+} from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -262,12 +266,16 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Credentials:{" "}
-          <span className="font-medium text-foreground">{userCount}</span>
+          Credentials
+          <WithoutPermissions permissions={{ profile: ["admin"] }}>
+            {" "}
+            in your team
+          </WithoutPermissions>
+          : <span className="font-medium text-foreground">{userCount}</span>
           {currentUserInstalledLocalServer && (
             <Badge
               variant="secondary"
-              className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
+              className="ml-1 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
             >
               You
             </Badge>
@@ -280,6 +288,7 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs"
+          data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
         >
           Manage
         </Button>
@@ -291,8 +300,12 @@ export function McpServerCard({
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
         <span className="text-muted-foreground">
-          Credentials:{" "}
-          <span className="font-medium text-foreground">{userCount}</span>
+          Credentials
+          <WithoutPermissions permissions={{ profile: ["admin"] }}>
+            {" "}
+            in your team
+          </WithoutPermissions>
+          : <span className="font-medium text-foreground">{userCount}</span>
           {isCurrentUserAuthenticated && (
             <Badge
               variant="secondary"
@@ -343,21 +356,19 @@ export function McpServerCard({
 
   const remoteCardContent = (
     <>
-      {userIsMcpServerAdmin && (
+      <WithPermissions
+        permissions={{ tool: ["update"], profile: ["update"] }}
+        noPermissionHandle="hide"
+      >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          {[
-            { id: "1", content: usersAuthenticated },
-            { id: "2", content: toolsAssigned },
-          ].map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
-            >
-              {item.content}
-            </div>
-          ))}
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {usersAuthenticated}
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {toolsAssigned}
+          </div>
         </div>
-      )}
+      </WithPermissions>
       {isCurrentUserAuthenticated && hasError && errorMessage && (
         <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
           {errorMessage}
@@ -418,21 +429,19 @@ export function McpServerCard({
 
   const localCardContent = (
     <>
-      {userIsMcpServerAdmin && (
+      <WithPermissions
+        permissions={{ tool: ["update"], profile: ["update"] }}
+        noPermissionHandle="hide"
+      >
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          {[
-            { id: "1", content: localServersInstalled },
-            { id: "2", content: toolsAssigned },
-          ].map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
-            >
-              {item.content}
-            </div>
-          ))}
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {localServersInstalled}
+          </div>
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {toolsAssigned}
+          </div>
         </div>
-      )}
+      </WithPermissions>
       {isCurrentUserAuthenticated && hasError && errorMessage && (
         <div className="text-sm text-destructive mb-2 px-3 py-2 bg-destructive/10 rounded-md">
           {errorMessage}
@@ -619,7 +628,10 @@ export function McpServerCard({
   );
 
   return (
-    <Card className="flex flex-col relative pt-4">
+    <Card
+      className="flex flex-col relative pt-4"
+      data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
+    >
       <CardHeader>
         <div className="flex items-start justify-between gap-4 overflow-hidden">
           <div className="min-w-0 flex-1">

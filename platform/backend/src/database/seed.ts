@@ -4,6 +4,7 @@ import {
   AgentModel,
   AgentTeamModel,
   DualLlmConfigModel,
+  InternalMcpCatalogModel,
   MemberModel,
   OrganizationModel,
   PromptModel,
@@ -441,6 +442,69 @@ async function seedDefaultTeam(): Promise<void> {
   logger.info("✓ Assigned default team to default profile");
 }
 
+/**
+ * Seeds test MCP server for development
+ * This creates a simple MCP server in the catalog that has one tool: print_archestra_test
+ */
+async function seedTestMcpServer(): Promise<void> {
+  // Only seed in development, or when ENABLE_TEST_MCP_SERVER is explicitly set (e.g., in CI e2e tests)
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_MCP_SERVER !== "true"
+  ) {
+    return;
+  }
+
+  const existing = await InternalMcpCatalogModel.findByName(
+    "internal-dev-test-server",
+  );
+  if (existing) {
+    logger.info("✓ Test MCP server already exists in catalog, skipping");
+    return;
+  }
+
+  // MCP server script using the SDK - installed at runtime
+  const mcpServerScript = `
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+
+const server = new McpServer({ name: 'dev-test-server', version: '1.0.0' });
+
+server.tool('print_archestra_test', 'Prints the ARCHESTRA_TEST environment variable value', {}, async () => {
+  const value = process.env.ARCHESTRA_TEST || '(not set)';
+  return { content: [{ type: 'text', text: 'ARCHESTRA_TEST = ' + value }] };
+});
+
+const transport = new StdioServerTransport();
+server.connect(transport);
+`.trim();
+
+  await InternalMcpCatalogModel.create({
+    name: "internal-dev-test-server",
+    description:
+      "Simple test MCP server for development. Has one tool that prints an env var.",
+    serverType: "local",
+    localConfig: {
+      command: "sh",
+      arguments: [
+        "-c",
+        `npm install --silent @modelcontextprotocol/sdk && node -e '${mcpServerScript.replace(/'/g, "'\"'\"'")}'`,
+      ],
+      transportType: "stdio",
+      environment: [
+        {
+          key: "ARCHESTRA_TEST",
+          type: "plain_text",
+          promptOnInstallation: true,
+          required: true,
+          description: "Test value to print (any string)",
+        },
+      ],
+    },
+  });
+  logger.info("✓ Seeded test MCP server (internal-dev-test-server)");
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
@@ -450,4 +514,5 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedN8NSystemPrompt();
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
+  await seedTestMcpServer();
 }

@@ -213,6 +213,28 @@ class TeamModel {
   }
 
   /**
+   * Get all user IDs that share at least one team with the given user
+   */
+  static async getTeammateUserIds(userId: string): Promise<string[]> {
+    // First get the user's team IDs
+    const userTeamIds = await TeamModel.getUserTeamIds(userId);
+
+    if (userTeamIds.length === 0) {
+      return [];
+    }
+
+    // Then get all users in those teams
+    const teammates = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
+
+    // Return unique user IDs (excluding the user themselves)
+    const teammateIds = [...new Set(teammates.map((t) => t.userId))];
+    return teammateIds.filter((id) => id !== userId);
+  }
+
+  /**
    * Get all teams for an agent with their compression settings
    */
   static async getTeamsForAgent(agentId: string): Promise<Team[]> {

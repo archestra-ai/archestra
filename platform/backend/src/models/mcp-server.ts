@@ -67,16 +67,27 @@ class McpServerModel {
 
     // Apply access control filtering for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
-      // Get MCP servers accessible through team membership and personal access in parallel
-      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
-        await Promise.all([
-          McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false),
-          McpServerUserModel.getUserPersonalMcpServerIds(userId),
-        ]);
+      // Get MCP servers accessible through:
+      // 1. Team membership (servers assigned to user's teams)
+      // 2. Personal access (user's own servers)
+      // 3. Teammate ownership (servers owned by users in the same teams)
+      const [
+        teamAccessibleMcpServerIds,
+        personalMcpServerIds,
+        teammateMcpServerIds,
+      ] = await Promise.all([
+        McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false),
+        McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        McpServerTeamModel.getTeammateMcpServerIds(userId),
+      ]);
 
-      // Combine both lists
+      // Combine all lists
       const accessibleMcpServerIds = [
-        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+        ...new Set([
+          ...teamAccessibleMcpServerIds,
+          ...personalMcpServerIds,
+          ...teammateMcpServerIds,
+        ]),
       ];
 
       if (accessibleMcpServerIds.length === 0) {

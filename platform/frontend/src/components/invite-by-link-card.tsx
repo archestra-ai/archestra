@@ -4,6 +4,7 @@ import {
   ADMIN_ROLE_NAME,
   type AnyRoleName,
   E2eTestId,
+  EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 } from "@shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
@@ -128,6 +129,7 @@ function InviteByLinkCardContent({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                  <SelectItem value={EDITOR_ROLE_NAME}>Editor</SelectItem>
                   <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
                   {roles
                     ?.filter((r) => !r.predefined)

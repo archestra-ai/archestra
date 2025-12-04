@@ -3,7 +3,12 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
-import { API_BASE_URL, UI_BASE_URL } from "../../consts";
+import {
+  API_BASE_URL,
+  editorAuthFile,
+  memberAuthFile,
+  UI_BASE_URL,
+} from "../../consts";
 
 /**
  * Playwright test extension with fixtures
@@ -26,6 +31,12 @@ export interface TestFixtures {
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
   waitForAgentTool: typeof waitForAgentTool;
+  /** API request context authenticated as admin (same as default `request`) */
+  adminRequest: APIRequestContext;
+  /** API request context authenticated as editor */
+  editorRequest: APIRequestContext;
+  /** API request context authenticated as member */
+  memberRequest: APIRequestContext;
 }
 
 const makeApiRequest = async ({
@@ -395,5 +406,32 @@ export const test = base.extend<TestFixtures>({
   },
   waitForAgentTool: async ({}, use) => {
     await use(waitForAgentTool);
+  },
+  /**
+   * Admin request - same auth as default `request` fixture
+   */
+  adminRequest: async ({ request }, use) => {
+    // Default request is already admin (via storageState in config)
+    await use(request);
+  },
+  /**
+   * Editor request - creates a new request context with editor auth
+   */
+  editorRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: editorAuthFile,
+    });
+    await use(context);
+    await context.dispose();
+  },
+  /**
+   * Member request - creates a new request context with member auth
+   */
+  memberRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: memberAuthFile,
+    });
+    await use(context);
+    await context.dispose();
   },
 });

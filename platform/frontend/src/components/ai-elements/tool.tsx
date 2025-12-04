@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import {
+  McpUiWrapper,
+  extractUIResourcesFromOutput,
+  hasUIResourceInOutput,
+} from "./mcp-ui-wrapper";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -141,6 +146,9 @@ export type ToolOutputProps = ComponentProps<"div"> & {
     role: "user" | "assistant";
     content: string | unknown;
   }>;
+  onToolCall?: (toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onPrompt?: (promptName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onIntent?: (intent: string, params: Record<string, unknown>) => void;
 };
 
 export const ToolOutput = ({
@@ -149,6 +157,9 @@ export const ToolOutput = ({
   errorText,
   label,
   conversations,
+  onToolCall,
+  onPrompt,
+  onIntent,
   ...props
 }: ToolOutputProps) => {
   if (!(output || errorText || conversations)) {
@@ -196,6 +207,32 @@ export const ToolOutput = ({
         </div>
       </div>
     );
+  }
+
+  // Check if output contains MCP UI resources
+  if (output && hasUIResourceInOutput(output)) {
+    const uiResources = extractUIResourcesFromOutput(output);
+    if (uiResources.length > 0) {
+      return (
+        <div className={cn("space-y-2 p-4", className)} {...props}>
+          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {label ?? "Interactive UI"}
+          </h4>
+          <div className="space-y-4">
+            {uiResources.map((resource, idx) => (
+              <McpUiWrapper
+                key={`${resource.uri}-${idx}`}
+                resource={resource}
+                onToolCall={onToolCall}
+                onPrompt={onPrompt}
+                onIntent={onIntent}
+                className="rounded-md overflow-hidden"
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
   }
 
   let Output = <div>{output as ReactNode}</div>;

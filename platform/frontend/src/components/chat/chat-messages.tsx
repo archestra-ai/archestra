@@ -26,6 +26,9 @@ interface ChatMessagesProps {
   messages: UIMessage[];
   hideToolCalls?: boolean;
   status: ChatStatus;
+  onMcpUiToolCall?: (toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onMcpUiPrompt?: (promptName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onMcpUiIntent?: (intent: string, params: Record<string, unknown>) => void;
 }
 
 // Type guards for tool parts
@@ -52,6 +55,9 @@ export function ChatMessages({
   messages,
   hideToolCalls = false,
   status,
+  onMcpUiToolCall,
+  onMcpUiPrompt,
+  onMcpUiIntent,
 }: ChatMessagesProps) {
   const isStreamingStalled = useStreamingStallDetection(messages, status);
 
@@ -144,6 +150,9 @@ export function ChatMessages({
                         key={`${message.id}-${i}`}
                         toolResultPart={toolResultPart}
                         toolName={toolName}
+                        onMcpUiToolCall={onMcpUiToolCall}
+                        onMcpUiPrompt={onMcpUiPrompt}
+                        onMcpUiIntent={onMcpUiIntent}
                       />
                     );
                   }
@@ -173,6 +182,9 @@ export function ChatMessages({
                           key={`${message.id}-${i}`}
                           toolResultPart={toolResultPart}
                           toolName={toolName}
+                          onMcpUiToolCall={onMcpUiToolCall}
+                          onMcpUiPrompt={onMcpUiPrompt}
+                          onMcpUiIntent={onMcpUiIntent}
                         />
                       );
                     }
@@ -246,10 +258,16 @@ function MessageTool({
   part,
   toolResultPart,
   toolName,
+  onMcpUiToolCall,
+  onMcpUiPrompt,
+  onMcpUiIntent,
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   toolName: string;
+  onMcpUiToolCall?: (toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onMcpUiPrompt?: (promptName: string, params: Record<string, unknown>) => Promise<unknown>;
+  onMcpUiIntent?: (intent: string, params: Record<string, unknown>) => void;
 }) {
   const outputError = toolResultPart
     ? tryToExtractErrorFromOutput(toolResultPart.output)
@@ -284,6 +302,9 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
+            onToolCall={onMcpUiToolCall}
+            onPrompt={onMcpUiPrompt}
+            onIntent={onMcpUiIntent}
           />
         )}
         {!toolResultPart && Boolean(part.output) && (
@@ -291,6 +312,9 @@ function MessageTool({
             label={errorText ? "Error" : "Result"}
             output={part.output}
             errorText={errorText}
+            onToolCall={onMcpUiToolCall}
+            onPrompt={onMcpUiPrompt}
+            onIntent={onMcpUiIntent}
           />
         )}
       </ToolContent>

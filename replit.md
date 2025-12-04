@@ -86,6 +86,31 @@ platform/
 - **Backend API**: http://localhost:9000
 - **Default Admin**: admin@example.com / admin123
 
+## MCP UI Integration (Bounty $900)
+**Status**: Implemented (Dec 4, 2025)
+
+The platform now supports rendering interactive UIs from MCP servers via the mcpui.dev protocol.
+
+### Supported Rendering Modes
+1. **text/html** - Inline HTML rendered in sandboxed iframe
+2. **text/uri-list** - External URL loaded in iframe
+3. **application/vnd.mcp-ui.remote-dom** - Not yet supported
+
+### Key Components
+- `platform/frontend/src/components/ai-elements/mcp-ui-wrapper.tsx` - Core iframe wrapper with postMessage handling
+- `platform/frontend/src/components/ai-elements/tool.tsx` - Updated ToolOutput to detect and render UIResource content
+- `platform/frontend/src/components/chat/chat-messages.tsx` - Updated to pass MCP UI action handlers
+
+### postMessage Protocol Support
+The implementation supports bidirectional communication:
+- **Inbound**: `tool`, `prompt`, `intent`, `ui-lifecycle-iframe-ready`, `ui-size-change`, `ui-request-data`
+- **Outbound**: `ui-message-received`, `ui-message-response`, `ui-lifecycle-iframe-render-data`
+
+### UIResource Detection
+Tool outputs are automatically detected for UIResource content based on:
+- `type: "resource"` with `resource.uri` starting with `ui://`
+- Or mimeType: `text/html`, `text/uri-list`, or `application/vnd.mcp-ui.remote-dom`
+
 ## Known Limitations in Replit Environment
 1. **Kubernetes features disabled**: MCP orchestrator requires a K8s cluster
 2. **OpenTelemetry disabled**: No external OTEL collector configured

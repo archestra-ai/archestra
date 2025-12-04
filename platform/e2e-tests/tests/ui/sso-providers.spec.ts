@@ -756,6 +756,9 @@ test.describe("SSO SAML E2E Flow with Keycloak", () => {
     await page.waitForLoadState("networkidle");
 
     // STEP 3: Verify SSO button appears on login page and test SSO login
+    // NOTE: SAML account linking works because the backend automatically sets
+    // `domainVerified: true` for SAML providers as a workaround for:
+    // https://github.com/better-auth/better-auth/issues/6481
     const ssoContext = await browser.newContext({
       storageState: undefined,
     });

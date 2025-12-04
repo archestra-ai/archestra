@@ -139,13 +139,10 @@ export const auth: any = betterAuth({
       disableImplicitSignUp: false,
       providersLimit: 10,
       trustEmailVerified: true, // Trust email verification from SSO providers
-      /**
-       * Disable domain verification since admins are manually configuring their trusted SSO providers
-       *
-       * https://www.better-auth.com/docs/plugins/sso#domain-verification
-       */
+      // Enable domain verification to allow SAML account linking for non-trusted providers
+      // When enabled, providers with domainVerified: true can link accounts by email domain
       domainVerification: {
-        enabled: false,
+        enabled: true,
       },
     }),
   ],

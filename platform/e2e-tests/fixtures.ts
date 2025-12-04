@@ -10,6 +10,9 @@ import {
 } from "@playwright/test";
 import { editorAuthFile, memberAuthFile, UI_BASE_URL } from "./consts";
 
+/** Type for user-specific navigation function */
+type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
+
 /**
  * Playwright test extension with fixtures
  * https://playwright.dev/docs/test-fixtures#creating-a-fixture
@@ -23,6 +26,12 @@ interface TestFixtures {
   editorPage: Page;
   /** Page authenticated as member */
   memberPage: Page;
+  /** Navigate admin page to a path */
+  goToAdminPage: GoToPageFn;
+  /** Navigate editor page to a path */
+  goToEditorPage: GoToPageFn;
+  /** Navigate member page to a path */
+  goToMemberPage: GoToPageFn;
 }
 
 const goToPage = (page: Page, path = "") => page.goto(`${UI_BASE_URL}${path}`);
@@ -80,5 +89,23 @@ export const test = base.extend<TestFixtures>({
     );
     await use(page);
     await context.close();
+  },
+  /**
+   * Navigate admin page to a path
+   */
+  goToAdminPage: async ({ adminPage }, use) => {
+    await use((path = "") => adminPage.goto(`${UI_BASE_URL}${path}`));
+  },
+  /**
+   * Navigate editor page to a path
+   */
+  goToEditorPage: async ({ editorPage }, use) => {
+    await use((path = "") => editorPage.goto(`${UI_BASE_URL}${path}`));
+  },
+  /**
+   * Navigate member page to a path
+   */
+  goToMemberPage: async ({ memberPage }, use) => {
+    await use((path = "") => memberPage.goto(`${UI_BASE_URL}${path}`));
   },
 });

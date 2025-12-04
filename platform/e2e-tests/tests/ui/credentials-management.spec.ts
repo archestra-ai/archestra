@@ -25,7 +25,6 @@ import {
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
   MEMBER_EMAIL,
-  UI_BASE_URL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
 
@@ -39,14 +38,17 @@ test.describe("Credentials Management", () => {
     adminPage,
     editorPage,
     memberPage,
+    goToAdminPage,
+    goToEditorPage,
+    goToMemberPage,
   }, testInfo) => {
     // Pod deletion can take a while, so we need a longer timeout
     testInfo.setTimeout(180000);
 
     await Promise.all([
-      uninstallTestServer(adminPage),
-      uninstallTestServer(editorPage),
-      uninstallTestServer(memberPage),
+      uninstallTestServer(adminPage, goToAdminPage),
+      uninstallTestServer(editorPage, goToEditorPage),
+      uninstallTestServer(memberPage, goToMemberPage),
     ]);
   });
 
@@ -54,19 +56,23 @@ test.describe("Credentials Management", () => {
     adminPage,
     editorPage,
     memberPage,
+    goToAdminPage,
+    goToEditorPage,
+    goToMemberPage,
   }) => {
     await Promise.all([
-      installTestServer(adminPage, "Admin"),
-      installTestServer(editorPage, "Editor"),
-      installTestServer(memberPage, "Member"),
+      installTestServer(adminPage, goToAdminPage, "Admin"),
+      installTestServer(editorPage, goToEditorPage, "Editor"),
+      installTestServer(memberPage, goToMemberPage, "Member"),
     ]);
   });
 
   test.describe("Check who can see which credentials", () => {
     test("Member cannot see Manage credentials button (lacks permissions)", async ({
       memberPage,
+      goToMemberPage,
     }) => {
-      await memberPage.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+      await goToMemberPage("/mcp-catalog/registry");
       await memberPage.waitForLoadState("networkidle");
 
       // Find the test server card
@@ -90,8 +96,9 @@ test.describe("Credentials Management", () => {
 
     test("Admin sees all credentials in Local Installations dialog", async ({
       adminPage,
+      goToAdminPage,
     }) => {
-      await openLocalInstallationsDialog(adminPage);
+      await openLocalInstallationsDialog(adminPage, goToAdminPage);
 
       const visibleEmails = await getVisibleCredentialEmails(adminPage);
 
@@ -104,8 +111,9 @@ test.describe("Credentials Management", () => {
 
     test("Editor sees only Editor and Member credentials (team-based visibility)", async ({
       editorPage,
+      goToEditorPage,
     }) => {
-      await openLocalInstallationsDialog(editorPage);
+      await openLocalInstallationsDialog(editorPage, goToEditorPage);
 
       const visibleEmails = await getVisibleCredentialEmails(editorPage);
 
@@ -121,8 +129,9 @@ test.describe("Credentials Management", () => {
   test.describe("Check team select options", () => {
     test("Admin can see all teams in team select options", async ({
       adminPage,
+      goToAdminPage,
     }) => {
-      await openLocalInstallationsDialog(adminPage);
+      await openLocalInstallationsDialog(adminPage, goToAdminPage);
 
       // Check team select options for Admin's credential
       const adminOptions = await getTeamSelectOptionsForCredential(
@@ -136,8 +145,9 @@ test.describe("Credentials Management", () => {
 
     test("Editor can see options that belong to his team / teams", async ({
       editorPage,
+      goToEditorPage,
     }) => {
-      await openLocalInstallationsDialog(editorPage);
+      await openLocalInstallationsDialog(editorPage, goToEditorPage);
 
       // Editor should be able to see team select for their own credential
       const editorOptions = await getTeamSelectOptionsForCredential(
@@ -151,8 +161,9 @@ test.describe("Credentials Management", () => {
 
   test("Admin grants their credential to Marketing Team", async ({
     adminPage,
+    goToAdminPage,
   }) => {
-    await openLocalInstallationsDialog(adminPage);
+    await openLocalInstallationsDialog(adminPage, goToAdminPage);
 
     // Grant Admin's credential to Marketing Team
     await grantTeamAccessToCredential(
@@ -170,8 +181,9 @@ test.describe("Credentials Management", () => {
 
   test("Editor can now see Admin's credential after team grant", async ({
     editorPage,
+    goToEditorPage,
   }) => {
-    await openLocalInstallationsDialog(editorPage);
+    await openLocalInstallationsDialog(editorPage, goToEditorPage);
 
     const visibleEmails = await getVisibleCredentialEmails(editorPage);
 
@@ -186,8 +198,12 @@ test.describe("Credentials Management", () => {
 /**
  * Install the test MCP server for a user with their name as ARCHESTRA_TEST value
  */
-async function installTestServer(page: Page, userName: string): Promise<void> {
-  await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+async function installTestServer(
+  page: Page,
+  goTo: GoToPageFn,
+  userName: string,
+): Promise<void> {
+  await goTo("/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
 
   // Find the test server card using data-slot attribute
@@ -217,8 +233,11 @@ async function installTestServer(page: Page, userName: string): Promise<void> {
 /**
  * Uninstall the test MCP server for the current user
  */
-async function uninstallTestServer(page: Page): Promise<void> {
-  await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+async function uninstallTestServer(
+  page: Page,
+  goTo: GoToPageFn,
+): Promise<void> {
+  await goTo("/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
 
   // Find the test server card
@@ -251,11 +270,17 @@ async function uninstallTestServer(page: Page): Promise<void> {
   }
 }
 
+/** Type for user-specific navigation function */
+type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
+
 /**
  * Open the Local Installations dialog for the test server
  */
-async function openLocalInstallationsDialog(page: Page): Promise<void> {
-  await page.goto(`${UI_BASE_URL}/mcp-catalog/registry`);
+async function openLocalInstallationsDialog(
+  page: Page,
+  goTo: GoToPageFn,
+): Promise<void> {
+  await goTo("/mcp-catalog/registry");
   await page.waitForLoadState("networkidle");
 
   // Find and click the Manage button for credentials

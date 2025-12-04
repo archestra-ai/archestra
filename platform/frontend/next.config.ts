@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
     },
     incomingRequests: true,
   },
+  allowedDevOrigins: ["*.replit.dev", "*.pike.replit.dev", "127.0.0.1"],
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
   },

@@ -20,7 +20,7 @@ type WithPermissionsProps = {
       }: {
         hasPermission: boolean | undefined;
         isPending: boolean;
-      }) => ReactElement;
+      }) => React.ReactNode;
     }
   | {
       noPermissionHandle: "hide";

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const {
   getProfileTokens,
@@ -41,6 +42,10 @@ export function useCreateProfileToken() {
       queryClient.invalidateQueries({
         queryKey: ["profileTokens", variables.profileId],
       });
+      toast.success("Token created successfully");
+    },
+    onError: () => {
+      toast.error("Failed to create token");
     },
   });
 }
@@ -80,6 +85,7 @@ export function useDeleteProfileToken() {
     }: {
       profileId: string;
       tokenId: string;
+      tokenName?: string;
     }) => {
       const response = await deleteProfileToken({
         path: { profileId, tokenId },
@@ -90,6 +96,14 @@ export function useDeleteProfileToken() {
       queryClient.invalidateQueries({
         queryKey: ["profileTokens", variables.profileId],
       });
+      if (variables.tokenName) {
+        toast.success(`Token "${variables.tokenName}" deleted`);
+      } else {
+        toast.success("Token deleted");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to delete token");
     },
   });
 }
@@ -103,6 +117,7 @@ export function useRotateProfileToken() {
     }: {
       profileId: string;
       tokenId: string;
+      tokenName?: string;
     }) => {
       const response = await rotateProfileToken({
         path: { profileId, tokenId },
@@ -113,6 +128,14 @@ export function useRotateProfileToken() {
       queryClient.invalidateQueries({
         queryKey: ["profileTokens", variables.profileId],
       });
+      if (variables.tokenName) {
+        toast.success(`Token "${variables.tokenName}" rotated`);
+      } else {
+        toast.success("Token rotated");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to rotate token");
     },
   });
 }

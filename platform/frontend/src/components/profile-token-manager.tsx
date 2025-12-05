@@ -46,6 +46,7 @@ import {
   useRotateProfileToken,
 } from "@/lib/profile-token.query";
 import { useTeams } from "@/lib/team.query";
+import { LoadingSpinner } from "./loading";
 
 interface ProfileTokenManagerProps {
   profileId: string;
@@ -77,44 +78,33 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
       return;
     }
 
-    try {
-      const result = await createToken.mutateAsync({
-        profileId,
-        data: {
-          name: newTokenName.trim(),
-          teamIds: isOrganizationToken ? [] : newTokenTeams,
-          isOrganizationToken,
-        },
-      });
+    const result = await createToken.mutateAsync({
+      profileId,
+      data: {
+        name: newTokenName.trim(),
+        teamIds: isOrganizationToken ? [] : newTokenTeams,
+        isOrganizationToken,
+      },
+    });
 
-      if (result?.value) {
-        setNewTokenValue(result.value);
-      }
-      toast.success("Token created successfully");
-    } catch {
-      toast.error("Failed to create token");
+    if (result?.value) {
+      setNewTokenValue(result.value);
     }
   };
 
   const handleDeleteToken = async (tokenId: string, tokenName: string) => {
-    try {
-      await deleteToken.mutateAsync({ profileId, tokenId });
-      toast.success(`Token "${tokenName}" deleted`);
-    } catch {
-      toast.error("Failed to delete token");
-    }
+    await deleteToken.mutateAsync({ profileId, tokenId, tokenName });
   };
 
   const handleRotateToken = async (tokenId: string, tokenName: string) => {
-    try {
-      const result = await rotateToken.mutateAsync({ profileId, tokenId });
-      if (result?.value) {
-        setNewTokenValue(result.value);
-        setCreateDialogOpen(true);
-      }
-      toast.success(`Token "${tokenName}" rotated`);
-    } catch {
-      toast.error("Failed to rotate token");
+    const result = await rotateToken.mutateAsync({
+      profileId,
+      tokenId,
+      tokenName,
+    });
+    if (result?.value) {
+      setNewTokenValue(result.value);
+      setCreateDialogOpen(true);
     }
   };
 
@@ -140,9 +130,7 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
   };
 
   if (isLoading) {
-    return (
-      <div className="text-sm text-muted-foreground">Loading tokens...</div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (

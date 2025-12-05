@@ -31,10 +31,19 @@ export const persistTools = async (
   );
 
   // Filter out tools that are already available via MCP servers or are Archestra built-in tools
-  const toolsToAutoDiscover = tools.filter(
-    ({ toolName }) =>
-      !mcpToolNamesSet.has(toolName) && !archestraToolNamesSet.has(toolName),
-  );
+  // Also deduplicate by tool name (keep first occurrence) to avoid constraint violations
+  const seenToolNames = new Set<string>();
+  const toolsToAutoDiscover = tools.filter(({ toolName }) => {
+    if (
+      mcpToolNamesSet.has(toolName) ||
+      archestraToolNamesSet.has(toolName) ||
+      seenToolNames.has(toolName)
+    ) {
+      return false;
+    }
+    seenToolNames.add(toolName);
+    return true;
+  });
 
   if (toolsToAutoDiscover.length === 0) {
     return;

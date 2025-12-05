@@ -216,7 +216,7 @@ test.describe("Credentials Management", () => {
       await adminPage
         .getByRole("button", { name: "Assign Tool to Profiles" })
         .click();
-      await adminPage.getByRole("checkbox").click();
+      await adminPage.getByRole("checkbox").first().click();
       await adminPage.waitForLoadState("networkidle");
       await adminPage.getByRole("combobox").click();
       await adminPage
@@ -247,7 +247,7 @@ test.describe("Credentials Management", () => {
       await adminPage
         .getByRole("button", { name: "Assign Tool to Profiles" })
         .click();
-      await adminPage.getByRole("checkbox").click();
+      await adminPage.getByRole("checkbox").first().click();
       await adminPage.waitForLoadState("networkidle");
       await adminPage.getByRole("combobox").click();
       await adminPage.getByText("editor@example.com").click();

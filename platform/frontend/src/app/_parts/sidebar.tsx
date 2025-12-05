@@ -216,8 +216,8 @@ const MainSideBarSection = ({
         permissions={{ conversation: ["read"] }}
         noPermissionHandle="tooltip"
       >
-        {({ hasPermission, isPending }) => {
-          return isPending ? null : hasPermission ? (
+        {({ hasPermission }) => {
+          return hasPermission === undefined ? null : hasPermission ? (
             <ChatSidebarSection />
           ) : (
             <SidebarGroup>

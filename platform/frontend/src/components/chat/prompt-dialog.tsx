@@ -166,8 +166,8 @@ export function PromptDialog({
               permissions={{ profile: ["read"] }}
               noPermissionHandle="tooltip"
             >
-              {({ hasPermission, isPending }) => {
-                return isPending ? null : hasPermission ? (
+              {({ hasPermission }) => {
+                return hasPermission === undefined ? null : hasPermission ? (
                   <Select value={agentId} onValueChange={setProfileId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a profile" />
@@ -192,8 +192,8 @@ export function PromptDialog({
                 permissions={{ profile: ["read"] }}
                 noPermissionHandle="tooltip"
               >
-                {({ hasPermission, isPending }) => {
-                  return isPending ? null : hasPermission ? (
+                {({ hasPermission }) => {
+                  return hasPermission === undefined ? null : hasPermission ? (
                     <McpToolsDisplay
                       agentId={agentId}
                       className="text-xs text-muted-foreground"

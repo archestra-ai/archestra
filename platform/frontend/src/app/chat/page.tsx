@@ -549,8 +549,9 @@ export default function ChatPage() {
                   permissions={{ profile: ["read"] }}
                   noPermissionHandle="tooltip"
                 >
-                  {({ hasPermission, isPending }) => {
-                    return isPending ? null : hasPermission ? (
+                  {({ hasPermission }) => {
+                    return hasPermission ===
+                      undefined ? null : hasPermission ? (
                       <McpToolsDisplay
                         agentId={currentProfileId}
                         className="text-xs text-muted-foreground"

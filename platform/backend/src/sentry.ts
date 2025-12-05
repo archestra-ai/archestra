@@ -1,6 +1,5 @@
-import type { TracesSamplerSamplingContext } from "@sentry/core";
+import type { Integration, TracesSamplerSamplingContext } from "@sentry/core";
 import * as Sentry from "@sentry/node";
-import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import config from "@/config";
 import logger from "@/logging";
 
@@ -11,10 +10,51 @@ const {
   },
 } = config;
 
+/**
+ * Safely load the profiling integration.
+ * The @sentry/profiling-node package contains native bindings that can fail to load
+ * on some systems (particularly Windows or certain Mac configurations).
+ * We gracefully handle this by returning null if loading fails.
+ */
+const getProfilingIntegration = async (): Promise<Integration | null> => {
+  try {
+    // Dynamic import to catch loading errors for native module
+    const { nodeProfilingIntegration } = await import("@sentry/profiling-node");
+    return nodeProfilingIntegration();
+  } catch (error) {
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error) },
+      "Failed to load Sentry profiling integration - profiling will be disabled",
+    );
+    return null;
+  }
+};
+
 let sentryClient: Sentry.NodeClient | undefined;
 
-// Initialize Sentry only if DSN is configured
-if (enabled) {
+/**
+ * Initialize Sentry asynchronously to handle dynamic profiling import.
+ * This is an IIFE that runs at module load time.
+ */
+const initSentry = async (): Promise<void> => {
+  if (!enabled) {
+    logger.info("Sentry DSN not configured, skipping Sentry initialization");
+    return;
+  }
+
+  const profilingIntegration = await getProfilingIntegration();
+
+  // Build integrations array, only including profiling if it loaded successfully
+  const integrations: Integration[] = [
+    // Add Pino integration to send logs to Sentry
+    // https://docs.sentry.io/platforms/javascript/guides/fastify/logs/#pino-integration
+    Sentry.pinoIntegration(),
+  ];
+
+  if (profilingIntegration) {
+    integrations.unshift(profilingIntegration);
+  }
+
   // https://docs.sentry.io/platforms/javascript/guides/fastify/install/commonjs/
   sentryClient = Sentry.init({
     dsn,
@@ -28,20 +68,14 @@ if (enabled) {
      */
     sendDefaultPii: true,
 
-    integrations: [
-      // Add our Profiling integration
-      nodeProfilingIntegration(),
-
-      // Add Pino integration to send logs to Sentry
-      // https://docs.sentry.io/platforms/javascript/guides/fastify/logs/#pino-integration
-      Sentry.pinoIntegration(),
-    ],
+    integrations,
 
     /**
      * Set profilesSampleRate to 1.0 to profile 100% of sampled transactions (this is relative to tracesSampleRate)
+     * Only effective if profiling integration loaded successfully
      * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#profilesSampleRate
      */
-    profilesSampleRate: 1.0,
+    profilesSampleRate: profilingIntegration ? 1.0 : 0,
 
     // Enable logs to be sent to Sentry
     enableLogs: true,
@@ -65,9 +99,13 @@ if (enabled) {
     },
   });
 
-  logger.info("Sentry initialized successfully");
-} else {
-  logger.info("Sentry DSN not configured, skipping Sentry initialization");
-}
+  logger.info(
+    { profilingEnabled: !!profilingIntegration },
+    "Sentry initialized successfully",
+  );
+};
+
+// Initialize Sentry (runs at module load)
+await initSentry();
 
 export default sentryClient;

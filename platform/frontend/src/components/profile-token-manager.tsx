@@ -1,10 +1,18 @@
 "use client";
 
+import { archestraApiSdk } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 import { Copy, Key, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useProfile, useUpdateProfile } from "@/lib/agent.query";
+import {
+  useProfileTokens,
+  useRotateProfileToken,
+} from "@/lib/profile-token.query";
+import { LoadingSpinner } from "./loading";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +20,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "./ui/dialog";
+import { MultiSelect } from "./ui/multi-select";
 import {
   Table,
   TableBody,
@@ -20,12 +29,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import {
-  useProfileTokens,
-  useRotateProfileToken,
-} from "@/lib/profile-token.query";
-import { LoadingSpinner } from "./loading";
+} from "./ui/table";
 
 interface ProfileTokenManagerProps {
   profileId: string;
@@ -33,13 +37,36 @@ interface ProfileTokenManagerProps {
 
 export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
   const { data: tokens, isLoading } = useProfileTokens(profileId);
+  const { data: profile } = useProfile(profileId);
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getTeams();
+      return data || [];
+    },
+  });
   const rotateToken = useRotateProfileToken();
+  const updateProfile = useUpdateProfile();
 
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [rotatedTokenValue, setRotatedTokenValue] = useState<string | null>(
     null,
   );
+
+  const assignedTeamIds = profile?.teams || [];
+
+  const handleTeamsChange = async (newTeamIds: string[]) => {
+    try {
+      await updateProfile.mutateAsync({
+        id: profileId,
+        data: { teams: newTeamIds },
+      });
+      toast.success("Teams updated");
+    } catch {
+      toast.error("Failed to update teams");
+    }
+  };
 
   const handleRotate = async () => {
     if (!selectedTokenId) return;
@@ -85,12 +112,28 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h4 className="text-sm font-medium">Access Tokens</h4>
-        <p className="text-xs text-muted-foreground">
-          Tokens for authenticating with the MCP Gateway. Tokens are
-          automatically managed based on team assignments.
-        </p>
+      <div className="flex justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-medium">Access Tokens</h4>
+          <p className="text-xs text-muted-foreground">
+            Tokens for authenticating with the MCP Gateway. Tokens are
+            automatically managed based on team assignments.
+          </p>
+        </div>
+        <div className="w-[max-content]">
+          <span className="text-sm whitespace-nowrap">
+            Assign teams to profile:
+          </span>
+          <MultiSelect
+            value={assignedTeamIds}
+            onValueChange={handleTeamsChange}
+            placeholder="Select teams to assign"
+            items={teams?.map((t) => ({ value: t.id, label: t.name })) || []}
+            disabled={updateProfile.isPending}
+            className="h-8 text-xs min-w-[120px]"
+            showSelectedBadges={false}
+          />
+        </div>
       </div>
 
       {tokens && tokens.length > 0 ? (

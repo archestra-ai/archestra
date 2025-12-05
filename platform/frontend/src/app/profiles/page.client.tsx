@@ -638,7 +638,11 @@ function CreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-4xl max-h-[90vh] flex flex-col"
+        className={
+          createdProfile
+            ? "max-w-[90vw] max-h-[90vh] flex flex-col"
+            : "max-w-4xl max-h-[90vh] flex flex-col"
+        }
         onInteractOutside={(e) => e.preventDefault()}
       >
         {!createdProfile ? (

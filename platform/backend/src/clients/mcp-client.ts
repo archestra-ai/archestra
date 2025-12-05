@@ -375,45 +375,64 @@ class McpClient {
         ReturnType<typeof McpServerModel.findByCatalogIdWithMatchingTeams>
       > = null;
 
-      if (tokenAuth.isOrganizationToken) {
-        // Organization token can use any available credential
-        const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
-        credentialServer = allServers.find((s) => s.secretId !== null) || null;
-      } else if (tokenAuth.tokenTeamId) {
-        // Team token - find server with matching team
-        credentialServer =
-          await McpServerModel.findByCatalogIdWithMatchingTeams(
-            tool.catalogId,
-            [tokenAuth.tokenTeamId],
+      // First, check if any server for this catalog has credentials
+      const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
+      const anyServerHasCredentials = allServers.some(
+        (s) => s.secretId !== null,
+      );
+
+      if (anyServerHasCredentials) {
+        // Credentials exist for this catalog - find an appropriate one
+        if (tokenAuth.isOrganizationToken) {
+          // Organization token can use any available credential
+          credentialServer =
+            allServers.find((s) => s.secretId !== null) || null;
+        } else if (tokenAuth.tokenTeamId) {
+          // Team token - find server with matching team
+          credentialServer =
+            await McpServerModel.findByCatalogIdWithMatchingTeams(
+              tool.catalogId,
+              [tokenAuth.tokenTeamId],
+            );
+        }
+
+        if (!credentialServer?.secretId) {
+          const teamInfo = tokenAuth.isOrganizationToken
+            ? "organization-wide"
+            : `team: ${tokenAuth.tokenTeamId}`;
+          return {
+            error: await this.createErrorResult(
+              toolCall,
+              agentId,
+              `No credential found for catalog ${tool.catalogName || tool.catalogId} with ${teamInfo}. Ensure an MCP server installation with credentials exists for your team.`,
+              tool.mcpServerName || "unknown",
+            ),
+          };
+        }
+
+        const secret = await secretManager.getSecret(credentialServer.secretId);
+        if (secret?.secret) {
+          secrets = secret.secret;
+          logger.info(
+            {
+              toolName: toolCall.name,
+              catalogId: tool.catalogId,
+              credentialServerId: credentialServer.id,
+              tokenId: tokenAuth.tokenId,
+              isOrganizationToken: tokenAuth.isOrganizationToken,
+            },
+            "Dynamic credential resolution: found matching credential",
           );
-      }
-
-      if (!credentialServer?.secretId) {
-        const teamInfo = tokenAuth.isOrganizationToken
-          ? "organization-wide"
-          : `team: ${tokenAuth.tokenTeamId}`;
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            `No credential found for catalog ${tool.catalogName || tool.catalogId} with ${teamInfo}. Ensure an MCP server installation with credentials exists for your team.`,
-            tool.mcpServerName || "unknown",
-          ),
-        };
-      }
-
-      const secret = await secretManager.getSecret(credentialServer.secretId);
-      if (secret?.secret) {
-        secrets = secret.secret;
+        }
+      } else {
+        // No servers have credentials - catalog doesn't require them
         logger.info(
           {
             toolName: toolCall.name,
             catalogId: tool.catalogId,
-            credentialServerId: credentialServer.id,
             tokenId: tokenAuth.tokenId,
-            isOrganizationToken: tokenAuth.isOrganizationToken,
           },
-          "Dynamic credential resolution: found matching credential",
+          "Dynamic credential resolution: catalog has no credentials, proceeding without secrets",
         );
       }
     } else if (tool.credentialSourceMcpServerId) {

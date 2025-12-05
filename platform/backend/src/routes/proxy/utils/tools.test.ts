@@ -275,4 +275,3 @@ describe("persistTools", () => {
     expect(proxyToolsAfter.length).toBe(proxyToolsBefore.length);
   });
 });
-

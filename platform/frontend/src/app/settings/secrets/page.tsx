@@ -72,7 +72,6 @@ export default function SecretsSettingsPage() {
 
           {checkConnectivityMutation.isSuccess && (
             <Alert>
-              <Server className="h-4 w-4" />
               <AlertTitle>Connection Successful</AlertTitle>
               <AlertDescription>
                 Found{" "}

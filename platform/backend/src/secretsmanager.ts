@@ -715,6 +715,8 @@ export class VaultSecretManager implements SecretManager {
     const meta: Record<string, string> = {
       "KV Version": this.config.kvVersion,
       "Secret Path": this.config.secretPath,
+      "Kubernetes Token Path": this.config.k8sTokenPath,
+      "Kubernetes Mount Point": this.config.k8sMountPoint,
     };
 
     if (this.config.kvVersion === "2") {

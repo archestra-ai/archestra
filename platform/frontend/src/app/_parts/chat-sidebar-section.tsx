@@ -253,11 +253,10 @@ export function ChatSidebarSection() {
                                   className="h-7 w-7 shrink-0"
                                 >
                                   <Sparkles
-                                    className={`h-4 w-4 text-yellow-400 ${
-                                      generateTitleMutation.isPending
-                                        ? "animate-[spin_800ms_ease_200ms_infinite]"
-                                        : ""
-                                    }`}
+                                    className={`h-4 w-4 text-primary ${generateTitleMutation.isPending
+                                      ? "animate-pulse"
+                                      : ""
+                                      }`}
                                   />
                                 </Button>
                               </TooltipTrigger>
@@ -276,7 +275,7 @@ export function ChatSidebarSection() {
                           >
                             {(hasRecentlyGeneratedTitle || isRegenerating) && (
                               <Sparkles
-                                className="h-4 w-4 text-yellow-400 animate-[spin_800ms_ease_200ms_infinite]"
+                                className="h-4 w-4 text-primary animate-pulse"
                                 aria-label="AI generated"
                               />
                             )}
@@ -294,7 +293,7 @@ export function ChatSidebarSection() {
                                   }
                                   typingSpeed={35}
                                   showCursor
-                                  cursorClassName="bg-yellow-400"
+                                  cursorClassName="bg-primary"
                                 />
                               </span>
                             ) : (

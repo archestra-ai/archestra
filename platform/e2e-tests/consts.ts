@@ -31,8 +31,6 @@ export const METRICS_ENDPOINT = "/metrics";
 
 export const MCP_GATEWAY_URL_SUFFIX = "/v1/mcp";
 
-export const MCP_INSPECTOR_URL = "http://localhost:6274";
-
 /**
  * Admin credentials - read from environment with fallback to defaults
  * These are used for both auth.setup.ts and SSO E2E tests

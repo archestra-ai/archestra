@@ -8,12 +8,7 @@ import {
   test as base,
   type Page,
 } from "@playwright/test";
-import {
-  editorAuthFile,
-  MCP_INSPECTOR_URL,
-  memberAuthFile,
-  UI_BASE_URL,
-} from "./consts";
+import { editorAuthFile, memberAuthFile, UI_BASE_URL } from "./consts";
 
 /** Type for user-specific navigation function */
 type GoToPageFn = (path?: string) => ReturnType<Page["goto"]>;
@@ -37,8 +32,6 @@ interface TestFixtures {
   goToEditorPage: GoToPageFn;
   /** Navigate member page to a path */
   goToMemberPage: GoToPageFn;
-  /** Navigate to MCP Inspector */
-  goToMcpInspector: GoToPageFn;
 }
 
 const goToPage = (page: Page, path = "") => page.goto(`${UI_BASE_URL}${path}`);
@@ -114,11 +107,5 @@ export const test = base.extend<TestFixtures>({
    */
   goToMemberPage: async ({ memberPage }, use) => {
     await use((path = "") => memberPage.goto(`${UI_BASE_URL}${path}`));
-  },
-  /**
-   * Navigate to MCP Inspector page
-   */
-  goToMcpInspector: async ({ page }, use) => {
-    await use((path = "") => page.goto(`${MCP_INSPECTOR_URL}${path}`));
   },
 });

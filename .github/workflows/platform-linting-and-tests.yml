@@ -170,33 +170,6 @@ jobs:
           curl --retry 10 --retry-delay 2 --retry-connrefused http://localhost:9000/health || (echo "Backend not accessible" && exit 1)
           echo "All services are ready"
 
-      - name: Start MCP Inspector
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          echo "Starting MCP Inspector in background..."
-          nohup npx @modelcontextprotocol/inspector \
-            --transport http \
-            --server-url http://localhost:9000/v1/mcp \
-            > /tmp/mcp-inspector.log 2>&1 &
-
-          echo "Waiting for MCP Inspector to start on port 6274..."
-          for i in {1..30}; do
-            if curl -s http://localhost:6274 > /dev/null 2>&1; then
-              echo "MCP Inspector is ready!"
-              break
-            fi
-            echo "Waiting... (attempt $i/30)"
-            sleep 2
-          done
-
-          curl --retry 5 --retry-delay 2 --retry-connrefused http://localhost:6274 || {
-            echo "MCP Inspector not accessible. Logs:"
-            cat /tmp/mcp-inspector.log
-            exit 1
-          }
-        env:
-          DANGEROUSLY_OMIT_AUTH: "true"
-
       # Check migration consistency using drizzle-kit check
       # https://orm.drizzle.team/docs/drizzle-kit-check
       # The drizzle-kit check command lets you check consistency of your generated SQL migrations history
@@ -336,9 +309,6 @@ jobs:
 
           echo "=== Describe PostgreSQL Pod ==="
           kubectl describe pod -l app.kubernetes.io/name=postgresql
-
-          echo "=== MCP Inspector Logs ==="
-          cat /tmp/mcp-inspector.log 2>/dev/null || echo "No MCP Inspector logs found"
 
   platform-docker-image-scanning:
     name: Platform Docker Image Scanning

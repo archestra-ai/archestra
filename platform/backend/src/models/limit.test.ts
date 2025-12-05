@@ -1,5 +1,3 @@
-import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import LimitModel, { LimitValidationService } from "./limit";
 
@@ -87,10 +85,7 @@ describe("LimitModel", () => {
       ]);
 
       // Verify model usage records were initialized for all 3 models
-      const modelUsage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
 
       expect(modelUsage).toHaveLength(3);
       expect(modelUsage.map((u) => u.model).sort()).toEqual([
@@ -373,10 +368,7 @@ describe("LimitModel", () => {
       );
 
       // Check model usage table instead
-      const modelUsage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
 
       expect(modelUsage.length).toBe(1);
       expect(modelUsage[0].currentUsageTokensIn).toBe(100);
@@ -412,10 +404,7 @@ describe("LimitModel", () => {
       );
 
       // Check model usage table
-      const modelUsage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
 
       expect(modelUsage.length).toBe(1);
       expect(modelUsage[0].currentUsageTokensIn).toBe(150);
@@ -446,11 +435,7 @@ describe("LimitModel", () => {
       );
 
       // Check that only gpt-4o was updated
-      const modelUsage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(eq(schema.limitModelUsageTable.limitId, limit.id))
-        .orderBy(schema.limitModelUsageTable.model);
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
 
       expect(modelUsage).toHaveLength(2);
 
@@ -497,25 +482,11 @@ describe("LimitModel", () => {
       );
 
       // Check that gpt-4o was updated in BOTH limits
-      const limit1Usage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(
-          and(
-            eq(schema.limitModelUsageTable.limitId, limit1.id),
-            eq(schema.limitModelUsageTable.model, "gpt-4o"),
-          ),
-        );
+      const limit1UsageAll = await LimitModel.getRawModelUsage(limit1.id);
+      const limit1Usage = limit1UsageAll.filter((u) => u.model === "gpt-4o");
 
-      const limit2Usage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(
-          and(
-            eq(schema.limitModelUsageTable.limitId, limit2.id),
-            eq(schema.limitModelUsageTable.model, "gpt-4o"),
-          ),
-        );
+      const limit2UsageAll = await LimitModel.getRawModelUsage(limit2.id);
+      const limit2Usage = limit2UsageAll.filter((u) => u.model === "gpt-4o");
 
       expect(limit1Usage[0].currentUsageTokensIn).toBe(100);
       expect(limit1Usage[0].currentUsageTokensOut).toBe(200);
@@ -707,10 +678,7 @@ describe("LimitModel", () => {
       const reset = await LimitModel.resetLimitUsage(limit.id);
 
       // Check model usage was also reset
-      const modelUsage = await db
-        .select()
-        .from(schema.limitModelUsageTable)
-        .where(eq(schema.limitModelUsageTable.limitId, limit.id));
+      const modelUsage = await LimitModel.getRawModelUsage(limit.id);
 
       expect(reset).toBeDefined();
       expect(modelUsage.length).toBe(1);

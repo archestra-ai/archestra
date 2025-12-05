@@ -1,8 +1,6 @@
-import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import db, { schema } from "@/database";
-import { InvitationModel } from "@/models";
+import { InvitationModel, UserModel } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -54,11 +52,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       }
 
       // Check if a user with this email already exists
-      const [existingUser] = await db
-        .select()
-        .from(schema.usersTable)
-        .where(eq(schema.usersTable.email, invitation.email))
-        .limit(1);
+      const existingUser = await UserModel.findByEmail(invitation.email);
 
       return reply.send({
         invitation: {

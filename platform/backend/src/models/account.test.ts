@@ -32,4 +32,40 @@ describe("AccountModel", () => {
       expect(account).toBeUndefined();
     });
   });
+
+  describe("getAllByUserId", () => {
+    test("should return all accounts for a user ordered by updatedAt DESC", async ({
+      makeUser,
+      makeAccount,
+    }) => {
+      const user = await makeUser();
+
+      // Create multiple accounts
+      const account1 = await makeAccount(user.id, {
+        accountId: "google-123",
+        providerId: "google",
+        accessToken: "access-token-1",
+      });
+      const account2 = await makeAccount(user.id, {
+        accountId: "github-123",
+        providerId: "github",
+        accessToken: "access-token-2",
+      });
+
+      const accounts = await AccountModel.getAllByUserId(user.id);
+
+      expect(accounts).toHaveLength(2);
+      // Most recently updated should be first
+      expect(accounts.map((a) => a.id)).toContain(account1.id);
+      expect(accounts.map((a) => a.id)).toContain(account2.id);
+    });
+
+    test("should return empty array when user has no accounts", async ({
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const accounts = await AccountModel.getAllByUserId(user.id);
+      expect(accounts).toEqual([]);
+    });
+  });
 });

@@ -10,12 +10,20 @@ class AgentTeamModel {
     userId: string,
     isAgentAdmin: boolean,
   ): Promise<string[]> {
+    logger.debug(
+      { userId, isAgentAdmin },
+      "AgentTeamModel.getUserAccessibleAgentIds: starting",
+    );
     // Agent admins have access to all agents
     if (isAgentAdmin) {
       const allAgents = await db
         .select({ id: schema.agentsTable.id })
         .from(schema.agentsTable);
 
+      logger.debug(
+        { userId, count: allAgents.length },
+        "AgentTeamModel.getUserAccessibleAgentIds: admin access to all agents",
+      );
       return allAgents.map((agent) => agent.id);
     }
 
@@ -27,20 +35,15 @@ class AgentTeamModel {
 
     const teamIds = userTeams.map((t) => t.teamId);
 
-    logger.info(
-      {
-        userId,
-        isAgentAdmin,
-        teamIds,
-        teamCount: teamIds.length,
-      },
-      "getUserAccessibleAgentIds - checking team membership",
+    logger.debug(
+      { userId, teamCount: teamIds.length },
+      "AgentTeamModel.getUserAccessibleAgentIds: found user teams",
     );
 
     if (teamIds.length === 0) {
-      logger.warn(
+      logger.debug(
         { userId },
-        "User has no team memberships - returning empty agent list",
+        "AgentTeamModel.getUserAccessibleAgentIds: user has no team memberships",
       );
       return [];
     }
@@ -53,16 +56,10 @@ class AgentTeamModel {
 
     const accessibleAgentIds = agentTeams.map((at) => at.agentId);
 
-    logger.info(
-      {
-        userId,
-        teamIds,
-        accessibleAgentIds,
-        agentCount: accessibleAgentIds.length,
-      },
-      "getUserAccessibleAgentIds - final result",
+    logger.debug(
+      { userId, agentCount: accessibleAgentIds.length },
+      "AgentTeamModel.getUserAccessibleAgentIds: completed",
     );
-
     return accessibleAgentIds;
   }
 
@@ -74,8 +71,16 @@ class AgentTeamModel {
     agentId: string,
     isAgentAdmin: boolean,
   ): Promise<boolean> {
+    logger.debug(
+      { userId, agentId, isAgentAdmin },
+      "AgentTeamModel.userHasAgentAccess: checking access",
+    );
     // Agent admins have access to all agents
     if (isAgentAdmin) {
+      logger.debug(
+        { userId, agentId },
+        "AgentTeamModel.userHasAgentAccess: admin has access",
+      );
       return true;
     }
 
@@ -88,6 +93,10 @@ class AgentTeamModel {
     const teamIds = userTeams.map((t) => t.teamId);
 
     if (teamIds.length === 0) {
+      logger.debug(
+        { userId, agentId },
+        "AgentTeamModel.userHasAgentAccess: user has no teams",
+      );
       return false;
     }
 
@@ -103,19 +112,33 @@ class AgentTeamModel {
       )
       .limit(1);
 
-    return agentTeam.length > 0;
+    const hasAccess = agentTeam.length > 0;
+    logger.debug(
+      { userId, agentId, hasAccess },
+      "AgentTeamModel.userHasAgentAccess: completed",
+    );
+    return hasAccess;
   }
 
   /**
    * Get all team IDs assigned to a specific agent
    */
   static async getTeamsForAgent(agentId: string): Promise<string[]> {
+    logger.debug(
+      { agentId },
+      "AgentTeamModel.getTeamsForAgent: fetching teams",
+    );
     const agentTeams = await db
       .select({ teamId: schema.agentTeamsTable.teamId })
       .from(schema.agentTeamsTable)
       .where(eq(schema.agentTeamsTable.agentId, agentId));
 
-    return agentTeams.map((at) => at.teamId);
+    const teamIds = agentTeams.map((at) => at.teamId);
+    logger.debug(
+      { agentId, count: teamIds.length },
+      "AgentTeamModel.getTeamsForAgent: completed",
+    );
+    return teamIds;
   }
 
   /**
@@ -125,6 +148,10 @@ class AgentTeamModel {
     agentId: string,
     teamIds: string[],
   ): Promise<number> {
+    logger.debug(
+      { agentId, teamCount: teamIds.length },
+      "AgentTeamModel.syncAgentTeams: syncing teams",
+    );
     await db.transaction(async (tx) => {
       // Delete all existing team assignments
       await tx
@@ -142,6 +169,10 @@ class AgentTeamModel {
       }
     });
 
+    logger.debug(
+      { agentId, assignedCount: teamIds.length },
+      "AgentTeamModel.syncAgentTeams: completed",
+    );
     return teamIds.length;
   }
 
@@ -152,7 +183,17 @@ class AgentTeamModel {
     agentId: string,
     teamIds: string[],
   ): Promise<void> {
-    if (teamIds.length === 0) return;
+    logger.debug(
+      { agentId, teamCount: teamIds.length },
+      "AgentTeamModel.assignTeamsToAgent: assigning teams",
+    );
+    if (teamIds.length === 0) {
+      logger.debug(
+        { agentId },
+        "AgentTeamModel.assignTeamsToAgent: no teams to assign",
+      );
+      return;
+    }
 
     await db
       .insert(schema.agentTeamsTable)
@@ -163,6 +204,8 @@ class AgentTeamModel {
         })),
       )
       .onConflictDoNothing();
+
+    logger.debug({ agentId }, "AgentTeamModel.assignTeamsToAgent: completed");
   }
 
   /**
@@ -172,6 +215,10 @@ class AgentTeamModel {
     agentId: string,
     teamId: string,
   ): Promise<boolean> {
+    logger.debug(
+      { agentId, teamId },
+      "AgentTeamModel.removeTeamFromAgent: removing team",
+    );
     const result = await db
       .delete(schema.agentTeamsTable)
       .where(
@@ -181,7 +228,12 @@ class AgentTeamModel {
         ),
       );
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const removed = result.rowCount !== null && result.rowCount > 0;
+    logger.debug(
+      { agentId, teamId, removed },
+      "AgentTeamModel.removeTeamFromAgent: completed",
+    );
+    return removed;
   }
 
   /**
@@ -190,7 +242,12 @@ class AgentTeamModel {
   static async getTeamsForAgents(
     agentIds: string[],
   ): Promise<Map<string, string[]>> {
+    logger.debug(
+      { agentCount: agentIds.length },
+      "AgentTeamModel.getTeamsForAgents: fetching teams",
+    );
     if (agentIds.length === 0) {
+      logger.debug("AgentTeamModel.getTeamsForAgents: no agents provided");
       return new Map();
     }
 
@@ -216,6 +273,10 @@ class AgentTeamModel {
       teamsMap.set(agentId, teams);
     }
 
+    logger.debug(
+      { agentCount: agentIds.length, assignmentCount: agentTeams.length },
+      "AgentTeamModel.getTeamsForAgents: completed",
+    );
     return teamsMap;
   }
 
@@ -227,6 +288,10 @@ class AgentTeamModel {
     agentId: string,
     mcpServerId: string,
   ): Promise<boolean> {
+    logger.debug(
+      { agentId, mcpServerId },
+      "AgentTeamModel.agentAndMcpServerShareTeam: checking shared teams",
+    );
     const result = await db
       .select({ teamId: schema.agentTeamsTable.teamId })
       .from(schema.agentTeamsTable)
@@ -242,7 +307,12 @@ class AgentTeamModel {
       )
       .limit(1);
 
-    return result.length > 0;
+    const shareTeam = result.length > 0;
+    logger.debug(
+      { agentId, mcpServerId, shareTeam },
+      "AgentTeamModel.agentAndMcpServerShareTeam: completed",
+    );
+    return shareTeam;
   }
 }
 

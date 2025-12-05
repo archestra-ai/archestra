@@ -1,6 +1,7 @@
 import { MEMBER_ROLE_NAME } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type {
   InsertTeam,
   Team,
@@ -16,6 +17,10 @@ class TeamModel {
   static async create(
     input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt">,
   ): Promise<Team> {
+    logger.debug(
+      { name: input.name, organizationId: input.organizationId },
+      "TeamModel.create: creating team",
+    );
     const teamId = crypto.randomUUID();
     const now = new Date();
 
@@ -32,6 +37,7 @@ class TeamModel {
       })
       .returning();
 
+    logger.debug({ teamId }, "TeamModel.create: completed");
     return {
       ...team,
       members: [],
@@ -42,6 +48,10 @@ class TeamModel {
    * Find all teams in an organization
    */
   static async findByOrganization(organizationId: string): Promise<Team[]> {
+    logger.debug(
+      { organizationId },
+      "TeamModel.findByOrganization: fetching teams",
+    );
     const teams = await db
       .select()
       .from(schema.teamsTable)
@@ -55,6 +65,10 @@ class TeamModel {
       }),
     );
 
+    logger.debug(
+      { organizationId, count: teamsWithMembers.length },
+      "TeamModel.findByOrganization: completed",
+    );
     return teamsWithMembers;
   }
 
@@ -62,6 +76,7 @@ class TeamModel {
    * Find a team by ID
    */
   static async findById(id: string): Promise<Team | null> {
+    logger.debug({ id }, "TeamModel.findById: fetching team");
     const [team] = await db
       .select()
       .from(schema.teamsTable)
@@ -69,18 +84,47 @@ class TeamModel {
       .limit(1);
 
     if (!team) {
+      logger.debug({ id }, "TeamModel.findById: team not found");
       return null;
     }
 
     const members = await TeamModel.getTeamMembers(id);
 
+    logger.debug(
+      { id, membersCount: members.length },
+      "TeamModel.findById: completed",
+    );
     return { ...team, members };
+  }
+
+  /**
+   * Find multiple teams by their IDs
+   * Returns teams without members for performance
+   */
+  static async findByIds(teamIds: string[]): Promise<Team[]> {
+    logger.debug({ teamIds }, "TeamModel.findByIds: fetching teams");
+    if (teamIds.length === 0) {
+      logger.debug("TeamModel.findByIds: no team IDs provided");
+      return [];
+    }
+
+    const teams = await db
+      .select()
+      .from(schema.teamsTable)
+      .where(inArray(schema.teamsTable.id, teamIds));
+
+    logger.debug({ count: teams.length }, "TeamModel.findByIds: completed");
+    return teams.map((team) => ({
+      ...team,
+      members: [], // Members not fetched for performance
+    }));
   }
 
   /**
    * Update a team
    */
   static async update(id: string, input: UpdateTeam): Promise<Team | null> {
+    logger.debug({ id, input }, "TeamModel.update: updating team");
     const [updatedTeam] = await db
       .update(schema.teamsTable)
       .set({
@@ -91,11 +135,13 @@ class TeamModel {
       .returning();
 
     if (!updatedTeam) {
+      logger.debug({ id }, "TeamModel.update: team not found");
       return null;
     }
 
     const members = await TeamModel.getTeamMembers(id);
 
+    logger.debug({ id }, "TeamModel.update: completed");
     return { ...updatedTeam, members };
   }
 
@@ -103,21 +149,29 @@ class TeamModel {
    * Delete a team
    */
   static async delete(id: string): Promise<boolean> {
+    logger.debug({ id }, "TeamModel.delete: deleting team");
     const result = await db
       .delete(schema.teamsTable)
       .where(eq(schema.teamsTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+    logger.debug({ id, deleted }, "TeamModel.delete: completed");
+    return deleted;
   }
 
   /**
    * Get all members of a team
    */
   static async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    logger.debug({ teamId }, "TeamModel.getTeamMembers: fetching members");
     const members = await db
       .select()
       .from(schema.teamMembersTable)
       .where(eq(schema.teamMembersTable.teamId, teamId));
 
+    logger.debug(
+      { teamId, count: members.length },
+      "TeamModel.getTeamMembers: completed",
+    );
     return members;
   }
 
@@ -130,6 +184,10 @@ class TeamModel {
     role: string = MEMBER_ROLE_NAME,
     syncedFromSso = false,
   ): Promise<TeamMember> {
+    logger.debug(
+      { teamId, userId, role, syncedFromSso },
+      "TeamModel.addMember: adding member",
+    );
     const memberId = crypto.randomUUID();
     const now = new Date();
 
@@ -145,6 +203,10 @@ class TeamModel {
       })
       .returning();
 
+    logger.debug(
+      { teamId, userId, memberId },
+      "TeamModel.addMember: completed",
+    );
     return member;
   }
 
@@ -152,6 +214,7 @@ class TeamModel {
    * Remove a member from a team
    */
   static async removeMember(teamId: string, userId: string): Promise<boolean> {
+    logger.debug({ teamId, userId }, "TeamModel.removeMember: removing member");
     const result = await db
       .delete(schema.teamMembersTable)
       .where(
@@ -161,13 +224,19 @@ class TeamModel {
         ),
       );
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const removed = result.rowCount !== null && result.rowCount > 0;
+    logger.debug(
+      { teamId, userId, removed },
+      "TeamModel.removeMember: completed",
+    );
+    return removed;
   }
 
   /**
    * Get all teams a user is a member of
    */
   static async getUserTeams(userId: string): Promise<Team[]> {
+    logger.debug({ userId }, "TeamModel.getUserTeams: fetching user teams");
     const teamMemberships = await db
       .select()
       .from(schema.teamMembersTable)
@@ -179,13 +248,22 @@ class TeamModel {
       }),
     );
 
-    return teams.filter((team) => team !== null);
+    const filteredTeams = teams.filter((team) => team !== null);
+    logger.debug(
+      { userId, count: filteredTeams.length },
+      "TeamModel.getUserTeams: completed",
+    );
+    return filteredTeams;
   }
 
   /**
    * Check if a user is a member of a team
    */
   static async isUserInTeam(teamId: string, userId: string): Promise<boolean> {
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserInTeam: checking membership",
+    );
     const [membership] = await db
       .select()
       .from(schema.teamMembersTable)
@@ -197,29 +275,48 @@ class TeamModel {
       )
       .limit(1);
 
-    return !!membership;
+    const isMember = !!membership;
+    logger.debug(
+      { teamId, userId, isMember },
+      "TeamModel.isUserInTeam: completed",
+    );
+    return isMember;
   }
 
   /**
    * Get all team IDs a user is a member of (used for authorization)
    */
   static async getUserTeamIds(userId: string): Promise<string[]> {
+    logger.debug({ userId }, "TeamModel.getUserTeamIds: fetching team IDs");
     const teamMemberships = await db
       .select({ teamId: schema.teamMembersTable.teamId })
       .from(schema.teamMembersTable)
       .where(eq(schema.teamMembersTable.userId, userId));
 
-    return teamMemberships.map((membership) => membership.teamId);
+    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    logger.debug(
+      { userId, count: teamIds.length },
+      "TeamModel.getUserTeamIds: completed",
+    );
+    return teamIds;
   }
 
   /**
    * Get all user IDs that share at least one team with the given user
    */
   static async getTeammateUserIds(userId: string): Promise<string[]> {
+    logger.debug(
+      { userId },
+      "TeamModel.getTeammateUserIds: fetching teammate IDs",
+    );
     // First get the user's team IDs
     const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
     if (userTeamIds.length === 0) {
+      logger.debug(
+        { userId },
+        "TeamModel.getTeammateUserIds: user has no teams",
+      );
       return [];
     }
 
@@ -231,13 +328,22 @@ class TeamModel {
 
     // Return unique user IDs (excluding the user themselves)
     const teammateIds = [...new Set(teammates.map((t) => t.userId))];
-    return teammateIds.filter((id) => id !== userId);
+    const filteredIds = teammateIds.filter((id) => id !== userId);
+    logger.debug(
+      { userId, count: filteredIds.length },
+      "TeamModel.getTeammateUserIds: completed",
+    );
+    return filteredIds;
   }
 
   /**
    * Get all teams for an agent with their compression settings
    */
   static async getTeamsForAgent(agentId: string): Promise<Team[]> {
+    logger.debug(
+      { agentId },
+      "TeamModel.getTeamsForAgent: fetching agent teams",
+    );
     const agentTeams = await db
       .select({
         team: schema.teamsTable,
@@ -249,6 +355,10 @@ class TeamModel {
       )
       .where(eq(schema.agentTeamsTable.agentId, agentId));
 
+    logger.debug(
+      { agentId, count: agentTeams.length },
+      "TeamModel.getTeamsForAgent: completed",
+    );
     return agentTeams.map((result) => ({
       ...result.team,
       members: [], // Members not needed for compression logic
@@ -263,10 +373,19 @@ class TeamModel {
    * Get all external groups mapped to a team
    */
   static async getExternalGroups(teamId: string): Promise<TeamExternalGroup[]> {
-    return db
+    logger.debug(
+      { teamId },
+      "TeamModel.getExternalGroups: fetching external groups",
+    );
+    const groups = await db
       .select()
       .from(schema.teamExternalGroupsTable)
       .where(eq(schema.teamExternalGroupsTable.teamId, teamId));
+    logger.debug(
+      { teamId, count: groups.length },
+      "TeamModel.getExternalGroups: completed",
+    );
+    return groups;
   }
 
   /**
@@ -276,6 +395,10 @@ class TeamModel {
     teamId: string,
     groupIdentifier: string,
   ): Promise<TeamExternalGroup> {
+    logger.debug(
+      { teamId, groupIdentifier },
+      "TeamModel.addExternalGroup: adding external group",
+    );
     const id = crypto.randomUUID();
 
     const [group] = await db
@@ -287,6 +410,10 @@ class TeamModel {
       })
       .returning();
 
+    logger.debug(
+      { teamId, groupId: id },
+      "TeamModel.addExternalGroup: completed",
+    );
     return group;
   }
 
@@ -297,6 +424,10 @@ class TeamModel {
     teamId: string,
     groupIdentifier: string,
   ): Promise<boolean> {
+    logger.debug(
+      { teamId, groupIdentifier },
+      "TeamModel.removeExternalGroup: removing external group",
+    );
     const result = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
@@ -306,7 +437,12 @@ class TeamModel {
         ),
       );
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const removed = result.rowCount !== null && result.rowCount > 0;
+    logger.debug(
+      { teamId, groupIdentifier, removed },
+      "TeamModel.removeExternalGroup: completed",
+    );
+    return removed;
   }
 
   /**
@@ -317,6 +453,10 @@ class TeamModel {
     teamId: string,
     groupId: string,
   ): Promise<boolean> {
+    logger.debug(
+      { teamId, groupId },
+      "TeamModel.removeExternalGroupById: removing external group",
+    );
     const result = await db
       .delete(schema.teamExternalGroupsTable)
       .where(
@@ -326,7 +466,12 @@ class TeamModel {
         ),
       );
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const removed = result.rowCount !== null && result.rowCount > 0;
+    logger.debug(
+      { teamId, groupId, removed },
+      "TeamModel.removeExternalGroupById: completed",
+    );
+    return removed;
   }
 
   /**
@@ -337,6 +482,10 @@ class TeamModel {
     organizationId: string,
     groupIdentifier: string,
   ): Promise<Team[]> {
+    logger.debug(
+      { organizationId, groupIdentifier },
+      "TeamModel.findTeamsByExternalGroup: fetching teams",
+    );
     const results = await db
       .select({
         team: schema.teamsTable,
@@ -356,6 +505,10 @@ class TeamModel {
         ),
       );
 
+    logger.debug(
+      { organizationId, groupIdentifier, count: results.length },
+      "TeamModel.findTeamsByExternalGroup: completed",
+    );
     return results.map((r) => ({
       ...r.team,
       members: [],
@@ -370,7 +523,15 @@ class TeamModel {
     organizationId: string,
     groupIdentifiers: string[],
   ): Promise<Map<string, Team[]>> {
+    logger.debug(
+      { organizationId, groupCount: groupIdentifiers.length },
+      "TeamModel.findTeamsByExternalGroups: fetching teams",
+    );
     if (groupIdentifiers.length === 0) {
+      logger.debug(
+        { organizationId },
+        "TeamModel.findTeamsByExternalGroups: no group identifiers provided",
+      );
       return new Map();
     }
 
@@ -419,7 +580,50 @@ class TeamModel {
       }
     }
 
+    logger.debug(
+      { organizationId, teamsFound: teamMap.size },
+      "TeamModel.findTeamsByExternalGroups: completed",
+    );
     return groupToTeams;
+  }
+
+  /**
+   * Get a user's current SSO-synced team memberships in an organization
+   */
+  static async getSsoSyncedMemberships(
+    userId: string,
+    organizationId: string,
+  ): Promise<Array<{ teamMember: TeamMember; team: Team }>> {
+    logger.debug(
+      { userId, organizationId },
+      "TeamModel.getSsoSyncedMemberships: fetching memberships",
+    );
+    const memberships = await db
+      .select({
+        teamMember: schema.teamMembersTable,
+        team: schema.teamsTable,
+      })
+      .from(schema.teamMembersTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.syncedFromSso, true),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+
+    logger.debug(
+      { userId, organizationId, count: memberships.length },
+      "TeamModel.getSsoSyncedMemberships: completed",
+    );
+    return memberships.map((m) => ({
+      teamMember: m.teamMember,
+      team: { ...m.team, members: [] },
+    }));
   }
 
   /**
@@ -435,6 +639,10 @@ class TeamModel {
     organizationId: string,
     ssoGroups: string[],
   ): Promise<{ added: string[]; removed: string[] }> {
+    logger.debug(
+      { userId, organizationId, groupCount: ssoGroups.length },
+      "TeamModel.syncUserTeams: starting sync",
+    );
     const added: string[] = [];
     const removed: string[] = [];
 
@@ -453,23 +661,10 @@ class TeamModel {
     }
 
     // Get user's current SSO-synced team memberships in this organization
-    const currentSyncedMemberships = await db
-      .select({
-        teamMember: schema.teamMembersTable,
-        team: schema.teamsTable,
-      })
-      .from(schema.teamMembersTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.teamMembersTable.userId, userId),
-          eq(schema.teamMembersTable.syncedFromSso, true),
-          eq(schema.teamsTable.organizationId, organizationId),
-        ),
-      );
+    const currentSyncedMemberships = await TeamModel.getSsoSyncedMemberships(
+      userId,
+      organizationId,
+    );
 
     // Add user to teams they should be in but aren't
     for (const teamId of shouldBeInTeamIds) {
@@ -489,6 +684,10 @@ class TeamModel {
       }
     }
 
+    logger.debug(
+      { userId, organizationId, added: added.length, removed: removed.length },
+      "TeamModel.syncUserTeams: completed",
+    );
     return { added, removed };
   }
 }

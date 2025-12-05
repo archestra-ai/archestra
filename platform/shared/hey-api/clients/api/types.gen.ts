@@ -13490,6 +13490,9 @@ export type GetSecretsTypeResponses = {
      */
     200: {
         type: 'DB' | 'Vault';
+        meta: {
+            [key: string]: string;
+        };
     };
 };
 
@@ -13566,8 +13569,6 @@ export type CheckSecretsConnectivityResponses = {
      * Default Response
      */
     200: {
-        type: 'DB' | 'Vault';
-        connected: true;
         secretCount: number;
     };
 };

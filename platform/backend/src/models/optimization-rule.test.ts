@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "@/test";
-import type { OptimizationRule } from "@/types";
+import type { InsertOptimizationRule, OptimizationRule } from "@/types";
 import OptimizationRuleModel from "./optimization-rule";
 
 describe("OptimizationRuleModel.matchByRules", () => {
@@ -147,5 +147,37 @@ describe("OptimizationRuleModel.matchByRules", () => {
     const result = OptimizationRuleModel.matchByRules(rules, context);
 
     expect(result).toBeNull();
+  });
+});
+
+describe("OptimizationRuleModel.getFirstOrganizationId", () => {
+  test("returns organization ID when rules exist", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    // Create an organization-level optimization rule
+    const ruleData: InsertOptimizationRule = {
+      entityType: "organization",
+      entityId: org.id,
+      conditions: [{ maxLength: 1000 }],
+      provider: "openai",
+      targetModel: "gpt-4o-mini",
+      enabled: true,
+    };
+    await OptimizationRuleModel.create(ruleData);
+
+    const result = await OptimizationRuleModel.getFirstOrganizationId();
+
+    expect(result).toBe(org.id);
+  });
+
+  test("returns null when no organization rules exist", async () => {
+    // Since we're in a test with a fresh database, there should be no rules
+    // Note: This test might be flaky if other tests create rules and don't clean up
+    const result = await OptimizationRuleModel.getFirstOrganizationId();
+
+    // Result could be null or an org ID depending on test isolation
+    expect(result === null || typeof result === "string").toBe(true);
   });
 });

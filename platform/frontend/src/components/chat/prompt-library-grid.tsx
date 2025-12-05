@@ -140,14 +140,11 @@ export function PromptLibraryGrid({
           permissions={{ conversation: ["create"] }}
           noPermissionHandle="tooltip"
         >
-          {({ isDisabled: noPermission }) => {
-            const hasNoProfiles = agents.length === 0;
-            const isDisabled = noPermission || hasNoProfiles;
-
-            const freeChatCard = (
+          {({ hasPermission }) => {
+            return (
               <Card
-                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
-                onClick={() => !isDisabled && setIsFreeChatDialogOpen(true)}
+                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${hasPermission === false ? "opacity-50 pointer-events-none" : ""}`}
+                onClick={() => setIsFreeChatDialogOpen(true)}
               >
                 <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
                   <MessageSquarePlus className="h-4 w-4" />
@@ -155,27 +152,6 @@ export function PromptLibraryGrid({
                 </CardTitle>
               </Card>
             );
-
-            // Show tooltip when disabled due to no profiles (permission tooltip is handled by WithPermissions)
-            if (hasNoProfiles && !noPermission) {
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>{freeChatCard}</div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>
-                        No profiles available. You need access to at least one
-                        profile to start a chat.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            }
-
-            return freeChatCard;
           }}
         </WithPermissions>
 
@@ -191,7 +167,7 @@ export function PromptLibraryGrid({
               permissions={{ conversation: ["create"] }}
               noPermissionHandle="tooltip"
             >
-              {({ isDisabled }) => {
+              {({ hasPermission }) => {
                 return (
                   <PromptTile
                     key={prompt.id}
@@ -201,7 +177,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
-                    disabled={isDisabled}
+                    disabled={hasPermission === false}
                   />
                 );
               }}

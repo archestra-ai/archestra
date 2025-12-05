@@ -10,6 +10,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   SessionModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -30,6 +31,7 @@ import type {
   InsertTeam,
   InsertUser,
   OrganizationRole,
+  TeamMember,
   Tool,
   ToolInvocation,
   TrustedData,
@@ -48,6 +50,7 @@ interface TestFixtures {
   makeAdmin: typeof makeAdmin;
   makeOrganization: typeof makeOrganization;
   makeTeam: typeof makeTeam;
+  makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
@@ -145,6 +148,22 @@ async function makeTeam(
     })
     .returning();
   return team;
+}
+
+/**
+ * Creates a test team member using the TeamModel
+ */
+async function makeTeamMember(
+  teamId: string,
+  userId: string,
+  overrides: { role?: string; syncedFromSso?: boolean } = {},
+): Promise<TeamMember> {
+  return await TeamModel.addMember(
+    teamId,
+    userId,
+    overrides.role ?? MEMBER_ROLE_NAME,
+    overrides.syncedFromSso ?? false,
+  );
 }
 
 /**
@@ -673,6 +692,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeTeam: async ({}, use) => {
     await use(makeTeam);
+  },
+  makeTeamMember: async ({}, use) => {
+    await use(makeTeamMember);
   },
   makeAgent: async ({}, use) => {
     await use(makeAgent);

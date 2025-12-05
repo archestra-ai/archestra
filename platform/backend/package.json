@@ -7,10 +7,10 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsdown && sh scripts/upload-sentry-sourcemaps.sh",
+    "build": "tsdown && pnpm run sentry:sourcemaps",
     "start": "NODE_ENV=production node --enable-source-maps dist/server.mjs",
-    "dev": "tsdown --watch --onSuccess \"node --enable-source-maps dist/server.mjs\"",
-    "dev:debug": "tsdown --watch --onSuccess \"node --enable-source-maps --inspect dist/server.mjs\"",
+    "dev": "tsdown --watch",
+    "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",
@@ -23,7 +23,8 @@
     "db:studio": "drizzle-kit studio",
     "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
-    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts"
+    "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
+    "sentry:sourcemaps": "if [ -n \"$SENTRY_AUTH_TOKEN\" ]; then sentry-cli sourcemaps inject --org archestra --project archestra-platform-backend ./dist && sentry-cli sourcemaps upload --org archestra --project archestra-platform-backend --release \"${VERSION:-dev}\" ./dist; else echo 'Skipping Sentry source map upload (SENTRY_AUTH_TOKEN not set)'; fi"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.47",

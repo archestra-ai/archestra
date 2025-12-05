@@ -13,16 +13,17 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
-import { desc, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
+  AccountModel,
   InvitationModel,
   MemberModel,
   SessionModel,
+  SsoProviderModel,
   TeamModel,
 } from "@/models";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache";
@@ -133,14 +134,10 @@ export const auth: any = betterAuth({
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
         getRole: async (data) => {
-          // Dynamic import to avoid circular dependency
-          // (sso-provider.ts imports auth from this file)
-          const { default: SsoProviderModel } = await import(
-            "@/models/sso-provider"
-          );
-          const role = await SsoProviderModel.resolveSsoRole(data);
           // Cast to the expected union type (better-auth expects "member" | "admin")
-          return role as "member" | "admin";
+          return (await SsoProviderModel.resolveSsoRole(data)) as
+            | "member"
+            | "admin";
         },
       },
       defaultOverrideUserInfo: true,
@@ -232,11 +229,9 @@ export const auth: any = betterAuth({
         before: async (session) => {
           // If activeOrganizationId is not set, find the user's first organization
           if (!session.activeOrganizationId) {
-            const [membership] = await db
-              .select()
-              .from(schema.membersTable)
-              .where(eq(schema.membersTable.userId, session.userId))
-              .limit(1);
+            const membership = await MemberModel.getFirstMembershipForUser(
+              session.userId,
+            );
 
             if (membership) {
               logger.info(
@@ -431,13 +426,8 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // Auto-accept any pending invitations for this user's email
       try {
-        const pendingInvitations = await db
-          .select()
-          .from(schema.invitationsTable)
-          .where(eq(schema.invitationsTable.email, user.email.toLowerCase()));
-
-        const pendingInvitation = pendingInvitations.find(
-          (inv) => inv.status === "pending",
+        const pendingInvitation = await InvitationModel.findPendingByEmail(
+          user.email,
         );
 
         if (pendingInvitation) {
@@ -497,11 +487,7 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
 
   // Get the user's accounts and find the most recently used SSO account
   // Order by updatedAt DESC to get the account from the current login
-  const allAccounts = await db
-    .select()
-    .from(schema.accountsTable)
-    .where(eq(schema.accountsTable.userId, userId))
-    .orderBy(desc(schema.accountsTable.updatedAt));
+  const allAccounts = await AccountModel.getAllByUserId(userId);
 
   // Find an SSO account (providerId != "credential") - first match is most recent due to ordering
   const ssoAccount = allAccounts.find((acc) => acc.providerId !== "credential");
@@ -567,7 +553,6 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
   }
 
   // Get the SSO provider to find the organization ID
-  const { default: SsoProviderModel } = await import("@/models/sso-provider");
   const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
 
   if (!ssoProvider?.organizationId) {

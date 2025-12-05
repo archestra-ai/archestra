@@ -7,6 +7,7 @@ import {
   InternalMcpCatalogModel,
   MemberModel,
   OrganizationModel,
+  ProfileTokenModel,
   PromptModel,
   TeamModel,
   ToolModel,
@@ -505,6 +506,54 @@ server.connect(transport);
   logger.info("✓ Seeded test MCP server (internal-dev-test-server)");
 }
 
+/**
+ * Creates profile tokens for existing profiles and team assignments
+ * - Creates "Organization Token" for profiles missing one
+ * - Creates team tokens for profile-team assignments missing one
+ */
+async function seedProfileTokens(): Promise<void> {
+  const allProfiles = await AgentModel.findAll();
+
+  for (const profile of allProfiles) {
+    const tokens = await ProfileTokenModel.findByProfileId(profile.id);
+
+    // Check for Organization Token
+    const hasOrgToken = tokens.some((t) => t.isOrganizationToken);
+    if (!hasOrgToken) {
+      await ProfileTokenModel.createDefaultToken(profile.id);
+      logger.info(
+        { profileId: profile.id, profileName: profile.name },
+        "Created missing Organization Token",
+      );
+    }
+
+    // Check for team tokens
+    const teams = await AgentTeamModel.getTeamsForAgent(profile.id);
+    for (const teamId of teams) {
+      const hasTeamToken = tokens.some((t) => t.teamId === teamId);
+      if (!hasTeamToken) {
+        const team = await TeamModel.findById(teamId);
+        if (team) {
+          await ProfileTokenModel.createTeamToken(
+            profile.id,
+            teamId,
+            team.name,
+          );
+          logger.info(
+            {
+              profileId: profile.id,
+              profileName: profile.name,
+              teamId,
+              teamName: team.name,
+            },
+            "Created missing team token",
+          );
+        }
+      }
+    }
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultUserAndOrg();
   await seedDualLlmConfig();
@@ -515,4 +564,5 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
   await seedTestMcpServer();
+  await seedProfileTokens();
 }

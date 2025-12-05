@@ -54,7 +54,7 @@ export function WithPermissions({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="cursor-not-allowed">
-            {children({ hasPermission: false, isPending })}
+            {children({ hasPermission: isPending ? undefined : false, isPending })}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>

@@ -70,6 +70,7 @@ class McpClient {
       tool,
       toolCall,
       agentId,
+      catalogItem,
       tokenAuth,
     );
     if ("error" in contextResult) {
@@ -249,14 +250,86 @@ class McpClient {
     tool: McpToolWithServerMetadata,
     toolCall: CommonToolCall,
     agentId: string,
+    catalogItem: InternalMcpCatalog,
     tokenAuth?: TokenAuthContext,
   ): Promise<
     | { targetMcpServerId: string; secrets: Record<string, unknown> }
     | { error: CommonToolResult }
   > {
-    // Determine target server
-    const targetMcpServerId =
-      tool.executionSourceMcpServerId || tool.mcpServerId;
+    // Determine target server - may be resolved dynamically for local servers
+    let targetMcpServerId = tool.executionSourceMcpServerId || tool.mcpServerId;
+
+    // For local servers with dynamic credential, resolve execution source based on token's team
+    if (
+      catalogItem.serverType === "local" &&
+      tool.useDynamicTeamCredential &&
+      !tool.executionSourceMcpServerId
+    ) {
+      if (!tokenAuth) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      if (!tool.catalogId) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Dynamic team credential is enabled but tool has no catalogId",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      // Find execution source based on token's team
+      let executionServer: Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogIdWithMatchingTeams>
+      > = null;
+
+      if (tokenAuth.isOrganizationToken) {
+        // Organization token can use any available installation
+        const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
+        executionServer = allServers[0] || null;
+      } else {
+        // Team token - find server with matching team
+        executionServer = await McpServerModel.findByCatalogIdWithMatchingTeams(
+          tool.catalogId,
+          tokenAuth.tokenTeamIds,
+        );
+      }
+
+      if (!executionServer) {
+        const teamInfo = tokenAuth.isOrganizationToken
+          ? "organization-wide"
+          : `teams: ${tokenAuth.tokenTeamIds.join(", ")}`;
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            `No installation found for catalog ${tool.catalogName || tool.catalogId} with ${teamInfo}. Ensure an MCP server installation exists for your team.`,
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+
+      targetMcpServerId = executionServer.id;
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          executionServerId: executionServer.id,
+          tokenId: tokenAuth.tokenId,
+          isOrganizationToken: tokenAuth.isOrganizationToken,
+        },
+        "Dynamic execution source resolution: found matching installation",
+      );
+    }
 
     if (!targetMcpServerId) {
       return {

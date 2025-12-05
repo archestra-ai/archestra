@@ -79,9 +79,10 @@ export function AssignProfileDialog({
       );
     };
 
-    // Check if dynamic credential is selected
+    // Check if dynamic credential is selected (for both local and remote servers)
     const useDynamicCredential =
-      credentialSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE;
+      credentialSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE ||
+      executionSourceMcpServerId === DYNAMIC_CREDENTIAL_VALUE;
 
     const results = await Promise.allSettled(
       selectedProfileIds.map((agentId) =>
@@ -94,7 +95,9 @@ export function AssignProfileDialog({
               ? null
               : credentialSourceMcpServerId || null,
           executionSourceMcpServerId: isLocalServer
-            ? executionSourceMcpServerId || null
+            ? useDynamicCredential
+              ? null
+              : executionSourceMcpServerId || null
             : null,
           useDynamicTeamCredential: useDynamicCredential,
         }),
@@ -237,6 +240,7 @@ export function AssignProfileDialog({
                   className="w-full"
                   catalogId={catalogId}
                   shouldSetDefaultValue
+                  showDynamicOption
                 />
               </>
             ) : (

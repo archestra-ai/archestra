@@ -1,5 +1,6 @@
 "use client";
 
+import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +13,7 @@ import {
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 import { LoadingSpinner } from "./loading";
+import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
 
 interface InstallationSelectProps {
   value?: string | null;
@@ -21,6 +23,8 @@ interface InstallationSelectProps {
   /** Catalog ID to filter installations - only shows local installations for the same catalog item */
   catalogId: string;
   shouldSetDefaultValue: boolean;
+  /** Whether to show the dynamic team installation option */
+  showDynamicOption?: boolean;
 }
 
 /**
@@ -36,6 +40,7 @@ export function InstallationSelect({
   className,
   catalogId,
   shouldSetDefaultValue,
+  showDynamicOption = false,
 }: InstallationSelectProps) {
   const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
     catalogId,
@@ -51,12 +56,17 @@ export function InstallationSelect({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && installations.length > 0 && !value) {
-      onValueChange(installations[0].id);
+    if (shouldSetDefaultValue && !value) {
+      // Default to dynamic installation if available, otherwise first installation
+      if (showDynamicOption) {
+        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
+      } else if (installations.length > 0) {
+        onValueChange(installations[0].id);
+      }
     }
-  }, [installations.length]);
+  }, [installations.length, showDynamicOption]);
 
-  if (!installations || installations.length === 0) {
+  if (!showDynamicOption && (!installations || installations.length === 0)) {
     return (
       <div className="px-2 py-1.5 text-xs text-muted-foreground">
         No installations available
@@ -83,6 +93,22 @@ export function InstallationSelect({
         <SelectValue placeholder="Select installation..." />
       </SelectTrigger>
       <SelectContent>
+        {showDynamicOption && (
+          <SelectItem
+            value={DYNAMIC_CREDENTIAL_VALUE}
+            className="cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className="h-3 w-3 text-amber-500" />
+              <span className="text-xs font-medium">
+                Dynamic team installation
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Resolve based on token's team at runtime
+            </p>
+          </SelectItem>
+        )}
         {installations.map((server) => (
           <SelectItem
             key={server.id}
@@ -111,7 +137,7 @@ export function InstallationSelect({
             </div>
           </SelectItem>
         ))}
-        {installations.length === 0 && (
+        {!showDynamicOption && installations.length === 0 && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
             No installations available
           </div>

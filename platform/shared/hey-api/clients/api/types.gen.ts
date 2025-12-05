@@ -8023,6 +8023,89 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
+export type GetV1McpData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type GetV1McpErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
+
+export type GetV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+    };
+};
+
+export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
+
+export type PostV1McpData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type PostV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp/sessions';
+};
+
+export type DeleteV1McpSessionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
+
+export type DeleteV1McpSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
+
 export type GetLimitsData = {
     body?: never;
     path?: never;
@@ -8481,150 +8564,6 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
-
-export type GetV1McpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type GetV1McpErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
-
-export type GetV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-    };
-};
-
-export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
-
-export type PostV1McpData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type PostV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1McpByProfileIdData = {
-    body?: never;
-    path: {
-        profileId: string;
-    };
-    query?: never;
-    url: '/v1/mcp/{profileId}';
-};
-
-export type GetV1McpByProfileIdErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
-
-export type GetV1McpByProfileIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-        tokenAuth?: {
-            tokenId: string;
-            isOrganizationToken: boolean;
-            teamCount: number;
-        };
-    };
-};
-
-export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
-
-export type PostV1McpByProfileIdData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path: {
-        profileId: string;
-    };
-    query?: never;
-    url: '/v1/mcp/{profileId}';
-};
-
-export type PostV1McpByProfileIdResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1McpSessionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp/sessions';
-};
-
-export type DeleteV1McpSessionsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
-
-export type DeleteV1McpSessionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-        clearedCount: number;
-    };
-};
-
-export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
 
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
@@ -11159,6 +11098,100 @@ export type GetMcpToolCallResponses = {
 };
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
+export type GetV1McpByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type GetV1McpByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+
+export type GetV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+        tokenAuth?: {
+            tokenId: string;
+            isOrganizationToken: boolean;
+            teamCount: number;
+        };
+    };
+};
+
+export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+
+export type PostV1McpByProfileIdData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type PostV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/sessions/{profileId}';
+};
+
+export type DeleteV1McpSessionsByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdError = DeleteV1McpSessionsByProfileIdErrors[keyof DeleteV1McpSessionsByProfileIdErrors];
+
+export type DeleteV1McpSessionsByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdResponse = DeleteV1McpSessionsByProfileIdResponses[keyof DeleteV1McpSessionsByProfileIdResponses];
 
 export type InitiateOAuthData = {
     body: {

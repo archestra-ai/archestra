@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  Check,
-  Copy,
-  Key,
-  MoreHorizontal,
-  Plus,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
-import { useCallback, useState } from "react";
+import { Key, MoreHorizontal, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,9 +56,6 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
   const [newTokenTeams, setNewTokenTeams] = useState<string[]>([]);
   const [isOrganizationToken, setIsOrganizationToken] = useState(false);
 
-  const [newTokenValue, setNewTokenValue] = useState<string | null>(null);
-  const [copiedTokenValue, setCopiedTokenValue] = useState(false);
-
   const teamOptions = (teams ?? []).map((team) => ({
     value: team.id,
     label: team.name,
@@ -88,7 +77,9 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
     });
 
     if (result?.value) {
-      setNewTokenValue(result.value);
+      await navigator.clipboard.writeText(result.value);
+      toast.success("Token created and copied to clipboard");
+      handleCloseCreateDialog();
     }
   };
 
@@ -96,32 +87,22 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
     await deleteToken.mutateAsync({ profileId, tokenId, tokenName });
   };
 
-  const handleRotateToken = async (tokenId: string, tokenName: string) => {
+  const handleRotateToken = async (tokenId: string) => {
     const result = await rotateToken.mutateAsync({
       profileId,
       tokenId,
-      tokenName,
     });
     if (result?.value) {
-      setNewTokenValue(result.value);
-      setCreateDialogOpen(true);
+      await navigator.clipboard.writeText(result.value);
+      toast.success("Token rotated and copied to clipboard");
     }
   };
-
-  const handleCopyTokenValue = useCallback(async () => {
-    if (!newTokenValue) return;
-    await navigator.clipboard.writeText(newTokenValue);
-    setCopiedTokenValue(true);
-    toast.success("Token copied to clipboard");
-    setTimeout(() => setCopiedTokenValue(false), 2000);
-  }, [newTokenValue]);
 
   const handleCloseCreateDialog = () => {
     setCreateDialogOpen(false);
     setNewTokenName("");
     setNewTokenTeams([]);
     setIsOrganizationToken(false);
-    setNewTokenValue(null);
   };
 
   const formatDate = (date: string | null) => {
@@ -207,9 +188,7 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() =>
-                            handleRotateToken(token.id, token.name)
-                          }
+                          onClick={() => handleRotateToken(token.id)}
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Rotate
@@ -238,95 +217,60 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
       )}
 
       <Dialog open={createDialogOpen} onOpenChange={handleCloseCreateDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>
-              {newTokenValue ? "Token Created" : "Create Access Token"}
-            </DialogTitle>
+            <DialogTitle>Create Access Token</DialogTitle>
             <DialogDescription>
-              {newTokenValue
-                ? "Copy your new token now. You won't be able to see it again."
-                : "Create a new token for MCP Gateway authentication."}
+              Create a new token for MCP Gateway authentication.
             </DialogDescription>
           </DialogHeader>
 
-          {newTokenValue ? (
-            <div className="space-y-4">
-              <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                <code className="text-sm break-all flex-1 mr-2">
-                  {newTokenValue}
-                </code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCopyTokenValue}
-                >
-                  {copiedTokenValue ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Store this token securely. It provides access to the MCP Gateway
-                for this profile.
-              </p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tokenName">Name</Label>
+              <Input
+                id="tokenName"
+                value={newTokenName}
+                onChange={(e) => setNewTokenName(e.target.value)}
+                placeholder="e.g., Development, CI/CD"
+              />
             </div>
-          ) : (
-            <div className="space-y-4">
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="orgToken"
+                checked={isOrganizationToken}
+                onCheckedChange={setIsOrganizationToken}
+              />
+              <Label htmlFor="orgToken">Organization-wide token</Label>
+            </div>
+
+            {!isOrganizationToken && (
               <div className="space-y-2">
-                <Label htmlFor="tokenName">Name</Label>
-                <Input
-                  id="tokenName"
-                  value={newTokenName}
-                  onChange={(e) => setNewTokenName(e.target.value)}
-                  placeholder="e.g., Development, CI/CD"
+                <Label>Teams</Label>
+                <MultiSelect
+                  value={newTokenTeams}
+                  onValueChange={setNewTokenTeams}
+                  items={teamOptions}
+                  placeholder="Select teams..."
                 />
+                <p className="text-xs text-muted-foreground">
+                  Select which teams this token can access credentials for.
+                </p>
               </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="orgToken"
-                  checked={isOrganizationToken}
-                  onCheckedChange={setIsOrganizationToken}
-                />
-                <Label htmlFor="orgToken">Organization-wide token</Label>
-              </div>
-
-              {!isOrganizationToken && (
-                <div className="space-y-2">
-                  <Label>Teams</Label>
-                  <MultiSelect
-                    value={newTokenTeams}
-                    onValueChange={setNewTokenTeams}
-                    items={teamOptions}
-                    placeholder="Select teams..."
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Select which teams this token can access credentials for.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <DialogFooter>
-            {newTokenValue ? (
-              <Button onClick={handleCloseCreateDialog}>Done</Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={handleCloseCreateDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateToken}
-                  disabled={createToken.isPending}
-                >
-                  {createToken.isPending ? "Creating..." : "Create Token"}
-                </Button>
-              </>
-            )}
+            <Button variant="outline" onClick={handleCloseCreateDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateToken}
+              disabled={createToken.isPending}
+            >
+              {createToken.isPending ? "Creating..." : "Create Token"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

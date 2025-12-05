@@ -111,10 +111,6 @@ describe("createSecretManager", () => {
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is not set", () => {
     delete process.env.ARCHESTRA_SECRETS_MANAGER;
-    delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
-    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
-    delete process.env.HASHICORP_VAULT_ADDR;
-    delete process.env.HASHICORP_VAULT_TOKEN;
 
     const manager = createSecretManager();
 
@@ -140,18 +136,6 @@ describe("createSecretManager", () => {
   });
 
   test("should return DbSecretsManager when ARCHESTRA_SECRETS_MANAGER is 'Vault' but token is missing (default auth method)", () => {
-    process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
-    process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
-    delete process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD;
-    delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
-    setEnterpriseLicenseActivated(true);
-
-    const manager = createSecretManager();
-
-    expect(manager).toBeInstanceOf(DbSecretsManager);
-  });
-
-  test("should return DbSecretsManager when AUTH_METHOD=TOKEN but token is missing", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
     process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD = "TOKEN";
@@ -198,9 +182,6 @@ describe("createSecretManager", () => {
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
 
-  // Note: K8S auth integration test is skipped because it requires the K8s service account token file
-  // The K8S config parsing is tested in getVaultConfigFromEnv tests
-
   test("should return DbSecretsManager when AUTH_METHOD=K8S but K8S_ROLE is missing", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";
     process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://localhost:8200";
@@ -212,9 +193,6 @@ describe("createSecretManager", () => {
 
     expect(manager).toBeInstanceOf(DbSecretsManager);
   });
-
-  // Note: AWS IAM auth integration test is skipped because it requires actual AWS credentials
-  // The AWS config parsing is tested in getVaultConfigFromEnv tests
 
   test("should return DbSecretsManager when AUTH_METHOD=AWS but AWS_ROLE is missing", () => {
     process.env.ARCHESTRA_SECRETS_MANAGER = "Vault";

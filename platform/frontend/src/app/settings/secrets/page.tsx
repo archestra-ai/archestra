@@ -74,8 +74,7 @@ export default function SecretsSettingsPage() {
             <Alert>
               <AlertTitle>Connection Successful</AlertTitle>
               <AlertDescription>
-                Found{" "}
-                {checkConnectivityMutation.data.secretCount} secret
+                Found {checkConnectivityMutation.data.secretCount} secret
                 {checkConnectivityMutation.data.secretCount === 1 ? "" : "s"} in
                 the configured path.
               </AlertDescription>

@@ -17,7 +17,6 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
-import { slugifyName } from "@/utils";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
@@ -343,7 +342,7 @@ class McpClient {
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
     // Slugify the prefix the same way ToolModel.slugifyName does
-    const slugifiedPrefix = slugifyName(prefixName, "");
+    const slugifiedPrefix = ToolModel.slugifyName(prefixName, "");
 
     if (toolName.toLowerCase().startsWith(slugifiedPrefix)) {
       return toolName.substring(slugifiedPrefix.length);

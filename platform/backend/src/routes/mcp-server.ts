@@ -22,7 +22,6 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
-import { slugifyName } from "@/utils";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -303,7 +302,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Use catalog item name (without userId) for tool naming to avoid duplicates across users
                 const toolNamePrefix = capturedCatalogName || mcpServer.name;
                 const toolsToCreate = tools.map((tool) => ({
-                  name: slugifyName(toolNamePrefix, tool.name),
+                  name: ToolModel.slugifyName(toolNamePrefix, tool.name),
                   description: tool.description,
                   parameters: tool.inputSchema,
                   catalogId: capturedCatalogId,
@@ -391,7 +390,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Persist tools in the database with source='mcp_server' and mcpServerId
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
         const toolsToCreate = tools.map((tool) => ({
-          name: slugifyName(mcpServer.name, tool.name),
+          name: ToolModel.slugifyName(mcpServer.name, tool.name),
           description: tool.description,
           parameters: tool.inputSchema,
           catalogId: catalogItem.id,

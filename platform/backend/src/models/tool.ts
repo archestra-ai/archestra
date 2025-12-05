@@ -9,6 +9,15 @@ import AgentToolModel from "./agent-tool";
 
 class ToolModel {
   /**
+   * Slugify a tool name to get a unique name for the MCP server's tool
+   */
+  static slugifyName(mcpServerName: string, toolName: string): string {
+    return `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`
+      .toLowerCase()
+      .replace(/ /g, "_");
+  }
+
+  /**
    * Unslugify a tool name to get the original tool name
    */
   static unslugifyName(slugifiedName: string): string {

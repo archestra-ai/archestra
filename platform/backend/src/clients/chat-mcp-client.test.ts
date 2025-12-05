@@ -4,10 +4,13 @@ import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 
 describe("chat-mcp-client tool caching", () => {
-  test("reuses cached tool definitions for the same agent", async () => {
+  test("reuses cached tool definitions for the same agent and user", async () => {
     const agentId = "agent-cache-test";
+    const userId = "user-cache-test";
+    const cacheKey = chatClient.__test.getCacheKey(agentId, userId);
+
     chatClient.clearChatMcpClient(agentId);
-    chatClient.__test.clearToolCache(agentId);
+    chatClient.__test.clearToolCache(cacheKey);
 
     const mockClient = {
       listTools: vi.fn().mockResolvedValue({
@@ -23,16 +26,19 @@ describe("chat-mcp-client tool caching", () => {
       close: vi.fn(),
     };
 
-    chatClient.__test.setCachedClient(agentId, mockClient as unknown as Client);
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
 
-    const first = await chatClient.getChatMcpTools(agentId);
+    const first = await chatClient.getChatMcpTools(agentId, userId);
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
-    const second = await chatClient.getChatMcpTools(agentId);
+    const second = await chatClient.getChatMcpTools(agentId, userId);
 
     expect(second).toBe(first);
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);
     chatClient.clearChatMcpClient(agentId);
-    chatClient.__test.clearToolCache(agentId);
+    chatClient.__test.clearToolCache(cacheKey);
   });
 });

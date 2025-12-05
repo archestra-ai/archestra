@@ -65,7 +65,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Fetch MCP tools, agent prompts, and chat settings in parallel
       const [mcpTools, prompt, chatSettings] = await Promise.all([
-        getChatMcpTools(conversation.agentId),
+        getChatMcpTools(conversation.agentId, user.id),
         PromptModel.findById(conversation.promptId),
         ChatSettingsModel.findByOrganizationId(organizationId),
       ]);
@@ -332,7 +332,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Fetch MCP tools from gateway (same as used in chat)
-      const mcpTools = await getChatMcpTools(agentId);
+      const mcpTools = await getChatMcpTools(agentId, user.id);
 
       // Convert AI SDK Tool format to simple array for frontend
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({

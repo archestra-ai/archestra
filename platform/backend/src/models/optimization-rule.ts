@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, or } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import getDefaultModelPrice from "@/default-model-prices";
 import logger from "@/logging";
@@ -11,18 +11,40 @@ import type {
 } from "@/types";
 
 class OptimizationRuleModel {
+  /**
+   * Create a new optimization rule
+   */
   static async create(data: InsertOptimizationRule): Promise<OptimizationRule> {
+    logger.debug(
+      {
+        entityType: data.entityType,
+        entityId: data.entityId,
+        provider: data.provider,
+      },
+      "OptimizationRuleModel.create: creating rule",
+    );
     const [rule] = await db
       .insert(schema.optimizationRulesTable)
       .values(data)
       .returning();
 
+    logger.debug(
+      { ruleId: rule.id },
+      "OptimizationRuleModel.create: completed",
+    );
     return rule;
   }
 
+  /**
+   * Find all rules for an organization (including team-level rules)
+   */
   static async findByOrganizationId(
     organizationId: string,
   ): Promise<OptimizationRule[]> {
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.findByOrganizationId: fetching rules",
+    );
     const rules = await db
       .select(getTableColumns(schema.optimizationRulesTable))
       .from(schema.optimizationRulesTable)
@@ -49,13 +71,24 @@ class OptimizationRuleModel {
       )
       .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
+    logger.debug(
+      { organizationId, count: rules.length },
+      "OptimizationRuleModel.findByOrganizationId: completed",
+    );
     return rules;
   }
 
+  /**
+   * Find enabled rules for an organization and provider
+   */
   static async findEnabledByOrganizationAndProvider(
     organizationId: string,
     provider: SupportedProvider,
   ): Promise<OptimizationRule[]> {
+    logger.debug(
+      { organizationId, provider },
+      "OptimizationRuleModel.findEnabledByOrganizationAndProvider: fetching rules",
+    );
     const rules = await db
       .select()
       .from(schema.optimizationRulesTable)
@@ -69,32 +102,74 @@ class OptimizationRuleModel {
       )
       .orderBy(asc(schema.optimizationRulesTable.createdAt));
 
+    logger.debug(
+      { organizationId, provider, count: rules.length },
+      "OptimizationRuleModel.findEnabledByOrganizationAndProvider: completed",
+    );
     return rules;
   }
 
+  /**
+   * Get the first organization ID that has optimization rules
+   * Used as fallback when an agent has no teams
+   */
+  static async getFirstOrganizationId(): Promise<string | null> {
+    logger.debug(
+      "OptimizationRuleModel.getFirstOrganizationId: fetching first organization with rules",
+    );
+    const [result] = await db
+      .select({ entityId: schema.optimizationRulesTable.entityId })
+      .from(schema.optimizationRulesTable)
+      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
+      .limit(1);
+
+    const organizationId = result?.entityId || null;
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.getFirstOrganizationId: completed",
+    );
+    return organizationId;
+  }
+
+  /**
+   * Update an optimization rule
+   */
   static async update(
     id: string,
     data: Partial<UpdateOptimizationRule>,
   ): Promise<OptimizationRule | undefined> {
+    logger.debug({ id, data }, "OptimizationRuleModel.update: updating rule");
     const [rule] = await db
       .update(schema.optimizationRulesTable)
       .set(data)
       .where(eq(schema.optimizationRulesTable.id, id))
       .returning();
 
+    logger.debug(
+      { id, updated: !!rule },
+      "OptimizationRuleModel.update: completed",
+    );
     return rule;
   }
 
+  /**
+   * Delete an optimization rule
+   */
   static async delete(id: string): Promise<boolean> {
+    logger.debug({ id }, "OptimizationRuleModel.delete: deleting rule");
     const result = await db
       .delete(schema.optimizationRulesTable)
       .where(eq(schema.optimizationRulesTable.id, id));
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+    logger.debug({ id, deleted }, "OptimizationRuleModel.delete: completed");
+    return deleted;
   }
 
-  // Evaluate rules for a given context
-  // Returns the target model of the first matching rule
+  /**
+   * Evaluate rules for a given context.
+   * Returns the target model of the first matching rule, or null if no match.
+   */
   static matchByRules(
     rules: OptimizationRule[],
     context: {
@@ -102,12 +177,16 @@ class OptimizationRuleModel {
       hasTools: boolean;
     },
   ): string | null {
+    logger.debug(
+      { rulesCount: rules.length, context },
+      "OptimizationRuleModel.matchByRules: evaluating rules",
+    );
     for (const rule of rules) {
       if (!rule.enabled) continue;
 
-      logger.info(
-        { conditions: rule.conditions, context },
-        "[CostOptimization] matching rule conditions with context",
+      logger.debug(
+        { ruleId: rule.id, conditions: rule.conditions, context },
+        "OptimizationRuleModel.matchByRules: checking rule",
       );
 
       // Check if all conditions in the array match
@@ -122,10 +201,15 @@ class OptimizationRuleModel {
       });
 
       if (allConditionsMatch) {
+        logger.debug(
+          { ruleId: rule.id, targetModel: rule.targetModel },
+          "OptimizationRuleModel.matchByRules: rule matched",
+        );
         return rule.targetModel;
       }
     }
 
+    logger.debug("OptimizationRuleModel.matchByRules: no rules matched");
     return null;
   }
 
@@ -135,6 +219,9 @@ class OptimizationRuleModel {
   private static async getAllProvidersFromInteractions(): Promise<
     SupportedProvider[]
   > {
+    logger.debug(
+      "OptimizationRuleModel.getAllProvidersFromInteractions: fetching providers",
+    );
     const results = await db
       .select({
         providerDiscriminator: schema.interactionsTable.type,
@@ -148,7 +235,12 @@ class OptimizationRuleModel {
       .filter(Boolean) as SupportedProvider[];
 
     // Return unique providers
-    return [...new Set(providers)];
+    const uniqueProviders = [...new Set(providers)];
+    logger.debug(
+      { providers: uniqueProviders },
+      "OptimizationRuleModel.getAllProvidersFromInteractions: completed",
+    );
+    return uniqueProviders;
   }
 
   /**
@@ -158,6 +250,10 @@ class OptimizationRuleModel {
   static async ensureDefaultOptimizationRules(
     organizationId: string,
   ): Promise<void> {
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.ensureDefaultOptimizationRules: starting",
+    );
     const pricesByProvider: Record<SupportedProvider, InsertTokenPrice[]> = {
       openai: [
         {
@@ -223,6 +319,10 @@ class OptimizationRuleModel {
         .onConflictDoNothing({
           target: schema.tokenPricesTable.model,
         });
+      logger.debug(
+        { count: defaultPrices.length },
+        "OptimizationRuleModel.ensureDefaultOptimizationRules: inserted token prices",
+      );
     }
 
     // Get existing rules for this organization
@@ -242,7 +342,16 @@ class OptimizationRuleModel {
     // Insert new rules
     if (rulesToCreate.length > 0) {
       await db.insert(schema.optimizationRulesTable).values(rulesToCreate);
+      logger.debug(
+        { count: rulesToCreate.length },
+        "OptimizationRuleModel.ensureDefaultOptimizationRules: inserted default rules",
+      );
     }
+
+    logger.debug(
+      { organizationId },
+      "OptimizationRuleModel.ensureDefaultOptimizationRules: completed",
+    );
   }
 }
 

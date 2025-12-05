@@ -24,7 +24,7 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
 
@@ -858,6 +858,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/${CHAT_COMPLETIONS_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithDefaultAgent,
         description:
@@ -886,6 +887,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     `${API_PREFIX}/:agentId/${CHAT_COMPLETIONS_SUFFIX}`,
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithAgent,
         description:

@@ -922,4 +922,229 @@ describe("ToolModel", () => {
       expect(result2[0].name).toBe("conflict-tool");
     });
   });
+
+  describe("bulkCreateProxyToolsIfNotExists", () => {
+    test("creates multiple proxy-sniffed tools for an agent in bulk", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const toolsToCreate = [
+        {
+          name: "proxy-tool-1",
+          description: "First proxy tool",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-2",
+          description: "Second proxy tool",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-3",
+          description: "Third proxy tool",
+          parameters: { type: "object", properties: {} },
+        },
+      ];
+
+      const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        toolsToCreate,
+        agent.id,
+      );
+
+      expect(createdTools).toHaveLength(3);
+      expect(createdTools.map((t) => t.name)).toContain("proxy-tool-1");
+      expect(createdTools.map((t) => t.name)).toContain("proxy-tool-2");
+      expect(createdTools.map((t) => t.name)).toContain("proxy-tool-3");
+
+      // Verify all tools have correct agentId and null catalogId
+      for (const tool of createdTools) {
+        expect(tool.agentId).toBe(agent.id);
+        expect(tool.catalogId).toBeNull();
+        expect(tool.mcpServerId).toBeNull();
+      }
+    });
+
+    test("returns existing tools when some tools already exist", async ({
+      makeAgent,
+      makeTool,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      // Create one tool manually
+      const existingTool = await makeTool({
+        name: "proxy-tool-1",
+        agentId: agent.id,
+        description: "Existing tool",
+      });
+
+      const toolsToCreate = [
+        {
+          name: "proxy-tool-1", // Already exists
+          description: "First proxy tool (updated)",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-2",
+          description: "Second proxy tool",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-3",
+          description: "Third proxy tool",
+          parameters: { type: "object", properties: {} },
+        },
+      ];
+
+      const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        toolsToCreate,
+        agent.id,
+      );
+
+      expect(createdTools).toHaveLength(3);
+      // Should return the existing tool
+      expect(createdTools.find((t) => t.id === existingTool.id)).toBeDefined();
+      // Should create new tools
+      expect(createdTools.map((t) => t.name)).toContain("proxy-tool-2");
+      expect(createdTools.map((t) => t.name)).toContain("proxy-tool-3");
+    });
+
+    test("maintains input order in returned tools", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const toolsToCreate = [
+        {
+          name: "proxy-tool-c",
+          description: "Tool C",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-a",
+          description: "Tool A",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "proxy-tool-b",
+          description: "Tool B",
+          parameters: { type: "object", properties: {} },
+        },
+      ];
+
+      const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        toolsToCreate,
+        agent.id,
+      );
+
+      expect(createdTools).toHaveLength(3);
+      // Should maintain input order
+      expect(createdTools[0].name).toBe("proxy-tool-c");
+      expect(createdTools[1].name).toBe("proxy-tool-a");
+      expect(createdTools[2].name).toBe("proxy-tool-b");
+    });
+
+    test("handles empty tools array", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+      const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [],
+        agent.id,
+      );
+      expect(createdTools).toHaveLength(0);
+    });
+
+    test("handles conflict during insert and fetches existing tools", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const toolsToCreate = [
+        {
+          name: "conflict-proxy-tool",
+          description: "Tool that might conflict",
+          parameters: { type: "object", properties: {} },
+        },
+      ];
+
+      // Create tools in parallel to simulate race condition
+      const [result1, result2] = await Promise.all([
+        ToolModel.bulkCreateProxyToolsIfNotExists(toolsToCreate, agent.id),
+        ToolModel.bulkCreateProxyToolsIfNotExists(toolsToCreate, agent.id),
+      ]);
+
+      // Both should return the same tool (one created, one fetched)
+      expect(result1).toHaveLength(1);
+      expect(result2).toHaveLength(1);
+      expect(result1[0].name).toBe("conflict-proxy-tool");
+      expect(result2[0].name).toBe("conflict-proxy-tool");
+    });
+
+    test("does not mix tools between different agents", async ({
+      makeAgent,
+    }) => {
+      const agent1 = await makeAgent({ name: "Agent 1" });
+      const agent2 = await makeAgent({ name: "Agent 2" });
+
+      // Create same-named tool for agent1
+      await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [{ name: "shared-name-tool", description: "Tool for agent 1" }],
+        agent1.id,
+      );
+
+      // Create same-named tool for agent2
+      const result = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        [{ name: "shared-name-tool", description: "Tool for agent 2" }],
+        agent2.id,
+      );
+
+      // Should create a new tool for agent2 (not return agent1's tool)
+      expect(result).toHaveLength(1);
+      expect(result[0].agentId).toBe(agent2.id);
+      expect(result[0].name).toBe("shared-name-tool");
+    });
+
+    test("handles tools with optional parameters", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+
+      const toolsToCreate = [
+        {
+          name: "tool-with-all-fields",
+          description: "Has description",
+          parameters: { type: "object" },
+        },
+        {
+          name: "tool-without-description",
+          // No description
+        },
+        {
+          name: "tool-without-parameters",
+          description: "Has description but no parameters",
+          // No parameters
+        },
+      ];
+
+      const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+        toolsToCreate,
+        agent.id,
+      );
+
+      expect(createdTools).toHaveLength(3);
+
+      const toolWithAll = createdTools.find(
+        (t) => t.name === "tool-with-all-fields",
+      );
+      expect(toolWithAll?.description).toBe("Has description");
+      expect(toolWithAll?.parameters).toEqual({ type: "object" });
+
+      const toolWithoutDesc = createdTools.find(
+        (t) => t.name === "tool-without-description",
+      );
+      expect(toolWithoutDesc?.description).toBeNull();
+
+      const toolWithoutParams = createdTools.find(
+        (t) => t.name === "tool-without-parameters",
+      );
+      expect(toolWithoutParams?.description).toBe(
+        "Has description but no parameters",
+      );
+    });
+  });
 });

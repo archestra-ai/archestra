@@ -1,10 +1,8 @@
 import type { SsoRoleMappingConfig } from "@shared";
 import { MEMBER_ROLE_NAME } from "@shared";
 import { APIError } from "better-auth";
-import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { retrieveSsoGroups } from "@/auth/sso-team-sync-cache";
-import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import SsoProviderModel, { type SsoGetRoleData } from "./sso-provider";
 
@@ -569,10 +567,7 @@ describe("SsoProviderModel", () => {
 
       // Manually set domainVerified to false to simulate old data
       // (This simulates providers created before the workaround was added)
-      await db
-        .update(schema.ssoProvidersTable)
-        .set({ domainVerified: false })
-        .where(eq(schema.ssoProvidersTable.id, provider.id));
+      await SsoProviderModel.setDomainVerifiedForTesting(provider.id, false);
 
       // Verify it's now false
       const beforeUpdate = await SsoProviderModel.findById(provider.id, org.id);

@@ -14,7 +14,7 @@ import {
   Gemini,
   UuidIdSchema,
 } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
+import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "./common";
 import * as utils from "./utils";
 
 /**
@@ -375,6 +375,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     generateRouteEndpoint("generateContent"),
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         description: "Generate content using Gemini (default agent)",
         summary: "Generate content using Gemini",
@@ -407,6 +408,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     generateRouteEndpoint("streamGenerateContent"),
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         description: "Stream generated content using Gemini (default agent)",
         summary: "Stream generated content using Gemini",
@@ -438,6 +440,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     generateRouteEndpoint("generateContent", true),
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         description: "Generate content using Gemini with specific agent",
         summary: "Generate content using Gemini (specific agent)",
@@ -471,6 +474,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     generateRouteEndpoint("streamGenerateContent", true),
     {
+      bodyLimit: PROXY_BODY_LIMIT,
       schema: {
         description:
           "Stream generated content using Gemini with specific agent",

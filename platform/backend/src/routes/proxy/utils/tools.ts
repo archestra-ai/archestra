@@ -5,6 +5,8 @@ import { AgentToolModel, ToolModel } from "@/models";
  * Persist tools if present in the request
  * Skips tools that are already connected to the agent via MCP servers
  * Also skips Archestra built-in tools
+ *
+ * Uses bulk operations to avoid N+1 queries
  */
 export const persistTools = async (
   tools: Array<{
@@ -14,6 +16,10 @@ export const persistTools = async (
   }>,
   agentId: string,
 ) => {
+  if (tools.length === 0) {
+    return;
+  }
+
   // Get names of all MCP tools already assigned to this agent
   const mcpToolNames = await ToolModel.getMcpToolNamesByAgent(agentId);
   const mcpToolNamesSet = new Set(mcpToolNames);
@@ -25,26 +31,38 @@ export const persistTools = async (
   );
 
   // Filter out tools that are already available via MCP servers or are Archestra built-in tools
-  const toolsToAutoDiscover = tools.filter(
-    ({ toolName }) =>
-      !mcpToolNamesSet.has(toolName) && !archestraToolNamesSet.has(toolName),
+  // Also deduplicate by tool name (keep first occurrence) to avoid constraint violations
+  const seenToolNames = new Set<string>();
+  const toolsToAutoDiscover = tools.filter(({ toolName }) => {
+    if (
+      mcpToolNamesSet.has(toolName) ||
+      archestraToolNamesSet.has(toolName) ||
+      seenToolNames.has(toolName)
+    ) {
+      return false;
+    }
+    seenToolNames.add(toolName);
+    return true;
+  });
+
+  if (toolsToAutoDiscover.length === 0) {
+    return;
+  }
+
+  // Bulk create tools (single query to check existing + single insert for new)
+  const createdTools = await ToolModel.bulkCreateProxyToolsIfNotExists(
+    toolsToAutoDiscover.map(
+      ({ toolName, toolParameters, toolDescription }) => ({
+        name: toolName,
+        parameters: toolParameters,
+        description: toolDescription,
+      }),
+    ),
+    agentId,
   );
 
-  // Persist only the tools that are not already available via MCP
-  for (const {
-    toolName,
-    toolParameters,
-    toolDescription,
-  } of toolsToAutoDiscover) {
-    // Create or get the tool
-    const tool = await ToolModel.createToolIfNotExists({
-      name: toolName,
-      parameters: toolParameters,
-      description: toolDescription,
-      agentId,
-    });
-
-    // Create the agent-tool relationship
-    await AgentToolModel.createIfNotExists(agentId, tool.id);
-  }
+  // Bulk create agent-tool relationships (single query to check existing + single insert for new)
+  // Deduplicate tool IDs in case input contained duplicate tool names
+  const toolIds = [...new Set(createdTools.map((tool) => tool.id))];
+  await AgentToolModel.createManyIfNotExists(agentId, toolIds);
 };

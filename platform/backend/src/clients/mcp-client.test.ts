@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
@@ -452,14 +451,10 @@ describe("McpClient", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
 
-      beforeEach(async () => {
+      beforeEach(async ({ makeUser }) => {
         // Create test user for local MCP servers
-        const testUserId = "test-user-id";
-        await db.insert(schema.usersTable).values({
-          id: testUserId,
-          name: "Test User",
-          email: "test@example.com",
-          emailVerified: true,
+        const testUser = await makeUser({
+          email: "test-local-mcp@example.com",
         });
 
         // Create catalog entry for local streamable-http server
@@ -484,7 +479,7 @@ describe("McpClient", () => {
           name: "local-streamable-http-server",
           catalogId: localCatalogId,
           serverType: "local",
-          userId: testUserId,
+          userId: testUser.id,
         });
         localMcpServerId = localMcpServer.id;
 

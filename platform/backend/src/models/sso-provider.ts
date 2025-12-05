@@ -630,6 +630,31 @@ class SsoProviderModel {
 
     return deleted.length > 0;
   }
+
+  /**
+   * Sets domainVerified flag directly (TEST ONLY)
+   * This is used to simulate legacy data that has domainVerified: false
+   * to test the workaround in update() that sets it back to true.
+   * TODO: Remove this when upstream issue is fixed:
+   * https://github.com/better-auth/better-auth/issues/6481
+   */
+  static async setDomainVerifiedForTesting(
+    id: string,
+    domainVerified: boolean,
+  ): Promise<void> {
+    logger.debug(
+      { id, domainVerified },
+      "SsoProviderModel.setDomainVerifiedForTesting: setting domainVerified",
+    );
+    await db
+      .update(schema.ssoProvidersTable)
+      .set({ domainVerified })
+      .where(eq(schema.ssoProvidersTable.id, id));
+    logger.debug(
+      { id, domainVerified },
+      "SsoProviderModel.setDomainVerifiedForTesting: completed",
+    );
+  }
 }
 
 export default SsoProviderModel;

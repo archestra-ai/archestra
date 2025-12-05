@@ -12,19 +12,19 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetSecretsType,
-        description: "Get the secrets manager type",
+        description:
+          "Get the secrets manager type and configuration details (for Vault)",
         tags: ["Secrets"],
         response: constructResponseSchema(
           z.object({
             type: SecretsManagerTypeSchema,
+            meta: z.record(z.string(), z.string()),
           }),
         ),
       },
     },
     async (_request, reply) => {
-      return reply.send({
-        type: secretManager.type,
-      });
+      return reply.send(secretManager.getUserVisibleDebugInfo());
     },
   );
 
@@ -34,12 +34,10 @@ const secretsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CheckSecretsConnectivity,
         description:
-          "Check connectivity to the secrets storage and return secret count",
+          "Check connectivity to the secrets storage and return secret count.",
         tags: ["Secrets"],
         response: constructResponseSchema(
           z.object({
-            type: SecretsManagerTypeSchema,
-            connected: z.literal(true),
             secretCount: z.number(),
           }),
         ),

@@ -925,12 +925,12 @@ export const rollbackPrompt = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Get the secrets manager type
+ * Get the secrets manager type and configuration details (for Vault)
  */
 export const getSecretsType = <ThrowOnError extends boolean = false>(options?: Options<GetSecretsTypeData, ThrowOnError>) => (options?.client ?? client).get<GetSecretsTypeResponses, GetSecretsTypeErrors, ThrowOnError>({ url: '/api/secrets/type', ...options });
 
 /**
- * Check connectivity to the secrets storage and return secret count
+ * Check connectivity to the secrets storage and return secret count.
  */
 export const checkSecretsConnectivity = <ThrowOnError extends boolean = false>(options?: Options<CheckSecretsConnectivityData, ThrowOnError>) => (options?.client ?? client).post<CheckSecretsConnectivityResponses, CheckSecretsConnectivityErrors, ThrowOnError>({ url: '/api/secrets/check-connectivity', ...options });
 

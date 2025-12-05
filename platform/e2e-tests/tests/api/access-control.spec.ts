@@ -17,10 +17,13 @@ test.describe("Organization Roles API - CRUD Operations", () => {
 
     // Check for predefined roles
     const adminRole = roles.find((r: { name: string }) => r.name === "admin");
+    const editorRole = roles.find((r: { name: string }) => r.name === "editor");
     const memberRole = roles.find((r: { name: string }) => r.name === "member");
 
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
+    expect(editorRole).toBeDefined();
+    expect(editorRole.predefined).toBe(true);
     expect(memberRole).toBeDefined();
     expect(memberRole.predefined).toBe(true);
   });

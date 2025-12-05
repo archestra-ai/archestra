@@ -15,12 +15,8 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      if (!user?.id) {
-        throw new ApiError(401, "User not authenticated");
-      }
-
       // Get user's member record to find their role
-      const member = await MemberModel.getByUserId(user.id);
+      const member = await MemberModel.getByUserId(user.id, organizationId);
 
       if (!member || !member.role) {
         throw new ApiError(404, "User is not a member of any organization");

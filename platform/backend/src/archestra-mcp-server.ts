@@ -1306,23 +1306,14 @@ export async function executeArchestraTool(
 
     try {
       // Note: We don't have access to request.user.id in this context,
-      // so we'll use the profile's context or a placeholder for now
-      const authType = args?.authType as "personal" | "team" | undefined;
-
-      // For now, we'll call findAll without the user ID and filter logic
-      // This might need to be adjusted based on the actual requirements
+      // so we'll call findAll without the user ID
       const allServers = await McpServerModel.findAll();
-
-      // Filter by authType if provided
-      const filteredServers = authType
-        ? allServers.filter((server) => server.authType === authType)
-        : allServers;
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(filteredServers, null, 2),
+            text: JSON.stringify(allServers, null, 2),
           },
         ],
         isError: false,
@@ -2020,18 +2011,10 @@ export function getArchestraMcpTools(): Tool[] {
     {
       name: TOOL_GET_MCP_SERVERS_FULL_NAME,
       title: "Get MCP Servers",
-      description:
-        "List all installed MCP servers with their catalog names and optional filtering",
+      description: "List all installed MCP servers with their catalog names",
       inputSchema: {
         type: "object",
-        properties: {
-          authType: {
-            type: "string",
-            enum: ["personal", "team"],
-            description:
-              "Optional filter to only return servers of a specific authentication type",
-          },
-        },
+        properties: {},
         required: [],
       },
       annotations: {},

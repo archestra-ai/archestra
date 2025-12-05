@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
   type Permissions,
   type PredefinedRoleName,
@@ -9,6 +10,7 @@ import {
 } from "@shared";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
 
 const generatePredefinedRole = (
@@ -31,7 +33,16 @@ class OrganizationRoleModel {
    * Check if a role is a predefined role (not a custom one)
    */
   static isPredefinedRole(roleName: string): roleName is PredefinedRoleName {
-    return PredefinedRoleNameSchema.safeParse(roleName).success;
+    logger.debug(
+      { roleName },
+      "OrganizationRoleModel.isPredefinedRole: checking",
+    );
+    const result = PredefinedRoleNameSchema.safeParse(roleName).success;
+    logger.debug(
+      { roleName, isPredefined: result },
+      "OrganizationRoleModel.isPredefinedRole: completed",
+    );
+    return result;
   }
 
   /**
@@ -40,6 +51,10 @@ class OrganizationRoleModel {
   static getPredefinedRolePermissions(
     roleName: PredefinedRoleName,
   ): Permissions {
+    logger.debug(
+      { roleName },
+      "OrganizationRoleModel.getPredefinedRolePermissions: fetching",
+    );
     return predefinedPermissionsMap[roleName];
   }
 
@@ -71,6 +86,9 @@ class OrganizationRoleModel {
     userPermissions: Permissions,
     rolePermissions: Permissions,
   ): { valid: boolean; missingPermissions: string[] } {
+    logger.debug(
+      "OrganizationRoleModel.validateRolePermissions: validating permissions",
+    );
     const missingPermissions: string[] = [];
 
     for (const [resource, actions] of Object.entries(rolePermissions)) {
@@ -83,25 +101,47 @@ class OrganizationRoleModel {
       }
     }
 
+    logger.debug(
+      {
+        valid: missingPermissions.length === 0,
+        missingCount: missingPermissions.length,
+      },
+      "OrganizationRoleModel.validateRolePermissions: completed",
+    );
     return {
       valid: missingPermissions.length === 0,
       missingPermissions,
     };
   }
 
+  /**
+   * Check if a role can be deleted
+   */
   static async canDelete(
     roleId: string,
     organizationId: string,
   ): Promise<{ canDelete: boolean; reason?: string }> {
+    logger.debug(
+      { roleId, organizationId },
+      "OrganizationRoleModel.canDelete: checking",
+    );
     // Check if it's a predefined role by ID
     const role = await OrganizationRoleModel.getById(roleId, organizationId);
 
     if (!role) {
+      logger.debug(
+        { roleId },
+        "OrganizationRoleModel.canDelete: role not found",
+      );
       return { canDelete: false, reason: "Role not found" };
     }
 
     // Check if it's a predefined role
     if (OrganizationRoleModel.isPredefinedRole(role.role)) {
+      logger.debug(
+        { roleId },
+        "OrganizationRoleModel.canDelete: cannot delete predefined role",
+      );
       return { canDelete: false, reason: "Cannot delete predefined roles" };
     }
 
@@ -118,6 +158,10 @@ class OrganizationRoleModel {
       .limit(1);
 
     if (membersWithRole.length > 0) {
+      logger.debug(
+        { roleId },
+        "OrganizationRoleModel.canDelete: role assigned to members",
+      );
       return {
         canDelete: false,
         reason: "Cannot delete role that is currently assigned to members",
@@ -138,12 +182,17 @@ class OrganizationRoleModel {
       .limit(1);
 
     if (invitationsWithRole.length > 0) {
+      logger.debug(
+        { roleId },
+        "OrganizationRoleModel.canDelete: role used in pending invitations",
+      );
       return {
         canDelete: false,
         reason: "Cannot delete role that is used in pending invitations",
       };
     }
 
+    logger.debug({ roleId }, "OrganizationRoleModel.canDelete: can delete");
     return { canDelete: true };
   }
 
@@ -154,8 +203,16 @@ class OrganizationRoleModel {
     identifier: string,
     organizationId: string,
   ): Promise<OrganizationRole | null> {
+    logger.debug(
+      { identifier, organizationId },
+      "OrganizationRoleModel.getByIdentifier: fetching",
+    );
     // Check if it's a predefined role first
     if (OrganizationRoleModel.isPredefinedRole(identifier)) {
+      logger.debug(
+        { identifier },
+        "OrganizationRoleModel.getByIdentifier: returning predefined role",
+      );
       return generatePredefinedRole(identifier, organizationId);
     }
 
@@ -174,9 +231,17 @@ class OrganizationRoleModel {
       .limit(1);
 
     if (!result) {
+      logger.debug(
+        { identifier },
+        "OrganizationRoleModel.getByIdentifier: not found",
+      );
       return null;
     }
 
+    logger.debug(
+      { identifier },
+      "OrganizationRoleModel.getByIdentifier: completed",
+    );
     return {
       ...result,
       permission: JSON.parse(result.permission),
@@ -190,8 +255,16 @@ class OrganizationRoleModel {
     roleId: string,
     organizationId: string,
   ): Promise<OrganizationRole | null> {
+    logger.debug(
+      { roleId, organizationId },
+      "OrganizationRoleModel.getById: fetching",
+    );
     // Check if it's a predefined role first
     if (OrganizationRoleModel.isPredefinedRole(roleId)) {
+      logger.debug(
+        { roleId },
+        "OrganizationRoleModel.getById: returning predefined role",
+      );
       return generatePredefinedRole(roleId, organizationId);
     }
 
@@ -211,19 +284,28 @@ class OrganizationRoleModel {
       .limit(1);
 
     if (!result) {
+      logger.debug({ roleId }, "OrganizationRoleModel.getById: not found");
       return null;
     }
 
+    logger.debug({ roleId }, "OrganizationRoleModel.getById: completed");
     return {
       ...result,
       permission: JSON.parse(result.permission),
     };
   }
 
+  /**
+   * Get permissions for a role
+   */
   static async getPermissions(
     identifier: string,
     organizationId: string,
   ): Promise<Permissions> {
+    logger.debug(
+      { identifier, organizationId },
+      "OrganizationRoleModel.getPermissions: fetching",
+    );
     if (OrganizationRoleModel.isPredefinedRole(identifier)) {
       return OrganizationRoleModel.getPredefinedRolePermissions(identifier);
     }
@@ -234,9 +316,17 @@ class OrganizationRoleModel {
     );
 
     if (!role) {
+      logger.debug(
+        { identifier },
+        "OrganizationRoleModel.getPermissions: role not found, returning empty",
+      );
       return {};
     }
 
+    logger.debug(
+      { identifier },
+      "OrganizationRoleModel.getPermissions: completed",
+    );
     return role.permission;
   }
 
@@ -246,8 +336,13 @@ class OrganizationRoleModel {
   static async getAll(
     organizationId: string,
   ): Promise<Array<OrganizationRole>> {
+    logger.debug(
+      { organizationId },
+      "OrganizationRoleModel.getAll: fetching roles",
+    );
     const predefinedRoles = [
       generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
+      generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
       generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
     ];
 
@@ -262,6 +357,14 @@ class OrganizationRoleModel {
           eq(schema.organizationRolesTable.organizationId, organizationId),
         );
 
+      logger.debug(
+        {
+          organizationId,
+          predefinedCount: predefinedRoles.length,
+          customCount: customRoles.length,
+        },
+        "OrganizationRoleModel.getAll: completed",
+      );
       return [
         ...predefinedRoles,
         ...customRoles.map((role) => ({
@@ -270,6 +373,10 @@ class OrganizationRoleModel {
         })),
       ];
     } catch (_error) {
+      logger.debug(
+        { organizationId },
+        "OrganizationRoleModel.getAll: error fetching custom roles, returning predefined only",
+      );
       // Return predefined roles as fallback
       return predefinedRoles;
     }

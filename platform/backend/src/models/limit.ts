@@ -146,6 +146,30 @@ class LimitModel {
   }
 
   /**
+   * Get raw model usage records for a limit (primarily for testing)
+   * Returns the raw database records from limitModelUsageTable
+   */
+  static async getRawModelUsage(limitId: string): Promise<
+    Array<{
+      model: string;
+      currentUsageTokensIn: number;
+      currentUsageTokensOut: number;
+    }>
+  > {
+    logger.debug({ limitId }, "LimitModel.getRawModelUsage: fetching records");
+    const records = await db
+      .select()
+      .from(schema.limitModelUsageTable)
+      .where(eq(schema.limitModelUsageTable.limitId, limitId));
+
+    logger.debug(
+      { limitId, count: records.length },
+      "LimitModel.getRawModelUsage: completed",
+    );
+    return records;
+  }
+
+  /**
    * Find a limit by ID
    */
   static async findById(id: string): Promise<Limit | null> {

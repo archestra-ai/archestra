@@ -150,7 +150,7 @@ describe("InvitationModel", () => {
       await InvitationModel.accept(testSession, testUser, invitation.id);
 
       // Check that member was created
-      const member = await MemberModel.getByUserId(user.id);
+      const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member).toBeDefined();
       expect(member?.organizationId).toBe(org.id);
       expect(member?.role).toBe(MEMBER_ROLE_NAME);
@@ -158,6 +158,104 @@ describe("InvitationModel", () => {
       // Check that invitation was updated to accepted
       const updatedInvitation = await InvitationModel.getById(invitation.id);
       expect(updatedInvitation?.status).toBe("accepted");
+    });
+  });
+
+  describe("findByEmail", () => {
+    test("should find all invitations for an email", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+
+      // Create multiple invitations for same email
+      await makeInvitation(org.id, inviter.id, { email: "findme@example.com" });
+      await makeInvitation(org.id, inviter.id, { email: "findme@example.com" });
+
+      const invitations =
+        await InvitationModel.findByEmail("findme@example.com");
+
+      expect(invitations).toHaveLength(2);
+      expect(invitations.every((i) => i.email === "findme@example.com")).toBe(
+        true,
+      );
+    });
+
+    test("should return empty array for non-existent email", async () => {
+      const invitations = await InvitationModel.findByEmail(
+        "nonexistent@example.com",
+      );
+
+      expect(invitations).toEqual([]);
+    });
+
+    test("should be case-insensitive", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+
+      await makeInvitation(org.id, inviter.id, { email: "test@example.com" });
+
+      const invitations = await InvitationModel.findByEmail("test@example.com");
+
+      expect(invitations).toHaveLength(1);
+    });
+  });
+
+  describe("findPendingByEmail", () => {
+    test("should find pending invitation for an email", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "pending@example.com",
+      });
+
+      const found = await InvitationModel.findPendingByEmail(
+        "pending@example.com",
+      );
+
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(invitation.id);
+      expect(found?.status).toBe("pending");
+    });
+
+    test("should return undefined if no pending invitation exists", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+
+      // Create an accepted invitation
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "accepted@example.com",
+      });
+      await InvitationModel.patch(invitation.id, { status: "accepted" });
+
+      const found = await InvitationModel.findPendingByEmail(
+        "accepted@example.com",
+      );
+
+      expect(found).toBeUndefined();
+    });
+
+    test("should return undefined for non-existent email", async () => {
+      const found = await InvitationModel.findPendingByEmail(
+        "nonexistent@example.com",
+      );
+
+      expect(found).toBeUndefined();
     });
   });
 });

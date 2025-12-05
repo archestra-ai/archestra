@@ -1,7 +1,11 @@
 "use client";
 
 import { AuthUIProvider } from "@daveyplate/better-auth-ui";
-import { EMAIL_PLACEHOLDER, PASSWORD_PLACEHOLDER } from "@shared";
+import {
+  EDITOR_ROLE_NAME,
+  EMAIL_PLACEHOLDER,
+  PASSWORD_PLACEHOLDER,
+} from "@shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -28,10 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
          * by setting this to true.. would need to test though..
          */
         // apiKey: true,
-        customRoles: (customRoles || []).map(({ role, name }) => ({
-          role,
-          label: name,
-        })),
+        customRoles: [
+          { role: EDITOR_ROLE_NAME, label: "Editor" },
+          ...(customRoles || []).map(({ role, name }) => ({
+            role,
+            label: name,
+          })),
+        ],
       }}
       localization={{
         EMAIL_PLACEHOLDER,

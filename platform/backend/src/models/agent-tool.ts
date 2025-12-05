@@ -663,22 +663,17 @@ class AgentToolModel {
 
     const agentIds = agentsInTeam.map((a) => a.agentId);
 
-    // Get all personal MCP servers owned by this user
-    const userPersonalServers = await db
+    // Get all MCP servers owned by this user
+    const userServers = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(
-        and(
-          eq(schema.mcpServersTable.ownerId, userId),
-          eq(schema.mcpServersTable.authType, "personal"),
-        ),
-      );
+      .where(eq(schema.mcpServersTable.ownerId, userId));
 
-    if (userPersonalServers.length === 0) {
+    if (userServers.length === 0) {
       return 0;
     }
 
-    const serverIds = userPersonalServers.map((s) => s.id);
+    const serverIds = userServers.map((s) => s.id);
 
     // For each agent, check if user still has access through other teams
     let cleanedCount = 0;

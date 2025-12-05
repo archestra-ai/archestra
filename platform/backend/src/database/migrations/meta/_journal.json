@@ -526,6 +526,48 @@
       "when": 1764680281179,
       "tag": "0074_left_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1764741373326,
+      "tag": "0075_natural_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1764763021874,
+      "tag": "0076_lowly_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1764781755548,
+      "tag": "0077_secret_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1764798610912,
+      "tag": "0078_wakeful_nightcrawler",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1764806886044,
+      "tag": "0079_mature_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1764863811430,
+      "tag": "0080_brown_steve_rogers",
+      "breakpoints": true
     }
   ]
 }

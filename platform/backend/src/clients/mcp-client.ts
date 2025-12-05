@@ -1,7 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -18,6 +17,7 @@ import type {
   CommonToolResult,
   InternalMcpCatalog,
 } from "@/types";
+import { slugifyName } from "@/utils";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 
 /**
@@ -73,18 +73,24 @@ class McpClient {
         secrets,
       );
 
-      // Use catalog ID + secret ID as cache key for connection reuse
-      let secretId: string | null = null;
-      if (tool.credentialSourceMcpServerId) {
-        const credentialSourceServer = await McpServerModel.findById(
-          tool.credentialSourceMcpServerId,
-        );
-        secretId = credentialSourceServer?.secretId || null;
+      // Build connection cache key:
+      // - Local servers: use targetMcpServerId (each pod needs its own connection)
+      // - Remote servers: use catalogId + secretId (credential-based caching)
+      let connectionKey: string;
+      if (catalogItem.serverType === "local") {
+        connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+      } else {
+        let secretId: string | null = null;
+        if (tool.credentialSourceMcpServerId) {
+          const credentialSourceServer = await McpServerModel.findById(
+            tool.credentialSourceMcpServerId,
+          );
+          secretId = credentialSourceServer?.secretId || null;
+        }
+        connectionKey = secretId
+          ? `${catalogItem.id}:${secretId}`
+          : catalogItem.id;
       }
-
-      const connectionKey = secretId
-        ? `${catalogItem.id}:${secretId}`
-        : catalogItem.id;
 
       // Get or create client
       const client = await this.getOrCreateClient(connectionKey, transport);
@@ -332,13 +338,15 @@ class McpClient {
   }
 
   /**
-   * Strip server prefix from tool name (case-insensitive)
+   * Strip server prefix from tool name
+   * Slugifies the prefix (lowercase + spaces to underscores) to match how tool names are created
    */
   private stripServerPrefix(toolName: string, prefixName: string): string {
-    const serverPrefix = `${prefixName}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-    // Case-insensitive comparison
-    if (toolName.toLowerCase().startsWith(serverPrefix.toLowerCase())) {
-      return toolName.substring(serverPrefix.length);
+    // Slugify the prefix the same way ToolModel.slugifyName does
+    const slugifiedPrefix = slugifyName(prefixName, "");
+
+    if (toolName.toLowerCase().startsWith(slugifiedPrefix)) {
+      return toolName.substring(slugifiedPrefix.length);
     }
     return toolName;
   }

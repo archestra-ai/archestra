@@ -56,3 +56,19 @@ export function WithPermissions({
     );
   }
 }
+
+export function WithoutPermissions({
+  children,
+  permissions,
+}: {
+  permissions: Permissions;
+  children: React.ReactNode;
+}) {
+  const { data: hasPermission } = useHasPermissions(permissions);
+
+  if (hasPermission) {
+    return null;
+  }
+
+  return children;
+}

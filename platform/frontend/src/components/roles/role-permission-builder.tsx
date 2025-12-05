@@ -176,6 +176,64 @@ export function RolePermissionBuilder({
     );
   }, [permission]);
 
+  // Check if all resources in a category are fully selected
+  const isCategoryFullySelected = useCallback(
+    (category: string): boolean => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      if (visibleResources.length === 0) {
+        return false;
+      }
+
+      return visibleResources.every((resource) => {
+        return isResourceFullySelected(resource);
+      });
+    },
+    [userPermissions, isResourceFullySelected],
+  );
+
+  // Select all permissions for all resources in a category
+  const selectAllForCategory = useCallback(
+    (category: string) => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      const newPermission = { ...permission };
+      visibleResources.forEach((resource) => {
+        const availableActions = userPermissions[resource] || [];
+        if (availableActions.length > 0) {
+          newPermission[resource] = [...availableActions];
+        }
+      });
+
+      onChange(newPermission);
+    },
+    [permission, onChange, userPermissions],
+  );
+
+  // Deselect all permissions for all resources in a category
+  const deselectAllForCategory = useCallback(
+    (category: string) => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      const newPermission = { ...permission };
+      visibleResources.forEach((resource) => {
+        delete newPermission[resource];
+      });
+
+      onChange(newPermission);
+    },
+    [permission, onChange, userPermissions],
+  );
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -201,125 +259,151 @@ export function RolePermissionBuilder({
       </Card>
 
       <div className="space-y-3">
-        {Object.entries(resourceCategories).map(([category, resources]) => (
-          <Card key={category} className="p-3">
-            <button
-              className="flex w-full items-center justify-between text-left"
-              onClick={() => toggleCategory(category)}
-              type="button"
-            >
-              <div className="flex items-center gap-2">
-                {expandedCategories.has(category) ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                <span className="font-semibold text-sm">{category}</span>
+        {Object.entries(resourceCategories).map(([category, resources]) => {
+          const isCategorySelected = isCategoryFullySelected(category);
+
+          return (
+            <Card key={category} className="p-3">
+              <div className="flex w-full items-center gap-2">
+                <button
+                  className="flex items-center text-left"
+                  onClick={() => toggleCategory(category)}
+                  type="button"
+                >
+                  {expandedCategories.has(category) ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+                <Checkbox
+                  id={`category-${category}`}
+                  checked={isCategorySelected}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      selectAllForCategory(category);
+                    } else {
+                      deselectAllForCategory(category);
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                />
+                <button
+                  className="flex-1 text-left"
+                  onClick={() => toggleCategory(category)}
+                  type="button"
+                >
+                  <span className="font-semibold text-sm">{category}</span>
+                </button>
               </div>
-            </button>
 
-            {expandedCategories.has(category) && (
-              <div className="mt-3 space-y-2">
-                {resources
-                  .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
-                  .map((resource) => {
-                    const availableActions = userPermissions[resource] || [];
-                    const selectedActions = permission[resource] || [];
-                    const isFullySelected = isResourceFullySelected(resource);
-                    const isPartiallySelected =
-                      isResourcePartiallySelected(resource);
+              {expandedCategories.has(category) && (
+                <div className="mt-3 space-y-2">
+                  {resources
+                    .filter((resource) => userPermissions[resource]) // Only show resources user has permission for
+                    .map((resource) => {
+                      const availableActions = userPermissions[resource] || [];
+                      const selectedActions = permission[resource] || [];
+                      const isFullySelected = isResourceFullySelected(resource);
+                      const isPartiallySelected =
+                        isResourcePartiallySelected(resource);
 
-                    return (
-                      <div
-                        key={resource}
-                        className="rounded-md border bg-card p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              id={`${resource}-all`}
-                              checked={isFullySelected}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  selectAllForResource(resource);
-                                } else {
-                                  deselectAllForResource(resource);
+                      return (
+                        <div
+                          key={resource}
+                          className="rounded-md border bg-card p-3"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id={`${resource}-all`}
+                                checked={isFullySelected}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    selectAllForResource(resource);
+                                  } else {
+                                    deselectAllForResource(resource);
+                                  }
+                                }}
+                                className={
+                                  isPartiallySelected ? "opacity-50" : ""
                                 }
-                              }}
-                              className={
-                                isPartiallySelected ? "opacity-50" : ""
-                              }
-                            />
-                            <Label
-                              htmlFor={`${resource}-all`}
-                              className="font-medium cursor-pointer"
-                            >
-                              {resourceLabels[resource] || resource}
-                            </Label>
-                            {isPartiallySelected && (
+                              />
+                              <Label
+                                htmlFor={`${resource}-all`}
+                                className="font-medium cursor-pointer"
+                              >
+                                {resourceLabels[resource] || resource}
+                              </Label>
+                              {isPartiallySelected && (
+                                <span className="text-xs text-muted-foreground">
+                                  (Partial)
+                                </span>
+                              )}
+                            </div>
+                            {selectedActions.length > 0 && (
                               <span className="text-xs text-muted-foreground">
-                                (Partial)
+                                {selectedActions.length}/
+                                {availableActions.length}
                               </span>
                             )}
                           </div>
-                          {selectedActions.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {selectedActions.length}/{availableActions.length}
-                            </span>
-                          )}
-                        </div>
 
-                        <Separator className="my-2" />
+                          <Separator className="my-2" />
 
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {ActionSchema.options.map((action) => {
-                            const isAvailable =
-                              availableActions.includes(action);
-                            const isSelected = selectedActions.includes(action);
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {ActionSchema.options.map((action) => {
+                              const isAvailable =
+                                availableActions.includes(action);
+                              const isSelected =
+                                selectedActions.includes(action);
 
-                            return (
-                              <div
-                                key={action}
-                                className={`flex items-center gap-2 ${
-                                  !isAvailable
-                                    ? "opacity-40 cursor-not-allowed"
-                                    : ""
-                                }`}
-                              >
-                                <Checkbox
-                                  id={`${resource}-${action}`}
-                                  checked={isSelected}
-                                  disabled={!isAvailable}
-                                  onCheckedChange={() => {
-                                    if (isAvailable) {
-                                      toggleAction(resource, action);
-                                    }
-                                  }}
-                                />
-                                <Label
-                                  htmlFor={`${resource}-${action}`}
-                                  className={`text-sm ${
+                              return (
+                                <div
+                                  key={action}
+                                  className={`flex items-center gap-2 ${
                                     !isAvailable
-                                      ? "cursor-not-allowed"
-                                      : "cursor-pointer"
+                                      ? "opacity-40 cursor-not-allowed"
+                                      : ""
                                   }`}
                                 >
-                                  {actionLabels[action]}
-                                  {isSelected && (
-                                    <Check className="ml-1 inline h-3 w-3" />
-                                  )}
-                                </Label>
-                              </div>
-                            );
-                          })}
+                                  <Checkbox
+                                    id={`${resource}-${action}`}
+                                    checked={isSelected}
+                                    disabled={!isAvailable}
+                                    onCheckedChange={() => {
+                                      if (isAvailable) {
+                                        toggleAction(resource, action);
+                                      }
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`${resource}-${action}`}
+                                    className={`text-sm ${
+                                      !isAvailable
+                                        ? "cursor-not-allowed"
+                                        : "cursor-pointer"
+                                    }`}
+                                  >
+                                    {actionLabels[action]}
+                                    {isSelected && (
+                                      <Check className="ml-1 inline h-3 w-3" />
+                                    )}
+                                  </Label>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </Card>
-        ))}
+                      );
+                    })}
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

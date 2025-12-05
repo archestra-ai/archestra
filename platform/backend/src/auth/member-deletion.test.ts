@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import MemberModel from "@/models/member";
+import SessionModel from "@/models/session";
+import UserModel from "@/models/user";
 import { describe, expect, test } from "@/test";
 
 describe("Member deletion with user cleanup", () => {
@@ -15,46 +15,28 @@ describe("Member deletion with user cleanup", () => {
     const member = await makeMember(user.id, org.id);
 
     // Verify user exists
-    const userBefore = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userBefore).toHaveLength(1);
+    const userBefore = await UserModel.getById(user.id);
+    expect(userBefore).toBeDefined();
 
     // Delete the member via model
     const deleted = await MemberModel.deleteByMemberOrUserId(member.id, org.id);
     expect(deleted).toBeDefined();
 
     // Verify member is deleted
-    const memberAfter = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.id, member.id))
-      .limit(1);
-    expect(memberAfter).toHaveLength(0);
+    const memberAfter = await MemberModel.getById(member.id);
+    expect(memberAfter).toBeUndefined();
 
     // Manually check if user has remaining organizations and delete if not
     // (simulating the hook behavior)
-    const remainingMembers = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, user.id))
-      .limit(1);
+    const hasRemainingMemberships = await MemberModel.hasAnyMembership(user.id);
 
-    if (remainingMembers.length === 0) {
-      await db
-        .delete(schema.usersTable)
-        .where(eq(schema.usersTable.id, user.id));
+    if (!hasRemainingMemberships) {
+      await UserModel.delete(user.id);
     }
 
     // Verify user is also deleted (since they have no more organizations)
-    const userAfter = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userAfter).toHaveLength(0);
+    const userAfter = await UserModel.getById(user.id);
+    expect(userAfter).toBeUndefined();
   });
 
   test("should NOT delete user when member is deleted but user has other organizations", async ({
@@ -70,53 +52,31 @@ describe("Member deletion with user cleanup", () => {
     await makeMember(user.id, org2.id);
 
     // Verify user exists
-    const userBefore = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userBefore).toHaveLength(1);
+    const userBefore = await UserModel.getById(user.id);
+    expect(userBefore).toBeDefined();
 
     // Delete the member from first organization
     await MemberModel.deleteByMemberOrUserId(member1.id, org1.id);
 
     // Verify member from org1 is deleted
-    const member1After = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.id, member1.id))
-      .limit(1);
-    expect(member1After).toHaveLength(0);
+    const member1After = await MemberModel.getById(member1.id);
+    expect(member1After).toBeUndefined();
 
     // Check if user has remaining organizations (simulating hook behavior)
-    const remainingMembers = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, user.id))
-      .limit(1);
+    const hasRemainingMemberships = await MemberModel.hasAnyMembership(user.id);
 
-    if (remainingMembers.length === 0) {
-      await db
-        .delete(schema.usersTable)
-        .where(eq(schema.usersTable.id, user.id));
+    if (!hasRemainingMemberships) {
+      await UserModel.delete(user.id);
     }
 
     // Verify user still exists (since they still have org2)
-    const userAfter = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userAfter).toHaveLength(1);
+    const userAfter = await UserModel.getById(user.id);
+    expect(userAfter).toBeDefined();
 
-    // Verify member from org2 still exists
-    const membersRemaining = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, user.id))
-      .limit(2);
-    expect(membersRemaining).toHaveLength(1);
-    expect(membersRemaining[0]?.organizationId).toBe(org2.id);
+    // Verify membership in org2 still exists
+    const org2Membership = await MemberModel.getByUserId(user.id, org2.id);
+    expect(org2Membership).toBeDefined();
+    expect(org2Membership?.organizationId).toBe(org2.id);
   });
 
   test("should delete user via userId parameter instead of memberId", async ({
@@ -133,31 +93,22 @@ describe("Member deletion with user cleanup", () => {
     await MemberModel.deleteByMemberOrUserId(user.id, org.id);
 
     // Check if user has remaining organizations (simulating hook behavior)
-    const remainingMembers = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, user.id))
-      .limit(1);
+    const hasRemainingMemberships = await MemberModel.hasAnyMembership(user.id);
 
-    if (remainingMembers.length === 0) {
-      await db
-        .delete(schema.usersTable)
-        .where(eq(schema.usersTable.id, user.id));
+    if (!hasRemainingMemberships) {
+      await UserModel.delete(user.id);
     }
 
     // Verify user is deleted (since they have no more organizations)
-    const userAfter = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userAfter).toHaveLength(0);
+    const userAfter = await UserModel.getById(user.id);
+    expect(userAfter).toBeUndefined();
   });
 
   test("should cascade delete related resources when user is deleted", async ({
     makeUser,
     makeOrganization,
     makeMember,
+    makeSession,
   }) => {
     // Create user and organization
     const user = await makeUser();
@@ -165,54 +116,31 @@ describe("Member deletion with user cleanup", () => {
     const member = await makeMember(user.id, org.id);
 
     // Create a session for the user (simulating a logged-in user)
-    const sessionId = crypto.randomUUID();
-    await db.insert(schema.sessionsTable).values({
-      id: sessionId,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day from now
-      token: crypto.randomUUID(),
+    await makeSession(user.id, {
       ipAddress: "127.0.0.1",
       userAgent: "test-agent",
     });
 
     // Verify session exists
-    const sessionBefore = await db
-      .select()
-      .from(schema.sessionsTable)
-      .where(eq(schema.sessionsTable.userId, user.id))
-      .limit(1);
-    expect(sessionBefore).toHaveLength(1);
+    const sessionsBefore = await SessionModel.getByUserId(user.id);
+    expect(sessionsBefore).toHaveLength(1);
 
     // Delete the member
     await MemberModel.deleteByMemberOrUserId(member.id, org.id);
 
     // Check if user has remaining organizations (simulating hook behavior)
-    const remainingMembers = await db
-      .select()
-      .from(schema.membersTable)
-      .where(eq(schema.membersTable.userId, user.id))
-      .limit(1);
+    const hasRemainingMemberships = await MemberModel.hasAnyMembership(user.id);
 
-    if (remainingMembers.length === 0) {
-      await db
-        .delete(schema.usersTable)
-        .where(eq(schema.usersTable.id, user.id));
+    if (!hasRemainingMemberships) {
+      await UserModel.delete(user.id);
     }
 
     // Verify user is deleted
-    const userAfter = await db
-      .select()
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, user.id))
-      .limit(1);
-    expect(userAfter).toHaveLength(0);
+    const userAfter = await UserModel.getById(user.id);
+    expect(userAfter).toBeUndefined();
 
     // Verify session is also deleted (cascade delete)
-    const sessionAfter = await db
-      .select()
-      .from(schema.sessionsTable)
-      .where(eq(schema.sessionsTable.userId, user.id))
-      .limit(1);
-    expect(sessionAfter).toHaveLength(0);
+    const sessionsAfter = await SessionModel.getByUserId(user.id);
+    expect(sessionsAfter).toHaveLength(0);
   });
 });

@@ -1,5 +1,5 @@
 import { ssoClient } from "@better-auth/sso/client";
-import { ac, adminRole, memberRole } from "@shared";
+import { ac, adminRole, editorRole, memberRole } from "@shared";
 import {
   adminClient,
   apiKeyClient,
@@ -21,6 +21,7 @@ export const authClient = createAuthClient({
       },
       roles: {
         admin: adminRole,
+        editor: editorRole,
         member: memberRole,
       },
       schema: inferOrgAdditionalFields({

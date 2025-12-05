@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import config from "@/lib/config";
 import {
   organizationKeys,
   useActiveMemberRole,
@@ -34,10 +35,11 @@ function MembersSettingsContent() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const hasPermissionTodo = "TODO:";
+  const invitationsEnabled = !config.disableInvitations;
 
   const members = activeOrg ? (
     <div className="space-y-6">
-      {activeMemberRole && hasPermissionTodo && (
+      {invitationsEnabled && activeMemberRole && hasPermissionTodo && (
         <Dialog
           open={inviteDialogOpen}
           onOpenChange={(open) => {
@@ -61,13 +63,21 @@ function MembersSettingsContent() {
         </Dialog>
       )}
       <OrganizationMembersCard
-        action={() => {
-          if (hasPermissionTodo) {
-            setInviteDialogOpen(true);
-          }
-        }}
+        {...(!invitationsEnabled && {
+          actionLabel: null,
+          instructions: null,
+        })}
+        action={
+          invitationsEnabled
+            ? () => {
+                setInviteDialogOpen(true);
+              }
+            : undefined
+        }
       />
-      <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
+      {invitationsEnabled && (
+        <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
+      )}
     </div>
   ) : (
     <Card>

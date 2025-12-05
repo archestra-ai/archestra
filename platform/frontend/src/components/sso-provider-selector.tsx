@@ -27,7 +27,10 @@ export function SsoProviderSelector({
       const result = await authClient.signIn.sso({
         providerId,
         callbackURL: `${window.location.origin}/`,
-        errorCallbackURL: `${window.location.origin}/sign-in`,
+        /**
+         * Use /auth/sign-in as the error callback base URL
+         */
+        errorCallbackURL: `${window.location.origin}/auth/sign-in`,
       });
       console.info("SSO sign-in initiated:", result);
     } catch (error) {

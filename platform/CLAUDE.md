@@ -119,16 +119,16 @@ ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Analytics (optional - disabled for local dev and e2e tests)
 ARCHESTRA_ANALYTICS=disabled  # Set to "disabled" to disable PostHog analytics
 
-# Feature Flags
-NEXT_PUBLIC_ARCHESTRA_ENABLE_TEAM_AUTH=false  # Enable team-based authentication/installation for MCP servers (disabled by default)
-
-# Authentication Secret (auto-generated in Helm/Docker if not set)
+# Authentication Secret (REQUIRED, must be at least 32 characters)
+# Generate with: openssl rand -base64 32
 # In Helm: Auto-generated on first install and persisted
 # In Docker: Auto-generated and saved to /app/data/.auth_secret
-ARCHESTRA_AUTH_SECRET=  # Optional: Set manually, or leave empty for auto-generation
+# For local dev: Must be set manually in .env file
+ARCHESTRA_AUTH_SECRET=auth-secret-must-be-at-least-32-chars-long
 
 # Disable Basic Authentication (username/password login form)
-ARCHESTRA_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
+ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=false  # Set to true to hide login form and require SSO
+ARCHESTRA_AUTH_DISABLE_INVITATIONS=false  # Set to true to disable user invitations
 
 # Chat Feature Configuration (n8n automation expert)
 ARCHESTRA_CHAT_ANTHROPIC_API_KEY=your-api-key-here  # Required for chat (direct Anthropic API)
@@ -152,8 +152,26 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 # Secrets Manager Configuration
 ARCHESTRA_SECRETS_MANAGER=DB  # Options: DB (default), Vault
-HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
-HASHICORP_VAULT_TOKEN=dev-root-token  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200  # Required when ARCHESTRA_SECRETS_MANAGER=Vault
+ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN  # Options: "TOKEN" (default), "K8S", or "AWS"
+ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2  # Options: "1" or "2" (default: "2") - KV secrets engine version
+
+# Vault Token Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=TOKEN or not set)
+ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token  # Required for TOKEN auth
+
+# Vault Kubernetes Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=K8S)
+ARCHESTRA_HASHICORP_VAULT_K8S_ROLE=  # Required for K8S auth: Vault role bound to K8s service account
+ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH=  # Optional: Path to SA token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
+ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT=  # Optional: Vault K8S auth mount point (default: kubernetes)
+ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=  # Optional: Path prefix for secrets (default: "secret/data/archestra" for v2, "secret/archestra" for v1)
+ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH=  # Optional: Path prefix for secret metadata in Vault KV v2 (default: secretPath with /data/ replaced by /metadata/)
+
+# Vault AWS IAM Authentication (ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD=AWS)
+ARCHESTRA_HASHICORP_VAULT_AWS_ROLE=  # Required for AWS auth: Vault role bound to AWS IAM principal
+ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT=  # Optional: Vault AWS auth mount point (default: aws)
+ARCHESTRA_HASHICORP_VAULT_AWS_REGION=  # Optional: AWS region for STS signing (default: us-east-1)
+ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT=  # Optional: STS endpoint URL (default: https://sts.amazonaws.com, matches Vault's default)
+ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID=  # Optional: Value for X-Vault-AWS-IAM-Server-ID header (additional security)
 
 # Sentry Error Tracking (optional - leave empty to disable)
 ARCHESTRA_SENTRY_BACKEND_DSN=  # Backend error tracking DSN
@@ -410,4 +428,34 @@ test("API example", async ({ request, createAgent, deleteAgent }) => {
   await deleteAgent(request, agent.id);
 });
 ```
+
+**Playwright Locator Best Practices**:
+
+Prefer Playwright's recommended locators over raw `locator()` calls. In priority order:
+1. `page.getByRole()` - Accessible elements by ARIA role (buttons, links, headings, etc.)
+2. `page.getByText()` - Find by text content
+3. `page.getByLabel()` - Form controls by label
+4. `page.getByPlaceholder()` - Input elements by placeholder
+5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
+
+Avoid:
+- Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`
+- XPath selectors
+- Arbitrary timeouts - use Playwright's auto-waiting instead
+
+Example:
+```typescript
+// Good
+await page.getByRole("button", { name: /Submit/i }).click();
+await page.getByLabel(/Email/i).fill("test@example.com");
+await page.getByTestId(E2eTestId.CreateAgentButton).click();
+
+// Avoid
+await page.locator('.submit-btn').click();
+await page.locator('#email-input').fill("test@example.com");
+await page.waitForTimeout(1000); // Use auto-waiting instead
+```
+
+Reference: https://playwright.dev/docs/locators#quick-guide
+
 - never amend commits

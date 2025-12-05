@@ -1,5 +1,121 @@
 # Changelog
 
+## [0.6.19](https://github.com/archestra-ai/archestra/compare/platform-v0.6.18...platform-v0.6.19) (2025-12-04)
+
+
+### Features
+
+* vault k8s connectivity check ([#1400](https://github.com/archestra-ai/archestra/issues/1400)) ([50d6c13](https://github.com/archestra-ai/archestra/commit/50d6c1344672508302b55afb733eebea150c0a8e))
+
+
+### Bug Fixes
+
+* fix tests ([#1397](https://github.com/archestra-ai/archestra/issues/1397)) ([dc09030](https://github.com/archestra-ai/archestra/commit/dc09030d8e455bdd28fa8e9fceddd773a22477d7))
+* SSO provider issue ([#1392](https://github.com/archestra-ai/archestra/issues/1392)) ([11dd7ec](https://github.com/archestra-ai/archestra/commit/11dd7ec353dd44d035b0bcd670f8a18b37088ade))
+
+
+### Miscellaneous Chores
+
+* debugging SSO configuration ([#1401](https://github.com/archestra-ai/archestra/issues/1401)) ([bc5990f](https://github.com/archestra-ai/archestra/commit/bc5990fd0f28fdf538b8131faa764f12925de9e1))
+* team-based access control for mcp credentials ([#1382](https://github.com/archestra-ai/archestra/issues/1382)) ([301ea25](https://github.com/archestra-ai/archestra/commit/301ea259c82065c801bb6ad67261edf3fc772d3f))
+
+## [0.6.18](https://github.com/archestra-ai/archestra/compare/platform-v0.6.17...platform-v0.6.18) (2025-12-04)
+
+
+### Miscellaneous Chores
+
+* configurable vault secret path ([#1393](https://github.com/archestra-ai/archestra/issues/1393)) ([b7d11fe](https://github.com/archestra-ai/archestra/commit/b7d11feb83391e930334605a21c2c8a5b85059ae))
+
+## [0.6.17](https://github.com/archestra-ai/archestra/compare/platform-v0.6.16...platform-v0.6.17) (2025-12-04)
+
+
+### Features
+
+* disable user invitations via environment variable ([#1388](https://github.com/archestra-ai/archestra/issues/1388)) ([ea8586c](https://github.com/archestra-ai/archestra/commit/ea8586cdfaaf8c21a50a17b28f86bba6367fa1d8))
+* IdP team sync ([#1380](https://github.com/archestra-ai/archestra/issues/1380)) ([3b3406a](https://github.com/archestra-ai/archestra/commit/3b3406a96fb6c98bcfdd59d6dea8a0b5541c8922))
+* LLM cost metrics ([#1386](https://github.com/archestra-ai/archestra/issues/1386)) ([dc7291d](https://github.com/archestra-ai/archestra/commit/dc7291d856accc95a4088acc25573dab2cedc46f))
+* vault-aws-iam ([#1387](https://github.com/archestra-ai/archestra/issues/1387)) ([394095d](https://github.com/archestra-ai/archestra/commit/394095d4e525004f6948ea608753c77233caa40d))
+
+
+### Bug Fixes
+
+* bug with parseAllowedOrigins when ARCHESTRA_FRONTEND_URL is not set ([c5786cf](https://github.com/archestra-ai/archestra/commit/c5786cfe6a3a30abb359d1d14d3b6a4936a1b67a))
+
+
+### Documentation
+
+* vault-k8s auth ([#1385](https://github.com/archestra-ai/archestra/issues/1385)) ([ce2283d](https://github.com/archestra-ai/archestra/commit/ce2283d99e3119e1963cf0debc09a553150a6d1c))
+
+
+### Miscellaneous Chores
+
+* gracefully handle vault errors ([#1389](https://github.com/archestra-ai/archestra/issues/1389)) ([6c1db0b](https://github.com/archestra-ai/archestra/commit/6c1db0b837ad6fc08d4cc143f2e8dc4e5e41fb5c))
+
+## [0.6.16](https://github.com/archestra-ai/archestra/compare/platform-v0.6.15...platform-v0.6.16) (2025-12-03)
+
+
+### Features
+
+* SSO role mapping ([#1378](https://github.com/archestra-ai/archestra/issues/1378)) ([58a6445](https://github.com/archestra-ai/archestra/commit/58a64450b531eadedd6e41576a0228ad812d64b9))
+* vault secrets manager k8s auth ([#1370](https://github.com/archestra-ai/archestra/issues/1370)) ([4efb47b](https://github.com/archestra-ai/archestra/commit/4efb47b3d8a23e99b1c89f8549e71b21afa58dcc))
+
+
+### Bug Fixes
+
+* store MCP client secret in secrets ([#1346](https://github.com/archestra-ai/archestra/issues/1346)) ([99494bb](https://github.com/archestra-ai/archestra/commit/99494bb23f4e50c46fef71d9186365cdebb4088f))
+
+
+### Documentation
+
+* remove default auth secret ([#1375](https://github.com/archestra-ai/archestra/issues/1375)) ([01d84f6](https://github.com/archestra-ai/archestra/commit/01d84f6a6de36812b43b3a089f2635898307cdec))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump next from 16.0.4 to 16.0.7 in /platform/frontend ([#1376](https://github.com/archestra-ai/archestra/issues/1376)) ([28718ec](https://github.com/archestra-ai/archestra/commit/28718ec4858d949ebf806c68f100d9dba842e6d6))
+* fix `logo.png` console warning ([#1373](https://github.com/archestra-ai/archestra/issues/1373)) ([08b8860](https://github.com/archestra-ai/archestra/commit/08b8860d44b4c886c31bc995130925adabaf2528))
+* make `lint:fix` a manual Tilt resource ([#1379](https://github.com/archestra-ai/archestra/issues/1379)) ([a3512da](https://github.com/archestra-ai/archestra/commit/a3512da5c2eb1b1c1db2efa94f6f1deb0df86e4d))
+* update .npmrc ([#1377](https://github.com/archestra-ai/archestra/issues/1377)) ([1e3e01a](https://github.com/archestra-ai/archestra/commit/1e3e01a453a669a80ccd2fd422bd2243278fba97))
+
+## [0.6.15](https://github.com/archestra-ai/archestra/compare/platform-v0.6.14...platform-v0.6.15) (2025-12-03)
+
+
+### Bug Fixes
+
+* address issue w/ configuring SAML SSO ([#1361](https://github.com/archestra-ai/archestra/issues/1361)) ([88d3eb6](https://github.com/archestra-ai/archestra/commit/88d3eb6685e68ef913a84565bc39726fe0526875))
+
+## [0.6.14](https://github.com/archestra-ai/archestra/compare/platform-v0.6.13...platform-v0.6.14) (2025-12-03)
+
+
+### Bug Fixes
+
+* fix mcp client connection key for local servers ([#1365](https://github.com/archestra-ai/archestra/issues/1365)) ([8c77839](https://github.com/archestra-ai/archestra/commit/8c778396f6d252eecad0b30710ccc831e1d4842e))
+* fix tool calling when custom server includes whitespace ([#1363](https://github.com/archestra-ai/archestra/issues/1363)) ([27fa58a](https://github.com/archestra-ai/archestra/commit/27fa58a3e504bf4fcf9f27244cdb8e5a155f6a43))
+
+
+### Miscellaneous Chores
+
+* e2e test - ignore status check for agent tools fixture ([#1369](https://github.com/archestra-ai/archestra/issues/1369)) ([ccf7140](https://github.com/archestra-ai/archestra/commit/ccf71409880484255d238026070d5ef9e7fd7d31))
+* team credentials ([#1362](https://github.com/archestra-ai/archestra/issues/1362)) ([89b3bf9](https://github.com/archestra-ai/archestra/commit/89b3bf90479a364343e174be5b38bcbec8af8c79))
+* upgrade playwright and fix flaky test ([#1368](https://github.com/archestra-ai/archestra/issues/1368)) ([ccceedb](https://github.com/archestra-ai/archestra/commit/ccceedbad580daa03d01fe4dc887fb0210c2670e))
+
+## [0.6.13](https://github.com/archestra-ai/archestra/compare/platform-v0.6.12...platform-v0.6.13) (2025-12-02)
+
+
+### Bug Fixes
+
+* UI form issue when editing Generic SAML SSO provider ([#1360](https://github.com/archestra-ai/archestra/issues/1360)) ([2fb0308](https://github.com/archestra-ai/archestra/commit/2fb03085168ff29983eb3a542fb5d0ec22cdfd4e))
+
+
+### Dependencies
+
+* address `@modelcontextprotocol/sdk` CVE ([#1358](https://github.com/archestra-ai/archestra/issues/1358)) ([62d2470](https://github.com/archestra-ai/archestra/commit/62d24707bc37d298cfb04708979c13e09a0c15a0))
+
+
+### Miscellaneous Chores
+
+* fix `experiments` `pnpm-lock.yaml` (to resolve false-positive CVE) ([#1357](https://github.com/archestra-ai/archestra/issues/1357)) ([2089240](https://github.com/archestra-ai/archestra/commit/208924043beea7e0169d5f0cfc37f087e7f6a9e5))
+
 ## [0.6.12](https://github.com/archestra-ai/archestra/compare/platform-v0.6.11...platform-v0.6.12) (2025-12-02)
 
 

@@ -9,6 +9,7 @@ import getDefaultPricing from "@/default-model-prices";
 import {
   getObservableFetch,
   reportBlockedTools,
+  reportLLMCost,
   reportLLMTokens,
 } from "@/llm-metrics";
 import {
@@ -530,6 +531,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "openai",
                 resolvedAgent,
                 accumulatedToolCalls.length,
+                model,
               );
             } else {
               // Tool calls are allowed
@@ -651,7 +653,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Report token usage metrics for streaming (only if available)
           if (tokenUsage) {
-            reportLLMTokens("openai", resolvedAgent, tokenUsage);
+            reportLLMTokens("openai", resolvedAgent, tokenUsage, model);
           }
 
           // Calculate costs (only if we have token usage)
@@ -686,6 +688,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "No token usage available for streaming request - recording interaction without usage data",
             );
           }
+          reportLLMCost("openai", resolvedAgent, model, costAfterOptimization);
 
           // Always record the interaction
           await InteractionModel.create({
@@ -782,7 +785,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           ];
 
-          reportBlockedTools("openai", resolvedAgent, blockedCount);
+          reportBlockedTools("openai", resolvedAgent, blockedCount, model);
         }
         // Tool calls are allowed - return response with tool_calls to client
         // Client is responsible for executing tools via MCP Gateway and sending results back
@@ -806,6 +809,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenUsage.input,
             tokenUsage.output,
           );
+        reportLLMCost("openai", resolvedAgent, model, costAfterOptimization);
 
         // Store the complete interaction
         await InteractionModel.create({

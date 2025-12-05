@@ -31,6 +31,7 @@ import {
   useUpdateSsoProvider,
 } from "@/lib/sso-provider.query";
 import { OidcConfigForm } from "./oidc-config-form";
+import { SamlConfigForm } from "./saml-config-form";
 
 interface EditSsoProviderDialogProps {
   ssoProviderId: string;
@@ -72,27 +73,51 @@ export function EditSsoProviderDialog({
     },
   });
 
+  // Determine provider type based on config presence
+  const providerType = provider?.samlConfig ? "saml" : "oidc";
+
   useEffect(() => {
     if (provider) {
+      const isSaml = !!provider.samlConfig;
       form.reset({
         providerId: provider.providerId,
         issuer: provider.issuer,
         domain: provider.domain,
-        providerType: "oidc", // Fixed to OIDC
-        oidcConfig: provider.oidcConfig || {
-          issuer: "",
-          pkce: true,
-          clientId: "",
-          clientSecret: "",
-          discoveryEndpoint: "",
-          scopes: ["openid", "email", "profile"],
-          mapping: {
-            id: "sub",
-            email: "email",
-            name: "name",
-          },
-          overrideUserInfo: true,
-        },
+        providerType: isSaml ? "saml" : "oidc",
+        ...(isSaml
+          ? {
+              samlConfig: provider.samlConfig || {
+                issuer: "",
+                entryPoint: "",
+                cert: "",
+                callbackUrl: "",
+                spMetadata: {},
+                idpMetadata: {},
+                mapping: {
+                  id: "",
+                  email: "email",
+                  name: "",
+                  firstName: "firstName",
+                  lastName: "lastName",
+                },
+              },
+            }
+          : {
+              oidcConfig: provider.oidcConfig || {
+                issuer: "",
+                pkce: true,
+                clientId: "",
+                clientSecret: "",
+                discoveryEndpoint: "",
+                scopes: ["openid", "email", "profile"],
+                mapping: {
+                  id: "sub",
+                  email: "email",
+                  name: "name",
+                },
+                overrideUserInfo: true,
+              },
+            }),
       });
     }
   }, [provider, form]);
@@ -140,7 +165,11 @@ export function EditSsoProviderDialog({
             className="flex flex-col flex-1 overflow-hidden"
           >
             <div className="flex-1 overflow-y-auto py-4">
-              <OidcConfigForm form={form} />
+              {providerType === "saml" ? (
+                <SamlConfigForm form={form} />
+              ) : (
+                <OidcConfigForm form={form} />
+              )}
             </div>
 
             <DialogFooter className="mt-4">

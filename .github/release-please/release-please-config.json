@@ -69,7 +69,7 @@
       "component": "platform",
       "release-type": "node",
       "versioning": "always-bump-patch",
-      "prerelease": true,
+      "prerelease": false,
       "initial-version": "0.0.1",
       "extra-files": [
         {

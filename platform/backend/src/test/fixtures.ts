@@ -10,6 +10,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   SessionModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
@@ -30,6 +31,7 @@ import type {
   InsertTeam,
   InsertUser,
   OrganizationRole,
+  TeamMember,
   Tool,
   ToolInvocation,
   TrustedData,
@@ -48,6 +50,7 @@ interface TestFixtures {
   makeAdmin: typeof makeAdmin;
   makeOrganization: typeof makeOrganization;
   makeTeam: typeof makeTeam;
+  makeTeamMember: typeof makeTeamMember;
   makeAgent: typeof makeAgent;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
@@ -145,6 +148,22 @@ async function makeTeam(
     })
     .returning();
   return team;
+}
+
+/**
+ * Creates a test team member using the TeamModel
+ */
+async function makeTeamMember(
+  teamId: string,
+  userId: string,
+  overrides: { role?: string; syncedFromSso?: boolean } = {},
+): Promise<TeamMember> {
+  return await TeamModel.addMember(
+    teamId,
+    userId,
+    overrides.role ?? MEMBER_ROLE_NAME,
+    overrides.syncedFromSso ?? false,
+  );
 }
 
 /**
@@ -345,7 +364,6 @@ async function makeMcpServer(
       catalogId,
       secretId: null,
       ownerId: null,
-      authType: null,
       reinstallRequired: false,
       localInstallationStatus: "idle",
       localInstallationError: null,
@@ -394,7 +412,9 @@ async function makeInternalMcpCatalog(
 async function makeInvitation(
   organizationId: string,
   inviterId: string,
-  overrides: Partial<Pick<InsertInvitation, "email" | "role" | "status">> = {},
+  overrides: Partial<
+    Pick<InsertInvitation, "email" | "role" | "status" | "expiresAt">
+  > = {},
 ) {
   const [invitation] = await db
     .insert(schema.invitationsTable)
@@ -418,7 +438,7 @@ async function makeInvitation(
 async function makeAccount(
   userId: string,
   overrides: Partial<
-    Pick<InsertAccount, "accountId" | "providerId" | "accessToken">
+    Pick<InsertAccount, "accountId" | "providerId" | "accessToken" | "idToken">
   > = {},
 ) {
   const [account] = await db
@@ -623,6 +643,7 @@ async function makeSsoProvider(
     domain?: string;
     oidcConfig?: Record<string, unknown>;
     samlConfig?: Record<string, unknown>;
+    roleMapping?: Record<string, unknown>;
     userId?: string | null;
   } = {},
 ) {
@@ -645,7 +666,13 @@ async function makeSsoProvider(
       samlConfig: overrides.samlConfig
         ? (JSON.stringify(overrides.samlConfig) as unknown as undefined)
         : undefined,
+      roleMapping: overrides.roleMapping
+        ? (JSON.stringify(overrides.roleMapping) as unknown as undefined)
+        : undefined,
       userId: overrides.userId ?? null,
+      // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true
+      // See: https://github.com/better-auth/better-auth/issues/6481
+      domainVerified: true,
     })
     .returning();
 
@@ -665,6 +692,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeTeam: async ({}, use) => {
     await use(makeTeam);
+  },
+  makeTeamMember: async ({}, use) => {
+    await use(makeTeamMember);
   },
   makeAgent: async ({}, use) => {
     await use(makeAgent);

@@ -3,7 +3,12 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 import { type APIRequestContext, test as base } from "@playwright/test";
-import { API_BASE_URL, UI_BASE_URL } from "../../consts";
+import {
+  API_BASE_URL,
+  editorAuthFile,
+  memberAuthFile,
+  UI_BASE_URL,
+} from "../../consts";
 
 /**
  * Playwright test extension with fixtures
@@ -25,6 +30,13 @@ export interface TestFixtures {
   uninstallMcpServer: typeof uninstallMcpServer;
   createRole: typeof createRole;
   deleteRole: typeof deleteRole;
+  waitForAgentTool: typeof waitForAgentTool;
+  /** API request context authenticated as admin (same as default `request`) */
+  adminRequest: APIRequestContext;
+  /** API request context authenticated as editor */
+  editorRequest: APIRequestContext;
+  /** API request context authenticated as member */
+  memberRequest: APIRequestContext;
 }
 
 const makeApiRequest = async ({
@@ -299,6 +311,52 @@ const deleteRole = async (request: APIRequestContext, roleId: string) =>
     urlSuffix: `/api/roles/${roleId}`,
   });
 
+/**
+ * Wait for an agent-tool to be registered with retry/polling logic.
+ * This helps avoid race conditions when a tool is registered asynchronously.
+ */
+const waitForAgentTool = async (
+  request: APIRequestContext,
+  agentId: string,
+  toolName: string,
+  options?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  },
+): Promise<{ id: string; agent: { id: string }; tool: { name: string } }> => {
+  const maxAttempts = options?.maxAttempts ?? 10;
+  const delayMs = options?.delayMs ?? 500;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const agentToolsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/agent-tools",
+      ignoreStatusCheck: true,
+    });
+
+    if (agentToolsResponse.ok()) {
+      const agentTools = await agentToolsResponse.json();
+      const foundTool = agentTools.data.find(
+        (at: { agent: { id: string }; tool: { name: string } }) =>
+          at.agent.id === agentId && at.tool.name === toolName,
+      );
+
+      if (foundTool) {
+        return foundTool;
+      }
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error(
+    `Agent-tool '${toolName}' for agent '${agentId}' not found after ${maxAttempts} attempts`,
+  );
+};
+
 export * from "@playwright/test";
 export const test = base.extend<TestFixtures>({
   makeApiRequest: async ({}, use) => {
@@ -345,5 +403,35 @@ export const test = base.extend<TestFixtures>({
   },
   deleteRole: async ({}, use) => {
     await use(deleteRole);
+  },
+  waitForAgentTool: async ({}, use) => {
+    await use(waitForAgentTool);
+  },
+  /**
+   * Admin request - same auth as default `request` fixture
+   */
+  adminRequest: async ({ request }, use) => {
+    // Default request is already admin (via storageState in config)
+    await use(request);
+  },
+  /**
+   * Editor request - creates a new request context with editor auth
+   */
+  editorRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: editorAuthFile,
+    });
+    await use(context);
+    await context.dispose();
+  },
+  /**
+   * Member request - creates a new request context with member auth
+   */
+  memberRequest: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext({
+      storageState: memberAuthFile,
+    });
+    await use(context);
+    await context.dispose();
   },
 });

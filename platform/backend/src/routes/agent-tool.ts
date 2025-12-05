@@ -148,6 +148,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               toolId: UuidIdSchema,
               credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
               executionSourceMcpServerId: UuidIdSchema.nullable().optional(),
+              allowUsageWhenUntrustedDataIsPresent: z.boolean().optional(),
             }),
           ),
         }),
@@ -220,6 +221,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assignment.credentialSourceMcpServerId,
             assignment.executionSourceMcpServerId,
             preFetchedData,
+            assignment.allowUsageWhenUntrustedDataIsPresent,
           ),
         ),
       );
@@ -563,6 +565,7 @@ export async function assignToolToAgent(
     toolsMap?: Map<string, Tool>;
     catalogItemsMap?: Map<string, InternalMcpCatalog>;
   },
+  allowUsageWhenUntrustedDataIsPresent?: boolean,
 ): Promise<
   | {
       status: 400 | 404;
@@ -674,6 +677,7 @@ export async function assignToolToAgent(
     toolId,
     credentialSourceMcpServerId,
     executionSourceMcpServerId,
+    allowUsageWhenUntrustedDataIsPresent,
   );
 
   // Return appropriate status

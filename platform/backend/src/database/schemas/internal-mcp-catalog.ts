@@ -79,6 +79,11 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
       >
     >()
     .default({}),
+  // Flag for MCP servers that inherently require chained tool calls
+  // When true, tools from this catalog will have allowUsageWhenUntrustedDataIsPresent=true by default
+  requiresTrustedContext: boolean("requires_trusted_context")
+    .notNull()
+    .default(false),
   // OAuth configuration for remote servers
   oauthConfig: jsonb("oauth_config").$type<{
     name: string;

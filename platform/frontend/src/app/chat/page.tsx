@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { Eye, EyeOff, Plus } from "lucide-react";
+import { Eye, EyeOff, Globe, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -21,6 +21,7 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatError } from "@/components/chat/chat-error";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { McpToolsDisplay } from "@/components/chat/mcp-tools-display";
@@ -48,7 +49,12 @@ import {
 import { useChatSession } from "@/contexts/global-chat-context";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
-import { useConversation, useCreateConversation } from "@/lib/chat.query";
+import {
+  useConversation,
+  useConversations,
+  useCreateConversation,
+  useHasPlaywrightMcpTools,
+} from "@/lib/chat.query";
 import { useChatSettingsOptional } from "@/lib/chat-settings.query";
 import { useDialogs } from "@/lib/dialog.hook";
 import { useDeletePrompt, usePrompt, usePrompts } from "@/lib/prompts.query";
@@ -82,6 +88,9 @@ export default function ChatPage() {
     internalMcpCatalog: ["create"],
   });
 
+  // State for browser panel
+  const [isBrowserPanelOpen, setIsBrowserPanelOpen] = useState(false);
+
   // State for prompt management
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
@@ -94,8 +103,14 @@ export default function ChatPage() {
   const { data: editingPrompt } = usePrompt(editingPromptId || "");
   const deletePromptMutation = useDeletePrompt();
   const { data: allProfiles = [] } = useProfiles();
+  const { data: allConversations = [] } = useConversations();
 
   const chatSession = useChatSession(conversationId);
+
+  // Calculate tab index based on conversation position in list
+  const tabIndex = conversationId
+    ? allConversations.findIndex((c) => c.id === conversationId)
+    : 0;
 
   // Check if API key is configured
   const { data: chatSettings } = useChatSettingsOptional();
@@ -131,6 +146,9 @@ export default function ChatPage() {
 
   // Get current agent info
   const currentProfileId = conversation?.agentId;
+
+  // Check if Playwright MCP is available for browser panel
+  const hasPlaywrightMcp = useHasPlaywrightMcpTools(currentProfileId);
 
   // Clear MCP Gateway sessions when opening a NEW conversation
   useEffect(() => {
@@ -497,7 +515,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen w-full">
-      <div className="flex-1 flex flex-col w-full">
+      <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-col h-full">
           {error && <ChatError error={error} />}
           <StreamTimeoutWarning status={status} messages={messages} />
@@ -513,6 +531,17 @@ export default function ChatPage() {
             )}
             <div className="flex-1 flex justify-end gap-2 items-center">
               {promptBadge}
+              {hasPlaywrightMcp && (
+                <Button
+                  variant={isBrowserPanelOpen ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setIsBrowserPanelOpen(!isBrowserPanelOpen)}
+                  className="text-xs"
+                >
+                  <Globe className="h-3 w-3 mr-1" />
+                  Browser
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -590,6 +619,15 @@ export default function ChatPage() {
         onClose={() => closeDialog("create-catalog")}
         onSuccess={() => router.push("/mcp-catalog/registry")}
       />
+
+      {isBrowserPanelOpen && (
+        <BrowserPanel
+          isOpen={isBrowserPanelOpen}
+          onClose={() => setIsBrowserPanelOpen(false)}
+          conversationId={conversationId}
+          tabIndex={tabIndex >= 0 ? tabIndex : 0}
+        />
+      )}
     </div>
   );
 }

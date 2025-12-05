@@ -1,6 +1,6 @@
 {
-  "id": "fc926eaf-43c0-4997-b133-74264c453b7b",
-  "prevId": "90d85f6c-8e8d-4ab5-8aaf-26aeef7f8bf8",
+  "id": "698cc87d-b87f-4410-a732-bc05082054b8",
+  "prevId": "5bdc6121-0557-4b42-b85d-cc76b353acc0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1149,6 +1149,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "client_secret_id": {
+          "name": "client_secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "local_config_secret_id": {
+          "name": "local_config_secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "local_config": {
           "name": "local_config",
           "type": "jsonb",
@@ -1161,6 +1173,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'{}'::jsonb"
+        },
+        "requires_trusted_context": {
+          "name": "requires_trusted_context",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "oauth_config": {
           "name": "oauth_config",
@@ -1184,7 +1203,34 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "internal_mcp_catalog_client_secret_id_secret_id_fk": {
+          "name": "internal_mcp_catalog_client_secret_id_secret_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "client_secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "internal_mcp_catalog_local_config_secret_id_secret_id_fk": {
+          "name": "internal_mcp_catalog_local_config_secret_id_secret_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "local_config_secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1900,12 +1946,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "auth_type": {
-          "name": "auth_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reinstall_required": {
           "name": "reinstall_required",
           "type": "boolean",
@@ -2466,7 +2506,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "compression_scope": {
           "name": "compression_scope",
@@ -2769,6 +2809,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "role_mapping": {
+          "name": "role_mapping",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "user_id": {
           "name": "user_id",
           "type": "text",
@@ -2792,6 +2838,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "domain_verified": {
+          "name": "domain_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -2817,6 +2869,67 @@
           "nullsNotDistinct": false,
           "columns": [
             "provider_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.team_external_group": {
+      "name": "team_external_group",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "group_identifier": {
+          "name": "group_identifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "team_external_group_team_id_team_id_fk": {
+          "name": "team_external_group_team_id_team_id_fk",
+          "tableFrom": "team_external_group",
+          "tableTo": "team",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "team_external_group_team_group_unique": {
+          "name": "team_external_group_team_group_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "team_id",
+            "group_identifier"
           ]
         }
       },
@@ -2852,6 +2965,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'member'"
+        },
+        "synced_from_sso": {
+          "name": "synced_from_sso",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -2994,6 +3114,12 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "model": {
           "name": "model",

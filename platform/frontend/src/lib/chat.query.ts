@@ -155,3 +155,21 @@ export function useChatProfileMcpTools(agentId: string | undefined) {
     gcTime: 10 * 60 * 1000,
   });
 }
+
+export function useHasPlaywrightMcpTools(agentId: string | undefined) {
+  const result = useQuery({
+    queryKey: ["chat", "agents", agentId, "mcp-tools", "has-playwright"],
+    queryFn: async () => {
+      if (!agentId) return false;
+      const { data, error } = await getChatAgentMcpTools({
+        path: { agentId },
+      });
+      if (error) throw new Error("Failed to fetch MCP tools");
+      return data.some(
+        (tool) =>
+          tool.name.includes("playwright") || tool.name.startsWith("browser_"),
+      );
+    },
+  });
+  return result.data ?? false;
+}

@@ -1026,9 +1026,58 @@ export type AnthropicMessagesResponseInput = {
 };
 
 export type WebSocketMessageInput = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: unknown;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -2054,9 +2103,58 @@ export type AnthropicMessagesResponse = {
 };
 
 export type WebSocketMessage = {
-    type: 'hello-world';
+    type: string;
     payload: {
         [key: string]: never;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        tabIndex: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        url: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        element?: string;
+        x?: number;
+        y?: number;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        text: string;
+        element?: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        key: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+    };
+} | {
+    type: string;
+    payload: {
+        conversationId: string;
+        zoomPercent: number;
     };
 };
 
@@ -7317,6 +7415,7 @@ export type GetInternalMcpCatalogResponses = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext: boolean;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -7396,6 +7495,7 @@ export type CreateInternalMcpCatalogItemData = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext?: boolean;
         oauthConfig?: {
             name: string;
             server_url: string;
@@ -7537,6 +7637,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext: boolean;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -7767,6 +7868,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext: boolean;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -7846,6 +7948,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext?: boolean;
         oauthConfig?: {
             name: string;
             server_url: string;
@@ -7989,6 +8092,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 max?: number;
             };
         } | null;
+        requiresTrustedContext: boolean;
         oauthConfig: {
             name: string;
             server_url: string;

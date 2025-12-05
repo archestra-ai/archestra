@@ -1,5 +1,5 @@
 {
-  "id": "90d85f6c-8e8d-4ab5-8aaf-26aeef7f8bf8",
+  "id": "0c570967-e77b-4555-a7e1-6e3c39af5d7c",
   "prevId": "091fc983-4197-47db-9598-0851be5780e2",
   "version": "7",
   "dialect": "postgresql",
@@ -1162,6 +1162,13 @@
           "notNull": false,
           "default": "'{}'::jsonb"
         },
+        "requires_trusted_context": {
+          "name": "requires_trusted_context",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "oauth_config": {
           "name": "oauth_config",
           "type": "jsonb",
@@ -2240,6 +2247,12 @@
         },
         "entity_id": {
           "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rule_type": {
+          "name": "rule_type",
           "type": "text",
           "primaryKey": false,
           "notNull": true

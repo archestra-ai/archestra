@@ -249,6 +249,7 @@ class AgentToolModel {
     toolId: string,
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
+    allowUsageWhenUntrustedDataIsPresent?: boolean,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
     // Check if assignment already exists
     const [existing] = await db
@@ -283,31 +284,47 @@ class AgentToolModel {
         options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
+      if (allowUsageWhenUntrustedDataIsPresent !== undefined) {
+        options.allowUsageWhenUntrustedDataIsPresent =
+          allowUsageWhenUntrustedDataIsPresent;
+      }
+
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
     }
 
-    // Check if credentials need updating
+    // Check if credentials or allowUsageWhenUntrustedDataIsPresent need updating
     const needsUpdate =
       existing.credentialSourceMcpServerId !==
         (credentialSourceMcpServerId ?? null) ||
       existing.executionSourceMcpServerId !==
-        (executionSourceMcpServerId ?? null);
+        (executionSourceMcpServerId ?? null) ||
+      (allowUsageWhenUntrustedDataIsPresent !== undefined &&
+        existing.allowUsageWhenUntrustedDataIsPresent !==
+          allowUsageWhenUntrustedDataIsPresent);
 
     if (needsUpdate) {
-      // Update credentials
+      // Update credentials and/or allowUsageWhenUntrustedDataIsPresent
       const updateData: Partial<
         Pick<
           UpdateAgentTool,
-          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+          | "allowUsageWhenUntrustedDataIsPresent"
         >
       > = {};
 
-      // Always set both fields to ensure they're updated correctly
+      // Always set both credential fields to ensure they're updated correctly
       updateData.credentialSourceMcpServerId =
         credentialSourceMcpServerId ?? null;
       updateData.executionSourceMcpServerId =
         executionSourceMcpServerId ?? null;
+
+      // Only update allowUsageWhenUntrustedDataIsPresent if explicitly provided
+      if (allowUsageWhenUntrustedDataIsPresent !== undefined) {
+        updateData.allowUsageWhenUntrustedDataIsPresent =
+          allowUsageWhenUntrustedDataIsPresent;
+      }
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };

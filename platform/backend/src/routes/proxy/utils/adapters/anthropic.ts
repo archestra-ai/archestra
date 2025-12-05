@@ -185,6 +185,73 @@ export function toolCallsToCommon(
 }
 
 /**
+ * Check if content array contains image blocks from MCP
+ */
+function hasImageContent(
+  content: unknown,
+): content is Array<{ type: string; data?: string; mimeType?: string }> {
+  if (!Array.isArray(content)) return false;
+  return content.some(
+    (item) =>
+      typeof item === "object" &&
+      item !== null &&
+      "type" in item &&
+      item.type === "image",
+  );
+}
+
+/**
+ * Convert MCP content array to Anthropic tool_result content format
+ * Handles both text and image content blocks
+ */
+function convertMcpContentToAnthropic(
+  content: unknown,
+): string | Array<{ type: string; [key: string]: unknown }> {
+  if (!Array.isArray(content)) {
+    return JSON.stringify(content);
+  }
+
+  // Check if there are any image blocks
+  if (!hasImageContent(content)) {
+    // No images, just stringify
+    return JSON.stringify(content);
+  }
+
+  // Convert to Anthropic content blocks format
+  const anthropicContent: Array<{ type: string; [key: string]: unknown }> = [];
+
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+
+    if ("type" in item && item.type === "image" && "data" in item) {
+      // Convert MCP image to Anthropic image block
+      const mimeType =
+        "mimeType" in item && typeof item.mimeType === "string"
+          ? item.mimeType
+          : "image/png";
+      anthropicContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mimeType,
+          data: item.data,
+        },
+      });
+    } else if ("type" in item && item.type === "text" && "text" in item) {
+      // Keep text blocks
+      anthropicContent.push({
+        type: "text",
+        text: item.text,
+      });
+    }
+  }
+
+  return anthropicContent.length > 0
+    ? anthropicContent
+    : JSON.stringify(content);
+}
+
+/**
  * Convert common tool results to Anthropic user message with tool_result blocks
  */
 export function toolResultsToMessages(
@@ -195,7 +262,7 @@ export function toolResultsToMessages(
   content: Array<{
     type: "tool_result";
     tool_use_id: string;
-    content: string;
+    content: string | Array<{ type: string; [key: string]: unknown }>;
     is_error?: boolean;
   }>;
 }> {
@@ -207,9 +274,20 @@ export function toolResultsToMessages(
     {
       role: "user" as const,
       content: results.map((result) => {
-        let content: string;
+        let content: string | Array<{ type: string; [key: string]: unknown }>;
         if (result.isError) {
           content = `Error: ${result.error || "Tool execution failed"}`;
+        } else if (hasImageContent(result.content)) {
+          // Handle image content - convert to Anthropic format
+          content = convertMcpContentToAnthropic(result.content);
+          logger.info(
+            {
+              toolName: result.name,
+              toolCallId: result.id,
+              hasImages: true,
+            },
+            "Tool result contains images, converting to Anthropic image blocks",
+          );
         } else if (convertToToon) {
           const beforeJson = JSON.stringify(result.content);
           const afterToon = toonEncode(result.content);
@@ -249,6 +327,79 @@ export function toolResultsToMessages(
       }),
     },
   ];
+}
+
+/**
+ * Convert MCP image blocks to Anthropic image format in tool results
+ * This should be called unconditionally to ensure images are properly formatted
+ *
+ * Note: We use type assertions here because the Anthropic SDK types don't include
+ * image blocks in tool_result content, but the API actually accepts them.
+ */
+export function convertMcpImagesToAnthropicFormat(
+  messages: AnthropicMessages,
+): AnthropicMessages {
+  // biome-ignore lint/suspicious/noExplicitAny: Anthropic types don't include image blocks in tool_result content
+  return messages.map((message: any) => {
+    // Only process user messages with content arrays that contain tool_result blocks
+    if (message.role === "user" && Array.isArray(message.content)) {
+      // biome-ignore lint/suspicious/noExplicitAny: Anthropic types don't include image blocks in tool_result content
+      const updatedContent = message.content.map((contentBlock: any) => {
+        if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
+          // Handle array content (content blocks format from MCP)
+          if (Array.isArray(contentBlock.content)) {
+            // biome-ignore lint/suspicious/noExplicitAny: Anthropic types don't include image blocks in tool_result content
+            const updatedBlocks = contentBlock.content.map((block: any) => {
+              // Convert MCP image blocks to Anthropic image format
+              // MCP format: {type: "image", data: "...", mimeType: "..."}
+              // Anthropic format: {type: "image", source: {type: "base64", media_type: "...", data: "..."}}
+              if (
+                typeof block === "object" &&
+                block !== null &&
+                block.type === "image" &&
+                typeof block.data === "string"
+              ) {
+                const mimeType =
+                  typeof block.mimeType === "string"
+                    ? block.mimeType
+                    : "image/png";
+                logger.info(
+                  {
+                    toolCallId: contentBlock.tool_use_id,
+                    mimeType,
+                    dataLength: block.data.length,
+                  },
+                  "Converting MCP image block to Anthropic image format",
+                );
+                return {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: mimeType,
+                    data: block.data,
+                  },
+                };
+              }
+              return block;
+            });
+
+            return {
+              ...contentBlock,
+              content: updatedBlocks,
+            };
+          }
+        }
+        return contentBlock;
+      });
+
+      return {
+        ...message,
+        content: updatedContent,
+      };
+    }
+
+    return message;
+  }) as AnthropicMessages;
 }
 
 /**
@@ -344,6 +495,7 @@ export async function convertToolResultsToToon(
           }
 
           // Handle array content (content blocks format)
+          // Note: Image conversion is already handled by convertMcpImagesToAnthropicFormat
           if (Array.isArray(contentBlock.content)) {
             const updatedBlocks = contentBlock.content.map((block) => {
               if (block.type === "text" && typeof block.text === "string") {

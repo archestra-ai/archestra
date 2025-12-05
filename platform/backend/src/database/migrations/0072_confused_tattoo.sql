@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "requires_trusted_context" boolean DEFAULT false NOT NULL;

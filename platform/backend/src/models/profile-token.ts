@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secretsmanager";
 import type {
@@ -398,6 +398,39 @@ class ProfileTokenModel {
       .limit(1);
 
     return !!result;
+  }
+
+  /**
+   * Delete tokens for specific teams
+   * Used when teams are unassigned from a profile
+   */
+  static async deleteTeamTokens(
+    profileId: string,
+    teamIds: string[],
+  ): Promise<void> {
+    if (teamIds.length === 0) return;
+
+    // Find tokens that are associated with these teams and belong to this profile
+    const tokenTeamRows = await db
+      .select({ tokenId: schema.profileTokenTeamsTable.tokenId })
+      .from(schema.profileTokenTeamsTable)
+      .innerJoin(
+        schema.profileTokensTable,
+        eq(schema.profileTokenTeamsTable.tokenId, schema.profileTokensTable.id),
+      )
+      .where(
+        and(
+          eq(schema.profileTokensTable.profileId, profileId),
+          inArray(schema.profileTokenTeamsTable.teamId, teamIds),
+        ),
+      );
+
+    const tokenIdsToDelete = [...new Set(tokenTeamRows.map((r) => r.tokenId))];
+
+    // Delete each token (this also deletes the secret)
+    for (const tokenId of tokenIdsToDelete) {
+      await ProfileTokenModel.delete(tokenId);
+    }
   }
 }
 

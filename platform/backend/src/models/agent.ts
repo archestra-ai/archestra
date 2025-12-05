@@ -492,20 +492,29 @@ class AgentModel {
 
     // Sync team assignments if teams is provided
     if (teams !== undefined) {
-      // Get current teams before sync to detect newly added teams
+      // Get current teams before sync to detect changes
       const previousTeams = await AgentTeamModel.getTeamsForAgent(id);
       const previousTeamSet = new Set(previousTeams);
+      const newTeamSet = new Set(teams);
 
       await AgentTeamModel.syncAgentTeams(id, teams);
 
       // Create tokens for newly assigned teams
-      const newTeams = teams.filter((teamId) => !previousTeamSet.has(teamId));
-      for (const teamId of newTeams) {
+      const addedTeams = teams.filter((teamId) => !previousTeamSet.has(teamId));
+      for (const teamId of addedTeams) {
         // Get team name for the token
         const team = await TeamModel.findById(teamId);
         if (team) {
           await ProfileTokenModel.createTeamToken(id, teamId, team.name);
         }
+      }
+
+      // Delete tokens for removed teams
+      const removedTeams = previousTeams.filter(
+        (teamId) => !newTeamSet.has(teamId),
+      );
+      if (removedTeams.length > 0) {
+        await ProfileTokenModel.deleteTeamTokens(id, removedTeams);
       }
     }
 

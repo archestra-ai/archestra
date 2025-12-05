@@ -32,4 +32,3 @@ export default async function SsoErrorPage({
   // The pathname + search gives us the relative URL
   redirect(redirectUrl.pathname + redirectUrl.search);
 }
-

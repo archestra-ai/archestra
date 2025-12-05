@@ -250,9 +250,7 @@ test.describe("Credentials Management", () => {
       await adminPage.getByRole("checkbox").click();
       await adminPage.waitForLoadState("networkidle");
       await adminPage.getByRole("combobox").click();
-      await adminPage
-        .getByText("editor@example.com")
-        .click();
+      await adminPage.getByText("editor@example.com").click();
       await adminPage
         .getByRole("button", { name: "Assign", exact: false })
         .click();
@@ -267,31 +265,34 @@ test.describe("Credentials Management", () => {
   // })
 });
 
-async function verifyToolCallResultViaApi(request: APIRequestContext, expectedText: string) {
+async function verifyToolCallResultViaApi(
+  request: APIRequestContext,
+  expectedText: string,
+) {
   // API verification: call tool via MCP Gateway and verify it returns "Admin"
-      // (the value Admin used when installing the server)
-      const defaultProfileResponse = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: "/api/agents/default",
-      });
-      const defaultProfile = await defaultProfileResponse.json();
+  // (the value Admin used when installing the server)
+  const defaultProfileResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: "/api/agents/default",
+  });
+  const defaultProfile = await defaultProfileResponse.json();
 
-      const orgToken = await getOrgTokenForProfile(request, defaultProfile.id);
-      const sessionId = await initializeMcpSession(request, {
-        profileId: defaultProfile.id,
-        token: orgToken,
-      });
+  const orgToken = await getOrgTokenForProfile(request, defaultProfile.id);
+  const sessionId = await initializeMcpSession(request, {
+    profileId: defaultProfile.id,
+    token: orgToken,
+  });
 
-      const toolResult = await callMcpTool(request, {
-        profileId: defaultProfile.id,
-        token: orgToken,
-        sessionId,
-        toolName: TEST_TOOL_NAME,
-      });
+  const toolResult = await callMcpTool(request, {
+    profileId: defaultProfile.id,
+    token: orgToken,
+    sessionId,
+    toolName: TEST_TOOL_NAME,
+  });
 
-      const textContent = toolResult.content.find((c) => c.type === "text");
-      expect(textContent?.text).toContain(expectedText);
+  const textContent = toolResult.content.find((c) => c.type === "text");
+  expect(textContent?.text).toContain(expectedText);
 }
 
 /**

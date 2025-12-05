@@ -1,17 +1,62 @@
-import { spawn } from "node:child_process";
+// biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
+import { type ChildProcess, spawn } from "node:child_process";
 import { defineConfig, type UserConfig } from "tsdown";
 
 /**
- * Properly manage server process lifecycle using AbortSignal.
- * When tsdown rebuilds, it triggers the signal which automatically
- * terminates the previous server process - preventing orphan processes.
+ * Track the current server process so we can properly terminate it before starting a new one.
+ * This prevents EADDRINUSE errors by ensuring the old process fully exits before the new one starts.
+ */
+let currentServerProcess: ChildProcess | null = null;
+
+/**
+ * Wait for the current server process to exit, with a timeout.
+ * Returns a promise that resolves when the process exits or times out.
+ */
+const waitForProcessExit = (
+  proc: ChildProcess,
+  timeoutMs = 5000,
+): Promise<void> => {
+  return new Promise((resolve) => {
+    // If process already exited, resolve immediately
+    if (proc.exitCode !== null || proc.killed) {
+      resolve();
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      // Force kill if still running after timeout
+      if (proc.exitCode === null && !proc.killed) {
+        console.log("Server process did not exit in time, force killing...");
+        proc.kill("SIGKILL");
+      }
+      resolve();
+    }, timeoutMs);
+
+    proc.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
+};
+
+/**
+ * Properly manage server process lifecycle.
+ * Before starting a new server, we terminate and wait for the old one to fully exit.
+ * This prevents EADDRINUSE errors on the metrics port (9050) and main port (9000).
  *
  * Set DEBUG=1 to enable Node.js inspector (e.g., DEBUG=1 pnpm dev)
  *
  * @see https://tsdown.dev/advanced/hooks
- * @see https://nodejs.org/api/child_process.html#optionssignal
  */
-const onSuccessHandler: UserConfig["onSuccess"] = (_config, signal) => {
+const onSuccessHandler: UserConfig["onSuccess"] = async () => {
+  // Kill and wait for the previous server to fully exit before starting a new one
+  if (currentServerProcess && currentServerProcess.exitCode === null) {
+    console.log("Stopping previous server...");
+    currentServerProcess.kill("SIGTERM");
+    await waitForProcessExit(currentServerProcess);
+    console.log("Previous server stopped");
+  }
+
   const args = ["--enable-source-maps"];
 
   if (process.env.DEBUG) {
@@ -20,20 +65,24 @@ const onSuccessHandler: UserConfig["onSuccess"] = (_config, signal) => {
 
   args.push("dist/server.mjs");
 
-  const child = spawn("node", args, {
+  currentServerProcess = spawn("node", args, {
     stdio: "inherit",
-    signal, // AbortSignal kills this process when tsdown rebuilds
   });
 
-  child.on("error", (err) => {
-    // AbortError is expected when tsdown rebuilds
-    if (err.name !== "AbortError") {
-      console.error("Server process error:", err);
+  currentServerProcess.on("error", (err) => {
+    console.error("Server process error:", err);
+  });
+
+  currentServerProcess.on("exit", (code, signal) => {
+    if (signal) {
+      console.log(`Server process terminated by signal: ${signal}`);
+    } else if (code !== 0) {
+      console.error(`Server process exited with code: ${code}`);
     }
   });
 
-  // Don't wait for the server to exit - return immediately
-  // so tsdown can continue watching for changes
+  // Return immediately so tsdown can continue watching for changes
+  // The server runs in the background
 };
 
 export default defineConfig((options: UserConfig) => {

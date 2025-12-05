@@ -10,10 +10,7 @@ class SessionModel {
   static async getAll() {
     logger.debug("SessionModel.getAll: fetching all sessions");
     const sessions = await db.select().from(schema.sessionsTable);
-    logger.debug(
-      { count: sessions.length },
-      "SessionModel.getAll: completed",
-    );
+    logger.debug({ count: sessions.length }, "SessionModel.getAll: completed");
     return sessions;
   }
 
@@ -54,15 +51,15 @@ class SessionModel {
    * Create a new session
    */
   static async create(data: InsertSession) {
-    logger.debug({ userId: data.userId }, "SessionModel.create: creating session");
+    logger.debug(
+      { userId: data.userId },
+      "SessionModel.create: creating session",
+    );
     const [session] = await db
       .insert(schema.sessionsTable)
       .values(data)
       .returning();
-    logger.debug(
-      { sessionId: session.id },
-      "SessionModel.create: completed",
-    );
+    logger.debug({ sessionId: session.id }, "SessionModel.create: completed");
     return session;
   }
 
@@ -86,7 +83,10 @@ class SessionModel {
    * Delete all sessions for a user
    */
   static async deleteAllByUserId(userId: string) {
-    logger.debug({ userId }, "SessionModel.deleteAllByUserId: deleting sessions");
+    logger.debug(
+      { userId },
+      "SessionModel.deleteAllByUserId: deleting sessions",
+    );
     const result = await db
       .delete(schema.sessionsTable)
       .where(eq(schema.sessionsTable.userId, userId));

@@ -102,7 +102,10 @@ class OrganizationRoleModel {
     }
 
     logger.debug(
-      { valid: missingPermissions.length === 0, missingCount: missingPermissions.length },
+      {
+        valid: missingPermissions.length === 0,
+        missingCount: missingPermissions.length,
+      },
       "OrganizationRoleModel.validateRolePermissions: completed",
     );
     return {
@@ -355,7 +358,11 @@ class OrganizationRoleModel {
         );
 
       logger.debug(
-        { organizationId, predefinedCount: predefinedRoles.length, customCount: customRoles.length },
+        {
+          organizationId,
+          predefinedCount: predefinedRoles.length,
+          customCount: customRoles.length,
+        },
         "OrganizationRoleModel.getAll: completed",
       );
       return [

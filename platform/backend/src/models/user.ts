@@ -4,7 +4,7 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@shared";
-import { and, eq, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -35,7 +35,10 @@ class UserModel {
         .from(schema.usersTable)
         .where(eq(schema.usersTable.email, email));
       if (existing.length > 0) {
-        logger.debug({ email }, "UserModel.createOrGetExistingDefaultAdminUser: user already exists");
+        logger.debug(
+          { email },
+          "UserModel.createOrGetExistingDefaultAdminUser: user already exists",
+        );
         return existing[0];
       }
 
@@ -55,11 +58,17 @@ class UserModel {
           })
           .where(eq(schema.usersTable.email, email));
 
-        logger.debug({ email }, "UserModel.createOrGetExistingDefaultAdminUser: user created successfully");
+        logger.debug(
+          { email },
+          "UserModel.createOrGetExistingDefaultAdminUser: user created successfully",
+        );
       }
       return result.user;
     } catch (err) {
-      logger.error({ err }, "UserModel.createOrGetExistingDefaultAdminUser: failed to create user");
+      logger.error(
+        { err },
+        "UserModel.createOrGetExistingDefaultAdminUser: failed to create user",
+      );
     }
   }
 
@@ -67,7 +76,7 @@ class UserModel {
    * Get a user by ID with their organization membership
    */
   static async getById(id: string) {
-    logger.debug({ id }, "UserModel.getById: fetching user");
+    logger.debug("UserModel.getById: fetching user");
     const [user] = await db
       .select({
         ...getTableColumns(schema.usersTable),
@@ -80,7 +89,7 @@ class UserModel {
       )
       .where(eq(schema.usersTable.id, id))
       .limit(1);
-    logger.debug({ id, found: !!user }, "UserModel.getById: completed");
+    logger.debug({ found: !!user }, "UserModel.getById: completed");
     return user;
   }
 

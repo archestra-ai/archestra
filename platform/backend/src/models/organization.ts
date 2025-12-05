@@ -24,9 +24,7 @@ class OrganizationModel {
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
-    logger.debug(
-      "OrganizationModel.getOrCreateDefaultOrganization: starting",
-    );
+    logger.debug("OrganizationModel.getOrCreateDefaultOrganization: starting");
     // Try to get existing default organization
     const existingOrg = await OrganizationModel.getFirst();
 
@@ -66,7 +64,10 @@ class OrganizationModel {
     id: string,
     data: Partial<UpdateOrganization>,
   ): Promise<Organization | null> {
-    logger.debug({ id, dataKeys: Object.keys(data) }, "OrganizationModel.patch: updating organization");
+    logger.debug(
+      { id, dataKeys: Object.keys(data) },
+      "OrganizationModel.patch: updating organization",
+    );
     if ("logo" in data && data.logo) {
       const logo = data.logo;
 

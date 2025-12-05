@@ -124,7 +124,10 @@ class AgentTeamModel {
    * Get all team IDs assigned to a specific agent
    */
   static async getTeamsForAgent(agentId: string): Promise<string[]> {
-    logger.debug({ agentId }, "AgentTeamModel.getTeamsForAgent: fetching teams");
+    logger.debug(
+      { agentId },
+      "AgentTeamModel.getTeamsForAgent: fetching teams",
+    );
     const agentTeams = await db
       .select({ teamId: schema.agentTeamsTable.teamId })
       .from(schema.agentTeamsTable)

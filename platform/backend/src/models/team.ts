@@ -90,7 +90,10 @@ class TeamModel {
 
     const members = await TeamModel.getTeamMembers(id);
 
-    logger.debug({ id, membersCount: members.length }, "TeamModel.findById: completed");
+    logger.debug(
+      { id, membersCount: members.length },
+      "TeamModel.findById: completed",
+    );
     return { ...team, members };
   }
 
@@ -110,10 +113,7 @@ class TeamModel {
       .from(schema.teamsTable)
       .where(inArray(schema.teamsTable.id, teamIds));
 
-    logger.debug(
-      { count: teams.length },
-      "TeamModel.findByIds: completed",
-    );
+    logger.debug({ count: teams.length }, "TeamModel.findByIds: completed");
     return teams.map((team) => ({
       ...team,
       members: [], // Members not fetched for performance
@@ -203,7 +203,10 @@ class TeamModel {
       })
       .returning();
 
-    logger.debug({ teamId, userId, memberId }, "TeamModel.addMember: completed");
+    logger.debug(
+      { teamId, userId, memberId },
+      "TeamModel.addMember: completed",
+    );
     return member;
   }
 
@@ -222,7 +225,10 @@ class TeamModel {
       );
 
     const removed = result.rowCount !== null && result.rowCount > 0;
-    logger.debug({ teamId, userId, removed }, "TeamModel.removeMember: completed");
+    logger.debug(
+      { teamId, userId, removed },
+      "TeamModel.removeMember: completed",
+    );
     return removed;
   }
 
@@ -254,7 +260,10 @@ class TeamModel {
    * Check if a user is a member of a team
    */
   static async isUserInTeam(teamId: string, userId: string): Promise<boolean> {
-    logger.debug({ teamId, userId }, "TeamModel.isUserInTeam: checking membership");
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserInTeam: checking membership",
+    );
     const [membership] = await db
       .select()
       .from(schema.teamMembersTable)
@@ -267,7 +276,10 @@ class TeamModel {
       .limit(1);
 
     const isMember = !!membership;
-    logger.debug({ teamId, userId, isMember }, "TeamModel.isUserInTeam: completed");
+    logger.debug(
+      { teamId, userId, isMember },
+      "TeamModel.isUserInTeam: completed",
+    );
     return isMember;
   }
 
@@ -293,12 +305,18 @@ class TeamModel {
    * Get all user IDs that share at least one team with the given user
    */
   static async getTeammateUserIds(userId: string): Promise<string[]> {
-    logger.debug({ userId }, "TeamModel.getTeammateUserIds: fetching teammate IDs");
+    logger.debug(
+      { userId },
+      "TeamModel.getTeammateUserIds: fetching teammate IDs",
+    );
     // First get the user's team IDs
     const userTeamIds = await TeamModel.getUserTeamIds(userId);
 
     if (userTeamIds.length === 0) {
-      logger.debug({ userId }, "TeamModel.getTeammateUserIds: user has no teams");
+      logger.debug(
+        { userId },
+        "TeamModel.getTeammateUserIds: user has no teams",
+      );
       return [];
     }
 
@@ -322,7 +340,10 @@ class TeamModel {
    * Get all teams for an agent with their compression settings
    */
   static async getTeamsForAgent(agentId: string): Promise<Team[]> {
-    logger.debug({ agentId }, "TeamModel.getTeamsForAgent: fetching agent teams");
+    logger.debug(
+      { agentId },
+      "TeamModel.getTeamsForAgent: fetching agent teams",
+    );
     const agentTeams = await db
       .select({
         team: schema.teamsTable,
@@ -352,7 +373,10 @@ class TeamModel {
    * Get all external groups mapped to a team
    */
   static async getExternalGroups(teamId: string): Promise<TeamExternalGroup[]> {
-    logger.debug({ teamId }, "TeamModel.getExternalGroups: fetching external groups");
+    logger.debug(
+      { teamId },
+      "TeamModel.getExternalGroups: fetching external groups",
+    );
     const groups = await db
       .select()
       .from(schema.teamExternalGroupsTable)
@@ -386,7 +410,10 @@ class TeamModel {
       })
       .returning();
 
-    logger.debug({ teamId, groupId: id }, "TeamModel.addExternalGroup: completed");
+    logger.debug(
+      { teamId, groupId: id },
+      "TeamModel.addExternalGroup: completed",
+    );
     return group;
   }
 

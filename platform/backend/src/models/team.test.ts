@@ -73,7 +73,7 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
 
       const teams = await TeamModel.findByIds([team1.id, team2.id]);
 

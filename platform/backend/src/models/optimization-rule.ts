@@ -16,7 +16,11 @@ class OptimizationRuleModel {
    */
   static async create(data: InsertOptimizationRule): Promise<OptimizationRule> {
     logger.debug(
-      { entityType: data.entityType, entityId: data.entityId, provider: data.provider },
+      {
+        entityType: data.entityType,
+        entityId: data.entityId,
+        provider: data.provider,
+      },
       "OptimizationRuleModel.create: creating rule",
     );
     const [rule] = await db
@@ -24,7 +28,10 @@ class OptimizationRuleModel {
       .values(data)
       .returning();
 
-    logger.debug({ ruleId: rule.id }, "OptimizationRuleModel.create: completed");
+    logger.debug(
+      { ruleId: rule.id },
+      "OptimizationRuleModel.create: completed",
+    );
     return rule;
   }
 
@@ -138,7 +145,10 @@ class OptimizationRuleModel {
       .where(eq(schema.optimizationRulesTable.id, id))
       .returning();
 
-    logger.debug({ id, updated: !!rule }, "OptimizationRuleModel.update: completed");
+    logger.debug(
+      { id, updated: !!rule },
+      "OptimizationRuleModel.update: completed",
+    );
     return rule;
   }
 

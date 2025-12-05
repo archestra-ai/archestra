@@ -555,7 +555,6 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
                 catalogId={row.original.tool.catalogId ?? ""}
                 className="h-8 w-[200px] text-xs"
                 shouldSetDefaultValue={false}
-                showDynamicOption
               />
             );
           }
@@ -581,7 +580,6 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
               catalogId={row.original.tool.catalogId ?? ""}
               className="h-8 w-[200px] text-xs"
               shouldSetDefaultValue={false}
-              showDynamicOption
             />
           );
         },

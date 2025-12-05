@@ -26,8 +26,6 @@ interface TokenSelectProps {
   /** Catalog ID to filter tokens - only shows tokens for the same catalog item */
   catalogId: string;
   shouldSetDefaultValue: boolean;
-  /** Whether to show the dynamic team credential option */
-  showDynamicOption?: boolean;
 }
 
 /**
@@ -43,7 +41,6 @@ export function TokenSelect({
   className,
   catalogId,
   shouldSetDefaultValue,
-  showDynamicOption = false,
 }: TokenSelectProps) {
   const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
     catalogId,
@@ -55,22 +52,11 @@ export function TokenSelect({
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && !value) {
-      // Default to dynamic credential if available, otherwise first server
-      if (showDynamicOption) {
-        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
-      } else if (mcpServers.length > 0) {
-        onValueChange(mcpServers[0].id);
-      }
+      // Default to dynamic credential
+      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
     }
-  }, [mcpServers.length, showDynamicOption]);
+  }, []);
 
-  if (!showDynamicOption && (!mcpServers || mcpServers.length === 0)) {
-    return (
-      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        No credentials available
-      </div>
-    );
-  }
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
   }
@@ -91,17 +77,12 @@ export function TokenSelect({
         <SelectValue placeholder="Select credentials..." />
       </SelectTrigger>
       <SelectContent>
-        {showDynamicOption && (
-          <SelectItem
-            value={DYNAMIC_CREDENTIAL_VALUE}
-            className="cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Zap className="h-3 w-3 text-amber-500" />
-              <span className="text-xs font-medium">Dynamic credential</span>
-            </div>
-          </SelectItem>
-        )}
+        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+          <div className="flex items-center gap-2">
+            <Zap className="h-3 w-3 text-amber-500" />
+            <span className="text-xs font-medium">Dynamic credential</span>
+          </div>
+        </SelectItem>
         <Divider className="my-2" />
         <div className="text-xs text-muted-foreground ml-2">
           Static credentials
@@ -134,12 +115,6 @@ export function TokenSelect({
             </div>
           </SelectItem>
         ))}
-
-        {!showDynamicOption && mcpServers.length === 0 && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No credentials available
-          </div>
-        )}
       </SelectContent>
     </Select>
   );

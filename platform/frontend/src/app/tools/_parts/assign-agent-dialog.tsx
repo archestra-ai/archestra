@@ -240,7 +240,6 @@ export function AssignProfileDialog({
                   className="w-full"
                   catalogId={catalogId}
                   shouldSetDefaultValue
-                  showDynamicOption
                 />
               </>
             ) : (
@@ -261,7 +260,6 @@ export function AssignProfileDialog({
                   className="w-full"
                   catalogId={catalogId}
                   shouldSetDefaultValue
-                  showDynamicOption
                 />
               </>
             )}

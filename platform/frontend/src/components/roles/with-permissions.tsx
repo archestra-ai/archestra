@@ -1,6 +1,5 @@
 import type { Permissions } from "@shared";
 import type React from "react";
-import type { ReactElement } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -54,7 +53,10 @@ export function WithPermissions({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="cursor-not-allowed">
-            {children({ hasPermission: isPending ? undefined : false, isPending })}
+            {children({
+              hasPermission: isPending ? undefined : false,
+              isPending,
+            })}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>

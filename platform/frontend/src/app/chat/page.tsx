@@ -550,10 +550,12 @@ export default function ChatPage() {
                   noPermissionHandle="tooltip"
                 >
                   {({ hasPermission }) => {
-                    return hasPermission ? <McpToolsDisplay
-                      agentId={currentProfileId}
-                      className="text-xs text-muted-foreground"
-                    /> : (
+                    return hasPermission ? (
+                      <McpToolsDisplay
+                        agentId={currentProfileId}
+                        className="text-xs text-muted-foreground"
+                      />
+                    ) : (
                       <Badge variant="outline" className="text-xs my-2">
                         Unable to show the list of tools
                       </Badge>

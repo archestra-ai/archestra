@@ -14,7 +14,13 @@ type WithPermissionsProps = {
 } & (
   | {
       noPermissionHandle: "tooltip";
-      children: ({ hasPermission, isPending }: { hasPermission: boolean | undefined, isPending: boolean }) => ReactElement;
+      children: ({
+        hasPermission,
+        isPending,
+      }: {
+        hasPermission: boolean | undefined;
+        isPending: boolean;
+      }) => ReactElement;
     }
   | {
       noPermissionHandle: "hide";

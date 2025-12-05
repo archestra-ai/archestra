@@ -6,6 +6,7 @@ import {
   UI_BASE_URL,
 } from "../../consts";
 import { expect, test } from "./fixtures";
+import { getOrgTokenForProfile, makeApiRequest } from "./mcp-gateway-utils";
 
 // =============================================================================
 // Helper functions for MCP server installation
@@ -256,7 +257,7 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
   let profileId: string;
   let archestraToken: string;
 
-  test.beforeAll(async ({ request, createAgent, makeApiRequest }) => {
+  test.beforeAll(async ({ request, createAgent }) => {
     // Create test profile
     const createResponse = await createAgent(
       request,
@@ -265,25 +266,8 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
     const profile = await createResponse.json();
     profileId = profile.id;
 
-    // Get the Organization Token
-    const tokensResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/profiles/${profileId}/tokens`,
-    });
-    const tokens = await tokensResponse.json();
-    const orgToken = tokens.find(
-      (t: { isOrganizationToken: boolean }) => t.isOrganizationToken,
-    );
-
-    // Rotate the token to get the actual value
-    const rotateResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: `/api/profiles/${profileId}/tokens/${orgToken.id}/rotate`,
-    });
-    const rotatedToken = await rotateResponse.json();
-    archestraToken = rotatedToken.value;
+    // Get org token using shared utility
+    archestraToken = await getOrgTokenForProfile(request, profileId);
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
@@ -633,7 +617,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
   let profileId: string;
   let archestraToken: string;
 
-  test.beforeAll(async ({ request, makeApiRequest, installMcpServer }) => {
+  test.beforeAll(async ({ request, installMcpServer }) => {
     // Use the Default Profile
     const defaultProfileResponse = await makeApiRequest({
       request,
@@ -643,25 +627,8 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
     const defaultProfile = await defaultProfileResponse.json();
     profileId = defaultProfile.id;
 
-    // Get the Organization Token
-    const tokensResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: `/api/profiles/${profileId}/tokens`,
-    });
-    const tokens = await tokensResponse.json();
-    const orgToken = tokens.find(
-      (t: { isOrganizationToken: boolean }) => t.isOrganizationToken,
-    );
-
-    // Rotate the token to get the actual value
-    const rotateResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: `/api/profiles/${profileId}/tokens/${orgToken.id}/rotate`,
-    });
-    const rotatedToken = await rotateResponse.json();
-    archestraToken = rotatedToken.value;
+    // Get org token using shared utility
+    archestraToken = await getOrgTokenForProfile(request, profileId);
 
     // Find the catalog item for internal-dev-test-server
     const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);

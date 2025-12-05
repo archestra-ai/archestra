@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import { E2eTestId } from "@shared";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
 import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
@@ -69,6 +70,7 @@ export function InstallationSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
+      data-testid={E2eTestId.InstallationSelect}
     >
       <SelectTrigger
         className={cn(

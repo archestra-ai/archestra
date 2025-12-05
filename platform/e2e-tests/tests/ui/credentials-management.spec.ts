@@ -17,18 +17,26 @@
  * Editor can see options that belong to his team / teams
  */
 
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   E2eTestId,
   EDITOR_EMAIL,
   ENGINEERING_TEAM_NAME,
   MARKETING_TEAM_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   MEMBER_EMAIL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
+import {
+  callMcpTool,
+  getOrgTokenForProfile,
+  initializeMcpSession,
+  makeApiRequest,
+} from "../api/mcp-gateway-utils";
 
 const TEST_SERVER_NAME = "internal-dev-test-server";
+const TEST_TOOL_NAME = `${TEST_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}print_archestra_test`;
 
 test.describe("Credentials Management", () => {
   test.describe.configure({ mode: "serial" });
@@ -52,7 +60,7 @@ test.describe("Credentials Management", () => {
     ]);
   });
 
-  test("Each user installs test server with their credentials", async ({
+  test("Setup: Each user installs test server with their credentials", async ({
     adminPage,
     editorPage,
     memberPage,
@@ -67,7 +75,7 @@ test.describe("Credentials Management", () => {
     ]);
   });
 
-  test.describe("Check who can see which credentials", () => {
+  test.describe("Check who can see which credentials in Local Installations dialog", () => {
     test("Member cannot see Manage credentials button (lacks permissions)", async ({
       memberPage,
       goToMemberPage,
@@ -159,7 +167,9 @@ test.describe("Credentials Management", () => {
     });
   });
 
-  test("Admin grants their credential to Marketing Team", async ({
+  test("When Admin grants their credential to Marketing Team, Editor can now see Admin's credential", async ({
+    editorPage,
+    goToEditorPage,
     adminPage,
     goToAdminPage,
   }) => {
@@ -177,12 +187,7 @@ test.describe("Credentials Management", () => {
       .getByTestId(E2eTestId.CredentialRow)
       .filter({ has: adminPage.getByText(ADMIN_EMAIL) });
     await expect(row.getByText(MARKETING_TEAM_NAME)).toBeVisible();
-  });
 
-  test("Editor can now see Admin's credential after team grant", async ({
-    editorPage,
-    goToEditorPage,
-  }) => {
     await openLocalInstallationsDialog(editorPage, goToEditorPage);
 
     const visibleEmails = await getVisibleCredentialEmails(editorPage);
@@ -193,7 +198,101 @@ test.describe("Credentials Management", () => {
     expect(visibleEmails).toContain(MEMBER_EMAIL);
     expect(visibleEmails.length).toBe(3);
   });
+
+  test.describe("Credential to use dropdown", () => {
+    test("Choose admin static credential and verify tool call result", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToAdminPage("/mcp-catalog/registry");
+      await adminPage.waitForLoadState("networkidle");
+
+      const manageToolsButton = adminPage.getByTestId(
+        `${E2eTestId.ManageToolsButton}-${TEST_SERVER_NAME}`,
+      );
+      await manageToolsButton.click();
+
+      await adminPage
+        .getByRole("button", { name: "Assign Tool to Profiles" })
+        .click();
+      await adminPage.getByRole("checkbox").click();
+      await adminPage.waitForLoadState("networkidle");
+      await adminPage.getByRole("combobox").click();
+      await adminPage
+        .getByLabel("admin@example.comMarketing")
+        .getByText("admin@example.com")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi(request, "Admin");
+    });
+
+    test("Choose editor static credential and verify tool call result", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToAdminPage("/mcp-catalog/registry");
+      await adminPage.waitForLoadState("networkidle");
+
+      const manageToolsButton = adminPage.getByTestId(
+        `${E2eTestId.ManageToolsButton}-${TEST_SERVER_NAME}`,
+      );
+      await manageToolsButton.click();
+
+      await adminPage
+        .getByRole("button", { name: "Assign Tool to Profiles" })
+        .click();
+      await adminPage.getByRole("checkbox").click();
+      await adminPage.waitForLoadState("networkidle");
+      await adminPage.getByRole("combobox").click();
+      await adminPage
+        .getByText("editor@example.com")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi(request, "Editor");
+    });
+  });
+
+  // test.describe("Connecting to MCP Gateway and tool call using proper credential", () => {
+
+  // })
 });
+
+async function verifyToolCallResultViaApi(request: APIRequestContext, expectedText: string) {
+  // API verification: call tool via MCP Gateway and verify it returns "Admin"
+      // (the value Admin used when installing the server)
+      const defaultProfileResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/agents/default",
+      });
+      const defaultProfile = await defaultProfileResponse.json();
+
+      const orgToken = await getOrgTokenForProfile(request, defaultProfile.id);
+      const sessionId = await initializeMcpSession(request, {
+        profileId: defaultProfile.id,
+        token: orgToken,
+      });
+
+      const toolResult = await callMcpTool(request, {
+        profileId: defaultProfile.id,
+        token: orgToken,
+        sessionId,
+        toolName: TEST_TOOL_NAME,
+      });
+
+      const textContent = toolResult.content.find((c) => c.type === "text");
+      expect(textContent?.text).toContain(expectedText);
+}
 
 /**
  * Install the test MCP server for a user with their name as ARCHESTRA_TEST value

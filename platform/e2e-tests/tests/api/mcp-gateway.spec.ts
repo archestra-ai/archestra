@@ -1,8 +1,84 @@
+import type { APIRequestContext } from "@playwright/test";
 import {
+  API_BASE_URL,
   MCP_GATEWAY_URL_SUFFIX,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  UI_BASE_URL,
 } from "../../consts";
 import { expect, test } from "./fixtures";
+
+// =============================================================================
+// Helper functions for MCP server installation
+// =============================================================================
+
+/**
+ * Find a catalog item by name
+ */
+async function findCatalogItem(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: string; name: string } | undefined> {
+  const response = await request.get(
+    `${API_BASE_URL}/api/internal_mcp_catalog`,
+    {
+      headers: { Origin: UI_BASE_URL },
+    },
+  );
+  const catalog = await response.json();
+  return catalog.find((item: { name: string }) => item.name === name);
+}
+
+/**
+ * Wait for MCP server installation to complete
+ */
+async function waitForServerInstallation(
+  request: APIRequestContext,
+  serverId: string,
+  maxAttempts = 60,
+): Promise<{
+  localInstallationStatus: string;
+  localInstallationError?: string;
+}> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await request.get(
+      `${API_BASE_URL}/api/mcp_server/${serverId}`,
+      {
+        headers: { Origin: UI_BASE_URL },
+      },
+    );
+    const server = await response.json();
+
+    if (server.localInstallationStatus === "success") {
+      return server;
+    }
+    if (server.localInstallationStatus === "error") {
+      throw new Error(
+        `MCP server installation failed: ${server.localInstallationError}`,
+      );
+    }
+
+    // Wait 2 seconds between checks
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(
+    `MCP server installation timed out after ${maxAttempts * 2} seconds`,
+  );
+}
+
+/**
+ * Find an installed MCP server by catalog ID
+ */
+async function findInstalledServer(
+  request: APIRequestContext,
+  catalogId: string,
+): Promise<{ id: string; catalogId: string } | undefined> {
+  const response = await request.get(`${API_BASE_URL}/api/mcp_server`, {
+    headers: { Origin: UI_BASE_URL },
+  });
+  const serversData = await response.json();
+  const servers = serversData.data || serversData;
+  return servers.find((s: { catalogId: string }) => s.catalogId === catalogId);
+}
 
 /**
  * MCP Gateway Authentication Tests
@@ -398,8 +474,8 @@ const TEST_TOOL_NAME = `${TEST_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}prin
 test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)", () => {
   let profileId: string;
 
-  test.beforeAll(async ({ request, makeApiRequest }) => {
-    // Use the Default Profile (internal-dev-test-server should be installed)
+  test.beforeAll(async ({ request, makeApiRequest, installMcpServer }) => {
+    // Use the Default Profile
     const defaultProfileResponse = await makeApiRequest({
       request,
       method: "get",
@@ -408,29 +484,81 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (Legacy Auth)",
     const defaultProfile = await defaultProfileResponse.json();
     profileId = defaultProfile.id;
 
-    // Ensure the test tool is assigned to the profile
-    const toolsResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/tools",
-    });
-    const toolsData = await toolsResponse.json();
-    const tools = toolsData.data || toolsData;
-    const testTool = tools.find(
-      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
-      (t: any) => t.name === TEST_TOOL_NAME,
-    );
+    // Find the catalog item for internal-dev-test-server
+    const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);
+    if (!catalogItem) {
+      throw new Error(
+        `Catalog item '${TEST_SERVER_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+      );
+    }
 
-    if (testTool) {
-      await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/agents/tools/bulk-assign",
-        data: {
-          assignments: [{ agentId: profileId, toolId: testTool.id }],
+    // Check if already installed
+    let testServer = await findInstalledServer(request, catalogItem.id);
+
+    if (!testServer) {
+      // Install the server
+      const installResponse = await installMcpServer(request, {
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        environmentValues: {
+          ARCHESTRA_TEST: "e2e-test-value",
         },
-        ignoreStatusCheck: true,
       });
+      const installedServer = await installResponse.json();
+
+      // Wait for installation to complete
+      await waitForServerInstallation(request, installedServer.id);
+      testServer = installedServer;
+    }
+
+    // Type guard - testServer is guaranteed to be defined here
+    if (!testServer) {
+      throw new Error("MCP server should be installed at this point");
+    }
+
+    // Find the test tool (may need to wait for tool discovery)
+    let testTool: { id: string; name: string } | undefined;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const toolsResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/tools",
+      });
+      const toolsData = await toolsResponse.json();
+      const tools = toolsData.data || toolsData;
+      testTool = tools.find((t: { name: string }) => t.name === TEST_TOOL_NAME);
+
+      if (testTool) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    if (!testTool) {
+      throw new Error(
+        `Tool '${TEST_TOOL_NAME}' not found after installation. Tool discovery may have failed.`,
+      );
+    }
+
+    // Assign the tool to the profile with executionSourceMcpServerId
+    const assignResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents/tools/bulk-assign",
+      data: {
+        assignments: [
+          {
+            agentId: profileId,
+            toolId: testTool.id,
+            executionSourceMcpServerId: testServer.id,
+          },
+        ],
+      },
+    });
+
+    const assignResult = await assignResponse.json();
+    if (assignResult.failed?.length > 0) {
+      throw new Error(
+        `Failed to assign tool: ${JSON.stringify(assignResult.failed)}`,
+      );
     }
   });
 
@@ -505,8 +633,8 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
   let profileId: string;
   let archestraToken: string;
 
-  test.beforeAll(async ({ request, makeApiRequest }) => {
-    // Use the Default Profile (internal-dev-test-server should be installed)
+  test.beforeAll(async ({ request, makeApiRequest, installMcpServer }) => {
+    // Use the Default Profile
     const defaultProfileResponse = await makeApiRequest({
       request,
       method: "get",
@@ -535,31 +663,81 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
     const rotatedToken = await rotateResponse.json();
     archestraToken = rotatedToken.value;
 
-    // Ensure the test tool is assigned to the profile
-    // First, find the tool ID
-    const toolsResponse = await makeApiRequest({
-      request,
-      method: "get",
-      urlSuffix: "/api/tools",
-    });
-    const toolsData = await toolsResponse.json();
-    const tools = toolsData.data || toolsData;
-    const testTool = tools.find(
-      // biome-ignore lint/suspicious/noExplicitAny: for a test it's okay..
-      (t: any) => t.name === TEST_TOOL_NAME,
-    );
+    // Find the catalog item for internal-dev-test-server
+    const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);
+    if (!catalogItem) {
+      throw new Error(
+        `Catalog item '${TEST_SERVER_NAME}' not found. Ensure it exists in the internal MCP catalog.`,
+      );
+    }
 
-    if (testTool) {
-      // Assign the tool to the profile
-      await makeApiRequest({
-        request,
-        method: "post",
-        urlSuffix: "/api/agents/tools/bulk-assign",
-        data: {
-          assignments: [{ agentId: profileId, toolId: testTool.id }],
+    // Check if already installed
+    let testServer = await findInstalledServer(request, catalogItem.id);
+
+    if (!testServer) {
+      // Install the server
+      const installResponse = await installMcpServer(request, {
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        environmentValues: {
+          ARCHESTRA_TEST: "e2e-test-value",
         },
-        ignoreStatusCheck: true, // May already be assigned
       });
+      const installedServer = await installResponse.json();
+
+      // Wait for installation to complete
+      await waitForServerInstallation(request, installedServer.id);
+      testServer = installedServer;
+    }
+
+    // Type guard - testServer is guaranteed to be defined here
+    if (!testServer) {
+      throw new Error("MCP server should be installed at this point");
+    }
+
+    // Find the test tool (may need to wait for tool discovery)
+    let testTool: { id: string; name: string } | undefined;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const toolsResponse = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: "/api/tools",
+      });
+      const toolsData = await toolsResponse.json();
+      const tools = toolsData.data || toolsData;
+      testTool = tools.find((t: { name: string }) => t.name === TEST_TOOL_NAME);
+
+      if (testTool) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    if (!testTool) {
+      throw new Error(
+        `Tool '${TEST_TOOL_NAME}' not found after installation. Tool discovery may have failed.`,
+      );
+    }
+
+    // Assign the tool to the profile with executionSourceMcpServerId
+    const assignResponse = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: "/api/agents/tools/bulk-assign",
+      data: {
+        assignments: [
+          {
+            agentId: profileId,
+            toolId: testTool.id,
+            executionSourceMcpServerId: testServer.id,
+          },
+        ],
+      },
+    });
+
+    const assignResult = await assignResponse.json();
+    if (assignResult.failed?.length > 0) {
+      throw new Error(
+        `Failed to assign tool: ${JSON.stringify(assignResult.failed)}`,
+      );
     }
   });
 

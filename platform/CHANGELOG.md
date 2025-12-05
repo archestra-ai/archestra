@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.20](https://github.com/archestra-ai/archestra/compare/platform-v0.6.19...platform-v0.6.20) (2025-12-05)
+
+
+### Features
+
+* support vault kvv1 ([#1410](https://github.com/archestra-ai/archestra/issues/1410)) ([12711f1](https://github.com/archestra-ai/archestra/commit/12711f1aadd2028e6c2c7e1414f2bb079b57cb43))
+
+
+### Miscellaneous Chores
+
+* add verbose debug-level logging in models + move all db queries to models ([#1412](https://github.com/archestra-ai/archestra/issues/1412)) ([86188e1](https://github.com/archestra-ai/archestra/commit/86188e1c00e3f33763a5a51df23c4e15e5b6068e))
+* improve SSO provider icon dark/light mode styling ([#1413](https://github.com/archestra-ai/archestra/issues/1413)) ([35d657d](https://github.com/archestra-ai/archestra/commit/35d657d93d1079860ae655b05319cc2caeb942f5))
+* nicely show sso redirect errors in UI ([#1404](https://github.com/archestra-ai/archestra/issues/1404)) ([404c0da](https://github.com/archestra-ai/archestra/commit/404c0dad74eb3858825ca7550c6c9893ee8a28ae))
+
 ## [0.6.19](https://github.com/archestra-ai/archestra/compare/platform-v0.6.18...platform-v0.6.19) (2025-12-04)
 
 

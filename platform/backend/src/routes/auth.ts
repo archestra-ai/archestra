@@ -1,13 +1,11 @@
 import { DEFAULT_ADMIN_EMAIL, RouteId } from "@shared";
 import { verifyPassword } from "better-auth/crypto";
-import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import config from "@/config";
-import db, { schema } from "@/database";
 import logger from "@/logging";
-import { AccountModel, UserModel } from "@/models";
+import { AccountModel, MemberModel, UserModel } from "@/models";
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.route({
@@ -92,28 +90,17 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Capture userId before better-auth deletes the member
       if (memberIdOrEmail) {
-        const memberToDelete = await db
-          .select()
-          .from(schema.membersTable)
-          .where(eq(schema.membersTable.id, memberIdOrEmail))
-          .limit(1)
-          .then((rows) => rows[0]);
+        // First try to find by member ID
+        const memberToDelete = await MemberModel.getById(memberIdOrEmail);
 
         if (memberToDelete) {
           userId = memberToDelete.userId;
         } else {
           // Maybe it's an email - try finding by userId + orgId
-          const memberByUserId = await db
-            .select()
-            .from(schema.membersTable)
-            .where(
-              and(
-                eq(schema.membersTable.userId, memberIdOrEmail),
-                eq(schema.membersTable.organizationId, organizationId),
-              ),
-            )
-            .limit(1)
-            .then((rows) => rows[0]);
+          const memberByUserId = await MemberModel.getByUserId(
+            memberIdOrEmail,
+            organizationId,
+          );
 
           if (memberByUserId) {
             userId = memberByUserId.userId;
@@ -140,16 +127,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // After successful member removal, check if user should be deleted
       if (response.ok && userId) {
         try {
-          const remainingMembers = await db
-            .select()
-            .from(schema.membersTable)
-            .where(eq(schema.membersTable.userId, userId))
-            .limit(1);
+          const hasRemainingMemberships =
+            await MemberModel.hasAnyMembership(userId);
 
-          if (remainingMembers.length === 0) {
-            await db
-              .delete(schema.usersTable)
-              .where(eq(schema.usersTable.id, userId));
+          if (!hasRemainingMemberships) {
+            await UserModel.delete(userId);
             logger.info(
               `✅ User ${userId} deleted (no remaining organizations)`,
             );

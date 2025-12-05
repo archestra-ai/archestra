@@ -1,9 +1,8 @@
-import { inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   AgentTeamModel,
   OptimizationRuleModel,
+  TeamModel,
   TokenPriceModel,
 } from "@/models";
 import { getTokenizer } from "@/tokenizers";
@@ -34,10 +33,7 @@ export async function getOptimizedModel<
 
   if (agentTeamIds.length > 0) {
     // Get organizationId from agent's first team
-    const teams = await db
-      .select()
-      .from(schema.teamsTable)
-      .where(inArray(schema.teamsTable.id, agentTeamIds));
+    const teams = await TeamModel.findByIds(agentTeamIds);
     if (teams.length > 0 && teams[0].organizationId) {
       organizationId = teams[0].organizationId;
       logger.info(
@@ -47,15 +43,10 @@ export async function getOptimizedModel<
     }
   } else {
     // If agent has no teams, check if there are any organization optimization rules to apply (fallback)
-    const existingOrgRules = await db
-      .select({ entityId: schema.optimizationRulesTable.entityId })
-      .from(schema.optimizationRulesTable)
-      .where(sql`${schema.optimizationRulesTable.entityType} = 'organization'`)
-      .limit(1);
+    // TODO: this fallback doesn't work if there are multiple organizations.
+    organizationId = await OptimizationRuleModel.getFirstOrganizationId();
 
-    if (existingOrgRules.length > 0) {
-      // TODO: this fallback doesn't work if there are multiple organizations.
-      organizationId = existingOrgRules[0].entityId;
+    if (organizationId) {
       logger.info(
         { agentId, organizationId },
         "[CostOptimization] agent has no teams - using fallback organization",

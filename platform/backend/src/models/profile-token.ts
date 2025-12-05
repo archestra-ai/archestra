@@ -159,6 +159,26 @@ class ProfileTokenModel {
   }
 
   /**
+   * Find the Organization Token for a profile
+   */
+  static async findOrganizationToken(
+    profileId: string,
+  ): Promise<SelectProfileToken | null> {
+    const [token] = await db
+      .select()
+      .from(schema.profileTokensTable)
+      .where(
+        and(
+          eq(schema.profileTokensTable.profileId, profileId),
+          eq(schema.profileTokensTable.isOrganizationToken, true),
+        ),
+      )
+      .limit(1);
+
+    return token ?? null;
+  }
+
+  /**
    * Update a token (name, isOrganizationToken)
    */
   static async update(

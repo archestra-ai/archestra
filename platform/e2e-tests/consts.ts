@@ -44,15 +44,15 @@ export const ADMIN_PASSWORD =
  * Editor credentials for e2e tests
  * Editor role has limited permissions compared to admin
  */
-export const EDITOR_EMAIL = "editor@e2e-test.local";
-export const EDITOR_PASSWORD = "editor-password-123";
+export const EDITOR_EMAIL = "editor@example.com";
+export const EDITOR_PASSWORD = "password";
 
 /**
  * Member credentials for e2e tests
  * Member role has the most restricted permissions
  */
-export const MEMBER_EMAIL = "member@e2e-test.local";
-export const MEMBER_PASSWORD = "member-password-123";
+export const MEMBER_EMAIL = "member@example.com";
+export const MEMBER_PASSWORD = "password";
 
 /**
  * Team names for e2e tests

@@ -11,7 +11,7 @@ import { defineConfig, type UserConfig } from "tsdown";
  * @see https://tsdown.dev/advanced/hooks
  * @see https://nodejs.org/api/child_process.html#optionssignal
  */
-const onSuccessHandler: UserConfig["onSuccess"] = async (_config, signal) => {
+const onSuccessHandler: UserConfig["onSuccess"] = (_config, signal) => {
   const args = ["--enable-source-maps"];
 
   if (process.env.DEBUG) {
@@ -22,7 +22,7 @@ const onSuccessHandler: UserConfig["onSuccess"] = async (_config, signal) => {
 
   const child = spawn("node", args, {
     stdio: "inherit",
-    signal,
+    signal, // AbortSignal kills this process when tsdown rebuilds
   });
 
   child.on("error", (err) => {
@@ -32,9 +32,8 @@ const onSuccessHandler: UserConfig["onSuccess"] = async (_config, signal) => {
     }
   });
 
-  return new Promise<void>((resolve) => {
-    child.on("close", () => resolve());
-  });
+  // Don't wait for the server to exit - return immediately
+  // so tsdown can continue watching for changes
 };
 
 export default defineConfig((options: UserConfig) => {

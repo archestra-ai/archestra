@@ -873,22 +873,22 @@ export function getVaultConfigFromEnv(): VaultConfig {
       kvVersion,
       token: token as string,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ?? defaultSecretPath,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
       k8sTokenPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
         DEFAULT_K8S_TOKEN_PATH,
       k8sMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
         DEFAULT_K8S_MOUNT_POINT,
       awsMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
         DEFAULT_AWS_MOUNT_POINT,
       awsRegion:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
       awsStsEndpoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
         DEFAULT_AWS_STS_ENDPOINT,
     };
   }
@@ -911,23 +911,23 @@ export function getVaultConfigFromEnv(): VaultConfig {
       kvVersion,
       k8sRole: k8sRole as string,
       k8sTokenPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
         DEFAULT_K8S_TOKEN_PATH,
       k8sMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
         DEFAULT_K8S_MOUNT_POINT,
       awsMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
         DEFAULT_AWS_MOUNT_POINT,
       awsRegion:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
       awsStsEndpoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
         DEFAULT_AWS_STS_ENDPOINT,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ?? defaultSecretPath,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
     };
   }
 
@@ -949,25 +949,25 @@ export function getVaultConfigFromEnv(): VaultConfig {
       kvVersion,
       awsRole: awsRole as string,
       k8sTokenPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
         DEFAULT_K8S_TOKEN_PATH,
       k8sMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
         DEFAULT_K8S_MOUNT_POINT,
       awsMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
         DEFAULT_AWS_MOUNT_POINT,
       awsRegion:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
       awsStsEndpoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
         DEFAULT_AWS_STS_ENDPOINT,
       awsIamServerIdHeader:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID || undefined,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ?? defaultSecretPath,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
     };
   }
 

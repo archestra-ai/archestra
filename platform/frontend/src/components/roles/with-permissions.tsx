@@ -14,7 +14,7 @@ type WithPermissionsProps = {
 } & (
   | {
       noPermissionHandle: "tooltip";
-      children: ({ isDisabled }: { isDisabled: boolean }) => ReactElement;
+      children: ({ hasPermission, isPending }: { hasPermission: boolean | undefined, isPending: boolean }) => ReactElement;
     }
   | {
       noPermissionHandle: "hide";
@@ -27,12 +27,12 @@ export function WithPermissions({
   permissions,
   noPermissionHandle,
 }: WithPermissionsProps) {
-  const { data: hasPermission } = useHasPermissions(permissions);
+  const { data: hasPermission, isPending } = useHasPermissions(permissions);
 
   // if has permission, return children as is
   if (hasPermission) {
     return typeof children === "function"
-      ? children({ isDisabled: false })
+      ? children({ hasPermission: true, isPending })
       : children;
   }
 
@@ -48,7 +48,7 @@ export function WithPermissions({
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="cursor-not-allowed">
-            {children({ isDisabled: true })}
+            {children({ hasPermission: false, isPending })}
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>

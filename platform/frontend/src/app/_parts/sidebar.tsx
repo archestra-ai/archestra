@@ -216,8 +216,10 @@ const MainSideBarSection = ({
         permissions={{ conversation: ["read"] }}
         noPermissionHandle="tooltip"
       >
-        {({ isDisabled }) => {
-          return isDisabled ? (
+        {({ hasPermission, isPending }) => {
+          return isPending ? null : hasPermission ? (
+            <ChatSidebarSection />
+          ) : (
             <SidebarGroup>
               <SidebarGroupContent>
                 <Badge variant="outline" className="text-xs mx-4">
@@ -225,8 +227,6 @@ const MainSideBarSection = ({
                 </Badge>
               </SidebarGroupContent>
             </SidebarGroup>
-          ) : (
-            <ChatSidebarSection />
           );
         }}
       </WithPermissions>

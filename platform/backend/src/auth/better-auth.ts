@@ -23,6 +23,7 @@ import {
   InvitationModel,
   MemberModel,
   SessionModel,
+  SsoProviderModel,
   TeamModel,
 } from "@/models";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache";
@@ -133,14 +134,10 @@ export const auth: any = betterAuth({
         disabled: false,
         defaultRole: MEMBER_ROLE_NAME,
         getRole: async (data) => {
-          // Dynamic import to avoid circular dependency
-          // (sso-provider.ts imports auth from this file)
-          const { default: SsoProviderModel } = await import(
-            "@/models/sso-provider"
-          );
-          const role = await SsoProviderModel.resolveSsoRole(data);
           // Cast to the expected union type (better-auth expects "member" | "admin")
-          return role as "member" | "admin";
+          return (await SsoProviderModel.resolveSsoRole(data)) as
+            | "member"
+            | "admin";
         },
       },
       defaultOverrideUserInfo: true,
@@ -556,7 +553,6 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
   }
 
   // Get the SSO provider to find the organization ID
-  const { default: SsoProviderModel } = await import("@/models/sso-provider");
   const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
 
   if (!ssoProvider?.organizationId) {

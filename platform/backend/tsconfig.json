@@ -18,16 +18,16 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
-    "rootDir": "./src",
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "*.config.ts"
   ],
   "exclude": [
-    "node_modules",
+    "node_modules"
   ]
 }

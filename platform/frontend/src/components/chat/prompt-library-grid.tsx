@@ -140,10 +140,10 @@ export function PromptLibraryGrid({
           permissions={{ conversation: ["create"] }}
           noPermissionHandle="tooltip"
         >
-          {({ isDisabled }) => {
+          {({ hasPermission }) => {
             return (
               <Card
-                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
+                className={`h-[155px] justify-center items-center px-0 py-2 border-2 border-green-500 hover:border-green-600 cursor-pointer transition-colors bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 ${hasPermission === false ? "opacity-50 pointer-events-none" : ""}`}
                 onClick={() => setIsFreeChatDialogOpen(true)}
               >
                 <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300 text-base">
@@ -167,7 +167,7 @@ export function PromptLibraryGrid({
               permissions={{ conversation: ["create"] }}
               noPermissionHandle="tooltip"
             >
-              {({ isDisabled }) => {
+              {({ hasPermission }) => {
                 return (
                   <PromptTile
                     key={prompt.id}
@@ -177,7 +177,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
-                    disabled={isDisabled}
+                    disabled={hasPermission === false}
                   />
                 );
               }}

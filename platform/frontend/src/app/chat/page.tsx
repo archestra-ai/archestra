@@ -549,16 +549,17 @@ export default function ChatPage() {
                   permissions={{ profile: ["read"] }}
                   noPermissionHandle="tooltip"
                 >
-                  {({ isDisabled }) => {
-                    return isDisabled ? (
-                      <Badge variant="outline" className="text-xs my-2">
-                        Unable to show the list of tools
-                      </Badge>
-                    ) : (
+                  {({ hasPermission }) => {
+                    return hasPermission ===
+                      undefined ? null : hasPermission ? (
                       <McpToolsDisplay
                         agentId={currentProfileId}
                         className="text-xs text-muted-foreground"
                       />
+                    ) : (
+                      <Badge variant="outline" className="text-xs my-2">
+                        Unable to show the list of tools
+                      </Badge>
                     );
                   }}
                 </WithPermissions>

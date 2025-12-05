@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
 
 // Special value for dynamic team credential option
@@ -97,15 +98,14 @@ export function TokenSelect({
           >
             <div className="flex items-center gap-2">
               <Zap className="h-3 w-3 text-amber-500" />
-              <span className="text-xs font-medium">
-                Dynamic team credential
-              </span>
+              <span className="text-xs font-medium">Dynamic credential</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Resolve based on token's team at runtime
-            </p>
           </SelectItem>
         )}
+        <Divider className="my-2" />
+        <div className="text-xs text-muted-foreground ml-2">
+          Static credentials
+        </div>
         {mcpServers.map((server) => (
           <SelectItem
             key={server.id}

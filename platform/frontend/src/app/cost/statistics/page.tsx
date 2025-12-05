@@ -737,7 +737,7 @@ export default function StatisticsPage() {
               }
             }}
           >
-            <SelectTrigger className="w-[320px]">
+            <SelectTrigger className="w-fit min-w-[180px] px-2">
               <CalendarIcon className="mr-2 h-4 w-4" />
               <SelectValue>
                 {timeframe.startsWith("custom:")

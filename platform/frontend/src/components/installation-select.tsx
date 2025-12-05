@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
-import { E2eTestId } from "@shared";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
 import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";

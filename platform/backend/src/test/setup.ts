@@ -14,6 +14,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 
+// Disable Sentry during tests (even if DSN is configured in .env)
+process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let pgliteClient: PGlite | null = null;

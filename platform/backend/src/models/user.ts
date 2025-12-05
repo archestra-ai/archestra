@@ -177,12 +177,13 @@ class UserModel {
    * Delete a user by ID
    */
   static async delete(userId: string): Promise<boolean> {
-    logger.debug({ userId }, "UserModel.delete: deleting user");
+    logger.debug("UserModel.delete: deleting user");
     const result = await db
       .delete(schema.usersTable)
-      .where(eq(schema.usersTable.id, userId));
-    const deleted = result.rowCount !== null && result.rowCount > 0;
-    logger.debug({ userId, deleted }, "UserModel.delete: completed");
+      .where(eq(schema.usersTable.id, userId))
+      .returning();
+    const deleted = result.length > 0;
+    logger.debug({ deleted }, "UserModel.delete: completed");
     return deleted;
   }
 }

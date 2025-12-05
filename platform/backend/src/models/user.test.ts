@@ -133,12 +133,8 @@ describe("UserModel.findByEmail", () => {
 });
 
 describe("UserModel.delete", () => {
-  test("should delete a user", async ({ makeUser, makeOrganization }) => {
+  test("should delete a user", async ({ makeUser }) => {
     const user = await makeUser({ email: "deleteme@test.com" });
-    const org = await makeOrganization();
-
-    // Create membership to test cascade behavior
-    await MemberModel.create(user.id, org.id, MEMBER_ROLE_NAME);
 
     // Delete user
     const deleted = await UserModel.delete(user.id);
@@ -147,6 +143,29 @@ describe("UserModel.delete", () => {
 
     // Verify user is gone
     const foundUser = await UserModel.findByEmail("deleteme@test.com");
+    expect(foundUser).toBeUndefined();
+  });
+
+  test("should delete a user after their membership is removed", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser({ email: "deleteme2@test.com" });
+    const org = await makeOrganization();
+
+    // Create membership
+    await MemberModel.create(user.id, org.id, MEMBER_ROLE_NAME);
+
+    // Must delete membership first due to foreign key constraint
+    await MemberModel.deleteByMemberOrUserId(user.id, org.id);
+
+    // Now delete user
+    const deleted = await UserModel.delete(user.id);
+
+    expect(deleted).toBe(true);
+
+    // Verify user is gone
+    const foundUser = await UserModel.findByEmail("deleteme2@test.com");
     expect(foundUser).toBeUndefined();
   });
 

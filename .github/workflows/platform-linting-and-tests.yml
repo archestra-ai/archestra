@@ -18,6 +18,30 @@ on:
         required: true
 
 jobs:
+  paths-filter:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mcp-server-base-image: ${{ steps.filter.outputs.mcp-server-base-image }}
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Filter paths
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            mcp-server-base-image:
+              - 'platform/mcp_server_docker_image/**'
+              - '.github/workflows/build-base-mcp-server-docker-image.yml'
+
   platform-linting-and-tests:
     name: Platform Linting and Tests
     runs-on: blacksmith-8vcpu-ubuntu-2404
@@ -368,3 +392,17 @@ jobs:
         # and helm package explicitly checks this
         run: |
           helm package . --version v0.0.1 --app-version v0.0.1
+
+  # Test that the MCP server base Docker image builds successfully
+  # Only runs when relevant files are changed
+  mcp-server-base-image-build:
+    name: MCP Server Base Image Build
+    needs: paths-filter
+    if: ${{ needs.paths-filter.outputs.mcp-server-base-image == 'true' }}
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
+    with:
+      push_to_gcr: false
+      version: test

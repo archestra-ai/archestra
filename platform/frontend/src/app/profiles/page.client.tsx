@@ -768,7 +768,7 @@ function CreateProfileDialog({
               </DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto py-4 flex-1">
-              <ProfileConnectionTabs agentId={createdProfile.id} />
+              <ProfileConnectionColumns agentId={createdProfile.id} />
             </div>
             <DialogFooter className="shrink-0">
               <Button
@@ -1020,7 +1020,7 @@ function EditProfileDialog({
   );
 }
 
-function ProfileConnectionTabs({ agentId }: { agentId: string }) {
+function ProfileConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="grid grid-cols-2 gap-6">
       <div className="space-y-3">
@@ -1056,12 +1056,12 @@ function ConnectProfileDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl">
+      <DialogContent className="max-w-[90vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>How to connect "{agent.name}" to Archestra</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <ProfileConnectionTabs agentId={agent.id} />
+          <ProfileConnectionColumns agentId={agent.id} />
         </div>
         <DialogFooter>
           <Button type="button" onClick={() => onOpenChange(false)}>

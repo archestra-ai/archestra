@@ -53,6 +53,7 @@ export const persistTools = async (
   );
 
   // Bulk create agent-tool relationships (single query to check existing + single insert for new)
-  const toolIds = createdTools.map((tool) => tool.id);
+  // Deduplicate tool IDs in case input contained duplicate tool names
+  const toolIds = [...new Set(createdTools.map((tool) => tool.id))];
   await AgentToolModel.createManyIfNotExists(agentId, toolIds);
 };

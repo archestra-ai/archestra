@@ -274,4 +274,54 @@ describe("persistTools", () => {
 
     expect(proxyToolsAfter.length).toBe(proxyToolsBefore.length);
   });
+
+  test("handles duplicate tool names in input without constraint violation", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // Input contains duplicate tool names - this should not cause a constraint violation
+    const tools = [
+      {
+        toolName: "duplicate-tool",
+        toolParameters: { type: "object" },
+        toolDescription: "First occurrence",
+      },
+      {
+        toolName: "duplicate-tool", // Duplicate!
+        toolParameters: { type: "object", additionalProperties: true },
+        toolDescription: "Second occurrence",
+      },
+      {
+        toolName: "unique-tool",
+        toolParameters: { type: "object" },
+        toolDescription: "Unique tool",
+      },
+      {
+        toolName: "duplicate-tool", // Triple duplicate!
+        toolParameters: {},
+        toolDescription: "Third occurrence",
+      },
+    ];
+
+    // Should not throw a constraint violation error
+    await persistTools(tools, agent.id);
+
+    // Verify tools were created (only unique names)
+    const agentTools = await ToolModel.getToolsByAgent(agent.id);
+    const proxyTools = agentTools.filter(
+      (t) => t.agentId === agent.id && t.catalogId === null,
+    );
+
+    // Should have exactly 2 unique tools
+    const toolNames = proxyTools.map((t) => t.name);
+    expect(toolNames).toContain("duplicate-tool");
+    expect(toolNames).toContain("unique-tool");
+    expect(toolNames.filter((n) => n === "duplicate-tool")).toHaveLength(1);
+
+    // Verify agent-tool relationships don't have duplicates
+    const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+    const uniqueToolIds = [...new Set(toolIds)];
+    expect(toolIds.length).toBe(uniqueToolIds.length);
+  });
 });

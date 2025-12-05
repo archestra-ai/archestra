@@ -177,7 +177,7 @@ export function PromptLibraryGrid({
                     onEdit={onEdit}
                     onDelete={setPromptToDelete}
                     onViewVersionHistory={onViewVersionHistory}
-                    disabled={hasPermission !== true}
+                    disabled={hasPermission === false}
                   />
                 );
               }}

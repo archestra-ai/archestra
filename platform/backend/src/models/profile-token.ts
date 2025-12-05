@@ -38,7 +38,7 @@ function getTokenStart(token: string): string {
 /**
  * Check if a value looks like a profile token (starts with archestra_)
  */
-export function isProfileToken(value: string): boolean {
+export function isArchestraPrefixedProfileToken(value: string): boolean {
   return value.startsWith(TOKEN_PREFIX);
 }
 

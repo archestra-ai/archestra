@@ -1,423 +1,31 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type Tool,
-} from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  executeArchestraTool,
-  getArchestraMcpTools,
-} from "@/archestra-mcp-server";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import logger from "@/logging";
+import { McpToolCallModel } from "@/models";
+import { UuidIdSchema } from "@/types";
 import {
-  AgentModel,
-  isProfileToken,
-  McpToolCallModel,
-  ProfileTokenModel,
-  ToolModel,
-} from "@/models";
-import { type CommonToolCall, UuidIdSchema } from "@/types";
+  activeSessions,
+  cleanupExpiredSessions,
+  createAgentServer,
+  createTransport,
+  extractProfileIdAndTokenFromRequest,
+  validateProfileToken,
+} from "./mcp-gateway.utils";
 
-/**
- * Token authentication result
- */
-interface TokenAuthResult {
-  profileId: string;
-  tokenId: string;
-  tokenTeamIds: string[];
-  isOrganizationToken: boolean;
-}
-
-/**
- * Session management types
- */
-interface SessionData {
-  server: Server;
-  transport: StreamableHTTPServerTransport;
-  lastAccess: number;
-  agentId: string;
-  agent?: {
-    id: string;
-    name: string;
-  }; // Cache agent data
-  // Token auth info (only present for archestra_ token auth)
-  tokenAuth?: {
-    tokenId: string;
-    tokenTeamIds: string[];
-    isOrganizationToken: boolean;
-  };
-}
-
-/**
- * Active sessions with last access time for cleanup
- * Sessions must persist across requests within the same session
- */
-const activeSessions = new Map<string, SessionData>();
-
-/**
- * Session timeout (30 minutes)
- */
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
-/**
- * Clean up expired sessions periodically
- */
-function cleanupExpiredSessions(): void {
-  const now = Date.now();
-  const expiredSessionIds: string[] = [];
-
-  for (const [sessionId, sessionData] of activeSessions.entries()) {
-    if (now - sessionData.lastAccess > SESSION_TIMEOUT_MS) {
-      expiredSessionIds.push(sessionId);
-    }
-  }
-
-  for (const sessionId of expiredSessionIds) {
-    logger.info({ sessionId }, "Cleaning up expired session");
-    activeSessions.delete(sessionId);
-  }
-}
-
-/**
- * Create a fresh MCP server for a request
- * In stateless mode, we need to create new server instances per request
- */
-async function createAgentServer(
-  agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
-  cachedAgent?: { name: string; id: string },
-  tokenAuth?: TokenAuthContext,
-): Promise<{ server: Server; agent: { name: string; id: string } }> {
-  const server = new Server(
-    {
-      name: `archestra-agent-${agentId}`,
-      version: config.api.version,
-    },
-    {
-      capabilities: {
-        tools: { listChanged: false },
-      },
-    },
-  );
-
-  // Use cached agent data if available, otherwise fetch it
-  let agent = cachedAgent;
-  if (!agent) {
-    const fetchedAgent = await AgentModel.findById(agentId);
-    if (!fetchedAgent) {
-      throw new Error(`Agent not found: ${agentId}`);
-    }
-    agent = fetchedAgent;
-  }
-
-  // Create a map of Archestra tool names to their titles
-  // This is needed because the database schema doesn't include a title field
-  const archestraTools = getArchestraMcpTools();
-  const archestraToolTitles = new Map(
-    archestraTools.map((tool: Tool) => [tool.name, tool.title]),
-  );
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    // Get MCP tools (from connected MCP servers + Archestra built-in tools)
-    // Excludes proxy-discovered tools
-    // Fetch fresh on every request to ensure we get newly assigned tools
-    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
-
-    const toolsList = mcpTools.map(({ name, description, parameters }) => ({
-      name,
-      title: archestraToolTitles.get(name) || name,
-      description,
-      inputSchema: parameters,
-      annotations: {},
-      _meta: {},
-    }));
-
-    // Log tools/list request
-    try {
-      await McpToolCallModel.create({
-        agentId,
-        mcpServerName: "mcp-gateway",
-        method: "tools/list",
-        toolCall: null,
-        // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
-        toolResult: { tools: toolsList } as any,
-      });
-      logger.info(
-        { agentId, toolsCount: toolsList.length },
-        "✅ Saved tools/list request",
-      );
-    } catch (dbError) {
-      logger.info({ err: dbError }, "Failed to persist tools/list request:");
-    }
-
-    return { tools: toolsList };
-  });
-
-  server.setRequestHandler(
-    CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
-      try {
-        // Check if this is an Archestra tool
-        const archestraToolPrefix = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-        if (name.startsWith(archestraToolPrefix)) {
-          logger.info(
-            {
-              agentId,
-              toolName: name,
-            },
-            "Archestra MCP tool call received",
-          );
-
-          // Handle Archestra tools directly
-          const archestraResponse = await executeArchestraTool(name, args, {
-            profile: { id: agent.id, name: agent.name },
-          });
-
-          logger.info(
-            {
-              agentId,
-              toolName: name,
-            },
-            "Archestra MCP tool call completed",
-          );
-
-          return archestraResponse;
-        }
-
-        logger.info(
-          {
-            agentId,
-            toolName: name,
-            argumentKeys: args ? Object.keys(args) : [],
-            argumentsSize: JSON.stringify(args || {}).length,
-          },
-          "MCP gateway tool call received",
-        );
-
-        // Generate a unique ID for this tool call
-        const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-        // Create CommonToolCall for McpClient
-        const toolCall: CommonToolCall = {
-          id: toolCallId,
-          name,
-          arguments: args || {},
-        };
-
-        // Execute the tool call via McpClient (pass tokenAuth for dynamic credential resolution)
-        const result = await mcpClient.executeToolCall(
-          toolCall,
-          agentId,
-          tokenAuth,
-        );
-
-        if (result.isError) {
-          logger.info(
-            {
-              agentId,
-              toolName: name,
-              error: result.error,
-            },
-            "MCP gateway tool call failed",
-          );
-
-          throw {
-            code: -32603, // Internal error
-            message: result.error || "Tool execution failed",
-          };
-        }
-
-        logger.info(
-          {
-            agentId,
-            toolName: name,
-            resultContentLength: Array.isArray(result.content)
-              ? JSON.stringify(result.content).length
-              : typeof result.content === "string"
-                ? result.content.length
-                : JSON.stringify(result.content).length,
-          },
-          "MCP gateway tool call completed",
-        );
-
-        // Transform CommonToolResult to MCP response format
-        return {
-          content: Array.isArray(result.content)
-            ? result.content
-            : [{ type: "text", text: JSON.stringify(result.content) }],
-          isError: false,
-        };
-      } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error) {
-          throw error; // Re-throw JSON-RPC errors
-        }
-
-        throw {
-          code: -32603, // Internal error
-          message: "Tool execution failed",
-          data: error instanceof Error ? error.message : "Unknown error",
-        };
-      }
-    },
-  );
-
-  logger.info({ agentId }, "MCP server instance created");
-  return { server, agent };
-}
-
-/**
- * Create a fresh transport for a request
- * We use session-based mode as required by the SDK for JSON responses
- */
-function createTransport(
-  agentId: string,
-  clientSessionId: string | undefined,
-  logger: { info: (obj: unknown, msg: string) => void },
-): StreamableHTTPServerTransport {
-  logger.info({ agentId, clientSessionId }, "Creating new transport instance");
-
-  // Create transport with session management
-  // If client provides a session ID, we'll use it; otherwise generate one
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => {
-      const sessionId =
-        clientSessionId || `session-${Date.now()}-${randomUUID()}`;
-      logger.info(
-        { agentId, sessionId, wasClientProvided: !!clientSessionId },
-        "Using session ID",
-      );
-      return sessionId;
-    },
-    enableJsonResponse: true, // Use JSON responses instead of SSE
-  });
-
-  logger.info({ agentId }, "Transport instance created");
-  return transport;
-}
-
-/**
- * Authentication result type
- */
-type AuthResult =
-  | { type: "legacy"; agentId: string }
-  | { type: "token"; token: string }
-  | { type: "invalid" };
-
-/**
- * Extract authentication info from Authorization header
- * Supports both legacy UUID agent IDs and new archestra_ prefixed tokens
- */
-function extractAuthFromHeader(authHeader: string | undefined): AuthResult {
-  if (!authHeader) {
-    return { type: "invalid" };
-  }
-
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return { type: "invalid" };
-  }
-
-  const token = match[1];
-
-  // Check if it's a new archestra_ prefixed token
-  if (isProfileToken(token)) {
-    return { type: "token", token };
-  }
-
-  // Try to validate as legacy UUID (agent ID)
-  try {
-    const parsed = UuidIdSchema.parse(token);
-    return { type: "legacy", agentId: parsed };
-  } catch {
-    return { type: "invalid" };
-  }
-}
-
-/**
- * Extract and validate agent ID from Authorization header bearer token
- * @deprecated Use extractAuthFromHeader for new code
- */
-function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
-  const result = extractAuthFromHeader(authHeader);
-  if (result.type === "legacy") {
-    return result.agentId;
-  }
-  return null;
-}
-
-/**
- * Validate an archestra_ prefixed token for a specific profile
- * Returns token auth info if valid, null otherwise
- */
-async function validateProfileToken(
-  profileId: string,
-  tokenValue: string,
-): Promise<TokenAuthResult | null> {
-  const token = await ProfileTokenModel.validateToken(profileId, tokenValue);
-  if (!token) {
-    return null;
-  }
-
-  // Get team IDs for this token
-  const tokenTeamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-
-  return {
-    profileId,
-    tokenId: token.id,
-    tokenTeamIds,
-    isOrganizationToken: token.isOrganizationToken,
-  };
-}
-
-/**
- * Clear all active sessions for a specific agent
- */
-export function clearAgentSessions(agentId: string): void {
-  const sessionsToClear: string[] = [];
-
-  // Find all sessions for this agent
-  for (const [sessionId, sessionData] of activeSessions.entries()) {
-    if (sessionData.agentId === agentId) {
-      sessionsToClear.push(sessionId);
-    }
-  }
-
-  // Delete all matching sessions
-  for (const sessionId of sessionsToClear) {
-    logger.info({ agentId, sessionId }, "Clearing agent session");
-    activeSessions.delete(sessionId);
-  }
-
-  logger.info(
-    { agentId, clearedCount: sessionsToClear.length },
-    "All sessions cleared, now clearing cached MCP client",
-  );
-
-  // Also clear the cached MCP client so it will reconnect with a new session
-  clearChatMcpClient(agentId);
-
-  logger.info(
-    { agentId, clearedCount: sessionsToClear.length },
-    "✅ Cleared agent sessions and client cache - next request will create fresh session",
-  );
-}
-
-/**
- * Fastify route plugin for MCP gateway
- */
-const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+// =============================================================================
+// LEGACY: MCP Gateway endpoints with UUID token authentication where profileID and token are the same from Authorization header
+// /v1/mcp
+// Authorization header: Bearer <profile_id_and_token_combined_as_uuid>
+// =============================================================================
+export const legacyMcpGatewayRoutes: FastifyPluginAsyncZod = async (
+  fastify,
+) => {
   const { endpoint } = config.mcpGateway;
 
   // GET endpoint for server discovery
@@ -444,11 +52,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const agentId = extractAgentIdFromAuth(
-        request.headers.authorization as string | undefined,
-      );
+      const { profileId: agentId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      if (!agentId) {
+      if (!agentId || !token) {
         reply.status(401);
         return {
           error: "Unauthorized",
@@ -481,11 +88,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const agentId = extractAgentIdFromAuth(
-        request.headers.authorization as string | undefined,
-      );
+      const { profileId: agentId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      if (!agentId) {
+      if (!agentId || !token) {
         reply.status(401);
         return {
           jsonrpc: "2.0",
@@ -761,9 +367,113 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // =============================================================================
-  // NEW: Profile-specific MCP Gateway endpoints with token authentication
-  // =============================================================================
+  // DELETE endpoint to clear sessions for an agent
+  fastify.delete(
+    `${endpoint}/sessions`,
+    {
+      schema: {
+        tags: ["mcp-gateway"],
+        response: {
+          200: z.object({
+            message: z.string(),
+            clearedCount: z.number(),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = extractProfileIdAndTokenFromRequest(request) ?? {};
+
+      fastify.log.info(
+        {
+          profileId,
+          totalActiveSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - Request received",
+      );
+
+      if (!profileId) {
+        fastify.log.warn("DELETE /v1/mcp/sessions - Unauthorized request");
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+        };
+      }
+
+      const sessionsToClear: string[] = [];
+      const allAgentIds: string[] = [];
+
+      // Find all sessions for this agent
+      for (const [sessionId, sessionData] of activeSessions.entries()) {
+        allAgentIds.push(sessionData.agentId);
+        if (sessionData.agentId === profileId) {
+          sessionsToClear.push(sessionId);
+        }
+      }
+
+      fastify.log.info(
+        {
+          profileId,
+          allAgentIds,
+          sessionsToClear,
+          totalSessions: activeSessions.size,
+          matchingSessionsCount: sessionsToClear.length,
+        },
+        "DELETE /v1/mcp/sessions - Found sessions to clear",
+      );
+
+      // Delete all matching sessions
+      for (const sessionId of sessionsToClear) {
+        fastify.log.info(
+          { profileId, sessionId },
+          "DELETE /v1/mcp/sessions - Clearing session",
+        );
+        activeSessions.delete(sessionId);
+      }
+
+      fastify.log.info(
+        {
+          profileId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - All sessions cleared, now clearing cached MCP client",
+      );
+
+      // Also clear the cached MCP client so it will reconnect with a new session
+      clearChatMcpClient(profileId);
+
+      fastify.log.info(
+        {
+          profileId,
+          clearedCount: sessionsToClear.length,
+          remainingSessions: activeSessions.size,
+        },
+        "DELETE /v1/mcp/sessions - ✅ Sessions and client cache cleared successfully",
+      );
+
+      reply.type("application/json");
+      return {
+        message: "Sessions cleared successfully",
+        clearedCount: sessionsToClear.length,
+      };
+    },
+  );
+};
+
+// =============================================================================
+// NEW: Profile-specific MCP Gateway endpoints with token authentication
+// /mcp/v1/<profile_id>
+// Authorization header: Bearer <archestra_token>
+// =============================================================================
+export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const { endpoint } = config.mcpGateway;
 
   // GET endpoint for server discovery with profile ID in URL
   fastify.get(
@@ -799,15 +509,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId } = request.params;
-      const authResult = extractAuthFromHeader(
-        request.headers.authorization as string | undefined,
-      );
+      const { profileId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      // Handle different auth types
-      let tokenAuth: TokenAuthResult | null = null;
-
-      if (authResult.type === "invalid") {
+      if (!profileId || !token) {
         reply.status(401);
         return {
           error: "Unauthorized",
@@ -816,26 +521,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      if (authResult.type === "token") {
-        // Validate archestra_ token against this profile
-        tokenAuth = await validateProfileToken(profileId, authResult.token);
-        if (!tokenAuth) {
-          reply.status(401);
-          return {
-            error: "Unauthorized",
-            message: "Invalid token for this profile",
-          };
-        }
-      } else if (authResult.type === "legacy") {
-        // Legacy UUID auth - verify it matches the profile ID
-        if (authResult.agentId !== profileId) {
-          reply.status(401);
-          return {
-            error: "Unauthorized",
-            message: "Agent ID does not match profile ID in URL",
-          };
-        }
-      }
+      const tokenAuth = await validateProfileToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -871,16 +557,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId } = request.params;
-      const authResult = extractAuthFromHeader(
-        request.headers.authorization as string | undefined,
-      );
+      const { profileId, token } =
+        extractProfileIdAndTokenFromRequest(request) ?? {};
 
-      // Handle different auth types
-      let tokenAuth: TokenAuthResult | null = null;
-      let agentId = profileId;
-
-      if (authResult.type === "invalid") {
+      if (!profileId || !token) {
         reply.status(401);
         return {
           jsonrpc: "2.0",
@@ -893,36 +573,17 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      if (authResult.type === "token") {
-        // Validate archestra_ token against this profile
-        tokenAuth = await validateProfileToken(profileId, authResult.token);
-        if (!tokenAuth) {
-          reply.status(401);
-          return {
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message: "Unauthorized: Invalid token for this profile",
-            },
-            id: null,
-          };
-        }
-        agentId = profileId;
-      } else if (authResult.type === "legacy") {
-        // Legacy UUID auth - verify it matches the profile ID
-        if (authResult.agentId !== profileId) {
-          reply.status(401);
-          return {
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message:
-                "Unauthorized: Agent ID does not match profile ID in URL",
-            },
-            id: null,
-          };
-        }
-        agentId = authResult.agentId;
+      const tokenAuth = await validateProfileToken(profileId, token);
+      if (!tokenAuth) {
+        reply.status(401);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Unauthorized: Invalid token for this profile",
+          },
+          id: null,
+        };
       }
 
       const sessionId = request.headers["mcp-session-id"] as string | undefined;
@@ -932,7 +593,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       fastify.log.info(
         {
-          agentId,
+          agentId: profileId,
           profileId,
           sessionId,
           method: request.body?.method,
@@ -954,7 +615,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           fastify.log.info(
-            { agentId, sessionId },
+            { profileId, sessionId },
             "Reusing existing session (profile route)",
           );
 
@@ -964,7 +625,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           if (isInitialize) {
             fastify.log.info(
-              { agentId, sessionId },
+              { profileId, sessionId },
               "Re-initialize on existing session - will reuse existing server",
             );
           }
@@ -974,7 +635,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           fastify.log.info(
             {
-              agentId,
+              profileId,
               sessionId: effectiveSessionId,
               hasTokenAuth: !!tokenAuth,
             },
@@ -991,18 +652,22 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : undefined;
 
           const { server: newServer, agent } = await createAgentServer(
-            agentId,
+            profileId,
             fastify.log,
             undefined, // No cached agent
             tokenAuthContext, // Pass token auth for dynamic credential resolution
           );
           server = newServer;
-          transport = createTransport(agentId, effectiveSessionId, fastify.log);
+          transport = createTransport(
+            profileId,
+            effectiveSessionId,
+            fastify.log,
+          );
 
           const thisTransport = transport;
           transport.onclose = () => {
             fastify.log.info(
-              { agentId, sessionId: effectiveSessionId },
+              { profileId, sessionId: effectiveSessionId },
               "Transport closed - checking if session should be cleaned up",
             );
             const currentSession = activeSessions.get(effectiveSessionId);
@@ -1010,7 +675,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               activeSessions.delete(effectiveSessionId);
               fastify.log.info(
                 {
-                  agentId,
+                  profileId,
                   sessionId: effectiveSessionId,
                   remainingSessions: activeSessions.size,
                 },
@@ -1019,16 +684,16 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           };
 
-          fastify.log.info({ agentId }, "Connecting server to transport");
+          fastify.log.info({ profileId }, "Connecting server to transport");
           await server.connect(transport);
-          fastify.log.info({ agentId }, "Server connected to transport");
+          fastify.log.info({ profileId }, "Server connected to transport");
 
           // Store session with token auth info
           activeSessions.set(effectiveSessionId, {
             server,
             transport,
             lastAccess: Date.now(),
-            agentId,
+            agentId: profileId,
             agent,
             // Include token auth info if using archestra_ token
             ...(tokenAuth && {
@@ -1042,7 +707,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           fastify.log.info(
             {
-              agentId,
+              profileId,
               sessionId: effectiveSessionId,
               hasTokenAuth: !!tokenAuth,
             },
@@ -1050,7 +715,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         } else if (!server || !transport) {
           fastify.log.error(
-            { agentId, sessionId, method: request.body?.method },
+            { profileId, sessionId, method: request.body?.method },
             "Request received without valid session (profile route)",
           );
           reply.status(400);
@@ -1065,7 +730,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         fastify.log.info(
-          { agentId, sessionId },
+          { profileId, sessionId },
           "Calling transport.handleRequest (profile route)",
         );
 
@@ -1078,14 +743,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         fastify.log.info(
-          { agentId, sessionId },
+          { profileId, sessionId },
           "Transport.handleRequest completed (profile route)",
         );
 
         if (isInitialize) {
           try {
             await McpToolCallModel.create({
-              agentId,
+              agentId: profileId,
               mcpServerName: "mcp-gateway",
               method: "initialize",
               toolCall: null,
@@ -1094,14 +759,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   tools: { listChanged: false },
                 },
                 serverInfo: {
-                  name: `archestra-agent-${agentId}`,
+                  name: `archestra-agent-${profileId}`,
                   version: config.api.version,
                 },
                 // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
               } as any,
             });
             fastify.log.info(
-              { agentId, sessionId },
+              { profileId, sessionId },
               "✅ Saved initialize request (profile route)",
             );
           } catch (dbError) {
@@ -1113,7 +778,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         fastify.log.info(
-          { agentId, sessionId },
+          { profileId, sessionId },
           "Request handled successfully (profile route)",
         );
       } catch (error) {
@@ -1121,7 +786,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             error,
             errorMessage: error instanceof Error ? error.message : "Unknown",
-            agentId,
+            profileId,
           },
           "Error handling MCP request (profile route)",
         );
@@ -1144,7 +809,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // DELETE endpoint to clear sessions for an agent
   fastify.delete(
-    `${endpoint}/sessions`,
+    `${endpoint}/sessions/:profileId`,
     {
       schema: {
         tags: ["mcp-gateway"],
@@ -1161,20 +826,20 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const agentId = extractAgentIdFromAuth(
-        request.headers.authorization as string | undefined,
-      );
+      const { profileId } = extractProfileIdAndTokenFromRequest(request) ?? {};
 
       fastify.log.info(
         {
-          agentId,
+          profileId,
           totalActiveSessions: activeSessions.size,
         },
         "DELETE /v1/mcp/sessions - Request received",
       );
 
-      if (!agentId) {
-        fastify.log.warn("DELETE /v1/mcp/sessions - Unauthorized request");
+      if (!profileId) {
+        fastify.log.warn(
+          "DELETE /v1/mcp/sessions/:profileId - Unauthorized request",
+        );
         reply.status(401);
         return {
           error: "Unauthorized",
@@ -1189,50 +854,50 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Find all sessions for this agent
       for (const [sessionId, sessionData] of activeSessions.entries()) {
         allAgentIds.push(sessionData.agentId);
-        if (sessionData.agentId === agentId) {
+        if (sessionData.agentId === profileId) {
           sessionsToClear.push(sessionId);
         }
       }
 
       fastify.log.info(
         {
-          agentId,
+          profileId,
           allAgentIds,
           sessionsToClear,
           totalSessions: activeSessions.size,
           matchingSessionsCount: sessionsToClear.length,
         },
-        "DELETE /v1/mcp/sessions - Found sessions to clear",
+        "DELETE /v1/mcp/sessions/:profileId - Found sessions to clear",
       );
 
       // Delete all matching sessions
       for (const sessionId of sessionsToClear) {
         fastify.log.info(
-          { agentId, sessionId },
-          "DELETE /v1/mcp/sessions - Clearing session",
+          { profileId, sessionId },
+          "DELETE /v1/mcp/sessions/:profileId - Clearing session",
         );
         activeSessions.delete(sessionId);
       }
 
       fastify.log.info(
         {
-          agentId,
+          profileId,
           clearedCount: sessionsToClear.length,
           remainingSessions: activeSessions.size,
         },
-        "DELETE /v1/mcp/sessions - All sessions cleared, now clearing cached MCP client",
+        "DELETE /v1/mcp/sessions/:profileId - All sessions cleared, now clearing cached MCP client",
       );
 
       // Also clear the cached MCP client so it will reconnect with a new session
-      clearChatMcpClient(agentId);
+      clearChatMcpClient(profileId);
 
       fastify.log.info(
         {
-          agentId,
+          profileId,
           clearedCount: sessionsToClear.length,
           remainingSessions: activeSessions.size,
         },
-        "DELETE /v1/mcp/sessions - ✅ Sessions and client cache cleared successfully",
+        "DELETE /v1/mcp/sessions/:profileId - ✅ Sessions and client cache cleared successfully",
       );
 
       reply.type("application/json");
@@ -1253,5 +918,3 @@ setInterval(
   },
   5 * 60 * 1000,
 );
-
-export default mcpGatewayRoutes;

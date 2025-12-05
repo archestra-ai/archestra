@@ -1,17 +1,21 @@
 import { describe, expect, test } from "@/test";
-import ProfileTokenModel, { isProfileToken } from "./profile-token";
+import ProfileTokenModel, {
+  isArchestraPrefixedProfileToken,
+} from "./profile-token";
 
 describe("ProfileTokenModel", () => {
-  describe("isProfileToken", () => {
+  describe("isArchestraPrefixedProfileToken", () => {
     test("should return true for valid archestra_ prefixed tokens", async () => {
-      expect(isProfileToken("archestra_abc123")).toBe(true);
-      expect(isProfileToken("archestra_a1b2c3d4e5f6g7h8i9j0")).toBe(true);
+      expect(isArchestraPrefixedProfileToken("archestra_abc123")).toBe(true);
+      expect(
+        isArchestraPrefixedProfileToken("archestra_a1b2c3d4e5f6g7h8i9j0"),
+      ).toBe(true);
     });
 
     test("should return false for non-archestra tokens", async () => {
-      expect(isProfileToken("other_token")).toBe(false);
-      expect(isProfileToken("uuid-like-token")).toBe(false);
-      expect(isProfileToken("")).toBe(false);
+      expect(isArchestraPrefixedProfileToken("other_token")).toBe(false);
+      expect(isArchestraPrefixedProfileToken("uuid-like-token")).toBe(false);
+      expect(isArchestraPrefixedProfileToken("")).toBe(false);
     });
   });
 

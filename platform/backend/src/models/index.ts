@@ -21,7 +21,10 @@ export { default as MessageModel } from "./message";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
-export { default as ProfileTokenModel, isProfileToken } from "./profile-token";
+export {
+  default as ProfileTokenModel,
+  isArchestraPrefixedProfileToken,
+} from "./profile-token";
 export { default as PromptModel } from "./prompt";
 export { default as SecretModel } from "./secret";
 export { default as SessionModel } from "./session";

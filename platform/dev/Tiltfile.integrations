@@ -67,9 +67,10 @@ k8s_resource(
   auto_init=False
 )
 
-# Configure Vault K8s auth (run after vault is started)
+# Configure Vault K8s auth with KV v1 (run after vault is started)
+# Use this for: ARCHESTRA_HASHICORP_VAULT_KV_VERSION=1, ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=kv/archestra
 local_resource(
-  'vault-k8s-auth-setup',
+  'vault-k8s-auth-v1',
   cmd='''
     echo "⏳ Waiting for Vault to be ready..."
     for i in {1..30}; do
@@ -81,9 +82,70 @@ local_resource(
       sleep 2
     done
 
-    echo "🔧 Configuring Vault K8s auth..."
+    echo "🔧 Configuring Vault K8s auth with KV v1..."
 
-    # Enable KV secrets engine at secret/ path
+    # Enable KV v1 secrets engine at kv/ path
+    kubectl exec -n archestra-dev vault-0 -- vault secrets enable -path=kv -version=1 kv 2>/dev/null || true
+
+    # Enable Kubernetes auth method
+    kubectl exec -n archestra-dev vault-0 -- vault auth enable kubernetes 2>/dev/null || true
+
+    # Configure K8s auth to use the in-cluster API
+    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
+
+    # Create a policy for archestra secrets (KV v1 paths - no /data/ prefix)
+    # Note: LIST on kv/archestra requires permission on the path itself, not just kv/archestra/*
+    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets-v1 - <<EOF
+path "kv/archestra" {
+  capabilities = ["list"]
+}
+path "kv/archestra/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+EOF'
+
+    # Create a role bound to the archestra-platform service account
+    kubectl exec -n archestra-dev vault-0 -- vault write auth/kubernetes/role/archestra \
+      bound_service_account_names="archestra-platform" \
+      bound_service_account_namespaces="archestra-dev" \
+      policies="archestra-secrets-v1" \
+      ttl="24h"
+
+    echo ""
+    echo "✅ Vault K8s auth configured with KV v1!"
+    echo ""
+    echo "Configuration:"
+    echo "  ARCHESTRA_HASHICORP_VAULT_KV_VERSION=1"
+    echo "  ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=kv/archestra"
+    echo ""
+    echo "Created:"
+    echo "  - KV v1 engine at: kv/"
+    echo "  - Vault role: archestra (bound to archestra-platform SA)"
+    echo "  - Vault policy: archestra-secrets-v1 (path: kv/archestra/*)"
+  ''',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+# Configure Vault K8s auth with KV v2 (run after vault is started)
+# Use this for: ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2, ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=secret/data/archestra
+local_resource(
+  'vault-k8s-auth-v2',
+  cmd='''
+    echo "⏳ Waiting for Vault to be ready..."
+    for i in {1..30}; do
+      if kubectl exec -n archestra-dev vault-0 -- vault status 2>/dev/null | grep -q "Initialized.*true"; then
+        echo "✅ Vault is ready"
+        break
+      fi
+      echo "Waiting... (attempt $i/30)"
+      sleep 2
+    done
+
+    echo "🔧 Configuring Vault K8s auth with KV v2..."
+
+    # Enable KV v2 secrets engine at secret/ path
     kubectl exec -n archestra-dev vault-0 -- vault secrets enable -path=secret kv-v2 2>/dev/null || true
 
     # Enable Kubernetes auth method
@@ -92,37 +154,34 @@ local_resource(
     # Configure K8s auth to use the in-cluster API
     kubectl exec -n archestra-dev vault-0 -- sh -c 'vault write auth/kubernetes/config kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"'
 
-    # Create a policy for archestra secrets
-    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets - <<EOF
+    # Create a policy for archestra secrets (KV v2 paths - with /data/ and /metadata/ prefixes)
+    kubectl exec -n archestra-dev vault-0 -- sh -c 'vault policy write archestra-secrets-v2 - <<EOF
 path "secret/data/archestra/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 path "secret/metadata/archestra/*" {
-  capabilities = ["delete", "list"]
+  capabilities = ["read", "delete", "list"]
 }
 EOF'
 
-    # Create a role bound to the archestra-platform service account (created by Helm chart)
+    # Create a role bound to the archestra-platform service account
     kubectl exec -n archestra-dev vault-0 -- vault write auth/kubernetes/role/archestra \
       bound_service_account_names="archestra-platform" \
       bound_service_account_namespaces="archestra-dev" \
-      policies="archestra-secrets" \
+      policies="archestra-secrets-v2" \
       ttl="24h"
 
     echo ""
-    echo "✅ Vault K8s auth configured!"
+    echo "✅ Vault K8s auth configured with KV v2!"
+    echo ""
+    echo "Configuration:"
+    echo "  ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2"
+    echo "  ARCHESTRA_HASHICORP_VAULT_SECRET_PATH=secret/data/archestra"
     echo ""
     echo "Created:"
+    echo "  - KV v2 engine at: secret/"
     echo "  - Vault role: archestra (bound to archestra-platform SA)"
-    echo "  - Vault policy: archestra-secrets"
-    echo ""
-    echo "Token auth (local dev):"
-    echo "  ARCHESTRA_HASHICORP_VAULT_ADDR=http://localhost:8200"
-    echo "  ARCHESTRA_HASHICORP_VAULT_TOKEN=dev-root-token"
-    echo ""
-    echo "K8s auth (for archestra-k8s deployment):"
-    echo "  Uses ServiceAccount: archestra-platform"
-    echo "  Vault addr: http://vault.archestra-dev.svc:8200"
+    echo "  - Vault policy: archestra-secrets-v2 (paths: secret/data/archestra/*, secret/metadata/archestra/*)"
   ''',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
@@ -260,6 +319,10 @@ spec:
               value: "K8S"
             - name: ARCHESTRA_HASHICORP_VAULT_K8S_ROLE
               value: "archestra"
+            - name: ARCHESTRA_HASHICORP_VAULT_KV_VERSION
+              value: "1"
+            - name: ARCHESTRA_HASHICORP_VAULT_SECRET_PATH
+              value: "kv/archestra"
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE

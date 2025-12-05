@@ -1,16 +1,9 @@
 "use client";
 
 import { RefreshCw, Server } from "lucide-react";
-import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useCheckSecretsConnectivity,
   useSecretsType,
@@ -19,22 +12,9 @@ import {
 export default function SecretsSettingsPage() {
   const { data: secretsType, isLoading } = useSecretsType();
   const checkConnectivityMutation = useCheckSecretsConnectivity();
-  const [connectivityResult, setConnectivityResult] = useState<{
-    connected: boolean;
-    secretCount: number;
-  } | null>(null);
 
   const handleCheckConnectivity = async () => {
-    setConnectivityResult(null);
-    try {
-      const result = await checkConnectivityMutation.mutateAsync();
-      setConnectivityResult({
-        connected: result.connected,
-        secretCount: result.secretCount,
-      });
-    } catch {
-      // Error is handled by the mutation
-    }
+    await checkConnectivityMutation.mutateAsync();
   };
 
   if (isLoading) {
@@ -60,6 +40,14 @@ export default function SecretsSettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="text-sm font-mono bg-muted p-3 rounded space-y-1">
+            {Object.entries(secretsType.meta).map(([key, value]) => (
+              <p key={key}>
+                <span className="text-muted-foreground">{key}:</span> {value}
+              </p>
+            ))}
+          </div>
+
           <div className="flex items-center gap-4">
             <Button
               onClick={handleCheckConnectivity}
@@ -82,14 +70,12 @@ export default function SecretsSettingsPage() {
             </Alert>
           )}
 
-          {connectivityResult && (
+          {checkConnectivityMutation.isSuccess && (
             <Alert>
-              <Server className="h-4 w-4" />
               <AlertTitle>Connection Successful</AlertTitle>
               <AlertDescription>
-                Connected to Vault. Found {connectivityResult.secretCount}{" "}
-                secret{connectivityResult.secretCount === 1 ? "" : "s"} in the
-                configured path.
+                Found {checkConnectivityMutation.data.secretCount} secret
+                {checkConnectivityMutation.data.secretCount === 1 ? "" : "s"}.
               </AlertDescription>
             </Alert>
           )}

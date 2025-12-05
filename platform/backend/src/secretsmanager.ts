@@ -10,11 +10,7 @@ import { ApiError } from "@/types/api";
  * Result of checking connectivity to the secrets storage
  */
 export interface SecretsConnectivityResult {
-  /** The type of secrets manager being used */
-  type: SecretsManagerType;
-  /** Whether the connection was successful */
-  connected: true;
-  /** Number of secrets stored (only available for Vault) */
+  /** Number of secrets stored */
   secretCount: number;
 }
 
@@ -73,6 +69,15 @@ export interface SecretManager {
    * @throws ApiError if connectivity check fails or is not supported
    */
   checkConnectivity(): Promise<SecretsConnectivityResult>;
+
+  /**
+   * Get user-visible debug info about the secrets manager configuration
+   * @returns Debug info object with type and meta dictionary for display
+   */
+  getUserVisibleDebugInfo(): {
+    type: SecretsManagerType;
+    meta: Record<string, string>;
+  };
 }
 
 export class SecretsManagerConfigurationError extends Error {
@@ -188,37 +193,48 @@ export class DbSecretsManager implements SecretManager {
       "Connectivity check not implemented for database storage",
     );
   }
+
+  getUserVisibleDebugInfo() {
+    return {
+      type: this.type,
+      meta: {},
+    };
+  }
 }
 
 export type VaultAuthMethod = "token" | "kubernetes" | "aws";
 
+export type VaultKvVersion = "1" | "2";
+
 export interface VaultConfig {
   /** Vault server address (default: http://localhost:8200) */
   address: string;
+  /** Path prefix for secrets in Vault KV engine (defaults based on kvVersion: "secret/data/archestra" for v2, "secret/archestra" for v1) */
+  secretPath: string;
+  /** Path prefix for secret metadata in Vault KV v2 engine (only used for v2, defaults to secretPath with /data/ replaced by /metadata/) */
+  secretMetadataPath?: string;
   /** Authentication method to use */
   authMethod: VaultAuthMethod;
+  /** KV secrets engine version (default: "2") */
+  kvVersion: VaultKvVersion;
   /** Vault token for authentication (required for token auth) */
   token?: string;
   /** Kubernetes auth role (required for kubernetes auth) */
   k8sRole?: string;
-  /** Path to service account token file (defaults to /var/run/secrets/kubernetes.io/serviceaccount/token) */
-  k8sTokenPath?: string;
-  /** Kubernetes auth mount point in Vault (defaults to "kubernetes") */
-  k8sMountPoint?: string;
+  /** Path to service account token file (default: /var/run/secrets/kubernetes.io/serviceaccount/token) */
+  k8sTokenPath: string;
+  /** Kubernetes auth mount point in Vault (default: "kubernetes") */
+  k8sMountPoint: string;
   /** AWS IAM auth role (required for aws auth) */
   awsRole?: string;
-  /** AWS auth mount point in Vault (defaults to "aws") */
-  awsMountPoint?: string;
-  /** AWS region for STS signing (defaults to us-east-1) */
-  awsRegion?: string;
-  /** AWS STS endpoint URL (defaults to https://sts.amazonaws.com to match Vault's default) */
-  awsStsEndpoint?: string;
+  /** AWS auth mount point in Vault (default: "aws") */
+  awsMountPoint: string;
+  /** AWS region for STS signing (default: "us-east-1") */
+  awsRegion: string;
+  /** AWS STS endpoint URL (default: "https://sts.amazonaws.com" to match Vault's default) */
+  awsStsEndpoint: string;
   /** Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security) */
   awsIamServerIdHeader?: string;
-  /** Path prefix for secrets in Vault KV v2 engine (defaults to "secret/data/archestra") */
-  secretPath: string;
-  /** Path prefix for secret metadata in Vault KV v2 engine (defaults to secretPath with /data/ replaced by /metadata/) */
-  secretMetadataPath?: string;
 }
 
 /**
@@ -240,21 +256,18 @@ export class VaultSecretManager implements SecretManager {
       endpoint: normalizedEndpoint,
     });
 
-    // Validate config but defer authentication for k8s/aws
     if (config.authMethod === "kubernetes") {
       if (!config.k8sRole) {
         throw new Error(
           "VaultSecretManager: k8sRole is required for Kubernetes authentication",
         );
       }
-      // Authentication deferred to ensureInitialized()
     } else if (config.authMethod === "aws") {
       if (!config.awsRole) {
         throw new Error(
           "VaultSecretManager: awsRole is required for AWS IAM authentication",
         );
       }
-      // Authentication deferred to ensureInitialized()
     } else if (config.authMethod === "token") {
       if (!config.token) {
         throw new Error(
@@ -286,7 +299,7 @@ export class VaultSecretManager implements SecretManager {
 
       this.client.token = result.auth.client_token;
       logger.info(
-        { role: this.config.k8sRole },
+        { role: this.config.k8sRole, mountPoint: this.config.k8sMountPoint },
         "VaultSecretManager: authenticated via Kubernetes auth",
       );
     } catch (error) {
@@ -303,11 +316,9 @@ export class VaultSecretManager implements SecretManager {
    * Uses the default AWS credential provider chain (env vars, shared credentials, IAM role, etc.)
    */
   private async loginWithAws(): Promise<void> {
-    const region = this.config.awsRegion ?? DEFAULT_AWS_REGION;
-    const mountPoint = this.config.awsMountPoint ?? DEFAULT_AWS_MOUNT_POINT;
-    // Use the STS endpoint from config, or construct based on region
-    // Default to global endpoint (sts.amazonaws.com) which matches Vault's default sts_endpoint
-    const stsEndpoint = this.config.awsStsEndpoint ?? DEFAULT_AWS_STS_ENDPOINT;
+    const region = this.config.awsRegion;
+    const mountPoint = this.config.awsMountPoint;
+    const stsEndpoint = this.config.awsStsEndpoint;
 
     try {
       // Get credentials from the default provider chain
@@ -415,7 +426,7 @@ export class VaultSecretManager implements SecretManager {
   /**
    * Ensure authentication is complete before any operation.
    * For k8s/aws auth, this triggers the login on first call (lazy initialization).
-   * Each call retries authentication if not yet initialized, allowing recovery if Vault becomes available.
+   * Each call retries authentication if not yet initialized.
    */
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) {
@@ -431,10 +442,7 @@ export class VaultSecretManager implements SecretManager {
       this.initialized = true;
     } catch (error) {
       logger.error({ error }, "VaultSecretManager: initialization failed");
-      throw new ApiError(
-        500,
-        "Failed to connect to secrets vault. Please try again later or contact your administrator.",
-      );
+      throw new ApiError(500, extractVaultErrorMessage(error));
     }
   }
 
@@ -468,11 +476,56 @@ export class VaultSecretManager implements SecretManager {
   }
 
   private getVaultMetadataPath(name: string, id: string): string {
-    // Use configured metadata path, or fallback to replacing /data/ with /metadata/
+    // KV v1 doesn't have separate metadata path - use the same path as read/write
+    if (this.config.kvVersion === "1") {
+      return this.getVaultPath(name, id);
+    }
+
+    // KV v2: Use configured metadata path, or fallback to replacing /data/ with /metadata/
     const metadataPath =
       this.config.secretMetadataPath ??
       this.config.secretPath.replace("/data/", "/metadata/");
     return `${metadataPath}/${name}-${id}`;
+  }
+
+  /**
+   * Build the write payload based on KV version
+   * v2 requires { data: { value: ... } }, v1 requires { value: ... }
+   */
+  private buildWritePayload(value: string): Record<string, unknown> {
+    if (this.config.kvVersion === "1") {
+      return { value };
+    }
+    return { data: { value } };
+  }
+
+  /**
+   * Extract the secret value from Vault read response based on KV version
+   * v2 response: vaultResponse.data.data.value
+   * v1 response: vaultResponse.data.value
+   */
+  private extractSecretValue(vaultResponse: {
+    data: Record<string, unknown>;
+  }): string {
+    if (this.config.kvVersion === "1") {
+      return vaultResponse.data.value as string;
+    }
+    return (vaultResponse.data.data as Record<string, unknown>).value as string;
+  }
+
+  /**
+   * Get the base path for listing secrets based on KV version
+   * v2: Uses metadata path
+   * v1: Uses the same secret path
+   */
+  private getListBasePath(): string {
+    if (this.config.kvVersion === "1") {
+      return this.config.secretPath;
+    }
+    return (
+      this.config.secretMetadataPath ??
+      this.config.secretPath.replace("/data/", "/metadata/")
+    );
   }
 
   async createSecret(
@@ -496,11 +549,12 @@ export class VaultSecretManager implements SecretManager {
 
     const vaultPath = this.getVaultPath(dbRecord.name, dbRecord.id);
     try {
-      await this.client.write(vaultPath, {
-        data: { value: JSON.stringify(secretValue) },
-      });
+      await this.client.write(
+        vaultPath,
+        this.buildWritePayload(JSON.stringify(secretValue)),
+      );
       logger.info(
-        { vaultPath },
+        { vaultPath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.createSecret: secret created",
       );
     } catch (error) {
@@ -527,16 +581,17 @@ export class VaultSecretManager implements SecretManager {
     }
 
     if (dbRecord.isVault) {
-      const metadataPath = this.getVaultMetadataPath(dbRecord.name, secid);
+      const deletePath = this.getVaultMetadataPath(dbRecord.name, secid);
       try {
-        // Delete metadata to permanently remove all versions of the secret
-        await this.client.delete(metadataPath);
+        // For v2: Delete metadata to permanently remove all versions of the secret
+        // For v1: Delete the secret directly (no versioning)
+        await this.client.delete(deletePath);
         logger.info(
-          { metadataPath },
-          "VaultSecretManager.deleteSecret: secret permanently deleted",
+          { deletePath, kvVersion: this.config.kvVersion },
+          `VaultSecretManager.deleteSecret: secret ${this.config.kvVersion === "1" ? "deleted" : "permanently deleted"}`,
         );
       } catch (error) {
-        this.handleVaultError(error, "deleteSecret", { metadataPath });
+        this.handleVaultError(error, "deleteSecret", { deletePath });
       }
     }
 
@@ -567,10 +622,10 @@ export class VaultSecretManager implements SecretManager {
     try {
       const vaultResponse = await this.client.read(vaultPath);
       const secretValue = JSON.parse(
-        vaultResponse.data.data.value,
+        this.extractSecretValue(vaultResponse),
       ) as SecretValue;
       logger.info(
-        { vaultPath },
+        { vaultPath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.getSecret: secret retrieved",
       );
 
@@ -604,11 +659,12 @@ export class VaultSecretManager implements SecretManager {
 
     const vaultPath = this.getVaultPath(dbRecord.name, secid);
     try {
-      await this.client.write(vaultPath, {
-        data: { value: JSON.stringify(secretValue) },
-      });
+      await this.client.write(
+        vaultPath,
+        this.buildWritePayload(JSON.stringify(secretValue)),
+      );
       logger.info(
-        { vaultPath },
+        { vaultPath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.updateSecret: secret updated",
       );
     } catch (error) {
@@ -629,42 +685,69 @@ export class VaultSecretManager implements SecretManager {
   async checkConnectivity(): Promise<SecretsConnectivityResult> {
     await this.ensureInitialized();
 
-    // List secrets at metadata path to get count
-    const metadataBasePath =
-      this.config.secretMetadataPath ??
-      this.config.secretPath.replace("/data/", "/metadata/");
+    const listBasePath = this.getListBasePath();
 
     try {
-      const result = await this.client.list(metadataBasePath);
+      const result = await this.client.list(listBasePath);
       const keys = (result?.data?.keys as string[] | undefined) ?? [];
-      return {
-        type: SecretsManagerType.Vault,
-        connected: true,
-        secretCount: keys.length,
-      };
+      return { secretCount: keys.length };
     } catch (error) {
       // Vault returns 404 when the path doesn't exist (no secrets created yet)
       // This is expected and means we're connected with 0 secrets
       const vaultError = error as { response?: { statusCode?: number } };
       if (vaultError.response?.statusCode === 404) {
         logger.info(
-          { metadataBasePath },
+          { listBasePath, kvVersion: this.config.kvVersion },
           "VaultSecretManager.checkConnectivity: path not found, no secrets exist yet",
         );
-        return {
-          type: SecretsManagerType.Vault,
-          connected: true,
-          secretCount: 0,
-        };
+        return { secretCount: 0 };
       }
 
       logger.error(
-        { error, metadataBasePath },
+        { error, listBasePath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.checkConnectivity: failed to list secrets",
       );
-      throw new ApiError(500, "Failed to connect to Vault or list secrets");
+      throw new ApiError(500, extractVaultErrorMessage(error));
     }
   }
+
+  getUserVisibleDebugInfo() {
+    const meta: Record<string, string> = {
+      "KV Version": this.config.kvVersion,
+      "Secret Path": this.config.secretPath,
+      "Kubernetes Token Path": this.config.k8sTokenPath,
+      "Kubernetes Mount Point": this.config.k8sMountPoint,
+    };
+
+    if (this.config.kvVersion === "2") {
+      meta["Metadata Path"] = this.getListBasePath();
+    }
+
+    return {
+      type: this.type,
+      meta,
+    };
+  }
+}
+
+/**
+ * Extract error message from Vault response
+ * Returns only the Vault response details (status code and errors array)
+ */
+function extractVaultErrorMessage(error: unknown): string {
+  const vaultErr = error as {
+    response?: { statusCode?: number; body?: { errors?: string[] } };
+  };
+  const vaultErrors = vaultErr.response?.body?.errors;
+  const statusCode = vaultErr.response?.statusCode;
+
+  if (vaultErrors?.length) {
+    return `${statusCode}: ${vaultErrors.join(", ")}`;
+  }
+  if (statusCode) {
+    return `${statusCode}`;
+  }
+  return "Connection failed";
 }
 
 /**
@@ -709,7 +792,13 @@ const DEFAULT_AWS_REGION = "us-east-1";
 const DEFAULT_AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
 
 /** Default path prefix for secrets in Vault KV v2 engine */
-const DEFAULT_SECRET_PATH = "secret/data/archestra";
+const DEFAULT_SECRET_PATH_V2 = "secret/data/archestra";
+
+/** Default path prefix for secrets in Vault KV v1 engine */
+const DEFAULT_SECRET_PATH_V1 = "secret/archestra";
+
+/** Default KV version */
+const DEFAULT_KV_VERSION: VaultKvVersion = "2";
 
 /**
  * Get Vault configuration from environment variables
@@ -736,13 +825,32 @@ const DEFAULT_SECRET_PATH = "secret/data/archestra";
  * - ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID: Value for X-Vault-AWS-IAM-Server-ID header (optional, for additional security)
  *
  * Common (all auth methods):
- * - ARCHESTRA_HASHICORP_VAULT_SECRET_PATH: Path prefix for secrets in Vault KV v2 (optional, defaults to "secret/data/archestra")
+ * - ARCHESTRA_HASHICORP_VAULT_KV_VERSION: KV secrets engine version, "1" or "2" (optional, defaults to "2")
+ * - ARCHESTRA_HASHICORP_VAULT_SECRET_PATH: Path prefix for secrets in Vault KV (optional, defaults based on KV version)
  *
  * @returns VaultConfig if ARCHESTRA_HASHICORP_VAULT_ADDR is set and configuration is valid, null if VAULT_ADDR is not set
  * @throws SecretsManagerConfigurationError if VAULT_ADDR is set but configuration is incomplete or invalid
  */
 export function getVaultConfigFromEnv(): VaultConfig {
   const errors: string[] = [];
+
+  // Parse KV version first (needed for default secret path)
+  const kvVersionEnv = process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION;
+  let kvVersion: VaultKvVersion = DEFAULT_KV_VERSION;
+
+  if (kvVersionEnv) {
+    if (kvVersionEnv === "1" || kvVersionEnv === "2") {
+      kvVersion = kvVersionEnv;
+    } else {
+      errors.push(
+        `Invalid ARCHESTRA_HASHICORP_VAULT_KV_VERSION="${kvVersionEnv}". Expected "1" or "2".`,
+      );
+    }
+  }
+
+  // Get default secret path based on KV version
+  const defaultSecretPath =
+    kvVersion === "1" ? DEFAULT_SECRET_PATH_V1 : DEFAULT_SECRET_PATH_V2;
 
   const authMethod =
     process.env.ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD?.toUpperCase() ?? "TOKEN";
@@ -762,12 +870,26 @@ export function getVaultConfigFromEnv(): VaultConfig {
     return {
       address: address as string,
       authMethod: "token",
+      kvVersion,
       token: token as string,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
-        DEFAULT_SECRET_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
+      k8sTokenPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
+        DEFAULT_K8S_TOKEN_PATH,
+      k8sMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
+        DEFAULT_K8S_MOUNT_POINT,
+      awsMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
+        DEFAULT_AWS_MOUNT_POINT,
+      awsRegion:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
+      awsStsEndpoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
+        DEFAULT_AWS_STS_ENDPOINT,
     };
   }
 
@@ -786,18 +908,26 @@ export function getVaultConfigFromEnv(): VaultConfig {
     return {
       address: address as string,
       authMethod: "kubernetes",
+      kvVersion,
       k8sRole: k8sRole as string,
       k8sTokenPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
         DEFAULT_K8S_TOKEN_PATH,
       k8sMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
         DEFAULT_K8S_MOUNT_POINT,
+      awsMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
+        DEFAULT_AWS_MOUNT_POINT,
+      awsRegion:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
+      awsStsEndpoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
+        DEFAULT_AWS_STS_ENDPOINT,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
-        DEFAULT_SECRET_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
     };
   }
 
@@ -816,22 +946,28 @@ export function getVaultConfigFromEnv(): VaultConfig {
     return {
       address: address as string,
       authMethod: "aws",
+      kvVersion,
       awsRole: awsRole as string,
+      k8sTokenPath:
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH ||
+        DEFAULT_K8S_TOKEN_PATH,
+      k8sMountPoint:
+        process.env.ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT ||
+        DEFAULT_K8S_MOUNT_POINT,
       awsMountPoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT ||
         DEFAULT_AWS_MOUNT_POINT,
       awsRegion:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION ?? DEFAULT_AWS_REGION,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_REGION || DEFAULT_AWS_REGION,
       awsStsEndpoint:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ??
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT ||
         DEFAULT_AWS_STS_ENDPOINT,
       awsIamServerIdHeader:
-        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID,
+        process.env.ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID || undefined,
       secretPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH ??
-        DEFAULT_SECRET_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_PATH || defaultSecretPath,
       secretMetadataPath:
-        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH,
+        process.env.ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH || undefined,
     };
   }
 

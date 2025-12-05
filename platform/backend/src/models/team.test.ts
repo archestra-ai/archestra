@@ -63,6 +63,144 @@ describe("TeamModel", () => {
     });
   });
 
+  describe("findByIds", () => {
+    test("should find multiple teams by IDs", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const _team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
+
+      const teams = await TeamModel.findByIds([team1.id, team2.id]);
+
+      expect(teams).toHaveLength(2);
+      expect(teams.map((t) => t.id).sort()).toEqual(
+        [team1.id, team2.id].sort(),
+      );
+    });
+
+    test("should return empty array for empty IDs array", async () => {
+      const teams = await TeamModel.findByIds([]);
+
+      expect(teams).toEqual([]);
+    });
+
+    test("should return empty array for non-existent IDs", async () => {
+      const teams = await TeamModel.findByIds([
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+      ]);
+
+      expect(teams).toEqual([]);
+    });
+
+    test("should return teams without members for performance", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Add a member to the team
+      const newUser = await makeUser({ email: "member@test.com" });
+      await TeamModel.addMember(team.id, newUser.id);
+
+      const teams = await TeamModel.findByIds([team.id]);
+
+      expect(teams).toHaveLength(1);
+      // Members should be empty array for performance
+      expect(teams[0].members).toEqual([]);
+    });
+  });
+
+  describe("getSsoSyncedMemberships", () => {
+    test("should return SSO synced memberships for a user in an organization", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+
+      // Add user with SSO sync to both teams
+      const ssoUser = await makeUser({ email: "sso@test.com" });
+      await TeamModel.addMember(team1.id, ssoUser.id, MEMBER_ROLE_NAME, true);
+      await TeamModel.addMember(team2.id, ssoUser.id, MEMBER_ROLE_NAME, true);
+
+      const memberships = await TeamModel.getSsoSyncedMemberships(
+        ssoUser.id,
+        org.id,
+      );
+
+      expect(memberships).toHaveLength(2);
+      expect(memberships.every((m) => m.teamMember.syncedFromSso)).toBe(true);
+    });
+
+    test("should not return manually added memberships", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      // Add user manually (not SSO synced)
+      const manualUser = await makeUser({ email: "manual@test.com" });
+      await TeamModel.addMember(
+        team.id,
+        manualUser.id,
+        MEMBER_ROLE_NAME,
+        false,
+      );
+
+      const memberships = await TeamModel.getSsoSyncedMemberships(
+        manualUser.id,
+        org.id,
+      );
+
+      expect(memberships).toHaveLength(0);
+    });
+
+    test("should only return memberships for the specified organization", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org1 = await makeOrganization({ name: "Org 1" });
+      const org2 = await makeOrganization({ name: "Org 2" });
+      const team1 = await makeTeam(org1.id, user.id, { name: "Team in Org 1" });
+      const team2 = await makeTeam(org2.id, user.id, { name: "Team in Org 2" });
+
+      const ssoUser = await makeUser({ email: "sso@test.com" });
+      await TeamModel.addMember(team1.id, ssoUser.id, MEMBER_ROLE_NAME, true);
+      await TeamModel.addMember(team2.id, ssoUser.id, MEMBER_ROLE_NAME, true);
+
+      const membershipsOrg1 = await TeamModel.getSsoSyncedMemberships(
+        ssoUser.id,
+        org1.id,
+      );
+      const membershipsOrg2 = await TeamModel.getSsoSyncedMemberships(
+        ssoUser.id,
+        org2.id,
+      );
+
+      expect(membershipsOrg1).toHaveLength(1);
+      expect(membershipsOrg1[0].team.id).toBe(team1.id);
+      expect(membershipsOrg2).toHaveLength(1);
+      expect(membershipsOrg2[0].team.id).toBe(team2.id);
+    });
+  });
+
   // ==========================================
   // External Group Sync Tests
   // ==========================================

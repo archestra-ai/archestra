@@ -3,10 +3,8 @@ import {
   MEMBER_ROLE_NAME,
   predefinedPermissionsMap,
 } from "@shared";
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { InsertOrganizationRole } from "@/types";
+import MemberModel from "./member";
 import UserModel from "./user";
 
 describe("User.getUserPermissions", () => {
@@ -26,61 +24,37 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual({});
   });
 
-  test("should return permissions for admin role", async () => {
+  test("should return permissions for admin role", async ({ makeMember }) => {
     // Add user as admin member
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: testOrgId,
-      role: ADMIN_ROLE_NAME,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+    await makeMember(testUserId, testOrgId, { role: ADMIN_ROLE_NAME });
 
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     expect(result).toEqual(predefinedPermissionsMap[ADMIN_ROLE_NAME]);
   });
 
-  test("should return permissions for member role", async () => {
+  test("should return permissions for member role", async ({ makeMember }) => {
     // Add user as member
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: testOrgId,
-      role: MEMBER_ROLE_NAME,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+    await makeMember(testUserId, testOrgId, { role: MEMBER_ROLE_NAME });
 
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     expect(result).toEqual(predefinedPermissionsMap[MEMBER_ROLE_NAME]);
   });
 
-  test("should return permissions for custom role", async () => {
-    // Create a custom role via direct DB insert
-    const customRole: InsertOrganizationRole = {
+  test("should return permissions for custom role", async ({
+    makeCustomRole,
+    makeMember,
+  }) => {
+    // Create a custom role
+    const createdRole = await makeCustomRole(testOrgId, {
       role: "custom_role",
       name: "Custom Role",
-      organizationId: testOrgId,
       permission: { profile: ["read", "create"] },
-    };
-    const [createdRole] = await db
-      .insert(schema.organizationRolesTable)
-      .values({
-        id: crypto.randomUUID(),
-        ...customRole,
-        permission: JSON.stringify(customRole.permission),
-      })
-      .returning();
+    });
 
     // Add user with custom role
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: testOrgId,
-      role: createdRole.role,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+    await makeMember(testUserId, testOrgId, { role: createdRole.role });
 
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
@@ -89,16 +63,12 @@ describe("User.getUserPermissions", () => {
     });
   });
 
-  test("should handle multiple member records and return first", async () => {
-    // This scenario is unlikely in real app but tests the limtest(1) behavior
+  test("should handle multiple member records and return first", async ({
+    makeMember,
+  }) => {
+    // This scenario is unlikely in real app but tests the limit(1) behavior
     // Add user as admin member
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: testOrgId,
-      role: ADMIN_ROLE_NAME,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+    await makeMember(testUserId, testOrgId, { role: ADMIN_ROLE_NAME });
 
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
@@ -117,52 +87,91 @@ describe("User.getUserPermissions", () => {
     expect(result).toEqual({});
   });
 
-  test("should return empty permissions for user in wrong organization", async () => {
-    const wrongOrgId = crypto.randomUUID();
-
-    // Create member in different organization
-    await db.insert(schema.organizationsTable).values({
-      id: wrongOrgId,
-      name: "Wrong Organization",
-      slug: "wrong-organization",
-      createdAt: new Date(),
-    });
-
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: wrongOrgId,
-      role: ADMIN_ROLE_NAME,
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+  test("should return empty permissions for user in wrong organization", async ({
+    makeOrganization,
+    makeMember,
+  }) => {
+    // Create member in a different organization
+    const wrongOrg = await makeOrganization({ name: "Wrong Organization" });
+    await makeMember(testUserId, wrongOrg.id, { role: ADMIN_ROLE_NAME });
 
     // Try to get permissions for original organization
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     expect(result).toEqual({});
-
-    // Cleanup
-    await db
-      .delete(schema.membersTable)
-      .where(eq(schema.membersTable.organizationId, wrongOrgId));
-    await db
-      .delete(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, wrongOrgId));
   });
 
-  test("should handle custom role that no longer exists", async () => {
+  test("should handle custom role that no longer exists", async ({
+    makeMember,
+  }) => {
     // Add user with custom role that doesn't exist
-    await db.insert(schema.membersTable).values({
-      userId: testUserId,
-      organizationId: testOrgId,
-      role: crypto.randomUUID(),
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-    });
+    await makeMember(testUserId, testOrgId, { role: crypto.randomUUID() });
 
     const result = await UserModel.getUserPermissions(testUserId, testOrgId);
 
     // Should return empty permissions when role doesn't exist
     expect(result).toEqual({});
+  });
+});
+
+describe("UserModel.findByEmail", () => {
+  test("should find a user by email", async ({ makeUser }) => {
+    const user = await makeUser({ email: "findme@test.com" });
+
+    const foundUser = await UserModel.findByEmail("findme@test.com");
+
+    expect(foundUser).toBeDefined();
+    expect(foundUser?.id).toBe(user.id);
+    expect(foundUser?.email).toBe("findme@test.com");
+  });
+
+  test("should return undefined for non-existent email", async () => {
+    const foundUser = await UserModel.findByEmail("nonexistent@test.com");
+
+    expect(foundUser).toBeUndefined();
+  });
+});
+
+describe("UserModel.delete", () => {
+  test("should delete a user", async ({ makeUser }) => {
+    const user = await makeUser({ email: "deleteme@test.com" });
+
+    // Delete user
+    const deleted = await UserModel.delete(user.id);
+
+    expect(deleted).toBe(true);
+
+    // Verify user is gone
+    const foundUser = await UserModel.findByEmail("deleteme@test.com");
+    expect(foundUser).toBeUndefined();
+  });
+
+  test("should delete a user after their membership is removed", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser({ email: "deleteme2@test.com" });
+    const org = await makeOrganization();
+
+    // Create membership
+    await MemberModel.create(user.id, org.id, MEMBER_ROLE_NAME);
+
+    // Must delete membership first due to foreign key constraint
+    await MemberModel.deleteByMemberOrUserId(user.id, org.id);
+
+    // Now delete user
+    const deleted = await UserModel.delete(user.id);
+
+    expect(deleted).toBe(true);
+
+    // Verify user is gone
+    const foundUser = await UserModel.findByEmail("deleteme2@test.com");
+    expect(foundUser).toBeUndefined();
+  });
+
+  test("should return false for non-existent user", async () => {
+    const deleted = await UserModel.delete(crypto.randomUUID());
+
+    expect(deleted).toBe(false);
   });
 });

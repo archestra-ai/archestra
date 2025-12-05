@@ -57,6 +57,20 @@ class AgentModel {
     // Create default token for MCP Gateway authentication
     await ProfileTokenModel.createDefaultToken(createdAgent.id);
 
+    // Create team tokens for each assigned team
+    if (teams && teams.length > 0) {
+      for (const teamId of teams) {
+        const team = await TeamModel.findById(teamId);
+        if (team) {
+          await ProfileTokenModel.createTeamToken(
+            createdAgent.id,
+            teamId,
+            team.name,
+          );
+        }
+      }
+    }
+
     return {
       ...createdAgent,
       tools: [],

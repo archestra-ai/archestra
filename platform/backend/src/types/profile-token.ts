@@ -27,16 +27,6 @@ export const UpdateProfileTokenSchema = createUpdateSchema(
   createdAt: true,
 });
 
-// Profile Token Team schemas
-export const SelectProfileTokenTeamSchema = createSelectSchema(
-  schema.profileTokenTeamsTable,
-);
-export const InsertProfileTokenTeamSchema = createInsertSchema(
-  schema.profileTokenTeamsTable,
-).omit({
-  createdAt: true,
-});
-
 // Token value schema stored in secret table
 export const ProfileTokenValueSchema = z.object({
   token: z.string(),
@@ -49,46 +39,29 @@ export const PROFILE_TOKEN_PREFIX = "archestra_";
 export type SelectProfileToken = z.infer<typeof SelectProfileTokenSchema>;
 export type InsertProfileToken = z.infer<typeof InsertProfileTokenSchema>;
 export type UpdateProfileToken = z.infer<typeof UpdateProfileTokenSchema>;
-export type SelectProfileTokenTeam = z.infer<
-  typeof SelectProfileTokenTeamSchema
->;
-export type InsertProfileTokenTeam = z.infer<
-  typeof InsertProfileTokenTeamSchema
->;
 export type ProfileTokenValue = z.infer<typeof ProfileTokenValueSchema>;
 
 // Response types with relations
-export interface ProfileTokenWithTeams extends SelectProfileToken {
-  teams: Array<{
+// Now uses one-to-one relationship: each token has one team (or null for org tokens)
+export interface ProfileTokenWithTeam extends SelectProfileToken {
+  team: {
     id: string;
     name: string;
-  }>;
+  } | null;
 }
 
-// API request/response schemas
-export const CreateProfileTokenRequestSchema = z.object({
-  name: z.string().min(1).max(256),
-  teamIds: z.array(z.string()).optional(),
-  isOrganizationToken: z.boolean().optional().default(false),
-});
-
-export const UpdateProfileTokenRequestSchema = z.object({
-  name: z.string().min(1).max(256).optional(),
-  teamIds: z.array(z.string()).optional(),
-  isOrganizationToken: z.boolean().optional(),
-});
-
+// API response schemas
 export const ProfileTokenResponseSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   tokenStart: z.string(),
   isOrganizationToken: z.boolean(),
-  teams: z.array(
-    z.object({
+  team: z
+    .object({
       id: z.string(),
       name: z.string(),
-    }),
-  ),
+    })
+    .nullable(),
   createdAt: z.date(),
   lastUsedAt: z.date().nullable(),
 });
@@ -99,12 +72,6 @@ export const ProfileTokenWithValueResponseSchema =
     value: z.string(),
   });
 
-export type CreateProfileTokenRequest = z.infer<
-  typeof CreateProfileTokenRequestSchema
->;
-export type UpdateProfileTokenRequest = z.infer<
-  typeof UpdateProfileTokenRequestSchema
->;
 export type ProfileTokenResponse = z.infer<typeof ProfileTokenResponseSchema>;
 export type ProfileTokenWithValueResponse = z.infer<
   typeof ProfileTokenWithValueResponseSchema

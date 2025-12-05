@@ -44,8 +44,7 @@ const profileTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Profile not found");
       }
 
-      const tokens =
-        await ProfileTokenModel.findByProfileIdWithTeams(profileId);
+      const tokens = await ProfileTokenModel.findByProfileIdWithTeam(profileId);
 
       return reply.send(
         tokens.map((token) => ({
@@ -53,7 +52,7 @@ const profileTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: token.name,
           tokenStart: token.tokenStart,
           isOrganizationToken: token.isOrganizationToken,
-          teams: token.teams,
+          team: token.team,
           createdAt: token.createdAt,
           lastUsedAt: token.lastUsedAt,
         })),
@@ -108,8 +107,8 @@ const profileTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Failed to rotate token");
       }
 
-      // Fetch updated token with teams
-      const token = await ProfileTokenModel.findByIdWithTeams(tokenId);
+      // Fetch updated token with team
+      const token = await ProfileTokenModel.findByIdWithTeam(tokenId);
       if (!token) {
         throw new ApiError(404, "Token not found");
       }
@@ -119,7 +118,7 @@ const profileTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: token.name,
         tokenStart: token.tokenStart,
         isOrganizationToken: token.isOrganizationToken,
-        teams: token.teams,
+        team: token.team,
         createdAt: token.createdAt,
         lastUsedAt: token.lastUsedAt,
         value: result.value,

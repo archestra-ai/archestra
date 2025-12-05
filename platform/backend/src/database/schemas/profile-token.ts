@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   pgTable,
+  text,
   timestamp,
   unique,
   uuid,
@@ -9,10 +10,11 @@ import {
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import secretsTable from "./secret";
+import { team } from "./team";
 
 /**
  * ProfileToken table - stores authentication tokens for MCP Gateway access
- * Each token is tied to a profile and can be scoped to specific teams
+ * Each token is tied to a profile and can be scoped to a specific team
  * Token values are stored via secretsManager for Vault integration
  */
 const profileTokenTable = pgTable(
@@ -33,6 +35,11 @@ const profileTokenTable = pgTable(
     isOrganizationToken: boolean("is_organization_token")
       .notNull()
       .default(false),
+    /**
+     * Team ID for team-scoped tokens. NULL for organization-wide tokens.
+     * One-to-one relationship: each token is either org-wide or scoped to exactly one team.
+     */
+    teamId: text("team_id").references(() => team.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
   },
@@ -40,6 +47,7 @@ const profileTokenTable = pgTable(
     unique().on(table.profileId, table.name),
     index("idx_profile_token_profile_id").on(table.profileId),
     index("idx_profile_token_secret_id").on(table.secretId),
+    index("idx_profile_token_team_id").on(table.teamId),
   ],
 );
 

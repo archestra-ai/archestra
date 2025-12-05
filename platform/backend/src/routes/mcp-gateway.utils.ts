@@ -34,7 +34,7 @@ import { type CommonToolCall, UuidIdSchema } from "@/types";
 interface TokenAuthResult {
   profileId: string;
   tokenId: string;
-  tokenTeamIds: string[];
+  tokenTeamId: string | null;
   isOrganizationToken: boolean;
 }
 
@@ -53,7 +53,7 @@ export interface SessionData {
   // Token auth info (only present for archestra_ token auth)
   tokenAuth?: {
     tokenId: string;
-    tokenTeamIds: string[];
+    tokenTeamId: string | null;
     isOrganizationToken: boolean;
   };
 }
@@ -353,13 +353,10 @@ export async function validateProfileToken(
     return null;
   }
 
-  // Get team IDs for this token
-  const tokenTeamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-
   return {
     profileId,
     tokenId: token.id,
-    tokenTeamIds,
+    tokenTeamId: token.teamId,
     isOrganizationToken: token.isOrganizationToken,
   };
 }

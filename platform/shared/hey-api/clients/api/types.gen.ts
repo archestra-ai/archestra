@@ -11135,7 +11135,7 @@ export type GetV1McpByProfileIdResponses = {
         tokenAuth?: {
             tokenId: string;
             isOrganizationToken: boolean;
-            teamCount: number;
+            hasTeam: boolean;
         };
     };
 };
@@ -12693,10 +12693,10 @@ export type GetProfileTokensResponses = {
         name: string;
         tokenStart: string;
         isOrganizationToken: boolean;
-        teams: Array<{
+        team: {
             id: string;
             name: string;
-        }>;
+        } | null;
         createdAt: string;
         lastUsedAt: string | null;
     }>;
@@ -12782,10 +12782,10 @@ export type RotateProfileTokenResponses = {
         name: string;
         tokenStart: string;
         isOrganizationToken: boolean;
-        teams: Array<{
+        team: {
             id: string;
             name: string;
-        }>;
+        } | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;

@@ -52,7 +52,7 @@ describe("ProfileTokenModel", () => {
       expect(token.isOrganizationToken).toBe(true);
     });
 
-    test("should create token with team associations", async ({
+    test("should create token with team association", async ({
       makeAgent,
       makeUser,
       makeOrganization,
@@ -61,22 +61,16 @@ describe("ProfileTokenModel", () => {
       const agent = await makeAgent();
       const user = await makeUser();
       const org = await makeOrganization();
-      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
-      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      const team = await makeTeam(org.id, user.id, { name: "Team 1" });
 
-      const { token } = await ProfileTokenModel.create(
-        {
-          profileId: agent.id,
-          name: "Team Token",
-          isOrganizationToken: false,
-        },
-        [team1.id, team2.id],
-      );
+      const { token } = await ProfileTokenModel.create({
+        profileId: agent.id,
+        name: "Team Token",
+        isOrganizationToken: false,
+        teamId: team.id,
+      });
 
-      const teamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-      expect(teamIds).toHaveLength(2);
-      expect(teamIds).toContain(team1.id);
-      expect(teamIds).toContain(team2.id);
+      expect(token.teamId).toBe(team.id);
     });
   });
 
@@ -131,12 +125,12 @@ describe("ProfileTokenModel", () => {
       const tokens = await ProfileTokenModel.findByProfileId(agent.id);
       // makeAgent auto-creates a default token
       expect(tokens).toHaveLength(1);
-      expect(tokens[0].name).toBe("Default");
+      expect(tokens[0].name).toBe("Organization Token");
       expect(tokens[0].isOrganizationToken).toBe(true);
     });
   });
 
-  describe("findByIdWithTeams", () => {
+  describe("findByIdWithTeam", () => {
     test("should return token with team details", async ({
       makeAgent,
       makeUser,
@@ -148,23 +142,37 @@ describe("ProfileTokenModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id, { name: "Marketing" });
 
-      const { token } = await ProfileTokenModel.create(
-        {
-          profileId: agent.id,
-          name: "Team Token",
-          isOrganizationToken: false,
-        },
-        [team.id],
-      );
+      const { token } = await ProfileTokenModel.create({
+        profileId: agent.id,
+        name: "Team Token",
+        isOrganizationToken: false,
+        teamId: team.id,
+      });
 
-      const tokenWithTeams = await ProfileTokenModel.findByIdWithTeams(
-        token.id,
-      );
+      const tokenWithTeam = await ProfileTokenModel.findByIdWithTeam(token.id);
 
-      expect(tokenWithTeams).toBeDefined();
-      expect(tokenWithTeams?.teams).toHaveLength(1);
-      expect(tokenWithTeams?.teams[0].id).toBe(team.id);
-      expect(tokenWithTeams?.teams[0].name).toBe("Marketing");
+      expect(tokenWithTeam).toBeDefined();
+      expect(tokenWithTeam?.team).toBeDefined();
+      expect(tokenWithTeam?.team?.id).toBe(team.id);
+      expect(tokenWithTeam?.team?.name).toBe("Marketing");
+    });
+
+    test("should return null team for organization tokens", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent();
+
+      const { token } = await ProfileTokenModel.create({
+        profileId: agent.id,
+        name: "Org Token",
+        isOrganizationToken: true,
+        teamId: null,
+      });
+
+      const tokenWithTeam = await ProfileTokenModel.findByIdWithTeam(token.id);
+
+      expect(tokenWithTeam).toBeDefined();
+      expect(tokenWithTeam?.team).toBeNull();
     });
   });
 
@@ -201,7 +209,7 @@ describe("ProfileTokenModel", () => {
   });
 
   describe("delete", () => {
-    test("should delete token and its associations", async ({
+    test("should delete token", async ({
       makeAgent,
       makeUser,
       makeOrganization,
@@ -212,14 +220,12 @@ describe("ProfileTokenModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      const { token } = await ProfileTokenModel.create(
-        {
-          profileId: agent.id,
-          name: "To Delete",
-          isOrganizationToken: false,
-        },
-        [team.id],
-      );
+      const { token } = await ProfileTokenModel.create({
+        profileId: agent.id,
+        name: "To Delete",
+        isOrganizationToken: false,
+        teamId: team.id,
+      });
 
       const deleted = await ProfileTokenModel.delete(token.id);
       expect(deleted).toBe(true);
@@ -328,64 +334,6 @@ describe("ProfileTokenModel", () => {
     });
   });
 
-  describe("syncTeams", () => {
-    test("should replace all team associations", async ({
-      makeAgent,
-      makeUser,
-      makeOrganization,
-      makeTeam,
-    }) => {
-      const agent = await makeAgent();
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
-      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-      const team3 = await makeTeam(org.id, user.id, { name: "Team 3" });
-
-      const { token } = await ProfileTokenModel.create(
-        {
-          profileId: agent.id,
-          name: "Token",
-          isOrganizationToken: false,
-        },
-        [team1.id, team2.id],
-      );
-
-      // Replace with team3 only
-      await ProfileTokenModel.syncTeams(token.id, [team3.id]);
-
-      const teamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-      expect(teamIds).toHaveLength(1);
-      expect(teamIds).toContain(team3.id);
-    });
-
-    test("should allow clearing all teams", async ({
-      makeAgent,
-      makeUser,
-      makeOrganization,
-      makeTeam,
-    }) => {
-      const agent = await makeAgent();
-      const user = await makeUser();
-      const org = await makeOrganization();
-      const team = await makeTeam(org.id, user.id);
-
-      const { token } = await ProfileTokenModel.create(
-        {
-          profileId: agent.id,
-          name: "Token",
-          isOrganizationToken: false,
-        },
-        [team.id],
-      );
-
-      await ProfileTokenModel.syncTeams(token.id, []);
-
-      const teamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-      expect(teamIds).toHaveLength(0);
-    });
-  });
-
   describe("createDefaultToken", () => {
     test("should create organization token named Default", async ({
       makeAgent,
@@ -394,7 +342,7 @@ describe("ProfileTokenModel", () => {
 
       // makeAgent already creates a default token, so verify it exists
       const tokens = await ProfileTokenModel.findByProfileId(agent.id);
-      const defaultToken = tokens.find((t) => t.name === "Default");
+      const defaultToken = tokens.find((t) => t.name === "Organization Token");
 
       expect(defaultToken).toBeDefined();
       expect(defaultToken?.isOrganizationToken).toBe(true);
@@ -421,9 +369,7 @@ describe("ProfileTokenModel", () => {
 
       expect(token.name).toBe("Engineering Token");
       expect(token.isOrganizationToken).toBe(false);
-
-      const teamIds = await ProfileTokenModel.getTeamIdsForToken(token.id);
-      expect(teamIds).toContain(team.id);
+      expect(token.teamId).toBe(team.id);
     });
   });
 
@@ -448,7 +394,7 @@ describe("ProfileTokenModel", () => {
       // Verify it's the default token
       const tokens = await ProfileTokenModel.findByProfileId(agent.id);
       expect(tokens).toHaveLength(1);
-      expect(tokens[0].name).toBe("Default");
+      expect(tokens[0].name).toBe("Organization Token");
     });
   });
 

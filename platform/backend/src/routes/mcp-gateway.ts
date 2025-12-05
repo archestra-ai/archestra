@@ -497,7 +497,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .object({
                 tokenId: z.string(),
                 isOrganizationToken: z.boolean(),
-                teamCount: z.number(),
+                hasTeam: z.boolean(),
               })
               .optional(),
           }),
@@ -536,7 +536,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tokenAuth: {
             tokenId: tokenAuth.tokenId,
             isOrganizationToken: tokenAuth.isOrganizationToken,
-            teamCount: tokenAuth.tokenTeamIds.length,
+            hasTeam: tokenAuth.tokenTeamId !== null,
           },
         }),
       };
@@ -646,7 +646,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const tokenAuthContext: TokenAuthContext | undefined = tokenAuth
             ? {
                 tokenId: tokenAuth.tokenId,
-                tokenTeamIds: tokenAuth.tokenTeamIds,
+                tokenTeamId: tokenAuth.tokenTeamId,
                 isOrganizationToken: tokenAuth.isOrganizationToken,
               }
             : undefined;
@@ -699,7 +699,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...(tokenAuth && {
               tokenAuth: {
                 tokenId: tokenAuth.tokenId,
-                tokenTeamIds: tokenAuth.tokenTeamIds,
+                tokenTeamId: tokenAuth.tokenTeamId,
                 isOrganizationToken: tokenAuth.isOrganizationToken,
               },
             }),

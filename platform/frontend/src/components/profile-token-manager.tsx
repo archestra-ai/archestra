@@ -86,17 +86,11 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
                   <TableCell>
                     {token.isOrganizationToken ? (
                       <Badge variant="secondary">Whole Organization</Badge>
-                    ) : token.teams && token.teams.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {token.teams.map((team) => (
-                          <Badge key={team.id} variant="outline">
-                            {team.name}
-                          </Badge>
-                        ))}
-                      </div>
+                    ) : token.team ? (
+                      <Badge variant="outline">{token.team.name}</Badge>
                     ) : (
                       <span className="text-muted-foreground text-sm">
-                        No teams
+                        No team
                       </span>
                     )}
                   </TableCell>

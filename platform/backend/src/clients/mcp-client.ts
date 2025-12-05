@@ -42,7 +42,7 @@ type McpToolWithServerMetadata = {
  */
 export type TokenAuthContext = {
   tokenId: string;
-  tokenTeamIds: string[];
+  tokenTeamId: string | null;
   isOrganizationToken: boolean;
 };
 
@@ -296,18 +296,18 @@ class McpClient {
         // Organization token can use any available installation
         const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
         executionServer = allServers[0] || null;
-      } else {
+      } else if (tokenAuth.tokenTeamId) {
         // Team token - find server with matching team
         executionServer = await McpServerModel.findByCatalogIdWithMatchingTeams(
           tool.catalogId,
-          tokenAuth.tokenTeamIds,
+          [tokenAuth.tokenTeamId],
         );
       }
 
       if (!executionServer) {
         const teamInfo = tokenAuth.isOrganizationToken
           ? "organization-wide"
-          : `teams: ${tokenAuth.tokenTeamIds.join(", ")}`;
+          : `team: ${tokenAuth.tokenTeamId}`;
         return {
           error: await this.createErrorResult(
             toolCall,
@@ -379,19 +379,19 @@ class McpClient {
         // Organization token can use any available credential
         const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
         credentialServer = allServers.find((s) => s.secretId !== null) || null;
-      } else {
+      } else if (tokenAuth.tokenTeamId) {
         // Team token - find server with matching team
         credentialServer =
           await McpServerModel.findByCatalogIdWithMatchingTeams(
             tool.catalogId,
-            tokenAuth.tokenTeamIds,
+            [tokenAuth.tokenTeamId],
           );
       }
 
       if (!credentialServer?.secretId) {
         const teamInfo = tokenAuth.isOrganizationToken
           ? "organization-wide"
-          : `teams: ${tokenAuth.tokenTeamIds.join(", ")}`;
+          : `team: ${tokenAuth.tokenTeamId}`;
         return {
           error: await this.createErrorResult(
             toolCall,

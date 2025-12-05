@@ -4,7 +4,7 @@ import db, { schema } from "@/database";
 import { secretManager } from "@/secretsmanager";
 import type {
   InsertProfileToken,
-  ProfileTokenWithTeams,
+  ProfileTokenWithTeam,
   SelectProfileToken,
   UpdateProfileToken,
 } from "@/types";
@@ -49,7 +49,6 @@ class ProfileTokenModel {
    */
   static async create(
     input: Omit<InsertProfileToken, "secretId" | "tokenStart">,
-    teamIds?: string[],
   ): Promise<{ token: SelectProfileToken; value: string }> {
     // Generate a secure random token
     const tokenValue = generateToken();
@@ -61,7 +60,7 @@ class ProfileTokenModel {
       `profile-token-${input.profileId}-${input.name}`,
     );
 
-    // Create token record
+    // Create token record with teamId directly on the token
     const [token] = await db
       .insert(schema.profileTokensTable)
       .values({
@@ -70,16 +69,6 @@ class ProfileTokenModel {
         tokenStart,
       })
       .returning();
-
-    // Add team associations if provided
-    if (teamIds && teamIds.length > 0) {
-      await db.insert(schema.profileTokenTeamsTable).values(
-        teamIds.map((teamId) => ({
-          tokenId: token.id,
-          teamId,
-        })),
-      );
-    }
 
     return { token, value: tokenValue };
   }
@@ -100,14 +89,32 @@ class ProfileTokenModel {
   /**
    * Find a token by ID with team details
    */
-  static async findByIdWithTeams(
+  static async findByIdWithTeam(
     id: string,
-  ): Promise<ProfileTokenWithTeams | null> {
-    const token = await ProfileTokenModel.findById(id);
-    if (!token) return null;
+  ): Promise<ProfileTokenWithTeam | null> {
+    const result = await db
+      .select({
+        token: schema.profileTokensTable,
+        team: {
+          id: schema.teamsTable.id,
+          name: schema.teamsTable.name,
+        },
+      })
+      .from(schema.profileTokensTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.profileTokensTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.profileTokensTable.id, id))
+      .limit(1);
 
-    const teams = await ProfileTokenModel.getTeamsForToken(id);
-    return { ...token, teams };
+    if (result.length === 0) return null;
+
+    const { token, team } = result[0];
+    return {
+      ...token,
+      team: team?.id ? team : null,
+    };
   }
 
   /**
@@ -126,18 +133,28 @@ class ProfileTokenModel {
   /**
    * Find all tokens for a profile with team details
    */
-  static async findByProfileIdWithTeams(
+  static async findByProfileIdWithTeam(
     profileId: string,
-  ): Promise<ProfileTokenWithTeams[]> {
-    const tokens = await ProfileTokenModel.findByProfileId(profileId);
-    if (tokens.length === 0) return [];
+  ): Promise<ProfileTokenWithTeam[]> {
+    const result = await db
+      .select({
+        token: schema.profileTokensTable,
+        team: {
+          id: schema.teamsTable.id,
+          name: schema.teamsTable.name,
+        },
+      })
+      .from(schema.profileTokensTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.profileTokensTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.profileTokensTable.profileId, profileId))
+      .orderBy(schema.profileTokensTable.createdAt);
 
-    const tokenIds = tokens.map((t) => t.id);
-    const teamsMap = await ProfileTokenModel.getTeamsForTokens(tokenIds);
-
-    return tokens.map((token) => ({
+    return result.map(({ token, team }) => ({
       ...token,
-      teams: teamsMap.get(token.id) ?? [],
+      team: team?.id ? team : null,
     }));
   }
 
@@ -174,7 +191,7 @@ class ProfileTokenModel {
     const token = await ProfileTokenModel.findById(id);
     if (!token) return false;
 
-    // Delete the token (cascade will delete team associations)
+    // Delete the token
     await db
       .delete(schema.profileTokensTable)
       .where(eq(schema.profileTokensTable.id, id));
@@ -237,99 +254,6 @@ class ProfileTokenModel {
   }
 
   /**
-   * Get team IDs for a token
-   */
-  static async getTeamIdsForToken(tokenId: string): Promise<string[]> {
-    const result = await db
-      .select({ teamId: schema.profileTokenTeamsTable.teamId })
-      .from(schema.profileTokenTeamsTable)
-      .where(eq(schema.profileTokenTeamsTable.tokenId, tokenId));
-
-    return result.map((r) => r.teamId);
-  }
-
-  /**
-   * Get team details for a token
-   */
-  static async getTeamsForToken(
-    tokenId: string,
-  ): Promise<Array<{ id: string; name: string }>> {
-    const result = await db
-      .select({
-        id: schema.teamsTable.id,
-        name: schema.teamsTable.name,
-      })
-      .from(schema.profileTokenTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.profileTokenTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(eq(schema.profileTokenTeamsTable.tokenId, tokenId));
-
-    return result;
-  }
-
-  /**
-   * Get team details for multiple tokens (batch)
-   */
-  static async getTeamsForTokens(
-    tokenIds: string[],
-  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    if (tokenIds.length === 0) return new Map();
-
-    const result = await db
-      .select({
-        tokenId: schema.profileTokenTeamsTable.tokenId,
-        teamId: schema.teamsTable.id,
-        teamName: schema.teamsTable.name,
-      })
-      .from(schema.profileTokenTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.profileTokenTeamsTable.teamId, schema.teamsTable.id),
-      )
-      .where(inArray(schema.profileTokenTeamsTable.tokenId, tokenIds));
-
-    const teamsMap = new Map<string, Array<{ id: string; name: string }>>();
-
-    // Initialize all token IDs with empty arrays
-    for (const tokenId of tokenIds) {
-      teamsMap.set(tokenId, []);
-    }
-
-    // Populate with results
-    for (const row of result) {
-      const teams = teamsMap.get(row.tokenId) ?? [];
-      teams.push({ id: row.teamId, name: row.teamName });
-      teamsMap.set(row.tokenId, teams);
-    }
-
-    return teamsMap;
-  }
-
-  /**
-   * Sync team associations for a token (replace all)
-   */
-  static async syncTeams(tokenId: string, teamIds: string[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      // Delete existing team associations
-      await tx
-        .delete(schema.profileTokenTeamsTable)
-        .where(eq(schema.profileTokenTeamsTable.tokenId, tokenId));
-
-      // Insert new associations
-      if (teamIds.length > 0) {
-        await tx.insert(schema.profileTokenTeamsTable).values(
-          teamIds.map((teamId) => ({
-            tokenId,
-            teamId,
-          })),
-        );
-      }
-    });
-  }
-
-  /**
    * Find a token by its stored value (for authentication)
    * This is less efficient than validateToken() as it checks all tokens
    */
@@ -354,19 +278,18 @@ class ProfileTokenModel {
   }
 
   /**
-   * Create default "organization" token for a profile
+   * Create organization token for a profile
+   * Organization tokens work for all teams (teamId is null)
    */
   static async createDefaultToken(
     profileId: string,
   ): Promise<{ token: SelectProfileToken; value: string }> {
-    return ProfileTokenModel.create(
-      {
-        profileId,
-        name: "Default",
-        isOrganizationToken: true,
-      },
-      [],
-    );
+    return ProfileTokenModel.create({
+      profileId,
+      name: "Organization Token",
+      isOrganizationToken: true,
+      teamId: null,
+    });
   }
 
   /**
@@ -377,14 +300,12 @@ class ProfileTokenModel {
     teamId: string,
     teamName: string,
   ): Promise<{ token: SelectProfileToken; value: string }> {
-    return ProfileTokenModel.create(
-      {
-        profileId,
-        name: `${teamName} Token`,
-        isOrganizationToken: false,
-      },
-      [teamId],
-    );
+    return ProfileTokenModel.create({
+      profileId,
+      name: `${teamName} Token`,
+      isOrganizationToken: false,
+      teamId,
+    });
   }
 
   /**
@@ -410,26 +331,20 @@ class ProfileTokenModel {
   ): Promise<void> {
     if (teamIds.length === 0) return;
 
-    // Find tokens that are associated with these teams and belong to this profile
-    const tokenTeamRows = await db
-      .select({ tokenId: schema.profileTokenTeamsTable.tokenId })
-      .from(schema.profileTokenTeamsTable)
-      .innerJoin(
-        schema.profileTokensTable,
-        eq(schema.profileTokenTeamsTable.tokenId, schema.profileTokensTable.id),
-      )
+    // Find tokens that belong to this profile and are scoped to these teams
+    const tokensToDelete = await db
+      .select({ id: schema.profileTokensTable.id })
+      .from(schema.profileTokensTable)
       .where(
         and(
           eq(schema.profileTokensTable.profileId, profileId),
-          inArray(schema.profileTokenTeamsTable.teamId, teamIds),
+          inArray(schema.profileTokensTable.teamId, teamIds),
         ),
       );
 
-    const tokenIdsToDelete = [...new Set(tokenTeamRows.map((r) => r.tokenId))];
-
     // Delete each token (this also deletes the secret)
-    for (const tokenId of tokenIdsToDelete) {
-      await ProfileTokenModel.delete(tokenId);
+    for (const { id } of tokensToDelete) {
+      await ProfileTokenModel.delete(id);
     }
   }
 }

@@ -66,12 +66,23 @@ import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
 
-export default function ProfilesPage() {
+import type { archestraApiTypes } from "@shared";
+
+type ProfilesInitialData = {
+  agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+  teams: archestraApiTypes.GetTeamsResponses["200"];
+};
+
+export default function ProfilesPage({
+  initialData,
+}: {
+  initialData?: ProfilesInitialData;
+}) {
   return (
     <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Profiles />
+          <Profiles initialData={initialData} />
         </Suspense>
       </ErrorBoundary>
     </div>
@@ -101,8 +112,8 @@ function ProfileTeamsBadges({
 }: {
   teamIds: string[];
   teams:
-    | Array<{ id: string; name: string; description: string | null }>
-    | undefined;
+  | Array<{ id: string; name: string; description: string | null }>
+  | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
   if (!teams || teamIds.length === 0) {
@@ -153,7 +164,7 @@ function ProfileTeamsBadges({
   );
 }
 
-function Profiles() {
+function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -182,6 +193,7 @@ function Profiles() {
   const sortDirection = sortDirectionFromUrl || "desc";
 
   const { data: agentsResponse } = useProfilesPaginated({
+    initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
     sortBy,
@@ -198,6 +210,7 @@ function Profiles() {
       const { data } = await archestraApiSdk.getTeams();
       return data || [];
     },
+    initialData: initialData?.teams,
   });
 
   const [searchQuery, setSearchQuery] = useState(nameFilter);

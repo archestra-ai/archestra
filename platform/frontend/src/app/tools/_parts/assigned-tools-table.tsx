@@ -50,6 +50,7 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
+import type { ToolsInitialData } from "../page";
 
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
@@ -67,6 +68,7 @@ type ToolResultTreatment = ProfileToolData["toolResultTreatment"];
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ProfileToolData) => void;
+  initialData?: ToolsInitialData;
 }
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
@@ -83,15 +85,24 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
+export function AssignedToolsTable({
+  onToolClick,
+  initialData,
+}: AssignedToolsTableProps) {
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
   const unassignToolMutation = useUnassignTool();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
-  const { data: agents } = useProfiles();
-  const { data: mcpServers } = useMcpServers();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+    initialData: initialData?.internalMcpCatalog,
+  });
+  const { data: agents } = useProfiles({
+    initialData: initialData?.agents,
+  });
+  const { data: mcpServers } = useMcpServers({
+    initialData: initialData?.mcpServers,
+  });
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -133,7 +144,18 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Fetch agent tools with server-side pagination, filtering, and sorting
+  // Only use initialData for first page with default sorting and no filters
+  const useInitialData =
+    pageIndex === 0 &&
+    !searchQuery &&
+    agentFilter === "all" &&
+    originFilter === "all" &&
+    credentialFilter === "all" &&
+    (sorting[0]?.id === "createdAt" || !sorting[0]?.id) &&
+    sorting[0]?.desc !== false;
+
   const { data: agentToolsData, isLoading } = useAllProfileTools({
+    initialData: useInitialData ? initialData?.agentTools : undefined,
     pagination: {
       limit: pageSize,
       offset: pageIndex * pageSize,
@@ -915,9 +937,9 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {searchQuery ||
-            agentFilter !== "all" ||
-            originFilter !== "all" ||
-            credentialFilter !== "all"
+              agentFilter !== "all" ||
+              originFilter !== "all" ||
+              credentialFilter !== "all"
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
@@ -925,18 +947,18 @@ export function AssignedToolsTable({ onToolClick }: AssignedToolsTableProps) {
             agentFilter !== "all" ||
             originFilter !== "all" ||
             credentialFilter !== "all") && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                handleSearchChange("");
-                handleProfileFilterChange("all");
-                handleOriginFilterChange("all");
-                handleCredentialFilterChange("all");
-              }}
-            >
-              Clear all filters
-            </Button>
-          )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleSearchChange("");
+                  handleProfileFilterChange("all");
+                  handleOriginFilterChange("all");
+                  handleCredentialFilterChange("all");
+                }}
+              >
+                Clear all filters
+              </Button>
+            )}
         </div>
       ) : (
         <DataTable

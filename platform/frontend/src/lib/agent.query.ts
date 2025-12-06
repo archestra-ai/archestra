@@ -37,13 +37,15 @@ export function useProfiles(
 
 // New paginated hook for the agents page
 export function useProfilesPaginated(params?: {
+  initialData?: archestraApiTypes.GetAgentsResponses["200"];
   limit?: number;
   offset?: number;
   sortBy?: "name" | "createdAt" | "toolsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
 }) {
-  const { limit, offset, sortBy, sortDirection, name } = params || {};
+  const { initialData, limit, offset, sortBy, sortDirection, name } =
+    params || {};
 
   return useSuspenseQuery({
     queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
@@ -59,6 +61,14 @@ export function useProfilesPaginated(params?: {
           },
         })
       ).data ?? null,
+    // Only use initialData for the first page (offset 0) with default sorting
+    initialData:
+      offset === 0 &&
+        (sortBy === undefined || sortBy === "createdAt") &&
+        (sortDirection === undefined || sortDirection === "desc") &&
+        name === undefined
+        ? initialData
+        : undefined,
   });
 }
 

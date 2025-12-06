@@ -61,8 +61,10 @@ export class McpServerRuntimeManager {
       // Only create API client if K8s config loaded successfully
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     } catch (error) {
-      logger.error({ err: error }, "Failed to load Kubernetes config:");
+      // If the kubeconfig is missing or malformed, we treat the runtime as disabled rather than fatal.
+      logger.error({ err: error }, "Kubernetes config could not be loaded – disabling K8s runtime for this instance.");
       this.status = "error";
+      this.k8sApi = undefined;
     }
 
     this.k8sAttach = new Attach(this.k8sConfig);
@@ -76,15 +78,20 @@ export class McpServerRuntimeManager {
    * and the runtime hasn't been stopped
    */
   get isEnabled(): boolean {
-    return this.status !== "error" && this.status !== "stopped";
+    // Runtime is considered enabled only when it successfully loaded config and hasn't been stopped.
+    return this.status === "running" || this.status === "initializing" || this.status === "not_initialized";
   }
 
   /**
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
+    if (!this.isEnabled) {
+      logger.info("Kubernetes runtime is disabled – skipping MCP server startup.");
+      return;
+    }
     if (!this.k8sApi) {
-      throw new Error("Kubernetes API client not initialized");
+      throw new Error("Kubernetes API client not initialized despite enabled status.");
     }
 
     try {
@@ -156,7 +163,8 @@ export class McpServerRuntimeManager {
    */
   private async verifyK8sConnection(): Promise<void> {
     if (!this.k8sApi) {
-      throw new Error("Kubernetes API client not initialized");
+      logger.warn("Kubernetes API client not available – skipping connection verification.");
+      return;
     }
 
     try {
@@ -182,7 +190,8 @@ export class McpServerRuntimeManager {
     environmentValues?: Record<string, string>,
   ): Promise<void> {
     if (!this.k8sApi) {
-      throw new Error("Kubernetes API client not initialized");
+      logger.info(`Kubernetes runtime disabled – not starting server pod for ${mcpServer.name}`);
+      return;
     }
 
     const { id, name } = mcpServer;

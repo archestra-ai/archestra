@@ -12,7 +12,6 @@ import {
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
-import { nextCookies } from "better-auth/next-js";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
@@ -151,8 +150,6 @@ export const auth: any = betterAuth({
         enabled: true,
       },
     }),
-    // https://www.better-auth.com/docs/integrations/next#server-action-cookies
-    nextCookies(), // Make sure this is the last plugin in the array
   ],
 
   user: {

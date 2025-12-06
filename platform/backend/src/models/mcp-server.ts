@@ -390,19 +390,19 @@ class McpServerModel {
     }
 
     // Find MCP servers with the matching catalog
-    const matchingServers = await db
+    const serversFromMatchingCatalogItem = await db
       .select({
         server: schema.mcpServersTable,
       })
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.catalogId, catalogId));
 
-    if (matchingServers.length === 0) {
+    if (serversFromMatchingCatalogItem.length === 0) {
       return null;
     }
 
     // Get unique server IDs
-    const serverIds = matchingServers.map((r) => r.server.id);
+    const serverIds = serversFromMatchingCatalogItem.map((r) => r.server.id);
 
     // Get team details for all matching servers
     const teamDetailsMap =
@@ -411,7 +411,7 @@ class McpServerModel {
     const teamIdsSet = new Set(teamIds);
 
     // Find a server that has at least one matching team AND has a secretId
-    for (const serverRow of matchingServers) {
+    for (const serverRow of serversFromMatchingCatalogItem) {
       const server = serverRow.server;
       const serverTeams = teamDetailsMap.get(server.id) || [];
       const hasMatchingTeam = serverTeams.some((t) => teamIdsSet.has(t.teamId));

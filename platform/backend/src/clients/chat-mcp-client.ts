@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { jsonSchema, type Tool } from "ai";
+import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentTeamModel, ProfileTokenModel, TeamModel } from "@/models";
 import { secretManager } from "@/secretsmanager";
@@ -60,6 +62,7 @@ export const __test = {
 async function selectProfileToken(
   agentId: string,
   userId: string,
+  userIsProfileAdmin: boolean,
 ): Promise<{
   tokenValue: string;
   tokenId: string;
@@ -78,7 +81,32 @@ async function selectProfileToken(
   // Get all tokens for the profile
   const tokens = await ProfileTokenModel.findByProfileId(agentId);
 
-  // Try to find a team-scoped token first (where user is in that team)
+  // if user is profile admin, use organization token which allow him to use token from any team
+  const orgToken = tokens.find((t) => t.isOrganizationToken);
+  if (userIsProfileAdmin && orgToken) {
+    const secret = await secretManager.getSecret(orgToken.secretId);
+    if (secret?.secret) {
+      const tokenValue = (secret.secret as { token?: string }).token;
+      if (tokenValue) {
+        logger.info(
+          {
+            agentId,
+            userId,
+            tokenId: orgToken.id,
+          },
+          "Using organization token for chat MCP client (no matching team token)",
+        );
+        return {
+          tokenValue,
+          tokenId: orgToken.id,
+          teamId: null,
+          isOrganizationToken: true,
+        };
+      }
+    }
+  }
+
+  // Otherwise, try to find a team-scoped token first (where user is in that team)
   if (commonTeamIds.length > 0) {
     for (const token of tokens) {
       if (token.teamId && commonTeamIds.includes(token.teamId)) {
@@ -104,31 +132,6 @@ async function selectProfileToken(
             };
           }
         }
-      }
-    }
-  }
-
-  // Fall back to organization token
-  const orgToken = tokens.find((t) => t.isOrganizationToken);
-  if (orgToken) {
-    const secret = await secretManager.getSecret(orgToken.secretId);
-    if (secret?.secret) {
-      const tokenValue = (secret.secret as { token?: string }).token;
-      if (tokenValue) {
-        logger.info(
-          {
-            agentId,
-            userId,
-            tokenId: orgToken.id,
-          },
-          "Using organization token for chat MCP client (no matching team token)",
-        );
-        return {
-          tokenValue,
-          tokenId: orgToken.id,
-          teamId: null,
-          isOrganizationToken: true,
-        };
       }
     }
   }
@@ -208,11 +211,13 @@ export function clearChatMcpClient(agentId: string): void {
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
+ * @param userIsProfileAdmin - Whether the user is a profile admin
  * @returns MCP Client connected to the gateway, or null if connection fails
  */
 export async function getChatMcpClient(
   agentId: string,
   userId: string,
+  userIsProfileAdmin: boolean,
 ): Promise<Client | null> {
   const cacheKey = getCacheKey(agentId, userId);
 
@@ -236,7 +241,11 @@ export async function getChatMcpClient(
   );
 
   // Select appropriate token for this user
-  const tokenResult = await selectProfileToken(agentId, userId);
+  const tokenResult = await selectProfileToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
   if (!tokenResult) {
     logger.error(
       { agentId, userId },
@@ -341,6 +350,7 @@ function normalizeJsonSchema(schema: any): any {
 export async function getChatMcpTools(
   agentId: string,
   userId: string,
+  userIsProfileAdmin: boolean,
 ): Promise<Record<string, Tool>> {
   const cacheKey = getCacheKey(agentId, userId);
 
@@ -363,7 +373,23 @@ export async function getChatMcpTools(
     { agentId, userId },
     "getChatMcpTools() called - fetching client...",
   );
-  const client = await getChatMcpClient(agentId, userId);
+
+  // Get token for direct tool execution (bypasses HTTP for security)
+  const profileToken = await selectProfileToken(
+    agentId,
+    userId,
+    userIsProfileAdmin,
+  );
+  if (!profileToken) {
+    logger.warn(
+      { agentId, userId },
+      "No valid profile token available for user - cannot execute tools",
+    );
+    return {};
+  }
+
+  // Still use MCP client for listing tools (via MCP Gateway)
+  const client = await getChatMcpClient(agentId, userId, userIsProfileAdmin);
 
   if (!client) {
     logger.warn(
@@ -412,19 +438,41 @@ export async function getChatMcpTools(
           execute: async (args: any) => {
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
-              "Executing MCP tool from chat",
+              "Executing MCP tool from chat (direct)",
             );
 
             try {
-              const result = await client.callTool({
+              // Execute tool directly via mcpClient to avoid the need to pass the token in the HTTP header
+              // This allows passing userId securely without risk of header spoofing
+              const toolCall = {
+                id: randomUUID(),
                 name: mcpTool.name,
                 arguments: args || {},
-              });
+              };
+
+              const result = await mcpClient.executeToolCall(
+                toolCall,
+                agentId,
+                {
+                  tokenId: profileToken.tokenId,
+                  tokenTeamId: profileToken.teamId,
+                  isOrganizationToken: profileToken.isOrganizationToken,
+                  userId, // Pass userId for user-owned server priority
+                },
+              );
 
               logger.info(
                 { agentId, userId, toolName: mcpTool.name, result },
-                "MCP tool execution completed",
+                "MCP tool execution completed (direct)",
               );
+
+              // Check if MCP tool returned an error first
+              // When isError is true, throw to signal AI SDK that tool execution failed
+              // This allows AI SDK to create a tool-error part and continue the conversation
+              // Use result.error (not result.content which is null for errors)
+              if (result.isError) {
+                throw new Error(result.error || "Tool execution failed");
+              }
 
               // Convert MCP content to string for AI SDK
               const content = (
@@ -437,13 +485,6 @@ export async function getChatMcpTools(
                   return JSON.stringify(item);
                 })
                 .join("\n");
-
-              // Check if MCP tool returned an error
-              // When isError is true, throw to signal AI SDK that tool execution failed
-              // This allows AI SDK to create a tool-error part and continue the conversation
-              if (result.isError) {
-                throw new Error(content);
-              }
 
               return content;
             } catch (error) {

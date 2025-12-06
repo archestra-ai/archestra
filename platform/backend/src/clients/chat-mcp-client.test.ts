@@ -31,10 +31,10 @@ describe("chat-mcp-client tool caching", () => {
       mockClient as unknown as Client,
     );
 
-    const first = await chatClient.getChatMcpTools(agentId, userId);
+    const first = await chatClient.getChatMcpTools(agentId, userId, false);
     expect(Object.keys(first)).toEqual(["lookup_email"]);
 
-    const second = await chatClient.getChatMcpTools(agentId, userId);
+    const second = await chatClient.getChatMcpTools(agentId, userId, false);
 
     expect(second).toBe(first);
     expect(mockClient.listTools).toHaveBeenCalledTimes(1);

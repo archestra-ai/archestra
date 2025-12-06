@@ -258,7 +258,7 @@ export async function getChatMcpTools(
           // biome-ignore lint/suspicious/noExplicitAny: Tool execute function requires flexible typing for MCP integration
           execute: async (args: any) => {
             logger.info(
-              { agentId, toolName: mcpTool.name, arguments: args },
+              { agentId, toolName: mcpTool.name, toolArguments: args },
               "Executing MCP tool from chat",
             );
 

@@ -2,6 +2,7 @@ export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
+export { default as browserStreamRoutes } from "./browser-stream";
 export { default as chatRoutes } from "./chat";
 export { default as chatSettingsRoutes } from "./chat-settings";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";

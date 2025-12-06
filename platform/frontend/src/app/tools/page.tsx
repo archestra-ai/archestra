@@ -39,21 +39,21 @@ export default async function ToolsPage() {
   try {
     const headers = await getServerApiHeaders();
     initialData = {
-      agentTools: (
-        await archestraApiSdk.getAllAgentTools({
-          headers,
-          query: {
-            limit: DEFAULT_PAGE_SIZE,
-            offset: 0,
-            sortBy: "createdAt",
-            sortDirection: "desc",
-            excludeArchestraTools: true,
-          },
-        })
-      ).data || initialData.agentTools,
+      agentTools:
+        (
+          await archestraApiSdk.getAllAgentTools({
+            headers,
+            query: {
+              limit: DEFAULT_PAGE_SIZE,
+              offset: 0,
+              sortBy: "createdAt",
+              sortDirection: "desc",
+              excludeArchestraTools: true,
+            },
+          })
+        ).data || initialData.agentTools,
       agents: (await archestraApiSdk.getAllAgents({ headers })).data || [],
-      mcpServers:
-        (await archestraApiSdk.getMcpServers({ headers })).data || [],
+      mcpServers: (await archestraApiSdk.getMcpServers({ headers })).data || [],
       internalMcpCatalog:
         (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
     };

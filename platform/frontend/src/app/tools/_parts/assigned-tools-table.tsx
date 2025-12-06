@@ -937,9 +937,9 @@ export function AssignedToolsTable({
           <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
           <p className="mb-4 text-sm text-muted-foreground">
             {searchQuery ||
-              agentFilter !== "all" ||
-              originFilter !== "all" ||
-              credentialFilter !== "all"
+            agentFilter !== "all" ||
+            originFilter !== "all" ||
+            credentialFilter !== "all"
               ? "No tools match your filters. Try adjusting your search or filters."
               : "No tools have been assigned yet."}
           </p>
@@ -947,18 +947,18 @@ export function AssignedToolsTable({
             agentFilter !== "all" ||
             originFilter !== "all" ||
             credentialFilter !== "all") && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleSearchChange("");
-                  handleProfileFilterChange("all");
-                  handleOriginFilterChange("all");
-                  handleCredentialFilterChange("all");
-                }}
-              >
-                Clear all filters
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                handleSearchChange("");
+                handleProfileFilterChange("all");
+                handleOriginFilterChange("all");
+                handleCredentialFilterChange("all");
+              }}
+            >
+              Clear all filters
+            </Button>
+          )}
         </div>
       ) : (
         <DataTable

@@ -112,8 +112,8 @@ function ProfileTeamsBadges({
 }: {
   teamIds: string[];
   teams:
-  | Array<{ id: string; name: string; description: string | null }>
-  | undefined;
+    | Array<{ id: string; name: string; description: string | null }>
+    | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
   if (!teams || teamIds.length === 0) {

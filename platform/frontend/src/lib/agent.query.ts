@@ -64,9 +64,9 @@ export function useProfilesPaginated(params?: {
     // Only use initialData for the first page (offset 0) with default sorting
     initialData:
       offset === 0 &&
-        (sortBy === undefined || sortBy === "createdAt") &&
-        (sortDirection === undefined || sortDirection === "desc") &&
-        name === undefined
+      (sortBy === undefined || sortBy === "createdAt") &&
+      (sortDirection === undefined || sortDirection === "desc") &&
+      name === undefined
         ? initialData
         : undefined,
   });

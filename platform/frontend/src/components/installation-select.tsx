@@ -41,17 +41,12 @@ export function InstallationSelect({
   catalogId,
   shouldSetDefaultValue,
 }: InstallationSelectProps) {
-  const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
+  const { data: groupedInstallations, isLoading } = useProfileAvailableTokens({
     catalogId,
   });
 
   // Get tokens for this catalogId from the grouped response
-  const mcpServers = groupedTokens?.[catalogId] ?? [];
-
-  // Filter to local servers only
-  const installations = mcpServers.filter(
-    (server) => server.serverType === "local",
-  );
+  const installations = groupedInstallations?.[catalogId] ?? [];
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {

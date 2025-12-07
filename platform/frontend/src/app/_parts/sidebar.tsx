@@ -1,6 +1,6 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
-import { E2eTestId, requiredPagePermissionsMap } from "@shared";
+import { E2eTestId } from "@shared";
 import {
   BookOpen,
   Bot,
@@ -48,6 +48,14 @@ interface MenuItem {
   icon: LucideIcon;
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
+
+const allowAllPages = new Proxy({} as Record<string, Record<string, string[]>>, {
+  get: (_target, _prop) => ({}), // Return empty object for any page - allows all authenticated users
+});
+
+const { requiredPagePermissionsMap} = config.enterpriseLicenseActivated
+  ? await import('@shared/access-control.ee')
+  : await import('@shared/access-control');
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {

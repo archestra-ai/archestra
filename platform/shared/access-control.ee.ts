@@ -1,6 +1,11 @@
 import { defaultStatements } from "better-auth/plugins/organization/access";
 import { z } from "zod";
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME, PredefinedRoleNameSchema } from './roles';
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  PredefinedRoleName,
+} from './roles';
 import { RouteId } from './routes';
 
 export const ActionSchema = z.enum([
@@ -12,7 +17,7 @@ export const ActionSchema = z.enum([
   "cancel",
 ]);
 
-export const ResourceSchema = z.enum([
+const ResourceSchema = z.enum([
   "profile",
   "tool",
   "policy",
@@ -132,24 +137,10 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
 /**
  * Available resources and actions
  */
+
 export type Resource = z.infer<typeof ResourceSchema>;
 export type Action = z.infer<typeof ActionSchema>;
-
-/**
- * Permission string format: "resource:action"
- * Examples: "profile:create", "tool:read", "org:delete", "profile:admin", "mcpServer:admin"
- *
- * Note: "admin" action is only valid for certain resources
- */
-export type Permission =
-  | `${Resource}:${"create" | "read" | "update" | "delete"}`
-  | "profile:admin"
-  | "mcpServer:admin"
-  | "mcpServerInstallationRequest:admin"
-  | "invitation:cancel";
-
 export type Permissions = z.infer<typeof PermissionsSchema>;
-export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
 
 /**
  * Routes not configured throws 403.

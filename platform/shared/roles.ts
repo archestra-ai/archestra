@@ -9,5 +9,7 @@ export const PredefinedRoleNameSchema = z.enum([
   MEMBER_ROLE_NAME,
 ]);
 
+export type PredefinedRoleName = z.infer<typeof PredefinedRoleNameSchema>;
+
 const AnyRoleName = PredefinedRoleNameSchema.or(z.string());
 export type AnyRoleName = z.infer<typeof AnyRoleName>;

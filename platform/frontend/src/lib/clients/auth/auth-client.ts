@@ -14,12 +14,7 @@ const {
   allAvailableActions,
   editorPermissions,
   memberPermissions
-} = config.enterpriseLicenseActivated ? await import('@shared/access-control-ee') : {
-  allAvailableActions: {},
-  editorPermissions: {},
-  memberPermissions: {}
-}
-
+} = config.enterpriseLicenseActivated ? await import('@shared/access-control.ee') : await import('@shared/access-control')
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);

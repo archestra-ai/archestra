@@ -78,9 +78,9 @@ export function TokenSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
-          <div className="flex items-center gap-2">
-            <Zap className="h-3 w-3 text-amber-500" />
-            <span className="text-xs font-medium">Resolve on tool call</span>
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
           </div>
         </SelectItem>
         <Divider className="my-2" />

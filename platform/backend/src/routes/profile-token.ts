@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { AgentModel, ProfileTokenModel } from "@/models";
+import { secretManager } from "@/secretsmanager";
 import {
   ApiError,
   constructResponseSchema,
@@ -57,6 +58,62 @@ const profileTokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           lastUsedAt: token.lastUsedAt,
         })),
       );
+    },
+  );
+
+  /**
+   * Get the full token value (for copying to clipboard)
+   * Does not modify the token like rotate does
+   */
+  fastify.get(
+    "/api/profiles/:profileId/tokens/:tokenId/value",
+    {
+      schema: {
+        operationId: RouteId.GetProfileTokenValue,
+        description: "Get the full token value (for copying to clipboard)",
+        tags: ["Profile Tokens"],
+        params: z.object({
+          profileId: z.string().uuid(),
+          tokenId: z.string().uuid(),
+        }),
+        response: constructResponseSchema(z.object({ value: z.string() })),
+      },
+    },
+    async (request, reply) => {
+      const { profileId, tokenId } = request.params;
+      const { success: isAgentAdmin } = await hasPermission(
+        { profile: ["admin"] },
+        request.headers,
+      );
+
+      // Verify profile exists and user has access
+      const profile = await AgentModel.findById(
+        profileId,
+        request.user.id,
+        isAgentAdmin,
+      );
+      if (!profile) {
+        throw new ApiError(404, "Profile not found");
+      }
+
+      // Verify token exists and belongs to this profile
+      const token = await ProfileTokenModel.findById(tokenId);
+      if (!token || token.profileId !== profileId) {
+        throw new ApiError(404, "Token not found");
+      }
+
+      // Get the decrypted token value from secrets manager
+      const secret = await secretManager.getSecret(token.secretId);
+      if (!secret?.secret) {
+        throw new ApiError(500, "Failed to retrieve token value");
+      }
+
+      const tokenValue = (secret.secret as { token?: string }).token;
+      if (!tokenValue) {
+        throw new ApiError(500, "Token value not found in secret");
+      }
+
+      return reply.send({ value: tokenValue });
     },
   );
 

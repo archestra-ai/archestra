@@ -192,6 +192,7 @@ export const RouteId = {
 
   // Profile Token Routes
   GetProfileTokens: "getProfileTokens",
+  GetProfileTokenValue: "getProfileTokenValue",
   RotateProfileToken: "rotateProfileToken",
 
   // Features Routes
@@ -451,6 +452,9 @@ export const requiredEndpointPermissionsMap: Partial<
     profile: ["read"],
   },
   [RouteId.GetProfileTokens]: {
+    profile: ["admin"],
+  },
+  [RouteId.GetProfileTokenValue]: {
     profile: ["admin"],
   },
   [RouteId.RotateProfileToken]: {

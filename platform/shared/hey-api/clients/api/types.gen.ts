@@ -12704,6 +12704,86 @@ export type GetProfileTokensResponses = {
 
 export type GetProfileTokensResponse = GetProfileTokensResponses[keyof GetProfileTokensResponses];
 
+export type GetProfileTokenValueData = {
+    body?: never;
+    path: {
+        profileId: string;
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/profiles/{profileId}/tokens/{tokenId}/value';
+};
+
+export type GetProfileTokenValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetProfileTokenValueError = GetProfileTokenValueErrors[keyof GetProfileTokenValueErrors];
+
+export type GetProfileTokenValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetProfileTokenValueResponse = GetProfileTokenValueResponses[keyof GetProfileTokenValueResponses];
+
 export type RotateProfileTokenData = {
     body?: never;
     path: {

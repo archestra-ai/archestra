@@ -1,11 +1,19 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { archestraApiSdk } from "@shared";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { ProfileTokenManager } from "@/components/profile-token-manager";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import config from "@/lib/config";
 import { useProfileTokens } from "@/lib/profile-token.query";
 
@@ -23,14 +31,23 @@ export function McpConnectionInstructions({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedAuth, setCopiedAuth] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
+  const [isCopyingConfig, setIsCopyingConfig] = useState(false);
+  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
 
   // Use the new URL format with profile ID
   const mcpUrl = `${apiBaseUrl}/mcp/${agentId}`;
 
-  // Get the first token for the example configuration
-  const firstToken = tokens?.[0];
-  const tokenForDisplay = firstToken?.tokenStart
-    ? `${firstToken.tokenStart}...`
+  // Find org token as default, fallback to first token
+  const orgToken = tokens?.find((t) => t.isOrganizationToken);
+  const defaultToken = orgToken ?? tokens?.[0];
+
+  // Get the selected token or default to org token
+  const selectedToken = selectedTokenId
+    ? tokens?.find((t) => t.id === selectedTokenId)
+    : defaultToken;
+
+  const tokenForDisplay = selectedToken?.tokenStart
+    ? `${selectedToken.tokenStart}...`
     : "your-token-here";
 
   const mcpConfig = useMemo(
@@ -60,20 +77,74 @@ export function McpConnectionInstructions({
   }, [mcpUrl]);
 
   const handleCopyAuth = useCallback(async () => {
-    await navigator.clipboard.writeText(
-      `Authorization: Bearer ${tokenForDisplay}`,
-    );
-    setCopiedAuth(true);
-    toast.success("Authorization header copied to clipboard");
-    setTimeout(() => setCopiedAuth(false), 2000);
-  }, [tokenForDisplay]);
+    if (!selectedToken) {
+      toast.error("No token selected");
+      return;
+    }
+
+    try {
+      // Fetch the full token value from backend
+      const response = await archestraApiSdk.getProfileTokenValue({
+        path: { profileId: agentId, tokenId: selectedToken.id },
+      });
+
+      if (response.error || !response.data) {
+        throw new Error("Failed to fetch token value");
+      }
+
+      await navigator.clipboard.writeText(
+        `Authorization: Bearer ${response.data.value}`,
+      );
+      setCopiedAuth(true);
+      toast.success("Authorization header copied");
+      setTimeout(() => setCopiedAuth(false), 2000);
+    } catch {
+      toast.error("Failed to copy authorization header");
+    }
+  }, [agentId, selectedToken]);
 
   const handleCopyConfig = useCallback(async () => {
-    await navigator.clipboard.writeText(mcpConfig);
-    setCopiedConfig(true);
-    toast.success("Configuration copied to clipboard");
-    setTimeout(() => setCopiedConfig(false), 2000);
-  }, [mcpConfig]);
+    if (!selectedToken) {
+      toast.error("No token selected");
+      return;
+    }
+
+    setIsCopyingConfig(true);
+    try {
+      // Fetch the full token value from backend
+      const response = await archestraApiSdk.getProfileTokenValue({
+        path: { profileId: agentId, tokenId: selectedToken.id },
+      });
+
+      if (response.error || !response.data) {
+        throw new Error("Failed to fetch token value");
+      }
+
+      const fullConfig = JSON.stringify(
+        {
+          mcpServers: {
+            archestra: {
+              url: mcpUrl,
+              headers: {
+                Authorization: `Bearer ${response.data.value}`,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      );
+
+      await navigator.clipboard.writeText(fullConfig);
+      setCopiedConfig(true);
+      toast.success("Configuration copied");
+      setTimeout(() => setCopiedConfig(false), 2000);
+    } catch {
+      toast.error("Failed to copy configuration");
+    } finally {
+      setIsCopyingConfig(false);
+    }
+  }, [agentId, mcpUrl, selectedToken]);
 
   return (
     <div className="space-y-6">
@@ -95,7 +166,32 @@ export function McpConnectionInstructions({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">Authorization Header:</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Authorization Header:
+            </p>
+            {tokens && tokens.length > 0 && (
+              <Select
+                value={selectedTokenId ?? defaultToken?.id ?? ""}
+                onValueChange={setSelectedTokenId}
+              >
+                <SelectTrigger className="w-[200px] h-8">
+                  <SelectValue placeholder="Select token" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tokens.map((token) => (
+                    <SelectItem key={token.id} value={token.id}>
+                      {token.isOrganizationToken
+                        ? "Organization Token"
+                        : token.team?.name
+                          ? `${token.team.name} Token`
+                          : token.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <div className="bg-muted rounded-md p-3 flex items-center justify-between">
             <CodeText className="text-sm break-all">
               Authorization: Bearer {tokenForDisplay}
@@ -109,7 +205,7 @@ export function McpConnectionInstructions({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Create and manage tokens above, then use a token value here.
+            Select a token above, then click Copy to get the full token value.
           </p>
         </div>
 
@@ -129,8 +225,11 @@ export function McpConnectionInstructions({
               size="icon"
               className="absolute top-2 right-2"
               onClick={handleCopyConfig}
+              disabled={isCopyingConfig}
             >
-              {copiedConfig ? (
+              {isCopyingConfig ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : copiedConfig ? (
                 <Check className="h-4 w-4 text-green-500" />
               ) : (
                 <Copy className="h-4 w-4" />

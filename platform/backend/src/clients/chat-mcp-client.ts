@@ -461,18 +461,22 @@ export async function getChatMcpTools(
                 },
               );
 
-              logger.info(
-                { agentId, userId, toolName: mcpTool.name, result },
-                "MCP tool execution completed (direct)",
-              );
-
               // Check if MCP tool returned an error first
               // When isError is true, throw to signal AI SDK that tool execution failed
               // This allows AI SDK to create a tool-error part and continue the conversation
               // Use result.error (not result.content which is null for errors)
               if (result.isError) {
+                logger.error(
+                  { agentId, userId, toolName: mcpTool.name, result },
+                  "MCP tool execution failed",
+                );
                 throw new Error(result.error || "Tool execution failed");
               }
+
+              logger.info(
+                { agentId, userId, toolName: mcpTool.name, result },
+                "MCP tool execution completed (direct)",
+              );
 
               // Convert MCP content to string for AI SDK
               const content = (
@@ -489,7 +493,14 @@ export async function getChatMcpTools(
               return content;
             } catch (error) {
               logger.error(
-                { agentId, userId, toolName: mcpTool.name, error },
+                {
+                  agentId,
+                  userId,
+                  toolName: mcpTool.name,
+                  err: error,
+                  errorMessage:
+                    error instanceof Error ? error.message : String(error),
+                },
                 "MCP tool execution failed",
               );
               throw error;

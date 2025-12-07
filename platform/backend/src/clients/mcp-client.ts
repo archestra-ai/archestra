@@ -68,11 +68,12 @@ class McpClient {
     const { tool, catalogItem } = validationResult;
 
     const targetLocalMcpServerIdResult =
-      await this.determineTargetMcpServerIdForLocalCatalogItem({
+      await this.determineTargetMcpServerIdForCatalogItem({
         tool,
         toolCall,
         agentId,
         tokenAuth,
+        catalogItem,
       });
     if ("error" in targetLocalMcpServerIdResult) {
       return targetLocalMcpServerIdResult.error;
@@ -96,24 +97,9 @@ class McpClient {
         secrets,
       );
 
-      // Build connection cache key:
-      // - Local servers: use targetMcpServerId (each pod needs its own connection)
-      // - Remote servers: use catalogId + secretId (credential-based caching)
-      let connectionKey: string;
-      if (catalogItem.serverType === "local") {
-        connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
-      } else {
-        let secretId: string | null = null;
-        if (tool.credentialSourceMcpServerId) {
-          const credentialSourceServer = await McpServerModel.findById(
-            tool.credentialSourceMcpServerId,
-          );
-          secretId = credentialSourceServer?.secretId || null;
-        }
-        connectionKey = secretId
-          ? `${catalogItem.id}:${secretId}`
-          : catalogItem.id;
-      }
+      // Build connection cache key using the resolved target server ID
+      // This ensures each user gets their own connection for dynamic credentials
+      const connectionKey = `${catalogItem.id}:${targetLocalMcpServerId}`;
 
       // Get or create client
       const client = await this.getOrCreateClient(connectionKey, transport);
@@ -271,8 +257,8 @@ class McpClient {
         error: await this.createErrorResult(
           toolCall,
           agentId,
+          `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           "unknown",
-          `MCP server not found: ${targetMcpServerId}`,
         ),
       };
     }
@@ -294,16 +280,18 @@ class McpClient {
 
   // Determines the target MCP server ID for a local catalog item
   // Since there are multiple pods for a single catalog item that can receive request
-  private async determineTargetMcpServerIdForLocalCatalogItem({
+  private async determineTargetMcpServerIdForCatalogItem({
     tool,
     tokenAuth,
     toolCall,
     agentId,
+    catalogItem,
   }: {
     tool: McpToolWithServerMetadata;
     toolCall: CommonToolCall;
     agentId: string;
     tokenAuth?: TokenAuthContext;
+    catalogItem: InternalMcpCatalog;
   }): Promise<
     { targetLocalMcpServerId: string } | { error: CommonToolResult }
   > {
@@ -313,11 +301,14 @@ class McpClient {
         tool: tool,
         tokenAuth: tokenAuth,
       },
-      "Determining target MCP server ID for local catalog item",
+      "Determining target MCP server ID for catalog item",
     );
     // Static credential case: use pre-configured execution source
     if (!tool.useDynamicTeamCredential) {
-      if (!tool.executionSourceMcpServerId) {
+      if (
+        catalogItem.serverType === "local" &&
+        !tool.executionSourceMcpServerId
+      ) {
         return {
           error: await this.createErrorResult(
             toolCall,
@@ -327,7 +318,42 @@ class McpClient {
           ),
         };
       }
-      return { targetLocalMcpServerId: tool.executionSourceMcpServerId };
+      if (
+        catalogItem.serverType === "remote" &&
+        !tool.credentialSourceMcpServerId
+      ) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Credential source is required for remote MCP server tools when dynamic team credential is disabled.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+      const result =
+        catalogItem.serverType === "local"
+          ? tool.executionSourceMcpServerId
+          : tool.credentialSourceMcpServerId;
+      if (!result) {
+        return {
+          error: await this.createErrorResult(
+            toolCall,
+            agentId,
+            "Couldn't find execution or credential source for MCP server when dynamic team credential is disabled.",
+            tool.mcpServerName || "unknown",
+          ),
+        };
+      }
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogItem: catalogItem,
+          targetLocalMcpServerId: result,
+        },
+        "Determined target MCP server ID for catalog item",
+      );
+      return { targetLocalMcpServerId: result };
     }
 
     // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth

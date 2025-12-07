@@ -49,6 +49,11 @@ export function TokenSelect({
   // Get tokens for this catalogId from the grouped response
   const mcpServers = groupedTokens?.[catalogId] ?? [];
 
+  const staticCredentialOutsideOfGroupedTokens =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedTokens?.[catalogId]?.some((token) => token.id === value);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && !value) {
@@ -59,6 +64,14 @@ export function TokenSelect({
 
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedTokens) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Owner outside your team
+      </span>
+    );
   }
 
   return (

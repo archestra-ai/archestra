@@ -45,6 +45,13 @@ export function InstallationSelect({
     catalogId,
   });
 
+  const staticCredentialOutsideOfGroupedInstallations =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedInstallations?.[catalogId]?.some(
+      (installation) => installation.id === value,
+    );
+
   // Get tokens for this catalogId from the grouped response
   const installations = groupedInstallations?.[catalogId] ?? [];
 
@@ -58,6 +65,14 @@ export function InstallationSelect({
 
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedInstallations) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Owner outside your team
+      </span>
+    );
   }
 
   return (

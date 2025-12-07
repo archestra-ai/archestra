@@ -4,12 +4,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   type Action,
-  ADMIN_ROLE_NAME,
   allAvailableActions,
-  MEMBER_ROLE_NAME,
-  type PredefinedRoleName,
   predefinedPermissionsMap,
   type Resource,
+} from "@shared/access-control.ee";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  type PredefinedRoleName,
 } from "@shared";
 import logger from "@/logging";
 

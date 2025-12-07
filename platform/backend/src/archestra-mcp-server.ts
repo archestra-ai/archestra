@@ -235,7 +235,9 @@ export async function executeArchestraTool(
             text: `Successfully created profile.\n\nProfile Name: ${
               newProfile.name
             }\nProfile ID: ${newProfile.id}\nTeams: ${
-              newProfile.teams.length > 0 ? newProfile.teams.join(", ") : "None"
+              newProfile.teams.length > 0
+                ? newProfile.teams.map((t) => t.name).join(", ")
+                : "None"
             }\nLabels: ${
               newProfile.labels.length > 0
                 ? newProfile.labels

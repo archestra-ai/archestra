@@ -21,7 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-auth": "1.4.4-beta.3",
+    "better-auth": "1.4.6-beta.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {

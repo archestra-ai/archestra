@@ -105,6 +105,10 @@ describe("authPlugin integration", () => {
           updatedAt: new Date(),
         } as ApiKey,
       });
+      mockHasPermission.mockResolvedValue({
+        success: true,
+        error: null,
+      });
       mockUserModel.getById.mockResolvedValue({
         id: "user1",
         name: "Test User",

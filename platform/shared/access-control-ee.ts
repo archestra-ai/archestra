@@ -1,4 +1,3 @@
-import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/organization/access";
 import { z } from "zod";
 
@@ -57,7 +56,7 @@ export const PermissionsSchema = z.partialRecord(
   z.array(ActionSchema),
 );
 
-export const allAvailableActions: Record<Resource, Action[]> = {
+export const allAvailableActions: Permissions = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
@@ -91,14 +90,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ac: ["create", "read", "update", "delete"],
 };
 
-export const ac = createAccessControl(allAvailableActions);
-
-// all permissions granted
-export const adminRole = ac.newRole({
-  ...allAvailableActions,
-});
-
-export const editorRole = ac.newRole({
+export const editorPermissions: Permissions = {
   profile: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
@@ -116,9 +108,9 @@ export const editorRole = ac.newRole({
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["read", "update"],
   prompt: ["create", "read", "update", "delete"],
-});
+}
 
-export const memberRole = ac.newRole({
+export const memberPermissions: Permissions = {
   profile: ["read"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],
@@ -136,13 +128,13 @@ export const memberRole = ac.newRole({
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["read"],
-});
+}
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
-    [ADMIN_ROLE_NAME]: adminRole.statements,
-    [EDITOR_ROLE_NAME]: editorRole.statements,
-    [MEMBER_ROLE_NAME]: memberRole.statements,
+    [ADMIN_ROLE_NAME]: allAvailableActions,
+    [EDITOR_ROLE_NAME]: editorPermissions,
+    [MEMBER_ROLE_NAME]: memberPermissions,
   };
 
 /**

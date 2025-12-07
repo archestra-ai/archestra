@@ -1,16 +1,9 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
-import {
-  ac,
-  adminRole,
-  allAvailableActions,
-  editorRole,
-  MEMBER_ROLE_NAME,
-  memberRole,
-  SSO_TRUSTED_PROVIDER_IDS,
-} from "@shared";
+import { SSO_TRUSTED_PROVIDER_IDS, } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAccessControl } from 'better-auth/plugins/access';
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
 import { jwtDecode } from "jwt-decode";
@@ -27,6 +20,7 @@ import {
   TeamModel,
 } from "@/models";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache";
+import { editorPermissions, memberPermissions } from '@shared/access-control-ee';
 
 const APP_NAME = "Archestra";
 const {
@@ -51,6 +45,22 @@ const isHttps = () => {
   // this is useful for envs where NODE_ENV=production but using HTTP localhost like docker run
   return frontendBaseUrl.startsWith("https://");
 };
+
+const {
+  allAvailableActions,
+  editorPermissions,
+  memberPermissions
+} = config.enterpriseLicenseActivated ? await import('@shared/access-control-ee') : {
+  allAvailableActions: {},
+  editorPermissions: {},
+  memberPermissions: {}
+}
+
+const ac = createAccessControl(allAvailableActions);
+
+const adminRole = ac.newRole(allAvailableActions);
+const editorRole = ac.newRole(editorPermissions);
+const memberRole = ac.newRole(memberPermissions);
 
 // biome-ignore lint/suspicious/noExplicitAny: better-auth bs https://github.com/better-auth/better-auth/issues/5666
 export const auth: any = betterAuth({

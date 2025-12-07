@@ -1,5 +1,4 @@
 import { ssoClient } from "@better-auth/sso/client";
-import { ac, adminRole, editorRole, memberRole } from "@shared";
 import {
   adminClient,
   apiKeyClient,
@@ -9,6 +8,23 @@ import {
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config";
+import { createAccessControl } from 'better-auth/plugins/access';
+
+const {
+  allAvailableActions,
+  editorPermissions,
+  memberPermissions
+} = config.enterpriseLicenseActivated ? await import('@shared/access-control-ee') : {
+  allAvailableActions: {},
+  editorPermissions: {},
+  memberPermissions: {}
+}
+
+const ac = createAccessControl(allAvailableActions);
+
+const adminRole = ac.newRole(allAvailableActions);
+const editorRole = ac.newRole(editorPermissions);
+const memberRole = ac.newRole(memberPermissions);
 
 export const authClient = createAuthClient({
   baseURL: "", // Always use relative URLs (proxied through Next.js)

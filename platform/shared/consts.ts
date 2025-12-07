@@ -25,6 +25,7 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpToolsDialog: "mcp-tools-dialog",
   InstallationSelect: "installation-select",
+  ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

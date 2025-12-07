@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, Key, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -132,6 +132,7 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
             disabled={updateProfile.isPending}
             className="h-8 text-xs min-w-[120px]"
             showSelectedBadges={false}
+            triggerTestId={E2eTestId.ProfileTokenManagerTeamsSelect}
           />
         </div>
       </div>

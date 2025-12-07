@@ -193,6 +193,45 @@ export async function callMcpTool(
 }
 
 /**
+ * Get team token for a profile (rotates to get the actual value)
+ * @param teamName - The name of the team to get the token for
+ */
+export async function getTeamTokenForProfile(
+  request: APIRequestContext,
+  profileId: string,
+  teamName: string,
+): Promise<string> {
+  // Get all tokens for the profile
+  const tokensResponse = await makeApiRequest({
+    request,
+    method: "get",
+    urlSuffix: `/api/profiles/${profileId}/tokens`,
+  });
+  const tokens = await tokensResponse.json();
+
+  // Find the team token by team name
+  const teamToken = tokens.find(
+    (t: { isOrganizationToken: boolean; team?: { name: string } }) =>
+      !t.isOrganizationToken && t.team?.name === teamName,
+  );
+
+  if (!teamToken) {
+    throw new Error(
+      `No team token found for profile ${profileId} and team ${teamName}`,
+    );
+  }
+
+  // Rotate the token to get the actual value
+  const rotateResponse = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/profiles/${profileId}/tokens/${teamToken.id}/rotate`,
+  });
+  const rotatedToken = await rotateResponse.json();
+  return rotatedToken.value;
+}
+
+/**
  * List tools available via MCP gateway
  */
 export async function listMcpTools(

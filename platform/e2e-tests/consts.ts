@@ -57,6 +57,7 @@ export const MEMBER_PASSWORD = "password";
 /**
  * Team names for e2e tests
  */
+export const DEFAULT_TEAM_NAME = "Default Team";
 export const ENGINEERING_TEAM_NAME = "Engineering Team";
 export const MARKETING_TEAM_NAME = "Marketing Team";
 

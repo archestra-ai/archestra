@@ -1,4 +1,3 @@
-export * from "./access-control";
 export * from "./consts";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";
 export * as archestraApiSdk from "./hey-api/clients/api/sdk.gen";

@@ -20,7 +20,6 @@ import {
   TeamModel,
 } from "@/models";
 import { extractGroupsFromClaims } from "./sso-team-sync-cache";
-import { editorPermissions, memberPermissions } from '@shared/access-control-ee';
 
 const APP_NAME = "Archestra";
 const {

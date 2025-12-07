@@ -1,7 +1,8 @@
-import { PermissionsSchema, PredefinedRoleNameSchema, RouteId } from "@shared";
+import { PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
+import config from "@/config";
 import logger from "@/logging";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
@@ -10,6 +11,11 @@ import {
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
+
+const { PermissionsSchema } = config.enterpriseLicenseActivated
+  // biome-ignore lint/style/noRestrictedImports: conditional schema
+  ? await import("@shared/access-control.ee")
+  : await import("@shared/access-control");
 
 const CreateUpdateRoleNameSchema = z
   .string()

@@ -1,7 +1,13 @@
-import { PermissionsSchema, RouteId } from "@shared";
+import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import config from "@/config";
 import { MemberModel, OrganizationRoleModel } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
+
+const { PermissionsSchema } = config.enterpriseLicenseActivated
+  // biome-ignore lint/style/noRestrictedImports: conditional schema
+  ? await import("@shared/access-control.ee")
+  : await import("@shared/access-control");
 
 const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

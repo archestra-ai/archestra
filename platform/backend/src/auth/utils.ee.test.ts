@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Permissions } from "@shared/access-control.ee";
 import { vi } from "vitest";
 import {
   beforeEach,
@@ -8,7 +8,7 @@ import {
   type MockedFunction,
   test,
 } from "@/test";
-import { hasPermission } from "./utils";
+import { hasPermission } from "./utils.ee";
 
 // Mock the better-auth module
 vi.mock("./better-auth", () => ({

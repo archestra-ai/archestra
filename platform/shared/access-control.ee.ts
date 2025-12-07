@@ -4,9 +4,9 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
-  PredefinedRoleName,
-} from './roles';
-import { RouteId } from './routes';
+  type PredefinedRoleName,
+} from "./roles";
+import { RouteId } from "./routes";
 
 export const ActionSchema = z.enum([
   "create",
@@ -105,7 +105,7 @@ export const editorPermissions: Permissions = {
   tokenPrice: ["create", "read", "update", "delete"],
   chatSettings: ["read", "update"],
   prompt: ["create", "read", "update", "delete"],
-}
+};
 
 export const memberPermissions: Permissions = {
   profile: ["read"],
@@ -125,7 +125,7 @@ export const memberPermissions: Permissions = {
   tokenPrice: ["read"],
   chatSettings: ["read"],
   prompt: ["read"],
-}
+};
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {

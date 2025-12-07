@@ -49,13 +49,10 @@ interface MenuItem {
   customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
 }
 
-const allowAllPages = new Proxy({} as Record<string, Record<string, string[]>>, {
-  get: (_target, _prop) => ({}), // Return empty object for any page - allows all authenticated users
-});
-
-const { requiredPagePermissionsMap} = config.enterpriseLicenseActivated
-  ? await import('@shared/access-control.ee')
-  : await import('@shared/access-control');
+const { requiredPagePermissionsMap } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional page permissions
+    await import("@shared/access-control.ee")
+  : await import("@shared/access-control");
 
 const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   if (!isAuthenticated) {

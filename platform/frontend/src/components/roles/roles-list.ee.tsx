@@ -33,7 +33,7 @@ import {
   useRoles,
   useUpdateRole,
 } from "@/lib/role.query";
-import { RolePermissionBuilder } from "./role-permission-builder";
+import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 

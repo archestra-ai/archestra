@@ -6,15 +6,15 @@ import {
   organizationClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
 import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config";
-import { createAccessControl } from 'better-auth/plugins/access';
 
-const {
-  allAvailableActions,
-  editorPermissions,
-  memberPermissions
-} = config.enterpriseLicenseActivated ? await import('@shared/access-control.ee') : await import('@shared/access-control')
+const { allAvailableActions, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);

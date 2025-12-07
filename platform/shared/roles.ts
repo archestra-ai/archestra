@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ADMIN_ROLE_NAME = "admin";
 export const EDITOR_ROLE_NAME = "editor";

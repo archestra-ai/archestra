@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import { type RouteId } from "@shared";
+import type { RouteId } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
@@ -7,13 +7,10 @@ import logger from "@/logging";
 import { UserModel } from "@/models";
 import { ApiError } from "@/types";
 
-const allowAllEndpoints = new Proxy({} as Record<RouteId, Permissions>, {
-  get: (_target, _prop) => ({}), // Return empty object for any route
-})
-
-const {requiredEndpointPermissionsMap} = config.enterpriseLicenseActivated
-  ? await import('@shared/access-control.ee')
-  : await import('@shared/access-control')
+const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: conditional endpoint permissions
+    await import("@shared/access-control.ee")
+  : await import("@shared/access-control");
 
 export class Authnz {
   public handle = async (request: FastifyRequest, _reply: FastifyReply) => {

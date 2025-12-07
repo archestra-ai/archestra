@@ -1,11 +1,11 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
-import { SSO_TRUSTED_PROVIDER_IDS, } from "@shared";
+import { SSO_TRUSTED_PROVIDER_IDS } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAccessControl } from 'better-auth/plugins/access';
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, apiKey, organization, twoFactor } from "better-auth/plugins";
+import { createAccessControl } from "better-auth/plugins/access";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import config from "@/config";
@@ -45,11 +45,11 @@ const isHttps = () => {
   return frontendBaseUrl.startsWith("https://");
 };
 
-const {
-  allAvailableActions,
-  editorPermissions,
-  memberPermissions
-} = config.enterpriseLicenseActivated ? await import('@shared/access-control.ee') : await import('@shared/access-control')
+const { allAvailableActions, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permissions
+      await import("@shared/access-control.ee")
+    : await import("@shared/access-control");
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);

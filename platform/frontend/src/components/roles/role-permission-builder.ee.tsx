@@ -5,7 +5,7 @@ import {
   ActionSchema,
   type Permissions,
   type Resource,
-} from "@shared";
+} from "@shared/access-control.ee";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

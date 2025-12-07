@@ -1,13 +1,9 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import config from "@/config";
-import { MemberModel, OrganizationRoleModel } from "@/models";
+import { MemberModel } from "@/models";
 import { ApiError, constructResponseSchema } from "@/types";
-
-const { PermissionsSchema } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-    await import("@shared/access-control.ee")
-  : await import("@shared/access-control");
+import OrganizationRoleModel from '@/models/organization-role.ee';
+import { PermissionsSchema } from '@shared/access-control.ee';
 
 const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -20,7 +16,7 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(PermissionsSchema),
       },
     },
-    async ({ user, organizationId }, reply) => {
+    async ({ user,acce organizationId }, reply) => {
       // Get user's member record to find their role
       const member = await MemberModel.getByUserId(user.id, organizationId);
 

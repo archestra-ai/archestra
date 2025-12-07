@@ -2,20 +2,16 @@ import { PredefinedRoleNameSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
-import config from "@/config";
 import logger from "@/logging";
-import { OrganizationRoleModel, UserModel } from "@/models";
+import OrganizationRoleModel from '@/models/organization-role.ee';
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
-
-const { PermissionsSchema } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
-    await import("@shared/access-control.ee")
-  : await import("@shared/access-control");
+import { getUserPermissions } from "@/models/user.ee";
+import { PermissionsSchema } from "@shared/access-control.ee";
 
 const CreateUpdateRoleNameSchema = z
   .string()
@@ -78,7 +74,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
-      const userPermissions = await UserModel.getUserPermissions(
+      const userPermissions = await getUserPermissions(
         user.id,
         organizationId,
       );
@@ -217,7 +213,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate permissions if being changed
       if (permission) {
-        const userPermissions = await UserModel.getUserPermissions(
+        const userPermissions = await getUserPermissions(
           user.id,
           organizationId,
         );

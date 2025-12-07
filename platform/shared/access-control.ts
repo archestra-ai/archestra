@@ -1,7 +1,4 @@
-import { z } from "zod";
 import type { RouteId } from "./routes";
-
-export const PermissionsSchema = z.record(z.string(), z.array(z.string()));
 
 export const allAvailableActions = {};
 

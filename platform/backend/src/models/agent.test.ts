@@ -273,9 +273,7 @@ describe("AgentModel", () => {
         id: team2.id,
         name: team2.name,
       });
-      expect(
-        updatedAgent?.teams.some((t) => t.id === team1.id),
-      ).toBe(false);
+      expect(updatedAgent?.teams.some((t) => t.id === team1.id)).toBe(false);
     });
 
     test("update without teams keeps existing assignments", async ({

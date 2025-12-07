@@ -35,6 +35,8 @@ import {
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
 } from "./llm-metrics";
 
 describe("getObservableFetch", () => {
@@ -624,6 +626,167 @@ describe("reportBlockedTools with model", () => {
         model: "gpt-4",
       },
       3,
+    );
+  });
+});
+
+describe("reportTimeToFirstToken", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records time to first token with model", () => {
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0.5);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      0.5,
+    );
+  });
+
+  test("records time to first token without model", () => {
+    reportTimeToFirstToken("anthropic", testAgent, undefined, 0.25);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      0.25,
+    );
+  });
+
+  test("skips reporting for invalid TTFT value", () => {
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", 0);
+    reportTimeToFirstToken("openai", testAgent, "gpt-4", -1);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("records TTFT for different providers", () => {
+    reportTimeToFirstToken("gemini", testAgent, "gemini-pro", 0.3);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gemini-pro",
+      },
+      0.3,
+    );
+  });
+});
+
+describe("reportTokensPerSecond", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records tokens per second with model", () => {
+    // 100 tokens in 2 seconds = 50 tokens/sec
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 2);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gpt-4",
+      },
+      50,
+    );
+  });
+
+  test("records tokens per second without model", () => {
+    // 150 tokens in 3 seconds = 50 tokens/sec
+    reportTokensPerSecond("anthropic", testAgent, undefined, 150, 3);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "unknown",
+      },
+      50,
+    );
+  });
+
+  test("skips reporting for zero output tokens", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 0, 2);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("skips reporting for zero duration", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, 0);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("skips reporting for negative duration", () => {
+    reportTokensPerSecond("openai", testAgent, "gpt-4", 100, -1);
+
+    expect(histogramObserve).not.toHaveBeenCalled();
+  });
+
+  test("calculates correct tokens/sec for fast response", () => {
+    // 50 tokens in 0.5 seconds = 100 tokens/sec
+    reportTokensPerSecond("gemini", testAgent, "gemini-pro", 50, 0.5);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "gemini-pro",
+      },
+      100,
+    );
+  });
+
+  test("calculates correct tokens/sec for slow response", () => {
+    // 200 tokens in 10 seconds = 20 tokens/sec
+    reportTokensPerSecond("anthropic", testAgent, "claude-3", 200, 10);
+
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        profile_id: testAgent.id,
+        profile_name: testAgent.name,
+        model: "claude-3",
+      },
+      20,
     );
   });
 });

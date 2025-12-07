@@ -13,8 +13,8 @@ import {
 } from "@/types";
 
 const { PermissionsSchema } = config.enterpriseLicenseActivated
-  // biome-ignore lint/style/noRestrictedImports: conditional schema
-  ? await import("@shared/access-control.ee")
+  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
+    await import("@shared/access-control.ee")
   : await import("@shared/access-control");
 
 const CreateUpdateRoleNameSchema = z

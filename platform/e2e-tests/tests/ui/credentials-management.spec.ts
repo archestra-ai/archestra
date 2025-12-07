@@ -20,6 +20,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
+  DEFAULT_PROFILE_NAME,
   DEFAULT_TEAM_NAME,
   E2eTestId,
   EDITOR_EMAIL,
@@ -29,7 +30,6 @@ import {
   MEMBER_EMAIL,
 } from "../../consts";
 import { expect, test } from "../../fixtures";
-import { getTeamByName, removeTeamMember } from "../api/fixtures";
 import {
   callMcpTool,
   getOrgTokenForProfile,
@@ -219,7 +219,7 @@ test.describe("Credentials Management", () => {
     }) => {
       await goToAdminPage("/profiles");
       await adminPage
-        .getByRole("button", { name: "Connect", exact: true })
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
         .click();
       await adminPage.waitForLoadState("networkidle");
 
@@ -282,7 +282,7 @@ test.describe("Credentials Management", () => {
     }) => {
       await goToAdminPage("/profiles");
       await adminPage
-        .getByRole("button", { name: "Connect", exact: true })
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
         .click();
       await adminPage.waitForLoadState("networkidle");
 
@@ -327,7 +327,7 @@ test.describe("Credentials Management", () => {
     }) => {
       await goToAdminPage("/profiles");
       await adminPage
-        .getByRole("button", { name: "Connect", exact: true })
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
         .click();
       await adminPage.waitForLoadState("networkidle");
 
@@ -372,7 +372,6 @@ test.describe("Credentials Management", () => {
         page: adminPage,
         goTo: goToAdminPage,
       });
-      await adminPage.getByRole("combobox").click();
       await adminPage
         .getByLabel("admin@example.comMarketing")
         .getByText("admin@example.com")
@@ -398,8 +397,10 @@ test.describe("Credentials Management", () => {
         page: adminPage,
         goTo: goToAdminPage,
       });
-      await adminPage.getByRole("combobox").click();
-      await adminPage.getByText("editor@example.com").click();
+      await adminPage
+        .getByLabel("Resolve at call time")
+        .getByText("Resolve at call time")
+        .click();
       await adminPage
         .getByRole("button", { name: "Assign", exact: false })
         .click();
@@ -427,7 +428,10 @@ async function goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
     `${E2eTestId.ManageToolsButton}-${TEST_SERVER_NAME}`,
   );
   await manageToolsButton.click();
-  await page.getByRole("button", { name: "Assign Tool to Profiles" }).click();
+  await page
+    .getByRole("button", { name: "Assign Tool to Profiles" })
+    .first()
+    .click();
   await page.getByRole("checkbox").first().click();
   await page.waitForLoadState("networkidle");
   await page.getByRole("combobox").click();

@@ -11,6 +11,7 @@ import {
   useRotateProfileToken,
 } from "@/lib/profile-token.query";
 import { LoadingSpinner } from "./loading";
+import { WithPermissions } from "./roles/with-permissions";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -112,95 +113,98 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-medium">Access Tokens</h4>
-          <p className="text-xs text-muted-foreground">
-            Tokens for authenticating with the MCP Gateway. Tokens are
-            automatically managed based on team assignments.
-          </p>
+      <WithPermissions
+        permissions={{ profile: ["admin"] }}
+        noPermissionHandle="hide"
+      >
+        <div className="flex justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-medium">Access Tokens</h4>
+            <p className="text-xs text-muted-foreground">
+              Tokens for authenticating with the MCP Gateway. Tokens are
+              automatically managed based on team assignments.
+            </p>
+          </div>
+          <div className="w-[max-content]">
+            <span className="text-sm whitespace-nowrap">
+              Assign teams to profile:
+            </span>
+            <MultiSelect
+              value={assignedTeamIds}
+              onValueChange={handleTeamsChange}
+              placeholder="Select teams to assign"
+              items={teams?.map((t) => ({ value: t.id, label: t.name })) || []}
+              disabled={updateProfile.isPending}
+              className="h-8 text-xs min-w-[120px]"
+              showSelectedBadges={false}
+              triggerTestId={E2eTestId.ProfileTokenManagerTeamsSelect}
+            />
+          </div>
         </div>
-        <div className="w-[max-content]">
-          <span className="text-sm whitespace-nowrap">
-            Assign teams to profile:
-          </span>
-          <MultiSelect
-            value={assignedTeamIds}
-            onValueChange={handleTeamsChange}
-            placeholder="Select teams to assign"
-            items={teams?.map((t) => ({ value: t.id, label: t.name })) || []}
-            disabled={updateProfile.isPending}
-            className="h-8 text-xs min-w-[120px]"
-            showSelectedBadges={false}
-            triggerTestId={E2eTestId.ProfileTokenManagerTeamsSelect}
-          />
-        </div>
-      </div>
-
-      {tokens && tokens.length > 0 ? (
-        <div className="border rounded-md">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Scope</TableHead>
-                <TableHead>Token</TableHead>
-                <TableHead className="w-[50px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tokens.map((token) => (
-                <TableRow key={token.id}>
-                  <TableCell className="font-medium relative">
-                    <div className="flex items-center gap-2">
-                      <Key className="h-4 w-4 text-muted-foreground" />
-                      <div className="text-sm pb-2 relative">
-                        {token.name}{" "}
-                        <div className="text-[11px] text-muted-foreground absolute bottom-[-8px] w-[max-content]">
-                          Last used: {formatDate(token.lastUsedAt)}
+        {tokens && tokens.length > 0 ? (
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead>Token</TableHead>
+                  <TableHead className="w-[50px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tokens.map((token) => (
+                  <TableRow key={token.id}>
+                    <TableCell className="font-medium relative">
+                      <div className="flex items-center gap-2">
+                        <Key className="h-4 w-4 text-muted-foreground" />
+                        <div className="text-sm pb-2 relative">
+                          {token.name}{" "}
+                          <div className="text-[11px] text-muted-foreground absolute bottom-[-8px] w-[max-content]">
+                            Last used: {formatDate(token.lastUsedAt)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {token.isOrganizationToken ? (
-                      <Badge variant="secondary">Whole Organization</Badge>
-                    ) : token.team ? (
-                      <Badge variant="outline">{token.team.name}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">
-                        No team
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                      {token.tokenStart}...
-                    </code>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openRotateDialog(token.id)}
-                      title="Rotate token"
-                      className="relative right-2"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
-          No tokens available. Tokens will be created automatically when the
-          profile is assigned to teams.
-        </div>
-      )}
-
+                    </TableCell>
+                    <TableCell>
+                      {token.isOrganizationToken ? (
+                        <Badge variant="secondary">Whole Organization</Badge>
+                      ) : token.team ? (
+                        <Badge variant="outline">{token.team.name}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">
+                          No team
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                        {token.tokenStart}...
+                      </code>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openRotateDialog(token.id)}
+                        title="Rotate token"
+                        className="relative right-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
+            No tokens available. Tokens will be created automatically when the
+            profile is assigned to teams.
+          </div>
+        )}
+      </WithPermissions>
       <Dialog open={rotateDialogOpen} onOpenChange={setRotateDialogOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>

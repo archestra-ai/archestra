@@ -450,12 +450,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLabelValues]: {
     profile: ["read"],
   },
-  // Profile Token permissions - require profile update permission
   [RouteId.GetProfileTokens]: {
-    profile: ["read"],
+    profile: ["admin"],
   },
   [RouteId.RotateProfileToken]: {
-    profile: ["update"],
+    profile: ["admin"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],

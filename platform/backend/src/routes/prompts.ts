@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import config from "@/config";
 import { AgentTeamModel, PromptModel } from "@/models";
 import {
   ApiError,
@@ -12,6 +12,10 @@ import {
   UpdatePromptSchema,
   UuidIdSchema,
 } from "@/types";
+
+const { hasPermission } = config.enterpriseLicenseActivated
+  ? await import("@/auth/utils.ee")
+  : await import("@/auth/utils");
 
 const promptRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

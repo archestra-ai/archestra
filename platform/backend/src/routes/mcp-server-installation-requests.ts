@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import config from "@/config";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
   ApiError,
@@ -14,6 +14,10 @@ import {
   UpdateMcpServerInstallationRequestSchema,
   UuidIdSchema,
 } from "@/types";
+
+const { hasPermission } = config.enterpriseLicenseActivated
+  ? await import("@/auth/utils.ee")
+  : await import("@/auth/utils");
 
 const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
   fastify,

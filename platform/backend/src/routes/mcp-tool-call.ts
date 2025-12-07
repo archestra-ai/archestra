@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import config from "@/config";
 import { McpToolCallModel } from "@/models";
 import {
   ApiError,
@@ -12,6 +12,10 @@ import {
   SelectMcpToolCallSchema,
   UuidIdSchema,
 } from "@/types";
+
+const { hasPermission } = config.enterpriseLicenseActivated
+  ? await import("@/auth/utils.ee")
+  : await import("@/auth/utils");
 
 const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

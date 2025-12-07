@@ -1,9 +1,13 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import config from "@/config";
 import { ToolModel } from "@/models";
 import { constructResponseSchema, ExtendedSelectToolSchema } from "@/types";
+
+const { hasPermission } = config.enterpriseLicenseActivated
+  ? await import("@/auth/utils.ee")
+  : await import("@/auth/utils");
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

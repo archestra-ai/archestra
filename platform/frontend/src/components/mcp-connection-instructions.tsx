@@ -48,7 +48,7 @@ export function McpConnectionInstructions({
 
   const tokenForDisplay = selectedToken?.tokenStart
     ? `${selectedToken.tokenStart}...`
-    : "your-token-here";
+    : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
     () =>

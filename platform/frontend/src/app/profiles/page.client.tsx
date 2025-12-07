@@ -96,36 +96,25 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 }
 
 function ProfileTeamsBadges({
-  teamIds,
   teams,
 }: {
-  teamIds: string[];
-  teams:
-    | Array<{ id: string; name: string; description: string | null }>
-    | undefined;
+  teams: Array<{ id: string; name: string }> | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
-  if (!teams || teamIds.length === 0) {
+  if (!teams || teams.length === 0) {
     return <span className="text-sm text-muted-foreground">None</span>;
   }
 
-  const getTeamById = (teamId: string) => {
-    return teams.find((team) => team.id === teamId);
-  };
-
-  const visibleTeams = teamIds.slice(0, MAX_TEAMS_TO_SHOW);
-  const remainingTeams = teamIds.slice(MAX_TEAMS_TO_SHOW);
+  const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
+  const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {visibleTeams.map((teamId) => {
-        const team = getTeamById(teamId);
-        return (
-          <Badge key={teamId} variant="secondary" className="text-xs">
-            {team?.name || teamId}
-          </Badge>
-        );
-      })}
+      {visibleTeams.map((team) => (
+        <Badge key={team.id} variant="secondary" className="text-xs">
+          {team.name}
+        </Badge>
+      ))}
       {remainingTeams.length > 0 && (
         <TooltipProvider>
           <Tooltip>
@@ -136,14 +125,11 @@ function ProfileTeamsBadges({
             </TooltipTrigger>
             <TooltipContent>
               <div className="flex flex-col gap-1">
-                {remainingTeams.map((teamId) => {
-                  const team = getTeamById(teamId);
-                  return (
-                    <div key={teamId} className="text-xs">
-                      {team?.name || teamId}
-                    </div>
-                  );
-                })}
+                {remainingTeams.map((team) => (
+                  <div key={team.id} className="text-xs">
+                    {team.name}
+                  </div>
+                ))}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -192,14 +178,6 @@ function Profiles() {
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
 
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeams();
-      return data || [];
-    },
-  });
-
   const [searchQuery, setSearchQuery] = useState(nameFilter);
   const [sorting, setSorting] = useState<SortingState>([
     { id: sortBy, desc: sortDirection === "desc" },
@@ -221,7 +199,7 @@ function Profiles() {
   const [editingProfile, setEditingProfile] = useState<{
     id: string;
     name: string;
-    teams: string[];
+    teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
   } | null>(null);
@@ -402,7 +380,14 @@ function Profiles() {
         </Button>
       ),
       cell: ({ row }) => (
-        <ProfileTeamsBadges teamIds={row.original.teams || []} teams={teams} />
+        <ProfileTeamsBadges
+          teams={
+            row.original.teams as unknown as Array<{
+              id: string;
+              name: string;
+            }>
+          }
+        />
       ),
     },
     {
@@ -416,7 +401,19 @@ function Profiles() {
           <ProfileActions
             agent={agent}
             onConnect={setConnectingProfile}
-            onEdit={setEditingProfile}
+            onEdit={(agentData) => {
+              setEditingProfile({
+                id: agentData.id,
+                name: agentData.name,
+                teams:
+                  (agentData.teams as unknown as Array<{
+                    id: string;
+                    name: string;
+                  }>) || [],
+                labels: agentData.labels || [],
+                considerContextUntrusted: agentData.considerContextUntrusted,
+              });
+            }}
             onDelete={setDeletingProfileId}
           />
         );
@@ -798,7 +795,7 @@ function EditProfileDialog({
   agent: {
     id: string;
     name: string;
-    teams: string[];
+    teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
   };
@@ -807,7 +804,7 @@ function EditProfileDialog({
 }) {
   const [name, setName] = useState(agent.name);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
-    agent.teams || [],
+    agent.teams?.map((t) => t.id) || [],
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(agent.labels || []);
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(

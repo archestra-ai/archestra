@@ -55,7 +55,7 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
     null,
   );
 
-  const assignedTeamIds = profile?.teams || [];
+  const assignedTeams = profile?.teams || [];
 
   const handleTeamsChange = async (newTeamIds: string[]) => {
     try {
@@ -130,7 +130,7 @@ export function ProfileTokenManager({ profileId }: ProfileTokenManagerProps) {
               Assign teams to profile:
             </span>
             <MultiSelect
-              value={assignedTeamIds}
+              value={assignedTeams.map((t) => t.id)}
               onValueChange={handleTeamsChange}
               placeholder="Select teams to assign"
               items={teams?.map((t) => ({ value: t.id, label: t.name })) || []}

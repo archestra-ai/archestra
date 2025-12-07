@@ -15,7 +15,9 @@ describe("chat-mcp-client tool caching", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ teams: [team.id] });
+    const agent = await makeAgent({
+      teams: [team.id],
+    });
 
     // Add user to team as a member
     await makeTeamMember(team.id, user.id);

@@ -116,6 +116,7 @@ describe("McpClient", () => {
 
         // Assign tool to agent with response modifier
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Modified: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -163,6 +164,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             '{{#with (lookup response 0)}}{"formatted": true, "data": "{{{this.text}}}"}{{/with}}',
         });
@@ -198,6 +200,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: `{{#with (lookup response 0)}}{{#with (json this.text)}}
   {
   {{#each this.issues}}
@@ -247,6 +250,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{{json response}}}",
         });
 
@@ -283,6 +287,7 @@ describe("McpClient", () => {
 
         // Invalid Handlebars template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: "{{#invalid",
         });
 
@@ -320,6 +325,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Type: {{lookup (lookup response 0) "type"}}',
         });
@@ -354,6 +360,7 @@ describe("McpClient", () => {
 
         // Assign tool without response modifier template
         await AgentToolModel.create(agentId, tool.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate: null,
         });
 
@@ -398,11 +405,13 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool1.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 1: {{lookup (lookup response 0) "text"}}',
         });
 
         await AgentToolModel.create(agentId, tool2.id, {
+          credentialSourceMcpServerId: mcpServerId,
           responseModifierTemplate:
             'Template 2: {{lookup (lookup response 0) "text"}}',
         });
@@ -500,7 +509,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -550,7 +561,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager responses - no endpoint URL
         mockUsesStreamableHttp.mockResolvedValue(true);
@@ -586,6 +599,7 @@ describe("McpClient", () => {
         });
 
         await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
           responseModifierTemplate:
             'Result: {{{lookup (lookup response 0) "text"}}}',
         });
@@ -628,7 +642,9 @@ describe("McpClient", () => {
           mcpServerId: localMcpServerId,
         });
 
-        await AgentToolModel.create(agentId, tool.id);
+        await AgentToolModel.create(agentId, tool.id, {
+          executionSourceMcpServerId: localMcpServerId,
+        });
 
         // Mock runtime manager to indicate stdio transport (not HTTP)
         mockUsesStreamableHttp.mockResolvedValue(false);

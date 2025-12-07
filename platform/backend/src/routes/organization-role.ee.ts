@@ -1,17 +1,17 @@
 import { PredefinedRoleNameSchema, RouteId } from "@shared";
+import { PermissionsSchema } from "@shared/access-control.ee";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import logger from "@/logging";
-import OrganizationRoleModel from '@/models/organization-role.ee';
+import OrganizationRoleModel from "@/models/organization-role.ee";
+import { getUserPermissions } from "@/models/user.ee";
 import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
-import { getUserPermissions } from "@/models/user.ee";
-import { PermissionsSchema } from "@shared/access-control.ee";
 
 const CreateUpdateRoleNameSchema = z
   .string()
@@ -74,10 +74,7 @@ const organizationRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { organizationId, user } = request;
 
       // Get user's permissions to validate they can grant these permissions
-      const userPermissions = await getUserPermissions(
-        user.id,
-        organizationId,
-      );
+      const userPermissions = await getUserPermissions(user.id, organizationId);
 
       const validation = OrganizationRoleModel.validateRolePermissions(
         userPermissions,

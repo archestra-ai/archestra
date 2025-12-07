@@ -9,7 +9,8 @@ import config from "@/lib/config";
 export default function RolesSettingsPage() {
   const { RolesList } = use(
     config.enterpriseLicenseActivated
-      ? import("@/components/roles/roles-list.ee")
+      ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with roles
+        import("@/components/roles/roles-list.ee")
       : Promise.resolve({
           RolesList: () => (
             <EnterpriseLicenseRequired featureName="Custom Roles" />

@@ -1,7 +1,7 @@
-import { type Permissions } from '@shared/access-control.ee';
-import logger from '@/logging';
-import MemberModel from '@/models/member';
-import OrganizationRoleModel from '@/models/organization-role.ee';
+import type { Permissions } from "@shared/access-control.ee";
+import logger from "@/logging";
+import MemberModel from "@/models/member";
+import OrganizationRoleModel from "@/models/organization-role.ee";
 
 export async function getUserPermissions(
   userId: string,

@@ -1,4 +1,7 @@
-import { allAvailableActions, type Permissions } from "@shared/access-control.ee.ts";
+import {
+  allAvailableActions,
+  type Permissions,
+} from "@shared/access-control.ee.ts";
 import {
   type APIRequestContext,
   expect,

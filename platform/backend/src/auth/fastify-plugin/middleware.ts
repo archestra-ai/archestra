@@ -13,7 +13,8 @@ const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
   : await import("@shared/access-control");
 
 const { hasPermission } = config.enterpriseLicenseActivated
-  ? await import("@/auth/utils.ee")
+  ? // biome-ignore lint/style/noRestrictedImports: conditional permission check
+    await import("@/auth/utils.ee")
   : await import("@/auth/utils");
 
 export class Authnz {

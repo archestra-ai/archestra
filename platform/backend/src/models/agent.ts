@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE_NAME } from "@shared";
+import { DEFAULT_PROFILE_NAME } from "@archestra/shared";
 import {
   and,
   asc,

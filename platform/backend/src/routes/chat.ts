@@ -1,5 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@shared";
+import { EXTERNAL_AGENT_ID_HEADER, RouteId } from "@archestra/shared";
 import {
   convertToModelMessages,
   generateText,

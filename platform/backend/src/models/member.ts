@@ -1,4 +1,4 @@
-import type { AnyRoleName } from "@shared";
+import type { AnyRoleName } from "@archestra/shared";
 import { and, count, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";

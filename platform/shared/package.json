@@ -1,5 +1,5 @@
 {
-  "name": "@shared",
+  "name": "@archestra/shared",
   "version": "0.0.12",
   "description": "",
   "type": "module",

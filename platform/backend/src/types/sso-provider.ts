@@ -3,7 +3,7 @@ import {
   SsoProviderSamlConfigSchema,
   SsoRoleMappingConfigSchema,
   SsoTeamSyncConfigSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

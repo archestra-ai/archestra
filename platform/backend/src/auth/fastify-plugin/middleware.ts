@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { RouteId } from "@shared";
+import type { RouteId } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth } from "@/auth";
 import { hasPermission } from "@/auth/utils";
@@ -10,8 +10,8 @@ import { ApiError } from "@/types";
 
 const { requiredEndpointPermissionsMap } = config.enterpriseLicenseActivated
   ? // biome-ignore lint/style/noRestrictedImports: conditional endpoint permissions
-    await import("@shared/access-control.ee")
-  : await import("@shared/access-control");
+    await import("@archestra/shared/access-control.ee")
+  : await import("@archestra/shared/access-control");
 
 export class Authnz {
   public handle = async (request: FastifyRequest, _reply: FastifyReply) => {

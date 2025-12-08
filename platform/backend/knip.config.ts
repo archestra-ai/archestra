@@ -13,7 +13,7 @@ const config: KnipConfig = {
   ignore: ["src/**/*.test.ts", "src/database/migrations/**"],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
-    "@shared",
+    "@archestra/shared",
     // Used in logging.ts
     "pino-pretty",
   ],

@@ -1,4 +1,4 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type { OrganizationCustomFont, OrganizationTheme } from "@archestra/shared";
 import {
   boolean,
   pgTable,

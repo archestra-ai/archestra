@@ -102,8 +102,6 @@ export default defineConfig((options: UserConfig) => {
     // Generate source maps for better stack traces
     sourcemap: true,
 
-    // Bundle @shared since it's a workspace package and needs to be included
-    noExternal: [/@shared/],
     tsconfig: "./tsconfig.json",
 
     ignoreWatch: [

@@ -55,7 +55,7 @@
     "@sentry/node": "^10.27.0",
     "@sentry/opentelemetry": "^10.27.0",
     "@sentry/profiling-node": "^10.27.0",
-    "@shared": "workspace:*",
+    "@archestra/shared": "workspace:*",
     "@smithy/signature-v4": "^5.3.5",
     "@toon-format/toon": "^2.0.0",
     "ai": "^5.0.101",

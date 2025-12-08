@@ -6,7 +6,7 @@ import {
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import dotenv from "dotenv";
 import logger from "@/logging";
 import packageJson from "../../package.json";

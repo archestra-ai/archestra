@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role.ee";

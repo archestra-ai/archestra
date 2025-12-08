@@ -1,4 +1,4 @@
-import { actions, resources } from "@shared";
+import { actions, resources } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

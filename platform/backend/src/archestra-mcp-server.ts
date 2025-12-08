@@ -3,7 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import logger from "@/logging";
 import {
   AgentModel,

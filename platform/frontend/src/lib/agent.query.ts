@@ -47,6 +47,16 @@ export function useProfilesPaginated(params?: {
   const { initialData, limit, offset, sortBy, sortDirection, name } =
     params || {};
 
+  // Check if we can use initialData (server-side fetched data)
+  // Only use it for the first page (offset 0), default sorting, no search filter,
+  // AND matching default page size (20)
+  const useInitialData =
+    offset === 0 &&
+    (sortBy === undefined || sortBy === "createdAt") &&
+    (sortDirection === undefined || sortDirection === "desc") &&
+    name === undefined &&
+    (limit === undefined || limit === 20);
+
   return useSuspenseQuery({
     queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],
     queryFn: async () =>
@@ -61,14 +71,7 @@ export function useProfilesPaginated(params?: {
           },
         })
       ).data ?? null,
-    // Only use initialData for the first page (offset 0) with default sorting
-    initialData:
-      offset === 0 &&
-      (sortBy === undefined || sortBy === "createdAt") &&
-      (sortDirection === undefined || sortDirection === "desc") &&
-      name === undefined
-        ? initialData
-        : undefined,
+    initialData: useInitialData ? initialData : undefined,
   });
 }
 

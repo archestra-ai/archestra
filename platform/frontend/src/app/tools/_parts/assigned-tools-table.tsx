@@ -147,6 +147,7 @@ export function AssignedToolsTable({
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
     pageIndex === 0 &&
+    pageSize === 50 &&
     !searchQuery &&
     agentFilter === "all" &&
     originFilter === "all" &&

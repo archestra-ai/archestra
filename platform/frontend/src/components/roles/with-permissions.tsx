@@ -1,12 +1,7 @@
-import type { Permissions } from "@shared";
 import type React from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth.query";
-import { permissionsToStrings } from "@/lib/auth.utils";
+import config from "@/lib/config";
+
+type Permissions = Record<string, string[]>;
 
 type WithPermissionsProps = {
   permissions: Permissions;
@@ -25,39 +20,27 @@ type WithPermissionsProps = {
     }
 );
 
-export function WithPermissions({
-  children,
-  permissions,
-  noPermissionHandle,
-}: WithPermissionsProps) {
-  const { data: hasPermission, isPending } = useHasPermissions(permissions);
+const {
+  WithPermissions: WithPermissionsEE,
+  WithoutPermissions: WithoutPermissionsEE,
+} = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: EE-only permission components
+    await import("./with-permissions.ee")
+  : {
+      WithPermissions: ({ children, noPermissionHandle }: WithPermissionsProps) => {
+        // Free version: always allow, no permission checks
+        return typeof children === "function"
+          ? children({ hasPermission: true })
+          : children;
+      },
+      WithoutPermissions: () => {
+        // Free version: never render (user always has permissions)
+        return null;
+      },
+    };
 
-  // if has permission, return children as is
-  if (hasPermission) {
-    return typeof children === "function"
-      ? children({ hasPermission: true })
-      : children;
-  }
-
-  // if no permission and noPermissionHandle is 'hide', return null
-  if (noPermissionHandle === "hide") {
-    return null;
-  }
-
-  // if no permission and noPermissionHandle is 'tooltip', return a tooltip with the permission error
-  if (noPermissionHandle === "tooltip") {
-    const permissionError = `Missing permissions: ${permissionsToStrings(permissions).join(", ")}`;
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="cursor-not-allowed">
-            {children({ hasPermission: isPending ? undefined : false })}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-60">{`${permissionError}.`}</TooltipContent>
-      </Tooltip>
-    );
-  }
+export function WithPermissions(props: WithPermissionsProps) {
+  return <WithPermissionsEE {...props} />;
 }
 
 export function WithoutPermissions({
@@ -67,11 +50,5 @@ export function WithoutPermissions({
   permissions: Permissions;
   children: React.ReactNode;
 }) {
-  const { data: hasPermission } = useHasPermissions(permissions);
-
-  if (hasPermission) {
-    return null;
-  }
-
-  return children;
+  return <WithoutPermissionsEE permissions={permissions}>{children}</WithoutPermissionsEE>;
 }

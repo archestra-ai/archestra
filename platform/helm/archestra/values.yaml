@@ -7,6 +7,9 @@ archestra:
   # Options: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
 
+  # Number of pod replicas for the Archestra Platform deployment
+  replicaCount: 1
+
   # Deployment strategy configuration for the Deployment
   # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/#:~:text=strategy%20(DeploymentStrategy)
   # When null, the default Kubernetes strategy is used

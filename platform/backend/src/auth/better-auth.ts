@@ -1,6 +1,6 @@
+import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@archestra/shared";
 import type { HookEndpointContext } from "@better-auth/core";
 import { sso } from "@better-auth/sso";
-import { MEMBER_ROLE_NAME, SSO_TRUSTED_PROVIDER_IDS } from "@archestra/shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";

@@ -26,10 +26,7 @@ const {
   ? // biome-ignore lint/style/noRestrictedImports: EE-only permission components
     await import("./with-permissions.ee")
   : {
-      WithPermissions: ({
-        children,
-        noPermissionHandle,
-      }: WithPermissionsProps) => {
+      WithPermissions: ({ children }: WithPermissionsProps) => {
         // Free version: always allow, no permission checks
         return typeof children === "function"
           ? children({ hasPermission: true })

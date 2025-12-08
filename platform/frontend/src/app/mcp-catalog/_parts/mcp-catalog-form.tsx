@@ -1,7 +1,7 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Info } from "lucide-react";
 import { useEffect } from "react";
 import { useFieldArray, useForm } from "react-hook-form";

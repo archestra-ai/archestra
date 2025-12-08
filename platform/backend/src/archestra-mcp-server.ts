@@ -1,9 +1,9 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME,
 } from "@archestra/shared";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
 import {
   AgentModel,

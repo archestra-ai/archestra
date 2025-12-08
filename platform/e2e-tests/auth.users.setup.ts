@@ -1,9 +1,9 @@
+import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import {
   type APIRequestContext,
   expect,
   test as setup,
 } from "@playwright/test";
-import { EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

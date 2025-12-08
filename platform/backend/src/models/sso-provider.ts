@@ -1,6 +1,6 @@
-import type { SSOOptions } from "@better-auth/sso";
 import type { SsoRoleMappingConfig } from "@archestra/shared";
 import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
 import { jwtDecode } from "jwt-decode";

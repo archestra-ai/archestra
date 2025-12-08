@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  ARCHESTRA_MCP_SERVER_NAME,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+} from "@archestra/shared";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -6,10 +10,6 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_SERVER_NAME,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import {
   executeArchestraTool,

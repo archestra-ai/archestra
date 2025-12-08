@@ -1,6 +1,6 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import fastifyHttpProxy from "@fastify/http-proxy";
 import { RouteId } from "@archestra/shared";
+import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { get } from "lodash-es";

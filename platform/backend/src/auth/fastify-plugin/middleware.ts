@@ -1,5 +1,5 @@
-import * as Sentry from "@sentry/node";
 import type { RouteId } from "@archestra/shared";
+import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth } from "@/auth";
 import { hasPermission } from "@/auth/utils";

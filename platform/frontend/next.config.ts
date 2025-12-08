@@ -1,5 +1,5 @@
-import { withSentryConfig } from "@sentry/nextjs";
 import { MCP_CATALOG_API_BASE_URL } from "@archestra/shared";
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

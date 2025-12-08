@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import { RouteId } from "@archestra/shared";
+import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";

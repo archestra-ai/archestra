@@ -1,8 +1,8 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import type { archestraApiTypes } from "@archestra/shared";
 import { EnvironmentVariableSchema } from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";

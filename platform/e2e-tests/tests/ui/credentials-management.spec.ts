@@ -202,6 +202,58 @@ test.describe("Credentials Management", () => {
     expect(visibleEmails.length).toBe(3);
   });
 
+  test.describe("Static credential selection", () => {
+    test("Choose admin static credential and verify that tool call used admin's credential", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+        page: adminPage,
+        goTo: goToAdminPage,
+      });
+      await adminPage
+        .getByLabel("admin@example.comMarketing")
+        .getByText("admin@example.com")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Admin",
+        tokenToUse: "org-token",
+      });
+    });
+
+    test("Choose editor static credential and verify that tool call used editor's credential", async ({
+      adminPage,
+      goToAdminPage,
+      request,
+    }) => {
+      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
+        page: adminPage,
+        goTo: goToAdminPage,
+      });
+      await adminPage
+        .getByLabel("Resolve at call time")
+        .getByText("Resolve at call time")
+        .click();
+      await adminPage
+        .getByRole("button", { name: "Assign", exact: false })
+        .click();
+      await adminPage.waitForTimeout(2_000);
+
+      await verifyToolCallResultViaApi({
+        request,
+        expectedText: "Editor",
+        tokenToUse: "org-token",
+      });
+    });
+  });
+
   test.describe("Dynamic credential selection", () => {
     test.describe.configure({ mode: "serial" });
     /**
@@ -289,7 +341,7 @@ test.describe("Credentials Management", () => {
 
       await adminPage.waitForLoadState("networkidle");
 
-      // Check if already assigned and skip if it is
+      // Check if already unassigned and skip if it is
       const engineeringTeamBadgeVisible = await adminPage
         .getByTestId(`${E2eTestId.ProfileTeamBadge}-${ENGINEERING_TEAM_NAME}`)
         .isVisible();
@@ -366,58 +418,6 @@ test.describe("Credentials Management", () => {
       await verifyToolCallResultViaApi({
         request,
         expectedText: "AnySuccessText",
-        tokenToUse: "org-token",
-      });
-    });
-  });
-
-  test.describe("Static credential selection", () => {
-    test("Choose admin static credential and verify that tool call used admin's credential", async ({
-      adminPage,
-      goToAdminPage,
-      request,
-    }) => {
-      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
-        page: adminPage,
-        goTo: goToAdminPage,
-      });
-      await adminPage
-        .getByLabel("admin@example.comMarketing")
-        .getByText("admin@example.com")
-        .click();
-      await adminPage
-        .getByRole("button", { name: "Assign", exact: false })
-        .click();
-      await adminPage.waitForTimeout(2_000);
-
-      await verifyToolCallResultViaApi({
-        request,
-        expectedText: "Admin",
-        tokenToUse: "org-token",
-      });
-    });
-
-    test("Choose editor static credential and verify that tool call used editor's credential", async ({
-      adminPage,
-      goToAdminPage,
-      request,
-    }) => {
-      await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
-        page: adminPage,
-        goTo: goToAdminPage,
-      });
-      await adminPage
-        .getByLabel("Resolve at call time")
-        .getByText("Resolve at call time")
-        .click();
-      await adminPage
-        .getByRole("button", { name: "Assign", exact: false })
-        .click();
-      await adminPage.waitForTimeout(2_000);
-
-      await verifyToolCallResultViaApi({
-        request,
-        expectedText: "Editor",
         tokenToUse: "org-token",
       });
     });

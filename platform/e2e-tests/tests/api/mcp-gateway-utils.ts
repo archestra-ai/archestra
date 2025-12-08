@@ -62,17 +62,17 @@ export async function makeApiRequest({
 }
 
 /**
- * Get organization token for a profile (rotates to get the actual value)
+ * Get organization token value
+ * Note: profileId parameter is kept for backward compatibility but not used
  */
 export async function getOrgTokenForProfile(
   request: APIRequestContext,
-  profileId: string,
 ): Promise<string> {
-  // Get the Organization Token
+  // Get all tokens (org token + team tokens)
   const tokensResponse = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: `/api/profiles/${profileId}/tokens`,
+    urlSuffix: "/api/tokens",
   });
   const tokens = await tokensResponse.json();
   const orgToken = tokens.find(
@@ -80,17 +80,17 @@ export async function getOrgTokenForProfile(
   );
 
   if (!orgToken) {
-    throw new Error(`No organization token found for profile ${profileId}`);
+    throw new Error("No organization token found");
   }
 
-  // Rotate the token to get the actual value
-  const rotateResponse = await makeApiRequest({
+  // Get the token value (don't rotate - causes race conditions in parallel tests)
+  const valueResponse = await makeApiRequest({
     request,
-    method: "post",
-    urlSuffix: `/api/profiles/${profileId}/tokens/${orgToken.id}/rotate`,
+    method: "get",
+    urlSuffix: `/api/tokens/${orgToken.id}/value`,
   });
-  const rotatedToken = await rotateResponse.json();
-  return rotatedToken.value;
+  const tokenData = await valueResponse.json();
+  return tokenData.value;
 }
 
 /**
@@ -193,19 +193,19 @@ export async function callMcpTool(
 }
 
 /**
- * Get team token for a profile (rotates to get the actual value)
+ * Get team token value by team name
  * @param teamName - The name of the team to get the token for
+ * Note: profileId parameter is kept for backward compatibility but not used
  */
 export async function getTeamTokenForProfile(
   request: APIRequestContext,
-  profileId: string,
   teamName: string,
 ): Promise<string> {
-  // Get all tokens for the profile
+  // Get all tokens (org token + team tokens)
   const tokensResponse = await makeApiRequest({
     request,
     method: "get",
-    urlSuffix: `/api/profiles/${profileId}/tokens`,
+    urlSuffix: "/api/tokens",
   });
   const tokens = await tokensResponse.json();
 
@@ -216,19 +216,17 @@ export async function getTeamTokenForProfile(
   );
 
   if (!teamToken) {
-    throw new Error(
-      `No team token found for profile ${profileId} and team ${teamName}`,
-    );
+    throw new Error(`No team token found for team ${teamName}`);
   }
 
-  // Rotate the token to get the actual value
-  const rotateResponse = await makeApiRequest({
+  // Get the token value (don't rotate - causes race conditions in parallel tests)
+  const valueResponse = await makeApiRequest({
     request,
-    method: "post",
-    urlSuffix: `/api/profiles/${profileId}/tokens/${teamToken.id}/rotate`,
+    method: "get",
+    urlSuffix: `/api/tokens/${teamToken.id}/value`,
   });
-  const rotatedToken = await rotateResponse.json();
-  return rotatedToken.value;
+  const tokenData = await valueResponse.json();
+  return tokenData.value;
 }
 
 /**

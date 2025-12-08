@@ -458,19 +458,11 @@ async function verifyToolCallResultViaApi({
 
   let token: string;
   if (tokenToUse === "default-team") {
-    token = await getTeamTokenForProfile(
-      request,
-      defaultProfile.id,
-      DEFAULT_TEAM_NAME,
-    );
+    token = await getTeamTokenForProfile(request, DEFAULT_TEAM_NAME);
   } else if (tokenToUse === "engineering-team") {
-    token = await getTeamTokenForProfile(
-      request,
-      defaultProfile.id,
-      ENGINEERING_TEAM_NAME,
-    );
+    token = await getTeamTokenForProfile(request, ENGINEERING_TEAM_NAME);
   } else {
-    token = await getOrgTokenForProfile(request, defaultProfile.id);
+    token = await getOrgTokenForProfile(request);
   }
 
   const sessionId = await initializeMcpSession(request, {

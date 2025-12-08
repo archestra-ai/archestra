@@ -267,7 +267,7 @@ test.describe("MCP Gateway - New Auth (archestra token)", () => {
     profileId = profile.id;
 
     // Get org token using shared utility
-    archestraToken = await getOrgTokenForProfile(request, profileId);
+    archestraToken = await getOrgTokenForProfile(request);
   });
 
   test.afterAll(async ({ request, deleteAgent }) => {
@@ -628,7 +628,7 @@ test.describe("MCP Gateway - External MCP Server Tool Invocation (New Auth)", ()
     profileId = defaultProfile.id;
 
     // Get org token using shared utility
-    archestraToken = await getOrgTokenForProfile(request, profileId);
+    archestraToken = await getOrgTokenForProfile(request);
 
     // Find the catalog item for internal-dev-test-server
     const catalogItem = await findCatalogItem(request, TEST_SERVER_NAME);

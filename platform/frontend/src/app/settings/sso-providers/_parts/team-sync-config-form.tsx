@@ -173,40 +173,62 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
                       <SelectItem value="token">ID Token Only</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription>
-                    Choose which SSO data to use for extracting group
-                    identifiers.
+                  <FormDescription className="space-y-1">
+                    <span className="block">
+                      Choose which SSO data to use for extracting group
+                      identifiers.
+                    </span>
+                    <span className="block">
+                      <strong>ID Token</strong> — Claims from the JWT.
+                    </span>
+                    <span className="block">
+                      <strong>UserInfo</strong> — Data from the userinfo
+                      endpoint.
+                    </span>
+                    <span className="block">
+                      <strong>Combined</strong> — Both sources merged (UserInfo
+                      wins on conflicts).
+                    </span>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <div className="rounded-md bg-muted p-4">
-              <p className="text-sm font-medium mb-2">Example Templates</p>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
-                  <li key={`${expression}-${description}`}>
-                    <code className="text-xs bg-background px-1 py-0.5 rounded break-all">
-                      {expression}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem
+                value="examples"
+                className="!border rounded-md bg-muted/30"
+              >
+                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                  <span className="text-sm font-medium">Example Templates</span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4 pt-0">
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {HANDLEBARS_EXAMPLES.map(({ expression, description }) => (
+                      <li key={`${expression}-${description}`}>
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
+                          {expression}
+                        </code>
+                        <span className="ml-2">- {description}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Use this to extract group names from complex token
+                    structures. For example, if your IdP sends{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                      roles: [{"{"}name: &quot;admin&quot;{"}"}]
                     </code>
-                    <span className="ml-2">- {description}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs text-muted-foreground mt-3">
-                Use this to extract group names from complex token structures.
-                For example, if your IdP sends{" "}
-                <code className="text-xs bg-background px-1 py-0.5 rounded">
-                  roles: [{"{"}name: &quot;admin&quot;{"}"}]
-                </code>
-                , use{" "}
-                <code className="text-xs bg-background px-1 py-0.5 rounded">
-                  {"{{#each roles}}{{this.name}},{{/each}}"}
-                </code>
-                .
-              </p>
-            </div>
+                    , use{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                      {"{{#each roles}}{{this.name}},{{/each}}"}
+                    </code>
+                    .
+                  </p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </AccordionContent>
         </AccordionItem>
       </Accordion>

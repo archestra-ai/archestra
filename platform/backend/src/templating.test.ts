@@ -370,4 +370,67 @@ describe("extractGroupsWithTemplate", () => {
       "users",
     ]);
   });
+
+  test("handles JSON string roles claim", () => {
+    // This is the actual format from Okta where roles is a JSON string, not an array
+    const context = {
+      roles:
+        '[{"name":"Application Administrator","attributes":[],"functionalAbilities":[]},{"name":"n8n_access","attributes":[],"functionalAbilities":[]}]',
+    };
+    const template =
+      "{{#with (json roles)}}{{#each this}}{{this.name}},{{/each}}{{/with}}";
+
+    expect(extractGroupsWithTemplate(template, context)).toEqual([
+      "Application Administrator",
+      "n8n_access",
+    ]);
+  });
+
+  test("handles JSON string roles with pluck helper", () => {
+    const context = {
+      roles:
+        '[{"name":"admin","type":"system"},{"name":"editor","type":"custom"}]',
+    };
+    const template = '{{{json (pluck (json roles) "name")}}}';
+
+    expect(extractGroupsWithTemplate(template, context)).toEqual([
+      "admin",
+      "editor",
+    ]);
+  });
+});
+
+describe("evaluateRoleMappingTemplate with JSON string claims", () => {
+  test("matches role in JSON string array", () => {
+    const context = {
+      roles:
+        '[{"name":"Application Administrator","attributes":[]},{"name":"archestra-admin","attributes":[]}]',
+    };
+    const template =
+      '{{#with (json roles)}}{{#each this}}{{#equals this.name "archestra-admin"}}true{{/equals}}{{/each}}{{/with}}';
+
+    expect(evaluateRoleMappingTemplate(template, context)).toBe(true);
+  });
+
+  test("does not match when role not in JSON string array", () => {
+    const context = {
+      roles:
+        '[{"name":"Application Administrator","attributes":[]},{"name":"n8n_access","attributes":[]}]',
+    };
+    const template =
+      '{{#with (json roles)}}{{#each this}}{{#equals this.name "archestra-admin"}}true{{/equals}}{{/each}}{{/with}}';
+
+    expect(evaluateRoleMappingTemplate(template, context)).toBe(false);
+  });
+
+  test("handles invalid JSON string gracefully", () => {
+    const context = {
+      roles: "not valid json",
+    };
+    const template =
+      '{{#with (json roles)}}{{#each this}}{{#equals this.name "admin"}}true{{/equals}}{{/each}}{{/with}}';
+
+    // Should return false when JSON parsing fails
+    expect(evaluateRoleMappingTemplate(template, context)).toBe(false);
+  });
 });

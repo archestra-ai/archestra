@@ -302,9 +302,31 @@ Handlebars templates should render to any non-empty string (like "true") when th
 | `{{#equals role "administrator"}}true{{/equals}}` | Match if role claim equals "administrator" |
 | `{{#each roles}}{{#equals this "platform-admin"}}true{{/equals}}{{/each}}` | Match if "platform-admin" is in roles array |
 | `{{#and department title}}{{#equals department "IT"}}true{{/equals}}{{/and}}` | Match IT department users with a title set |
-| `{{#or}}{{#includes groups "team-leads"}}true{{/includes}}{{#equals role "manager"}}true{{/equals}}{{/or}}` | Match team leads OR managers |
+| `{{#with (json roles)}}{{#each this}}{{#equals this.name "admin"}}true{{/equals}}{{/each}}{{/with}}` | Match role name in JSON string claim (see below) |
 
 > **Tip**: Templates should output any non-empty string when matching. The text "true" is commonly used but any output works.
+
+#### Handling JSON String Claims
+
+Some identity providers (like Okta) may send complex claims as JSON strings rather than native arrays. For example:
+
+```json
+{
+  "roles": "[{\"name\":\"Application Administrator\"},{\"name\":\"archestra-admin\"}]"
+}
+```
+
+To parse and match against JSON string claims, use the `json` helper with `#with`:
+
+```handlebars
+{{#with (json roles)}}{{#each this}}{{#equals this.name "archestra-admin"}}true{{/equals}}{{/each}}{{/with}}
+```
+
+This template:
+1. Parses the JSON string into an array using `(json roles)`
+2. Sets the parsed array as context using `#with`
+3. Iterates through each role object using `#each`
+4. Checks if any role's `name` property matches
 
 ### Provider-Specific Configuration
 
@@ -447,10 +469,11 @@ For identity providers with non-standard token formats, you can use Handlebars t
 | `{{#each roles}}{{this.name}},{{/each}}` | Extract names from objects: `[{name: "admin"}]` |
 | `{{{json (pluck roles "name")}}}` | Extract names as JSON array using pluck helper |
 | `{{#each user.memberships.groups}}{{this}},{{/each}}` | Nested path to groups |
+| `{{#with (json roles)}}{{#each this}}{{this.name}},{{/each}}{{/with}}` | Parse JSON string claim, then extract names |
 
-**Enterprise IdP Example (Complex Roles Claim):**
+**Enterprise IdP Example (Array of Objects):**
 
-If your IdP sends roles as an array of objects like:
+If your IdP sends roles as an array of objects:
 ```json
 {
   "roles": [
@@ -463,6 +486,27 @@ If your IdP sends roles as an array of objects like:
 Use the template: `{{#each roles}}{{this.name}},{{/each}}` to extract `["Application Administrator", "n8n_access"]`
 
 Or use the pluck helper: `{{{json (pluck roles "name")}}}` for a cleaner JSON array output.
+
+**Enterprise IdP Example (JSON String Claim):**
+
+Some IdPs (like Okta) may send complex claims as JSON **strings** rather than native arrays:
+```json
+{
+  "roles": "[{\"name\":\"Application Administrator\"},{\"name\":\"n8n_access\"}]"
+}
+```
+
+For JSON string claims, first parse the string using the `json` helper:
+
+```handlebars
+{{#with (json roles)}}{{#each this}}{{this.name}},{{/each}}{{/with}}
+```
+
+Or combine `json` and `pluck` helpers:
+
+```handlebars
+{{{json (pluck (json roles) "name")}}}
+```
 
 ### Linking Teams to External Groups
 

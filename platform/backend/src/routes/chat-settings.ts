@@ -54,7 +54,7 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           anthropicApiKey: z.string().optional(),
           resetApiKey: z.boolean().optional(),
-          // For BYOS (Bring Your Own Secrets) - external Vault path
+          // For BYOS (Bring Your Own Secrets) - path to the secret in the external Vault
           externalVaultSecret: z.string().optional(),
         }),
         response: constructResponseSchema(ChatSettingsResponseSchema),

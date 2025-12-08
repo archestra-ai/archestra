@@ -85,7 +85,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For PAT tokens (like GitHub), send the token directly
           // and we'll create a secret for it
           accessToken: z.string().optional(),
-          // For BYOS (Bring Your Own Secrets) - external Vault path
+          // For BYOS (Bring Your Own Secrets) - path to the secret in the external Vault
           externalVaultSecret: z.string().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),

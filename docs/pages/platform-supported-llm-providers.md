@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2025-10-17
+lastUpdated: 2025-12-08
 ---
 
 <!-- 
@@ -18,8 +18,6 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## OpenAI
 
-**Status**: Fully supported
-
 ### Supported OpenAI APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
@@ -27,7 +25,7 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ### OpenAI Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/openai` (default agent) or `http://localhost:9000/v1/openai/{agent-id}` (specific agent)
+- **Base URL**: `http://localhost:9000/v1/openai/{agent-id}`
 - **Authentication**: Pass your OpenAI API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Important Notes
@@ -38,14 +36,12 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## Anthropic
 
-**Status**: Streaming not yet supported
-
 ### Supported Anthropic APIs
 
-- **Messages API** (`/messages`) - ✅ Non-streaming mode supported
+- **Messages API** (`/messages`) - ✅ Fully supported
 
 ### Anthropic Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/anthropic` (default agent) or `http://localhost:9000/v1/anthropic/{agent-id}` (specific agent)
+- **Base URL**: `http://localhost:9000/v1/anthropic/{agent-id}`
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 

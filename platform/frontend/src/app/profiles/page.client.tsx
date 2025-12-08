@@ -111,7 +111,12 @@ function ProfileTeamsBadges({
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {visibleTeams.map((team) => (
-        <Badge key={team.id} variant="secondary" className="text-xs">
+        <Badge
+          key={team.id}
+          variant="secondary"
+          className="text-xs"
+          data-testid={`${E2eTestId.ProfileTeamBadge}-${team.name}`}
+        >
           {team.name}
         </Badge>
       ))}
@@ -959,6 +964,7 @@ function EditProfileDialog({
                         <button
                           type="button"
                           onClick={() => handleRemoveTeam(teamId)}
+                          data-testid={`${E2eTestId.RemoveTeamBadge}-${team?.name || teamId}`}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
                           <X className="h-3 w-3" />

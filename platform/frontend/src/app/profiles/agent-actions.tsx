@@ -44,6 +44,7 @@ export function ProfileActions({
         aria-label="Edit"
         variant="outline"
         size="icon-sm"
+        data-testid={`${E2eTestId.EditAgentButton}-${agent.name}`}
         onClick={(e) => {
           e.stopPropagation();
           onEdit({

@@ -27,6 +27,9 @@ export const E2eTestId = {
   InstallationSelect: "installation-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
+  ProfileTeamBadge: "profile-team-badge",
+  EditAgentButton: "edit-agent-button",
+  RemoveTeamBadge: "remove-team-badge",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 

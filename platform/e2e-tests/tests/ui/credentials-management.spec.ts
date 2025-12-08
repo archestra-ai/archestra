@@ -218,24 +218,29 @@ test.describe("Credentials Management", () => {
       goToAdminPage,
     }) => {
       await goToAdminPage("/profiles");
-      await adminPage
-        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
-        .click();
+
       await adminPage.waitForLoadState("networkidle");
 
       // Check if already assigned and skip if it is
       const engineeringTeamBadgeVisible = await adminPage
-        .getByText(`${ENGINEERING_TEAM_NAME} Token`)
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${ENGINEERING_TEAM_NAME}`)
         .isVisible();
       if (!engineeringTeamBadgeVisible) {
         await adminPage
-          .getByTestId(E2eTestId.ProfileTokenManagerTeamsSelect)
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
           .click();
+        await adminPage.getByText("Select a team to assign").click();
         await adminPage
-          .getByRole("button", { name: ENGINEERING_TEAM_NAME })
+          .getByRole("option", { name: ENGINEERING_TEAM_NAME })
           .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
         await adminPage.waitForLoadState("networkidle");
       }
+
+      await adminPage
+        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
+        .click();
+      await adminPage.waitForLoadState("networkidle");
 
       await goToMcpRegitryAndOpenManageToolsAndSelectTestTool({
         page: adminPage,
@@ -281,24 +286,25 @@ test.describe("Credentials Management", () => {
       request,
     }) => {
       await goToAdminPage("/profiles");
-      await adminPage
-        .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
-        .click();
+
       await adminPage.waitForLoadState("networkidle");
 
-      // Check if already unassigned and skip if it is
+      // Check if already assigned and skip if it is
       const engineeringTeamBadgeVisible = await adminPage
-        .getByText(`${ENGINEERING_TEAM_NAME} Token`)
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${ENGINEERING_TEAM_NAME}`)
         .isVisible();
+      await adminPage.waitForTimeout(2_000);
       if (engineeringTeamBadgeVisible) {
         await adminPage
-          .getByTestId(E2eTestId.ProfileTokenManagerTeamsSelect)
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
           .click();
         await adminPage
-          .getByRole("button", { name: ENGINEERING_TEAM_NAME })
+          .getByTestId(`${E2eTestId.RemoveTeamBadge}-${ENGINEERING_TEAM_NAME}`)
           .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
         await adminPage.waitForLoadState("networkidle");
       }
+
       try {
         await verifyToolCallResultViaApi({
           request,
@@ -306,7 +312,7 @@ test.describe("Credentials Management", () => {
           tokenToUse: "engineering-team",
         });
       } catch (error) {
-        expect((error as Error).message).toContain("No team token found");
+        expect((error as Error).message).toContain("Invalid token");
       }
       await verifyToolCallResultViaApi({
         request,
@@ -326,24 +332,27 @@ test.describe("Credentials Management", () => {
       request,
     }) => {
       await goToAdminPage("/profiles");
+      await adminPage.waitForLoadState("networkidle");
+
+      const defaultTeamBadgeVisible = await adminPage
+        .getByTestId(`${E2eTestId.ProfileTeamBadge}-${DEFAULT_TEAM_NAME}`)
+        .isVisible();
+      await adminPage.waitForTimeout(2_000);
+      if (defaultTeamBadgeVisible) {
+        await adminPage
+          .getByTestId(`${E2eTestId.EditAgentButton}-${DEFAULT_PROFILE_NAME}`)
+          .click();
+        await adminPage
+          .getByTestId(`${E2eTestId.RemoveTeamBadge}-${DEFAULT_TEAM_NAME}`)
+          .click();
+        await adminPage.getByRole("button", { name: "Update profile" }).click();
+        await adminPage.waitForLoadState("networkidle");
+      }
+
       await adminPage
         .getByTestId(`${E2eTestId.ConnectAgentButton}-${DEFAULT_PROFILE_NAME}`)
         .click();
       await adminPage.waitForLoadState("networkidle");
-
-      // Check if already unassigned and skip if it is
-      const defaultTeamBadgeVisible = await adminPage
-        .getByText(`${DEFAULT_TEAM_NAME} Token`)
-        .isVisible();
-      if (defaultTeamBadgeVisible) {
-        await adminPage
-          .getByTestId(E2eTestId.ProfileTokenManagerTeamsSelect)
-          .click();
-        await adminPage
-          .getByRole("button", { name: ENGINEERING_TEAM_NAME })
-          .click();
-        await adminPage.waitForLoadState("networkidle");
-      }
 
       try {
         await verifyToolCallResultViaApi({
@@ -352,7 +361,7 @@ test.describe("Credentials Management", () => {
           tokenToUse: "default-team",
         });
       } catch (error) {
-        expect((error as Error).message).toContain("No team token found");
+        expect((error as Error).message).toContain("Invalid token");
       }
       await verifyToolCallResultViaApi({
         request,
@@ -384,7 +393,7 @@ test.describe("Credentials Management", () => {
       await verifyToolCallResultViaApi({
         request,
         expectedText: "Admin",
-        tokenToUse: "default-team",
+        tokenToUse: "org-token",
       });
     });
 
@@ -409,7 +418,7 @@ test.describe("Credentials Management", () => {
       await verifyToolCallResultViaApi({
         request,
         expectedText: "Editor",
-        tokenToUse: "engineering-team",
+        tokenToUse: "org-token",
       });
     });
   });

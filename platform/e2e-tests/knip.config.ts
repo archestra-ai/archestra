@@ -11,7 +11,7 @@ const config: KnipConfig = {
   ignore: ["auth.*.setup.ts"],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
-    "@shared",
+    "@archestra/shared",
   ],
   ignoreBinaries: [
     // biome is in root package.json

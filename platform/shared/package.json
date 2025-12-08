@@ -5,9 +5,18 @@
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./dist/index.mjs",
-    "./access-control": "./dist/access-control.mjs",
-    "./access-control.ee": "./dist/access-control.ee.mjs"
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./access-control": {
+      "types": "./dist/access-control.d.mts",
+      "default": "./dist/access-control.mjs"
+    },
+    "./access-control.ee": {
+      "types": "./dist/access-control.ee.d.mts",
+      "default": "./dist/access-control.ee.mjs"
+    }
   },
   "scripts": {
     "build": "tsdown",

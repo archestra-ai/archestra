@@ -10,6 +10,9 @@ export default defineConfig({
 	// Generate source maps for better debugging
 	sourcemap: true,
 
+	// Generate TypeScript declaration files
+	dts: true,
+
 	// Bundle all dependencies into the output
 	noExternal: [/.*/],
 

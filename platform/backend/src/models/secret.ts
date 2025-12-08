@@ -47,15 +47,11 @@ class SecretModel {
    * Delete a secret by ID
    */
   static async delete(id: string): Promise<boolean> {
-    // First check if the secret exists
-    const existing = await SecretModel.findById(id);
-    if (!existing) {
-      return false;
-    }
+    const result = await db
+      .delete(schema.secretsTable)
+      .where(eq(schema.secretsTable.id, id));
 
-    await db.delete(schema.secretsTable).where(eq(schema.secretsTable.id, id));
-
-    return true;
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
 

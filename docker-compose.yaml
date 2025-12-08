@@ -1,18 +1,16 @@
 version: '3.8'
 
 services:
-  # The Main Archestra Application
   archestra:
-    # We build from the source so developers get the latest code
-    build:
-      context: ./platform
-      dockerfile: Dockerfile
+    # 🛑 CRITICAL FIX: We use the pre-downloaded image.
+    # This prevents the "Out of Memory" crash so you can record the UI!
+    image: archestra/platform:latest
     container_name: archestra_app
     ports:
       - "3000:3000"
       - "9000:9000"
     environment:
-      # CONFIGURATION: Connects Archestra to the internal K3s cluster automatically
+      # Connects the app to the K3s cluster automatically
       - KUBECONFIG=/k8s/kubeconfig.yaml
       - KUBERNETES_SERVICE_HOST=k3s
       - KUBERNETES_SERVICE_PORT=6443
@@ -21,11 +19,9 @@ services:
     depends_on:
       - k3s
 
-  # The Internal Kubernetes Server (K3s) - The "Fix"
   k3s:
     image: rancher/k3s:v1.27.1-k3s1
     container_name: k3s
-    # Runs K3s and sets permissions so Archestra can read the config
     command: server --disable-agent --tls-san k3s --write-kubeconfig-mode 644
     tmpfs:
       - /run

@@ -64,6 +64,16 @@ function getConversationDisplayTitle(
   return "New chat";
 }
 
+/** Reusable AI sparkle icon with consistent styling */
+function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
+  return (
+    <Sparkles
+      className={`h-4 w-4 text-primary ${isAnimating ? "animate-pulse" : ""}`}
+      aria-label="AI generated"
+    />
+  );
+}
+
 export function ChatSidebarSection() {
   const router = useRouter();
   const pathname = usePathname();
@@ -252,12 +262,7 @@ export function ChatSidebarSection() {
                                   disabled={generateTitleMutation.isPending}
                                   className="h-7 w-7 shrink-0"
                                 >
-                                  <Sparkles
-                                    className={`h-4 w-4 text-primary ${generateTitleMutation.isPending
-                                      ? "animate-pulse"
-                                      : ""
-                                      }`}
-                                  />
+                                  <AISparkleIcon isAnimating={generateTitleMutation.isPending} />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">
@@ -274,10 +279,7 @@ export function ChatSidebarSection() {
                             className="cursor-pointer flex-1 group-hover/menu-item:bg-sidebar-accent"
                           >
                             {(hasRecentlyGeneratedTitle || isRegenerating) && (
-                              <Sparkles
-                                className="h-4 w-4 text-primary animate-pulse"
-                                aria-label="AI generated"
-                              />
+                              <AISparkleIcon isAnimating />
                             )}
                             {isRegenerating ? (
                               <span className="flex-1 pr-0 text-muted-foreground text-sm">

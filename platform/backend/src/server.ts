@@ -42,7 +42,8 @@ import websocketService from "@/websocket";
 import * as routes from "./routes";
 
 const eeRoutes = config.enterpriseLicenseActivated
-  ? await import("./routes/index.ee") // biome-ignore lint/style/noRestrictedImports: conditional schema
+  ? // biome-ignore lint/style/noRestrictedImports: conditional schema
+    await import("./routes/index.ee")
   : [];
 
 const {

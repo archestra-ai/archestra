@@ -11,6 +11,8 @@ import {
   reportBlockedTools,
   reportLLMCost,
   reportLLMTokens,
+  reportTimeToFirstToken,
+  reportTokensPerSecond,
 } from "@/llm-metrics";
 import {
   AgentModel,
@@ -353,6 +355,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
+        // Track timing for TTFT and tokens/sec metrics
+        const streamStartTime = Date.now();
+        let firstChunkTime: number | undefined;
+
         // Handle streaming response with span to measure LLM call duration
         const streamingResponse = await utils.tracing.startActiveLlmSpan(
           "openai.chat.completions",
@@ -395,6 +401,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           for await (const chunk of streamingResponse) {
+            // Capture time to first token on first chunk
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttftSeconds = (firstChunkTime - streamStartTime) / 1000;
+              reportTimeToFirstToken(
+                "openai",
+                resolvedAgent,
+                model,
+                ttftSeconds,
+              );
+            }
+
             chunks.push(chunk);
 
             // Capture usage information if present
@@ -654,6 +672,19 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Report token usage metrics for streaming (only if available)
           if (tokenUsage) {
             reportLLMTokens("openai", resolvedAgent, tokenUsage, model);
+
+            // Report tokens per second if we have output tokens and timing
+            if (tokenUsage.output && firstChunkTime) {
+              const totalDurationSeconds =
+                (Date.now() - streamStartTime) / 1000;
+              reportTokensPerSecond(
+                "openai",
+                resolvedAgent,
+                model,
+                tokenUsage.output,
+                totalDurationSeconds,
+              );
+            }
           }
 
           // Calculate costs (only if we have token usage)

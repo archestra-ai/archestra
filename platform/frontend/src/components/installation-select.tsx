@@ -1,5 +1,7 @@
 "use client";
 
+import { E2eTestId } from "@shared";
+import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +13,9 @@ import {
 } from "@/components/ui/select";
 import { useProfileAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
+import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
 
 interface InstallationSelectProps {
   value?: string | null;
@@ -37,34 +41,38 @@ export function InstallationSelect({
   catalogId,
   shouldSetDefaultValue,
 }: InstallationSelectProps) {
-  const { data: groupedTokens, isLoading } = useProfileAvailableTokens({
+  const { data: groupedInstallations, isLoading } = useProfileAvailableTokens({
     catalogId,
   });
 
-  // Get tokens for this catalogId from the grouped response
-  const mcpServers = groupedTokens?.[catalogId] ?? [];
+  const staticCredentialOutsideOfGroupedInstallations =
+    value &&
+    value !== DYNAMIC_CREDENTIAL_VALUE &&
+    !groupedInstallations?.[catalogId]?.some(
+      (installation) => installation.id === value,
+    );
 
-  // Filter to local servers only
-  const installations = mcpServers.filter(
-    (server) => server.serverType === "local",
-  );
+  // Get tokens for this catalogId from the grouped response
+  const installations = groupedInstallations?.[catalogId] ?? [];
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
-    if (shouldSetDefaultValue && installations.length > 0 && !value) {
-      onValueChange(installations[0].id);
+    if (shouldSetDefaultValue && !value) {
+      // Default to dynamic credential
+      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
     }
-  }, [installations.length]);
+  }, []);
 
-  if (!installations || installations.length === 0) {
-    return (
-      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        No installations available
-      </div>
-    );
-  }
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+  }
+
+  if (staticCredentialOutsideOfGroupedInstallations) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        Owner outside your team
+      </span>
+    );
   }
 
   return (
@@ -72,6 +80,7 @@ export function InstallationSelect({
       value={value ?? ""}
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
+      data-testid={E2eTestId.InstallationSelect}
     >
       <SelectTrigger
         className={cn(
@@ -83,6 +92,16 @@ export function InstallationSelect({
         <SelectValue placeholder="Select installation..." />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={DYNAMIC_CREDENTIAL_VALUE} className="cursor-pointer">
+          <div className="flex items-center gap-1">
+            <Zap className="h-3! w-3! text-amber-500" />
+            <span className="text-xs font-medium">Resolve at call time</span>
+          </div>
+        </SelectItem>
+        <Divider className="my-2" />
+        <div className="text-xs text-muted-foreground ml-2">
+          Static credentials
+        </div>
         {installations.map((server) => (
           <SelectItem
             key={server.id}
@@ -111,11 +130,6 @@ export function InstallationSelect({
             </div>
           </SelectItem>
         ))}
-        {installations.length === 0 && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No installations available
-          </div>
-        )}
       </SelectContent>
     </Select>
   );

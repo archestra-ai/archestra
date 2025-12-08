@@ -268,7 +268,7 @@ describe("executeArchestraTool", () => {
       expect((result.content[0] as any).text).toContain(
         "Full Featured Profile",
       );
-      expect((result.content[0] as any).text).toContain(team.id);
+      expect((result.content[0] as any).text).toContain(team.name);
     });
 
     test("should return error when name is missing", async () => {

@@ -338,8 +338,12 @@ jobs:
       #
       # Branch ruleset has been configured to block PRs with critical or high vulnerabilities.
       # https://docs.github.com/en/code-security/code-scanning/managing-code-scanning-alerts/about-code-scanning-alerts#pull-request-check-failures-for-code-scanning-alerts
+      #
+      # NOTE: This step is skipped for PRs from forks because GitHub doesn't expose
+      # repository secrets to workflows triggered by fork PRs (for security reasons).
+      # Docker Scout requires Docker Hub authentication to run.
       - name: Docker Scout
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
         uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
         with:
           command: cves,recommendations,compare
@@ -355,8 +359,10 @@ jobs:
 
       # Upload SARIF result to GitHub Code Scanning
       # https://github.com/docker/scout-action?tab=readme-ov-file#analyze-vulnerabilities-and-upload-report-to-github-code-scanning
+      #
+      # NOTE: Skipped for fork PRs since Docker Scout step is skipped (no SARIF file generated).
       - name: Upload SARIF result
-        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true }}
+        if: ${{ github.event_name == 'pull_request' && inputs.should-skip-running-and-always-succeed != true && github.event.pull_request.head.repo.fork != true }}
         uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
         with:
           sarif_file: sarif.output.json

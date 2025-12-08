@@ -26,7 +26,15 @@ function useAllPermissions() {
  * Under the hood, fetches all user permissions and re-uses this permission cache.
  */
 export function useHasPermissions(permissionsToCheck: Permissions) {
-  const { data: userPermissions, isPending, isLoading, isError, error, isSuccess, status } = useAllPermissions();
+  const {
+    data: userPermissions,
+    isPending,
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+    status,
+  } = useAllPermissions();
 
   // Compute permission check result
   const hasPermissionResult = (() => {

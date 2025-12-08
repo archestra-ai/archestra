@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.22](https://github.com/archestra-ai/archestra/compare/platform-v0.6.21...platform-v0.6.22) (2025-12-07)
+
+
+### Features
+
+* add `llm_time_to_first_token_seconds` and `llm_tokens_per_second` metrics ([#1440](https://github.com/archestra-ai/archestra/issues/1440)) ([2c679e8](https://github.com/archestra-ai/archestra/commit/2c679e81b9f9fa133710fafdac89c247da5bc904))
+
+
+### Bug Fixes
+
+* address chat page slow loading time ([#1437](https://github.com/archestra-ai/archestra/issues/1437)) ([d408a1d](https://github.com/archestra-ai/archestra/commit/d408a1d571db98d864e8d1ecc9d2bb4e468c7ff3))
+* in sidebar hide chats while permission check pending ([#1419](https://github.com/archestra-ai/archestra/issues/1419)) ([bd767d2](https://github.com/archestra-ai/archestra/commit/bd767d26102b91cb3829e8ca7cde4ce44d7504c0))
+* LLM proxy request body too large error ([#1417](https://github.com/archestra-ai/archestra/issues/1417)) ([f9e82bc](https://github.com/archestra-ai/archestra/commit/f9e82bc3009680c2a1d370216e465158569a628a))
+
+
+### Miscellaneous Chores
+
+* address CRLF issues for Windows developers ([#1428](https://github.com/archestra-ai/archestra/issues/1428)) ([5583f8c](https://github.com/archestra-ai/archestra/commit/5583f8c5427c2916b8dfcbfd26a76835cc0b5a6b))
+* address issue w/ Sentry's `nodeProfilingIntegration` ([#1429](https://github.com/archestra-ai/archestra/issues/1429)) ([c3933f8](https://github.com/archestra-ai/archestra/commit/c3933f858148ea5345f7c708b8512c3f6c6db863))
+* improve `vitest` speed + CPU utilization ([#1439](https://github.com/archestra-ai/archestra/issues/1439)) ([29ec397](https://github.com/archestra-ai/archestra/commit/29ec397a86f3e2dfdbe7d61771bb23bcee633286))
+* local dev improvements ([#1421](https://github.com/archestra-ai/archestra/issues/1421)) ([ec3af56](https://github.com/archestra-ai/archestra/commit/ec3af56d0727ab3d6515985c4f9b8aacd3a4b8aa))
+* make MCP server "cards" consistent height ([d910ce3](https://github.com/archestra-ai/archestra/commit/d910ce37284483dc399e7d84d977d8b58a010656))
+
 ## [0.6.21](https://github.com/archestra-ai/archestra/compare/platform-v0.6.20...platform-v0.6.21) (2025-12-05)
 
 

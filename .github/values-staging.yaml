@@ -1,4 +1,6 @@
 archestra:
+  replicaCount: 4
+
   service:
     annotations:
       # GKE BackendConfig for custom health checks

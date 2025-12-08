@@ -512,7 +512,6 @@ async function syncSsoTeams(userId: string, userEmail: string): Promise<void> {
   const providerId = ssoAccount.providerId;
 
   // Get the SSO provider to find the organization ID and teamSyncConfig
-  const { default: SsoProviderModel } = await import("@/models/sso-provider");
   const ssoProvider = await SsoProviderModel.findByProviderId(providerId);
 
   if (!ssoProvider?.organizationId) {

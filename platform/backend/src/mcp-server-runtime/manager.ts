@@ -1,5 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
+import * as fs from "node:fs";
 import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
@@ -18,6 +19,84 @@ const {
     kubernetes: { namespace, kubeconfig, loadKubeconfigFromCurrentCluster },
   },
 } = config;
+
+/**
+ * Validates kubeconfig file and throws descriptive errors for various failure scenarios
+ */
+export function validateKubeconfig(path?: string) {
+  /**
+   * CASE 1 — No kubeconfig provided:
+   * --------------------------------
+   * Use Kubernetes client's built-in default loader.
+   * DO NOT validate. Docker Desktop kubeconfig is often
+   * non-standard YAML, but Kubernetes client can still load it.
+   */
+  if (!path) {
+    logger.info("No kubeconfig env var set — using default kubeconfig. Skipping validation.");
+    return;
+  }
+
+  /**
+   * CASE 2 — Developer explicitly provided a custom kubeconfig:
+   * -----------------------------------------------------------
+   * Strict validation applies.
+   */
+
+  if (!fs.existsSync(path)) {
+    throw new Error(
+      `❌ Kubeconfig file not found at ${path}.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  const content = fs.readFileSync(path, "utf8");
+
+  // Try parsing with the official Kubernetes parser
+  const kc = new k8s.KubeConfig();
+  try {
+    kc.loadFromString(content);
+  } catch {
+    throw new Error(
+      `❌ Malformed kubeconfig: could not parse YAML.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  // Structural validation
+  if (!kc.clusters || kc.clusters.length === 0) {
+    throw new Error(
+      `❌ Invalid kubeconfig: clusters section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  const c0 = kc.clusters[0];
+  if (!c0) {
+    throw new Error(
+      `❌ Invalid kubeconfig: clusters[0] is missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  if (!c0.name || !c0.server) {
+    throw new Error(
+      `❌ Invalid kubeconfig: cluster entry is missing required fields.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  if (!kc.contexts || kc.contexts.length === 0) {
+    throw new Error(
+      `❌ Invalid kubeconfig: contexts section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  if (!kc.users || kc.users.length === 0) {
+    throw new Error(
+      `❌ Invalid kubeconfig: users section missing.\n📘 View documentation: https://archestra.ai/docs/kubeconfig-setup`
+    );
+  }
+
+  logger.info("Custom kubeconfig validated successfully.");
+}
+
+
+
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
@@ -39,37 +118,44 @@ export class McpServerRuntimeManager {
 
   constructor() {
     this.k8sConfig = new k8s.KubeConfig();
-
-    // Load K8s config from environment or default locations
+  
+    const hasCustomKubeconfig =
+      Boolean(kubeconfig && kubeconfig.trim().length > 0);
+  
+    // If not loading from cluster AND user provided a custom kubeconfig → validate it
+    if (!loadKubeconfigFromCurrentCluster && hasCustomKubeconfig) {
+      validateKubeconfig(kubeconfig!);
+    }
+  
     try {
       if (loadKubeconfigFromCurrentCluster) {
-        /**
-         * Running inside a K8s cluster
-         *
-         * Automatically configure the client to connect to the Kubernetes API
-         * when the application is running inside a Kubernetes cluster
-         */
+        // Running inside Kubernetes pod
         this.k8sConfig.loadFromCluster();
-      } else if (kubeconfig) {
-        // Load from KUBECONFIG env var
-        this.k8sConfig.loadFromFile(kubeconfig);
+        logger.info("Loaded kubeconfig from in-cluster environment");
+      } else if (hasCustomKubeconfig) {
+        // Custom kubeconfig path provided by developer
+        logger.info(`Loading kubeconfig from env var: ${kubeconfig}`);
+        this.k8sConfig.loadFromFile(kubeconfig!);
       } else {
-        // Load from default location (~/.kube/config)
+        // ⭐ IMPORTANT FIX ⭐
+        // No env var? → Use ~/.kube/config (default Kubernetes path)
+        logger.info("No kubeconfig env set — using default kubeconfig (~/.kube/config)");
         this.k8sConfig.loadFromDefault();
       }
-
-      // Only create API client if K8s config loaded successfully
+  
+      // Initialize Kubernetes API client
       this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config:");
       this.status = "error";
+      throw error;
     }
-
+  
     this.k8sAttach = new Attach(this.k8sConfig);
     this.k8sLog = new k8s.Log(this.k8sConfig);
     this.namespace = namespace;
   }
-
+  
   /**
    * Check if the orchestrator K8s runtime is enabled
    * Returns true if the K8s config loaded successfully (constructor didn't fail)

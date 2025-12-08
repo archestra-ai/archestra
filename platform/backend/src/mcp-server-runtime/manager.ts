@@ -26,10 +26,7 @@ const {
 export function validateKubeconfig(path?: string) {
   /**
    * CASE 1 — No kubeconfig provided:
-   * --------------------------------
-   * Use Kubernetes client's built-in default loader.
-   * DO NOT validate. Docker Desktop kubeconfig is often
-   * non-standard YAML, but Kubernetes client can still load it.
+
    */
   if (!path) {
     logger.info("No kubeconfig env var set — using default kubeconfig. Skipping validation.");
@@ -38,8 +35,7 @@ export function validateKubeconfig(path?: string) {
 
   /**
    * CASE 2 — Developer explicitly provided a custom kubeconfig:
-   * -----------------------------------------------------------
-   * Strict validation applies.
+
    */
 
   if (!fs.existsSync(path)) {
@@ -100,8 +96,6 @@ export function validateKubeconfig(path?: string) {
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
- * This is analogous to McpServerSandboxManager in the desktop app,
- * but uses Kubernetes instead of Podman.
  */
 export class McpServerRuntimeManager {
   private k8sConfig: k8s.KubeConfig;
@@ -137,7 +131,7 @@ export class McpServerRuntimeManager {
         logger.info(`Loading kubeconfig from env var: ${kubeconfig}`);
         this.k8sConfig.loadFromFile(kubeconfig!);
       } else {
-        // ⭐ IMPORTANT FIX ⭐
+      
         // No env var? → Use ~/.kube/config (default Kubernetes path)
         logger.info("No kubeconfig env set — using default kubeconfig (~/.kube/config)");
         this.k8sConfig.loadFromDefault();
@@ -480,13 +474,9 @@ export class McpServerRuntimeManager {
 
   /**
    * Get all available tools from all running MCP servers
-   * Note: In the platform, tools are managed via the database and MCP client,
-   * not directly through the runtime manager like in desktop app.
-   * This is a placeholder for compatibility.
    */
   get allAvailableTools(): AvailableTool[] {
-    // Tools are managed by the MCP client and stored in the database
-    // This method is here for compatibility with the desktop app interface
+
     return [];
   }
 

@@ -139,51 +139,6 @@ export function RoleMappingForm({ form }: RoleMappingFormProps) {
             ref={accordionContentRef}
             className="space-y-4 pt-4"
           >
-            <FormField
-              control={form.control}
-              name="roleMapping.dataSource"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data Source</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || "combined"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select data source" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="combined">
-                        Combined (Token + UserInfo)
-                      </SelectItem>
-                      <SelectItem value="userInfo">UserInfo Only</SelectItem>
-                      <SelectItem value="token">ID Token Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription className="space-y-1">
-                    <span className="block">
-                      Choose which SSO data to use for role mapping expressions.
-                    </span>
-                    <span className="block">
-                      <strong>ID Token</strong> — Claims from the JWT (sub,
-                      email, name).
-                    </span>
-                    <span className="block">
-                      <strong>UserInfo</strong> — Data from the userinfo
-                      endpoint (may include custom attributes).
-                    </span>
-                    <span className="block">
-                      <strong>Combined</strong> — Both sources merged (UserInfo
-                      wins on conflicts).
-                    </span>
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Mapping Rules</FormLabel>

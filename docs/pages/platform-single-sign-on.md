@@ -254,7 +254,7 @@ Archestra supports automatic role assignment based on user attributes from your 
 
 ### How Role Mapping Works
 
-1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider (via OIDC userinfo/token claims or SAML assertions)
+1. When a user authenticates via SSO, Archestra receives user attributes from the identity provider's ID token (for OIDC) or SAML assertions
 2. These attributes are evaluated against your configured mapping rules in order
 3. The first rule that matches determines the user's Archestra role
 4. If no rules match, the user is assigned the configured default role (or "Member" if not specified)
@@ -263,22 +263,16 @@ Archestra supports automatic role assignment based on user attributes from your 
 
 When creating or editing an SSO provider, expand the **Role Mapping (Optional)** section:
 
-1. **Data Source**: Choose which SSO data to evaluate:
-
-   - **Combined (Token + UserInfo)**: Merges ID token claims and userinfo (default, recommended)
-   - **UserInfo Only**: Only use OIDC userinfo endpoint data
-   - **ID Token Only**: Only use ID token claims
-
-2. **Mapping Rules**: Add one or more rules. Each rule has:
+1. **Mapping Rules**: Add one or more rules. Each rule has:
 
    - **Handlebars Template**: A template that renders to a non-empty string when the rule should match
    - **Archestra Role**: The role to assign when the template matches
 
-3. **Default Role**: The role assigned when no rules match (defaults to "member")
+2. **Default Role**: The role assigned when no rules match (defaults to "member")
 
-4. **Strict Mode**: When enabled, denies user login if no mapping rules match. This is useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
+3. **Strict Mode**: When enabled, denies user login if no mapping rules match. This is useful when you want to ensure that only users with specific IdP attributes can access Archestra. Without strict mode, users who don't match any rule are simply assigned the default role.
 
-5. **Skip Role Sync**: When enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
+4. **Skip Role Sync**: When enabled, the user's role is only determined on their first login. Subsequent logins will not update their role, even if their IdP attributes change. This allows administrators to manually adjust roles after initial provisioning without those changes being overwritten on next login.
 
 ### Handlebars Template Examples
 
@@ -412,7 +406,7 @@ The attribute names depend on your IdP's configuration. Common examples:
 **Template always returns empty:**
 
 - Check for typos in claim/attribute names (they are case-sensitive in the template)
-- Use the "combined" data source to ensure you're checking both token and userinfo
+- Ensure your IdP is sending the expected claims in the ID token
 - The `includes` helper handles null/undefined arrays gracefully
 
 ## Team Synchronization
@@ -436,12 +430,7 @@ When creating or editing an SSO provider, expand the **Team Sync Configuration (
 
 1. **Enable Team Sync**: When enabled (default), users are automatically added/removed from Archestra teams based on their SSO group memberships.
 
-2. **Groups Handlebars Template**: A [Handlebars](https://handlebarsjs.com/) template to extract group identifiers from SSO claims. Should render to a comma-separated list or JSON array. Leave empty to use default extraction.
-
-3. **Data Source**: Choose which SSO data to use for extracting groups:
-   - **Combined (Token + UserInfo)**: Merges ID token claims and userinfo (default, recommended)
-   - **UserInfo Only**: Only use OIDC userinfo endpoint data
-   - **ID Token Only**: Only use ID token claims
+2. **Groups Handlebars Template**: A [Handlebars](https://handlebarsjs.com/) template to extract group identifiers from the ID token claims. Should render to a comma-separated list or JSON array. Leave empty to use default extraction.
 
 #### Default Group Extraction
 
@@ -452,7 +441,7 @@ The first claim that contains non-empty group data is used.
 
 #### Custom Handlebars Templates
 
-For identity providers with non-standard token formats, you can use Handlebars templates to extract group identifiers from complex claim structures. The template should render to either a comma-separated list or a JSON array.
+For identity providers with non-standard ID token formats, you can use Handlebars templates to extract group identifiers from complex claim structures. The template should render to either a comma-separated list or a JSON array.
 
 **Available Helpers:**
 
@@ -601,14 +590,15 @@ If your IdP sends roles as objects (e.g., `roles: [{name: "admin"}, {name: "view
 **Users not being added to teams:**
 
 1. Check that **Enable Team Sync** is enabled in your SSO provider settings
-2. Verify your Handlebars template extracts the expected groups
+2. Verify your Handlebars template extracts the expected groups from the ID token
 3. Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect your ID token claims
 4. Check that the group identifier in Archestra exactly matches the extracted group name
-5. Check backend logs for sync errors
+5. Ensure your IdP is configured to include group claims in the ID token (not just userinfo)
+6. Check backend logs for sync errors
 
 **Testing your Handlebars template:**
 
-You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual token claims as input.
+You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsjs.com/) using your actual ID token claims as input.
 
 **Users not being removed from teams:**
 
@@ -616,9 +606,9 @@ You can test Handlebars templates at [tryhandlebarsjs.com](http://tryhandlebarsj
 - Members added manually are never removed
 - Verify the user's IdP groups have actually changed
 
-**Checking SSO token groups:**
+**Checking ID token groups:**
 
-Use your IdP's token introspection or a JWT decoder to inspect the ID token and verify the groups claim contains the expected values.
+Use a JWT decoder (like [jwt.io](https://jwt.io)) to inspect the ID token and verify the groups claim contains the expected values. Role mapping and team sync both use ID token claims exclusively.
 
 ## User Provisioning
 

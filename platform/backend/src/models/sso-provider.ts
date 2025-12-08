@@ -22,7 +22,6 @@ import type {
 import MemberModel from "./member";
 
 interface RoleMappingContext {
-  userInfo: Record<string, unknown>;
   token?: Record<string, unknown>;
   provider: {
     id: string;
@@ -72,24 +71,12 @@ class SsoProviderModel {
       };
     }
 
-    // Build the data object based on dataSource configuration
-    let data: Record<string, unknown>;
-    switch (config.dataSource) {
-      case "userInfo":
-        data = context.userInfo;
-        break;
-      case "token":
-        data = context.token || {};
-        break;
-      default:
-        // Merge token and userInfo, with userInfo taking precedence
-        data = { ...context.token, ...context.userInfo };
-        break;
-    }
+    // Use ID token claims for role mapping
+    const data = context.token || {};
 
     logger.debug(
       { providerId: context.provider.providerId, dataKeys: Object.keys(data) },
-      "Evaluating role mapping rules",
+      "Evaluating role mapping rules against ID token claims",
     );
 
     // Evaluate rules in order, first match wins
@@ -166,7 +153,7 @@ class SsoProviderModel {
    * @throws APIError with FORBIDDEN if strict mode is enabled and no rules match
    */
   static async resolveSsoRole(data: SsoGetRoleData): Promise<string> {
-    const { user, token, provider, userInfo } = data;
+    const { user, token, provider } = data;
 
     // Better-auth passes the raw OAuth token response, not decoded JWT claims.
     // We need to decode the idToken to get claims like 'groups' for role mapping.
@@ -209,12 +196,8 @@ class SsoProviderModel {
             if (user.email && ssoProvider.organizationId) {
               const tokenClaims =
                 idTokenClaims || (token as Record<string, unknown>) || {};
-              const combinedClaims = {
-                ...tokenClaims,
-                ...((userInfo as Record<string, unknown>) || {}),
-              };
               const groups = extractGroupsFromClaims(
-                combinedClaims,
+                tokenClaims,
                 ssoProvider.teamSyncConfig,
               );
               if (groups.length > 0) {
@@ -239,15 +222,12 @@ class SsoProviderModel {
           }
         }
 
-        // Evaluate role mapping rules
-        // Use decoded idToken claims for 'token' data source (contains groups, roles, etc.)
-        // Fall back to raw token claims if idToken couldn't be decoded (e.g., in tests or non-JWT tokens)
+        // Evaluate role mapping rules using ID token claims
         const tokenClaims =
           idTokenClaims || (token as Record<string, unknown>) || {};
         const result = SsoProviderModel.evaluateRoleMapping(
           roleMapping,
           {
-            userInfo: (userInfo as Record<string, unknown>) || {},
             token: tokenClaims,
             provider: {
               id: provider.providerId,
@@ -282,12 +262,8 @@ class SsoProviderModel {
 
         // Cache SSO groups for team sync (if user email is available)
         if (user?.email && ssoProvider.organizationId) {
-          const combinedClaims = {
-            ...tokenClaims,
-            ...((userInfo as Record<string, unknown>) || {}),
-          };
           const groups = extractGroupsFromClaims(
-            combinedClaims,
+            tokenClaims,
             ssoProvider.teamSyncConfig,
           );
           if (groups.length > 0) {
@@ -305,13 +281,10 @@ class SsoProviderModel {
 
       // If no role mapping is configured but we still have groups, cache them for team sync
       if (ssoProvider?.organizationId && user?.email) {
-        const combinedClaims = {
-          ...idTokenClaims,
-          ...(token as Record<string, unknown>),
-          ...((userInfo as Record<string, unknown>) || {}),
-        };
+        const tokenClaimsForCache =
+          idTokenClaims || (token as Record<string, unknown>) || {};
         const groups = extractGroupsFromClaims(
-          combinedClaims,
+          tokenClaimsForCache,
           ssoProvider.teamSyncConfig,
         );
         if (groups.length > 0) {

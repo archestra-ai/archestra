@@ -222,12 +222,6 @@ export const SsoRoleMappingConfigSchema = z.object({
    */
   defaultRole: z.string().optional(),
   /**
-   * Path to extract the data object for Handlebars evaluation.
-   * Options: "userInfo" (OIDC userinfo), "token" (ID token claims), "combined" (merged)
-   * Default: "combined"
-   */
-  dataSource: z.enum(["userInfo", "token", "combined"]).optional(),
-  /**
    * Strict mode: If enabled, denies user login when no role mapping rule matches.
    * Without strict mode, users who don't match any rule are assigned the default role.
    * Default: false
@@ -253,24 +247,18 @@ export type SsoRoleMappingConfig = z.infer<typeof SsoRoleMappingConfigSchema>;
  */
 export const SsoTeamSyncConfigSchema = z.object({
   /**
-   * Handlebars expression to extract group identifiers from SSO claims.
+   * Handlebars expression to extract group identifiers from ID token claims.
    * The expression should evaluate to an array of strings (group identifiers).
    *
    * Examples:
-   * - `groups` - Simple array claim: ["admin", "users"]
-   * - `roles[*].name` - Extract names from array of objects: [{name: "admin"}, {name: "users"}]
-   * - `memberOf` - LDAP-style groups
+   * - `{{#each groups}}{{this}},{{/each}}` - Simple array claim: ["admin", "users"]
+   * - `{{#each roles}}{{this.name}},{{/each}}` - Extract names from array of objects
+   * - `{{{json (pluck (json roles) "name")}}}` - Parse JSON string and extract names
    *
    * If not configured, falls back to checking common claim names:
    * groups, group, memberOf, member_of, roles, role, teams, team
    */
   groupsExpression: z.string().optional(),
-  /**
-   * Data source for extracting groups.
-   * Options: "userInfo" (OIDC userinfo), "token" (ID token claims), "combined" (merged)
-   * Default: "combined"
-   */
-  dataSource: z.enum(["userInfo", "token", "combined"]).optional(),
   /**
    * Whether team sync is enabled for this provider.
    * Default: true (team sync is enabled)

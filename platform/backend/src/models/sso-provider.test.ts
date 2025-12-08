@@ -22,12 +22,13 @@ const mockProvider = {
 };
 
 // Helper to create test params with proper typing for resolveSsoRole tests
+// Note: userInfo is included for compatibility with better-auth's SsoGetRoleData type
+// but role mapping only uses token claims
 function createParams(
   params: Partial<{
     user: { id: string; email: string } | null;
     token: Record<string, unknown>;
     provider: { providerId: string };
-    userInfo: Record<string, unknown>;
   }>,
 ): SsoGetRoleData {
   return params as unknown as SsoGetRoleData;
@@ -591,7 +592,7 @@ describe("evaluateRoleMapping", () => {
   describe("when no config is provided", () => {
     test("returns fallback role when config is undefined", () => {
       const result = SsoProviderModel.evaluateRoleMapping(undefined, {
-        userInfo: { email: "user@example.com" },
+        token: { email: "user@example.com" },
         provider: mockProvider,
       });
 
@@ -605,7 +606,7 @@ describe("evaluateRoleMapping", () => {
       const result = SsoProviderModel.evaluateRoleMapping(
         undefined,
         {
-          userInfo: { email: "user@example.com" },
+          token: { email: "user@example.com" },
           provider: mockProvider,
         },
         "custom_fallback",
@@ -626,7 +627,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { email: "user@example.com" },
+        token: { email: "user@example.com" },
         provider: mockProvider,
       });
 
@@ -642,7 +643,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { email: "user@example.com" },
+        token: { email: "user@example.com" },
         provider: mockProvider,
       });
 
@@ -653,117 +654,30 @@ describe("evaluateRoleMapping", () => {
     });
   });
 
-  describe("data source selection", () => {
-    test("uses combined data source by default (merges token and userInfo)", () => {
+  describe("ID token claims", () => {
+    test("uses token claims for rule evaluation", () => {
       const config: SsoRoleMappingConfig = {
         rules: [
           {
             expression: '{{#equals tokenClaim "from-token"}}true{{/equals}}',
             role: "token-role",
           },
-          {
-            expression:
-              '{{#equals userInfoClaim "from-userinfo"}}true{{/equals}}',
-            role: "userinfo-role",
-          },
         ],
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { userInfoClaim: "from-userinfo" },
         token: { tokenClaim: "from-token" },
         provider: mockProvider,
       });
 
-      // First matching rule wins (token claim matches first)
       expect(result).toEqual({
         role: "token-role",
         matched: true,
       });
     });
 
-    test("combined data source prefers userInfo over token for conflicting keys", () => {
+    test("handles missing token gracefully", () => {
       const config: SsoRoleMappingConfig = {
-        dataSource: "combined",
-        rules: [
-          {
-            expression: '{{#equals role "from-userinfo"}}true{{/equals}}',
-            role: "admin",
-          },
-        ],
-      };
-
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "from-userinfo" },
-        token: { role: "from-token" },
-        provider: mockProvider,
-      });
-
-      expect(result).toEqual({
-        role: "admin",
-        matched: true,
-      });
-    });
-
-    test("userInfo data source only uses userInfo", () => {
-      const config: SsoRoleMappingConfig = {
-        dataSource: "userInfo",
-        rules: [
-          {
-            expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
-            role: "should-not-match",
-          },
-          {
-            expression: '{{#equals userInfoOnly "value"}}true{{/equals}}',
-            role: "userinfo-role",
-          },
-        ],
-      };
-
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { userInfoOnly: "value" },
-        token: { tokenOnly: "value" },
-        provider: mockProvider,
-      });
-
-      // Token data should not be available
-      expect(result).toEqual({
-        role: "userinfo-role",
-        matched: true,
-      });
-    });
-
-    test("token data source only uses token", () => {
-      const config: SsoRoleMappingConfig = {
-        dataSource: "token",
-        rules: [
-          {
-            expression: '{{#equals userInfoOnly "value"}}true{{/equals}}',
-            role: "should-not-match",
-          },
-          {
-            expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
-            role: "token-role",
-          },
-        ],
-      };
-
-      const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { userInfoOnly: "value" },
-        token: { tokenOnly: "value" },
-        provider: mockProvider,
-      });
-
-      // UserInfo data should not be available
-      expect(result).toEqual({
-        role: "token-role",
-        matched: true,
-      });
-    });
-
-    test("token data source handles missing token gracefully", () => {
-      const config: SsoRoleMappingConfig = {
-        dataSource: "token",
         rules: [
           {
             expression: '{{#equals tokenOnly "value"}}true{{/equals}}',
@@ -774,7 +688,6 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { userInfoOnly: "value" },
         // token is undefined
         provider: mockProvider,
       });
@@ -798,7 +711,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "administrator" },
+        token: { role: "administrator" },
         provider: mockProvider,
       });
 
@@ -820,7 +733,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users", "archestra-admins", "developers"] },
+        token: { groups: ["users", "archestra-admins", "developers"] },
         provider: mockProvider,
       });
 
@@ -842,7 +755,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { email: "user@example.com" }, // no groups
+        token: { email: "user@example.com" }, // no groups
         provider: mockProvider,
       });
 
@@ -864,7 +777,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { roles: ["viewer", "platform-admin", "editor"] },
+        token: { roles: ["viewer", "platform-admin", "editor"] },
         provider: mockProvider,
       });
 
@@ -886,7 +799,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { department: "IT", title: "Engineer" },
+        token: { department: "IT", title: "Engineer" },
         provider: mockProvider,
       });
 
@@ -912,7 +825,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "admin", groups: [] },
+        token: { role: "admin", groups: [] },
         provider: mockProvider,
       });
 
@@ -934,7 +847,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "user" },
+        token: { role: "user" },
         provider: mockProvider,
       });
 
@@ -957,7 +870,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users", "developers"] },
+        token: { groups: ["users", "developers"] },
         provider: mockProvider,
       });
 
@@ -974,7 +887,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users"] },
+        token: { groups: ["users"] },
         provider: mockProvider,
       });
 
@@ -989,7 +902,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { isAdmin: true },
+        token: { isAdmin: true },
         provider: mockProvider,
       });
 
@@ -1006,7 +919,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { isAdmin: false },
+        token: { isAdmin: false },
         provider: mockProvider,
       });
 
@@ -1027,7 +940,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { adminGroup: "yes" },
+        token: { adminGroup: "yes" },
         provider: mockProvider,
       });
 
@@ -1044,7 +957,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { adminGroup: "" },
+        token: { adminGroup: "" },
         provider: mockProvider,
       });
 
@@ -1075,7 +988,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users", "admins"] }, // Matches both admins and users
+        token: { groups: ["users", "admins"] }, // Matches both admins and users
         provider: mockProvider,
       });
 
@@ -1101,7 +1014,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "admin" },
+        token: { role: "admin" },
         provider: mockProvider,
       });
 
@@ -1125,7 +1038,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "admin" },
+        token: { role: "admin" },
         provider: mockProvider,
       });
 
@@ -1145,7 +1058,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { role: "admin" },
+        token: { role: "admin" },
         provider: mockProvider,
       });
 
@@ -1169,7 +1082,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users"] }, // Does not contain 'admins'
+        token: { groups: ["users"] }, // Does not contain 'admins'
         provider: mockProvider,
       });
 
@@ -1189,7 +1102,7 @@ describe("evaluateRoleMapping", () => {
       // When no rules are configured, it returns default role even with strictMode
       // because strict mode is about "no rules matching", not "no rules configured"
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users"] },
+        token: { groups: ["users"] },
         provider: mockProvider,
       });
 
@@ -1210,7 +1123,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["admins"] },
+        token: { groups: ["admins"] },
         provider: mockProvider,
       });
 
@@ -1233,7 +1146,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { groups: ["users"] },
+        token: { groups: ["users"] },
         provider: mockProvider,
       });
 
@@ -1247,7 +1160,6 @@ describe("evaluateRoleMapping", () => {
   describe("real-world scenarios", () => {
     test("Okta groups claim mapping", () => {
       const config: SsoRoleMappingConfig = {
-        dataSource: "combined",
         rules: [
           {
             expression:
@@ -1265,7 +1177,6 @@ describe("evaluateRoleMapping", () => {
 
       // Admin user
       const adminResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {},
         token: { groups: ["Everyone", "Archestra-Admins", "IT-Department"] },
         provider: mockProvider,
       });
@@ -1274,7 +1185,6 @@ describe("evaluateRoleMapping", () => {
 
       // Regular user
       const userResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {},
         token: { groups: ["Everyone", "Archestra-Users"] },
         provider: mockProvider,
       });
@@ -1283,7 +1193,6 @@ describe("evaluateRoleMapping", () => {
 
       // Unknown user falls back to default
       const unknownResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {},
         token: { groups: ["Everyone", "External-Partners"] },
         provider: mockProvider,
       });
@@ -1304,7 +1213,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {
+        token: {
           groups: [
             "a1b2c3d4-e5f6-7890-abcd-ef1234567890", // Admin group GUID
             "f0e0d0c0-b0a0-9080-7060-504030201000", // Another group
@@ -1337,7 +1246,7 @@ describe("evaluateRoleMapping", () => {
       };
 
       const result = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {
+        token: {
           roles: [
             "default-roles-myrealm",
             "archestra-editor",
@@ -1371,21 +1280,21 @@ describe("evaluateRoleMapping", () => {
 
       // IT Admin
       const itAdminResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { department: "IT", jobTitle: "Administrator" },
+        token: { department: "IT", jobTitle: "Administrator" },
         provider: mockProvider,
       });
       expect(itAdminResult.role).toBe("admin");
 
       // IT User (not admin)
       const itUserResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { department: "IT", jobTitle: "Developer" },
+        token: { department: "IT", jobTitle: "Developer" },
         provider: mockProvider,
       });
       expect(itUserResult.role).toBe("power_user");
 
       // Non-IT user
       const otherResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: { department: "Sales", jobTitle: "Manager" },
+        token: { department: "Sales", jobTitle: "Manager" },
         provider: mockProvider,
       });
       expect(otherResult.role).toBe("member");
@@ -1409,7 +1318,7 @@ describe("evaluateRoleMapping", () => {
 
       // Organization owner
       const ownerResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {
+        token: {
           orgRoles: ["owner", "billing"],
         },
         provider: mockProvider,
@@ -1418,7 +1327,7 @@ describe("evaluateRoleMapping", () => {
 
       // Organization member
       const memberResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {
+        token: {
           orgRoles: ["member"],
         },
         provider: mockProvider,
@@ -1427,7 +1336,7 @@ describe("evaluateRoleMapping", () => {
 
       // Not part of organization (strict mode denies)
       const outsiderResult = SsoProviderModel.evaluateRoleMapping(config, {
-        userInfo: {
+        token: {
           orgRoles: [], // No roles
         },
         provider: mockProvider,
@@ -1444,7 +1353,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "user@example.com" },
         provider: { providerId: "NonExistentProvider" },
-        userInfo: { email: "user@example.com" },
+        token: { email: "user@example.com" },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1464,7 +1373,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "user@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { email: "user@example.com" },
+        token: { email: "user@example.com" },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1495,7 +1404,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "admin@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["users", "admins"] },
+        token: { groups: ["users", "admins"] },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1524,7 +1433,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "user@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["users"] },
+        token: { groups: ["users"] },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1538,7 +1447,6 @@ describe("resolveSsoRole", () => {
     }) => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
-        dataSource: "token",
         rules: [
           {
             expression: '{{#equals role "super-admin"}}true{{/equals}}',
@@ -1555,7 +1463,6 @@ describe("resolveSsoRole", () => {
         user: { id: "user-1", email: "user@example.com" },
         provider: { providerId: provider.providerId },
         token: { role: "super-admin" },
-        userInfo: { role: "regular-user" },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1586,7 +1493,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "user@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["users"] },
+        token: { groups: ["users"] },
       });
 
       await expect(SsoProviderModel.resolveSsoRole(params)).rejects.toThrow(
@@ -1618,7 +1525,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "admin@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["admins"] },
+        token: { groups: ["admins"] },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1654,7 +1561,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: user.id, email: user.email },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["admins"] }, // Would normally map to admin
+        token: { groups: ["admins"] }, // Would normally map to admin
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1688,7 +1595,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: user.id, email: user.email },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["admins"] },
+        token: { groups: ["admins"] },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1723,7 +1630,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: user.id, email: user.email },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["admins"] },
+        token: { groups: ["admins"] },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1762,8 +1669,10 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "admin@company.com" },
         provider: { providerId: provider.providerId },
-        token: { groups: ["Everyone", "Archestra-Admins", "IT-Department"] },
-        userInfo: { email: "admin@company.com" },
+        token: {
+          groups: ["Everyone", "Archestra-Admins", "IT-Department"],
+          email: "admin@company.com",
+        },
       });
 
       const result = await SsoProviderModel.resolveSsoRole(params);
@@ -1799,7 +1708,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "editor@company.com" },
         provider: { providerId: provider.providerId },
-        userInfo: {
+        token: {
           roles: [
             "default-roles-myrealm",
             "archestra-editor",
@@ -1836,7 +1745,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "user@company.com" },
         provider: { providerId: provider.providerId },
-        userInfo: {
+        token: {
           groups: [
             "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             "f0e0d0c0-b0a0-9080-7060-504030201000",
@@ -1872,7 +1781,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "groupuser@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["engineering", "admins"] },
+        token: { groups: ["engineering", "admins"] },
       });
 
       await SsoProviderModel.resolveSsoRole(params);
@@ -1898,7 +1807,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "noroles@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["team-a", "team-b"] },
+        token: { groups: ["team-a", "team-b"] },
       });
 
       await SsoProviderModel.resolveSsoRole(params);
@@ -1923,7 +1832,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: null, // No user email
         provider: { providerId: provider.providerId },
-        userInfo: { groups: ["team-a"] },
+        token: { groups: ["team-a"] },
       });
 
       await SsoProviderModel.resolveSsoRole(params);
@@ -1944,7 +1853,7 @@ describe("resolveSsoRole", () => {
       const params = createParams({
         user: { id: "user-1", email: "nogroups@example.com" },
         provider: { providerId: provider.providerId },
-        userInfo: { email: "nogroups@example.com" }, // No groups claim
+        token: { email: "nogroups@example.com" }, // No groups claim
       });
 
       await SsoProviderModel.resolveSsoRole(params);
@@ -1963,7 +1872,6 @@ describe("resolveSsoRole", () => {
     }) => {
       const org = await makeOrganization();
       const roleMapping: SsoRoleMappingConfig = {
-        dataSource: "token",
         rules: [
           {
             expression: '{{#equals role "admin"}}true{{/equals}}',
@@ -1980,12 +1888,11 @@ describe("resolveSsoRole", () => {
         user: { id: "user-1", email: "tokenuser@example.com" },
         provider: { providerId: provider.providerId },
         token: { groups: ["from-token"], role: "admin" },
-        userInfo: { groups: ["from-userinfo"] },
       });
 
       await SsoProviderModel.resolveSsoRole(params);
 
-      // Groups should be combined from both token and userInfo
+      // Groups extracted from token
       const cachedData = retrieveSsoGroups(
         provider.providerId,
         "tokenuser@example.com",

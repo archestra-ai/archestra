@@ -20,13 +20,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
@@ -144,51 +137,6 @@ export function TeamSyncConfigForm({ form }: TeamSyncConfigFormProps) {
                     Handlebars template to extract group identifiers from SSO
                     claims. Should render to a comma-separated list or JSON
                     array. Leave empty to use default extraction.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="teamSyncConfig.dataSource"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data Source</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || "combined"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select data source" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="combined">
-                        Combined (Token + UserInfo)
-                      </SelectItem>
-                      <SelectItem value="userInfo">UserInfo Only</SelectItem>
-                      <SelectItem value="token">ID Token Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription className="space-y-1">
-                    <span className="block">
-                      Choose which SSO data to use for extracting group
-                      identifiers.
-                    </span>
-                    <span className="block">
-                      <strong>ID Token</strong> — Claims from the JWT.
-                    </span>
-                    <span className="block">
-                      <strong>UserInfo</strong> — Data from the userinfo
-                      endpoint.
-                    </span>
-                    <span className="block">
-                      <strong>Combined</strong> — Both sources merged (UserInfo
-                      wins on conflicts).
-                    </span>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

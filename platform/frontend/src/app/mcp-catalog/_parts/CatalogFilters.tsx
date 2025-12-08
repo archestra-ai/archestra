@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraCatalogTypes } from "@shared";
+import type { archestraCatalogTypes } from "@archestra/shared";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useMcpServerCategories } from "@/lib/external-mcp-catalog.query";

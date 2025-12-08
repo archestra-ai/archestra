@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";

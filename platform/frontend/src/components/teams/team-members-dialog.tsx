@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";

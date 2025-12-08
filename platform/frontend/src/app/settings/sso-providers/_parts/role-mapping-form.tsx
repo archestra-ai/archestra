@@ -1,6 +1,6 @@
 "use client";
 
-import type { SsoProviderFormValues } from "@shared";
+import type { SsoProviderFormValues } from "@archestra/shared";
 import { Info, Plus, Trash2 } from "lucide-react";
 import { useCallback, useId, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";

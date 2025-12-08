@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@archestra/shared";
 import { Copy, Link } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

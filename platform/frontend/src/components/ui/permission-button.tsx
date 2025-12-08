@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Tooltip,

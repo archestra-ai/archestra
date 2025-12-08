@@ -1,6 +1,6 @@
 "use client";
 
-import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@shared";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "@archestra/shared";
 import { Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AssignToolsDialog } from "@/app/profiles/assign-tools-dialog";

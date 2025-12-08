@@ -1,5 +1,5 @@
 "use client";
-import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Key, Link2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";

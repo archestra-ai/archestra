@@ -4,6 +4,7 @@
   "globalDependencies": [".env"],
   "tasks": {
     "build": {
+      "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {

@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { CodeText } from "@/components/code-text";

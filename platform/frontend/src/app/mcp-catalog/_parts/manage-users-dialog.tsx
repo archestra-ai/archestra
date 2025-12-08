@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { format } from "date-fns";
 import { Info, Trash, User, X } from "lucide-react";
 import { useCallback, useMemo } from "react";

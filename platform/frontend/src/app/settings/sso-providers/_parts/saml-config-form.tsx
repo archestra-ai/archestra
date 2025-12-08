@@ -1,6 +1,6 @@
 "use client";
 
-import type { SsoProviderFormValues } from "@shared";
+import type { SsoProviderFormValues } from "@archestra/shared";
 import type { UseFormReturn } from "react-hook-form";
 import {
   FormControl,

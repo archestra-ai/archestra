@@ -2,7 +2,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type ErrorExtended,
-} from "@shared";
+} from "@archestra/shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";

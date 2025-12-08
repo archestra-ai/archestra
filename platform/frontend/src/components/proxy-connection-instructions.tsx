@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";

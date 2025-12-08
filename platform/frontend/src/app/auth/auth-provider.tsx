@@ -5,7 +5,7 @@ import {
   EDITOR_ROLE_NAME,
   EMAIL_PLACEHOLDER,
   PASSWORD_PLACEHOLDER,
-} from "@shared";
+} from "@archestra/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";

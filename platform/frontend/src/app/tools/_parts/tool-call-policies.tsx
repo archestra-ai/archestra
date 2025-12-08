@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";

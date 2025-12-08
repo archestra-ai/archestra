@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { useFeatures } from "./features.query";
 
 export function useFeatureFlag(

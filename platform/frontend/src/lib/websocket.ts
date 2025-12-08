@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import config from "@/lib/config";
 
 type WebSocketMessage = archestraApiTypes.WebSocketMessage;

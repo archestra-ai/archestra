@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SsoProviderFormSchema, type SsoProviderFormValues } from "@shared";
+import { SsoProviderFormSchema, type SsoProviderFormValues } from "@archestra/shared";
 import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";

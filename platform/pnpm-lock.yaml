@@ -502,6 +502,9 @@ importers:
       knip:
         specifier: ^5.50.0
         version: 5.70.2(@types/node@24.10.1)(typescript@5.9.3)
+      tsdown:
+        specifier: ^0.16.6
+        version: 0.16.7(oxc-resolver@11.14.0)(typescript@5.9.3)
       tsx:
         specifier: ^4.20.6
         version: 4.20.6

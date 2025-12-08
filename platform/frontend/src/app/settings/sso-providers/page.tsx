@@ -4,7 +4,7 @@ import {
   SSO_PROVIDER_ID,
   SSO_TRUSTED_PROVIDER_IDS,
   type SsoProviderId,
-} from "@shared";
+} from "@archestra/shared";
 import { Suspense, useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";

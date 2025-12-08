@@ -1,10 +1,10 @@
 import { withSentryConfig } from "@sentry/nextjs";
-import { MCP_CATALOG_API_BASE_URL } from "@shared";
+import { MCP_CATALOG_API_BASE_URL } from "@archestra/shared";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@shared"],
+  transpilePackages: ["@archestra/shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   logging: {

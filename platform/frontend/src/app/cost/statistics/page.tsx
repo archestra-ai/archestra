@@ -30,8 +30,8 @@ ChartJS.register(
   Filler,
 );
 
-import type { archestraApiTypes } from "@shared";
-import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
+import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@archestra/shared";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

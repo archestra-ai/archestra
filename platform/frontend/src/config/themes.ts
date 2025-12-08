@@ -6,7 +6,7 @@
  * Single source of truth: shared/themes/tweakcn-themes.json
  */
 
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import type { OrganizationCustomFont, OrganizationTheme } from "@archestra/shared";
 import {
   DEFAULT_THEME_ID,
   getThemeById as getThemeByIdShared,
@@ -14,7 +14,7 @@ import {
   getThemeMetadata,
   getThemesByCategory as getThemesByCategoryShared,
   type ThemeMetadata as ThemeMetadataShared,
-} from "@shared";
+} from "@archestra/shared";
 
 // Re-export ThemeMetadata for local use
 export type ThemeMetadata = ThemeMetadataShared;

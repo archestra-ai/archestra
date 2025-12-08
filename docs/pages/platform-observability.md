@@ -4,7 +4,7 @@ category: Archestra Platform
 order: 5
 ---
 
-<!-- 
+<!--
 Check ../docs_writer_prompt.md before changing this file.
 
 This document is human-built, shouldn't be updated with AI. Don't change anything here.
@@ -42,6 +42,8 @@ The endpoint `http://localhost:9050/metrics` exposes Prometheus-formatted metric
 - `llm_request_duration_seconds` - LLM API request duration by provider, profile_id, profile_name, and status code
 - `llm_tokens_total` - Token consumption by provider, profile_id, profile_name, and type (input/output)
 - `llm_blocked_tool_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, profile_id, and profile_name
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, profile_id, profile_name, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, profile_id, profile_name, and model. Allows comparing model response speeds for latency-sensitive applications.
 
 > **Note:** The `agent_id` and `agent_name` labels are deprecated and will be removed in a future release. Please migrate your dashboards and alerts to use `profile_id` and `profile_name` instead. During the transition period, both label variants are emitted.
 
@@ -156,9 +158,9 @@ Add the following to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'archestra-backend'
+  - job_name: "archestra-backend"
     static_configs:
-      - targets: ['localhost:9050'] # Platform API base URL
+      - targets: ["localhost:9050"] # Platform API base URL
     scrape_interval: 15s
     metrics_path: /metrics
 ```
@@ -227,6 +229,30 @@ Here are some PromQL queries for Grafana charts to get you started:
 
   ```promql
   sum(rate(llm_request_duration_seconds_count{status_code!~"2.."}[5m])) by (profile_name) / sum(rate(llm_request_duration_seconds_count[5m])) by (profile_name)
+  ```
+
+- Time to first token (TTFT) p95 by model:
+
+  ```promql
+  histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket[5m])) by (model, le))
+  ```
+
+- Average time to first token by provider:
+
+  ```promql
+  sum(rate(llm_time_to_first_token_seconds_sum[5m])) by (provider) / sum(rate(llm_time_to_first_token_seconds_count[5m])) by (provider)
+  ```
+
+- Tokens per second throughput p50 by model:
+
+  ```promql
+  histogram_quantile(0.50, sum(rate(llm_tokens_per_second_bucket[5m])) by (model, le))
+  ```
+
+- Average tokens per second by provider and model:
+
+  ```promql
+  sum(rate(llm_tokens_per_second_sum[5m])) by (provider, model) / sum(rate(llm_tokens_per_second_count[5m])) by (provider, model)
   ```
 
 > **Note:** The `agent_name` label in PromQL queries is deprecated. Please migrate to `profile_name` for new dashboards and alerts.

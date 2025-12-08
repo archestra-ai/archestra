@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # The Main Archestra Application
+  archestra:
+    # We build from the source so developers get the latest code
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+    container_name: archestra_app
+    ports:
+      - "3000:3000"
+      - "9000:9000"
+    environment:
+      # CONFIGURATION: Connects Archestra to the internal K3s cluster automatically
+      - KUBECONFIG=/k8s/kubeconfig.yaml
+      - KUBERNETES_SERVICE_HOST=k3s
+      - KUBERNETES_SERVICE_PORT=6443
+    volumes:
+      - k3s_kubeconfig:/k8s
+    depends_on:
+      - k3s
+
+  # The Internal Kubernetes Server (K3s) - The "Fix"
+  k3s:
+    image: rancher/k3s:v1.27.1-k3s1
+    container_name: k3s
+    # Runs K3s and sets permissions so Archestra can read the config
+    command: server --disable-agent --tls-san k3s --write-kubeconfig-mode 644
+    tmpfs:
+      - /run
+      - /var/run
+    privileged: true
+    environment:
+      - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+      - K3S_KUBECONFIG_MODE=666
+    volumes:
+      - k3s_server:/var/lib/rancher/k3s
+      - k3s_kubeconfig:/output
+    ports:
+      - 6443:6443
+
+volumes:
+  k3s_server:
+  k3s_kubeconfig:

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@archestra/shared";
 import dotenv from "dotenv";
 
 // Load .env from platform root - this runs once when the module is imported
@@ -66,4 +66,4 @@ export const DEFAULT_PROFILE_NAME = "Default Agent";
 export {
   E2eTestId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";

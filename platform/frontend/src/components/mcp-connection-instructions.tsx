@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";

@@ -188,6 +188,11 @@ export const RouteId = {
   UpdateTokenPrice: "updateTokenPrice",
   DeleteTokenPrice: "deleteTokenPrice",
 
+  // Team Token Routes
+  GetTokens: "getTokens",
+  GetTokenValue: "getTokenValue",
+  RotateToken: "rotateToken",
+
   // Statistics Routes
   GetTeamStatistics: "getTeamStatistics",
   GetAgentStatistics: "getAgentStatistics",

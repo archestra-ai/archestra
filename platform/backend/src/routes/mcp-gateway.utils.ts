@@ -9,7 +9,7 @@ import {
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import {
   executeArchestraTool,

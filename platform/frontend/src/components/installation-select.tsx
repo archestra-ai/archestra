@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";

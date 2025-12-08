@@ -25,6 +25,7 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const settings = await ChatSettingsModel.getOrCreate(organizationId);
 
       // If there's an API key secret, check if it's from BYOS Vault
+      // It's needed to show a path to Vault secret in the UI.
       let externalVaultSecretPath: string | null = null;
       if (settings.anthropicApiKeySecretId) {
         const secret = await SecretModel.findById(

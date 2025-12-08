@@ -124,7 +124,7 @@ const chatSettingsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Chat settings not found");
       }
 
-      // Get the vault path if this is a BYOS secret
+      // Get the vault path if this is a BYOS secret, to render it in the UI
       let externalVaultSecretPath: string | null = null;
       if (secretId) {
         const secret = await SecretModel.findById(secretId);

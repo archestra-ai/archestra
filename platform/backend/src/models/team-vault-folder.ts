@@ -76,31 +76,6 @@ class TeamVaultFolderModel {
   }
 
   /**
-   * Find multiple Vault folders by team IDs
-   */
-  static async findByTeamIds(teamIds: string[]): Promise<TeamVaultFolder[]> {
-    logger.debug(
-      { teamIds },
-      "TeamVaultFolderModel.findByTeamIds: fetching team vault folders",
-    );
-
-    if (teamIds.length === 0) {
-      return [];
-    }
-
-    const folders = await db
-      .select()
-      .from(schema.teamVaultFoldersTable)
-      .where(inArray(schema.teamVaultFoldersTable.teamId, teamIds));
-
-    logger.debug(
-      { count: folders.length },
-      "TeamVaultFolderModel.findByTeamIds: completed",
-    );
-    return folders;
-  }
-
-  /**
    * Delete a team's Vault folder mapping
    */
   static async delete(teamId: string): Promise<boolean> {

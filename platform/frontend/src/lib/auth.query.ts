@@ -51,6 +51,15 @@ function permissionMapStub<Key extends string>(_map: Record<Key, Permissions>) {
   return result;
 }
 
+// Create stable promise at module level for React's use() hook
+const authQueryPromise = config.enterpriseLicenseActivated
+  ? // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
+    import("./auth.query.ee")
+  : Promise.resolve({
+      useHasPermissions: hasPermissionStub,
+      usePermissionMap: permissionMapStub,
+    });
+
 /**
  * Checks user permissions, resolving to true or false.
  * Under the hood, fetches all user permissions and re-uses this permission cache.
@@ -59,15 +68,7 @@ function permissionMapStub<Key extends string>(_map: Record<Key, Permissions>) {
  * EE version: Performs actual permission checks
  */
 export function useHasPermissions(permissionsToCheck: Permissions) {
-  const { useHasPermissions: useHasPermissionsEE } = use(
-    config.enterpriseLicenseActivated
-      ? // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
-        import("./auth.query.ee")
-      : Promise.resolve({
-          useHasPermissions: hasPermissionStub,
-          usePermissionMap: permissionMapStub,
-        }),
-  );
+  const { useHasPermissions: useHasPermissionsEE } = use(authQueryPromise);
   return useHasPermissionsEE(permissionsToCheck);
 }
 
@@ -81,15 +82,7 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
 ) {
-  const { usePermissionMap: usePermissionMapEE } = use(
-    config.enterpriseLicenseActivated
-      ? // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
-        import("./auth.query.ee")
-      : Promise.resolve({
-          useHasPermissions: hasPermissionStub,
-          usePermissionMap: permissionMapStub,
-        }),
-  );
+  const { usePermissionMap: usePermissionMapEE } = use(authQueryPromise);
   return usePermissionMapEE(map);
 }
 

@@ -1,7 +1,7 @@
+import { Permissions } from '@archestra/shared';
 import {
   allAvailableActions,
-  type Permissions,
-} from "@archestra/shared/access-control.ee.ts";
+} from "@archestra/shared/access-control.ee";
 import {
   type APIRequestContext,
   expect,

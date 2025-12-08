@@ -2193,7 +2193,10 @@ export type GetAgentsResponses = {
                 createdAt: string;
                 updatedAt: string;
             }>;
-            teams: Array<string>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -2329,7 +2332,10 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2444,7 +2450,10 @@ export type GetAllAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2559,7 +2568,10 @@ export type GetDefaultAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2755,7 +2767,10 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -2884,7 +2899,10 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        teams: Array<string>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -3148,6 +3166,7 @@ export type GetAllAgentToolsResponses = {
             responseModifierTemplate: string | null;
             credentialSourceMcpServerId: string | null;
             executionSourceMcpServerId: string | null;
+            useDynamicTeamCredential: boolean;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -3278,6 +3297,7 @@ export type AssignToolToAgentData = {
     body?: {
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     } | null;
     path: {
         agentId: string;
@@ -3364,6 +3384,7 @@ export type BulkAssignToolsData = {
             toolId: string;
             credentialSourceMcpServerId?: string | null;
             executionSourceMcpServerId?: string | null;
+            useDynamicTeamCredential?: boolean;
         }>;
     };
     path?: never;
@@ -3642,6 +3663,7 @@ export type UpdateAgentToolData = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
     };
     path: {
         id: string;
@@ -3722,6 +3744,7 @@ export type UpdateAgentToolResponses = {
         responseModifierTemplate?: string | null;
         credentialSourceMcpServerId?: string | null;
         executionSourceMcpServerId?: string | null;
+        useDynamicTeamCredential?: boolean;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -8018,6 +8041,89 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
+export type GetV1McpData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type GetV1McpErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
+
+export type GetV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+    };
+};
+
+export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
+
+export type PostV1McpData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/mcp';
+};
+
+export type PostV1McpResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/mcp/sessions';
+};
+
+export type DeleteV1McpSessionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
+
+export type DeleteV1McpSessionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
+
 export type GetLimitsData = {
     body?: never;
     path?: never;
@@ -8476,89 +8582,6 @@ export type UpdateLimitResponses = {
 };
 
 export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
-
-export type GetV1McpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type GetV1McpErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
-
-export type GetV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        name: string;
-        version: string;
-        agentId: string;
-        transport: string;
-        capabilities: {
-            tools: boolean;
-        };
-    };
-};
-
-export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
-
-export type PostV1McpData = {
-    body?: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/mcp';
-};
-
-export type PostV1McpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1McpSessionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/mcp/sessions';
-};
-
-export type DeleteV1McpSessionsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string;
-        message: string;
-    };
-};
-
-export type DeleteV1McpSessionsError = DeleteV1McpSessionsErrors[keyof DeleteV1McpSessionsErrors];
-
-export type DeleteV1McpSessionsResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        message: string;
-        clearedCount: number;
-    };
-};
-
-export type DeleteV1McpSessionsResponse = DeleteV1McpSessionsResponses[keyof DeleteV1McpSessionsResponses];
 
 export type GetMcpServerInstallationRequestsData = {
     body?: never;
@@ -11093,6 +11116,100 @@ export type GetMcpToolCallResponses = {
 };
 
 export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
+export type GetV1McpByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type GetV1McpByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpByProfileIdError = GetV1McpByProfileIdErrors[keyof GetV1McpByProfileIdErrors];
+
+export type GetV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+        tokenAuth?: {
+            tokenId: string;
+            teamId: string | null;
+            isOrganizationToken: boolean;
+        };
+    };
+};
+
+export type GetV1McpByProfileIdResponse = GetV1McpByProfileIdResponses[keyof GetV1McpByProfileIdResponses];
+
+export type PostV1McpByProfileIdData = {
+    body?: {
+        [key: string]: unknown;
+    };
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/{profileId}';
+};
+
+export type PostV1McpByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1McpSessionsByProfileIdData = {
+    body?: never;
+    path: {
+        profileId: string;
+    };
+    query?: never;
+    url: '/v1/mcp/sessions/{profileId}';
+};
+
+export type DeleteV1McpSessionsByProfileIdErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdError = DeleteV1McpSessionsByProfileIdErrors[keyof DeleteV1McpSessionsByProfileIdErrors];
+
+export type DeleteV1McpSessionsByProfileIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        message: string;
+        clearedCount: number;
+    };
+};
+
+export type DeleteV1McpSessionsByProfileIdResponse = DeleteV1McpSessionsByProfileIdResponses[keyof DeleteV1McpSessionsByProfileIdResponses];
 
 export type InitiateOAuthData = {
     body: {
@@ -16216,6 +16333,260 @@ export type UpdateTokenPriceResponses = {
 };
 
 export type UpdateTokenPriceResponse = UpdateTokenPriceResponses[keyof UpdateTokenPriceResponses];
+
+export type GetTokensData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tokens';
+};
+
+export type GetTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokensError = GetTokensErrors[keyof GetTokensErrors];
+
+export type GetTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+    }>;
+};
+
+export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];
+
+export type GetTokenValueData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/value';
+};
+
+export type GetTokenValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type GetTokenValueError = GetTokenValueErrors[keyof GetTokenValueErrors];
+
+export type GetTokenValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetTokenValueResponse = GetTokenValueResponses[keyof GetTokenValueResponses];
+
+export type RotateTokenData = {
+    body?: never;
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/tokens/{tokenId}/rotate';
+};
+
+export type RotateTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+        };
+    };
+};
+
+export type RotateTokenError = RotateTokenErrors[keyof RotateTokenErrors];
+
+export type RotateTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        isOrganizationToken: boolean;
+        team: {
+            id: string;
+            name: string;
+        } | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        value: string;
+    };
+};
+
+export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponses];
 
 export type GetToolsData = {
     body?: never;

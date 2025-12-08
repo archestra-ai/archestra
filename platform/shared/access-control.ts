@@ -190,6 +190,11 @@ export const RouteId = {
   UpdateAgentTool: "updateAgentTool",
   GetAgentAvailableTokens: "getAgentAvailableTokens",
 
+  // Team Token Routes
+  GetTokens: "getTokens",
+  GetTokenValue: "getTokenValue",
+  RotateToken: "rotateToken",
+
   // Features Routes
   GetFeatures: "getFeatures",
 
@@ -445,6 +450,15 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetLabelValues]: {
     profile: ["read"],
+  },
+  [RouteId.GetTokens]: {
+    team: ["read"],
+  },
+  [RouteId.GetTokenValue]: {
+    team: ["update"],
+  },
+  [RouteId.RotateToken]: {
+    team: ["update"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],

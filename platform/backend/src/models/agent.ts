@@ -52,10 +52,16 @@ class AgentModel {
     // Assign Archestra built-in tools to the agent
     await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
 
+    // Get team details for the created agent
+    const teamDetails =
+      teams && teams.length > 0
+        ? await AgentTeamModel.getTeamDetailsForAgent(createdAgent.id)
+        : [];
+
     return {
       ...createdAgent,
       tools: [],
-      teams: teams || [],
+      teams: teamDetails,
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };
   }
@@ -112,7 +118,7 @@ class AgentModel {
         agentsMap.set(agent.id, {
           ...agent,
           tools: [],
-          teams: [],
+          teams: [] as Array<{ id: string; name: string }>,
           labels: [],
         });
       }
@@ -128,7 +134,7 @@ class AgentModel {
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
     const [teamsMap, labelsMap] = await Promise.all([
-      AgentTeamModel.getTeamsForAgents(agentIds),
+      AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
@@ -285,7 +291,7 @@ class AgentModel {
         agentsMap.set(agent.id, {
           ...agent,
           tools: [],
-          teams: [],
+          teams: [] as Array<{ id: string; name: string }>,
           labels: [],
         });
       }
@@ -301,7 +307,7 @@ class AgentModel {
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
     const [teamsMap, labelsMap] = await Promise.all([
-      AgentTeamModel.getTeamsForAgents(agentIds),
+      AgentTeamModel.getTeamDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
@@ -400,7 +406,7 @@ class AgentModel {
     const agent = rows[0].agents;
     const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
 
-    const teams = await AgentTeamModel.getTeamsForAgent(id);
+    const teams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const labels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
@@ -432,7 +438,7 @@ class AgentModel {
       return {
         ...agent,
         tools,
-        teams: await AgentTeamModel.getTeamsForAgent(agent.id),
+        teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
       };
     }
@@ -502,7 +508,7 @@ class AgentModel {
       .where(eq(schema.toolsTable.agentId, updatedAgent.id));
 
     // Fetch current teams and labels
-    const currentTeams = await AgentTeamModel.getTeamsForAgent(id);
+    const currentTeams = await AgentTeamModel.getTeamDetailsForAgent(id);
     const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {

@@ -1,5 +1,4 @@
-import { archestraApiSdk } from "@shared";
-import type { Permissions } from "@shared/access-control.ee";
+import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 
@@ -27,7 +26,7 @@ function useAllPermissions() {
  * Under the hood, fetches all user permissions and re-uses this permission cache.
  */
 export function useHasPermissions(permissionsToCheck: Permissions) {
-  const { data: userPermissions, ...queryState } = useAllPermissions();
+  const { data: userPermissions, isPending, isLoading, isError, error, isSuccess, status } = useAllPermissions();
 
   // Compute permission check result
   const hasPermissionResult = (() => {
@@ -59,8 +58,13 @@ export function useHasPermissions(permissionsToCheck: Permissions) {
   })();
 
   return {
-    ...queryState,
     data: hasPermissionResult,
+    isPending,
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+    status,
   };
 }
 

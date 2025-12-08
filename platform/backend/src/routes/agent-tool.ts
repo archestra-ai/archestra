@@ -2,8 +2,8 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { groupBy } from "lodash-es";
 import { z } from "zod";
+import { hasPermission } from "@/auth/utils";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
-import config from "@/config";
 import {
   AgentModel,
   AgentTeamModel,
@@ -30,11 +30,6 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
-
-const { hasPermission } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: dynamic import for conditional EE loading
-    await import("@/auth/utils.ee")
-  : await import("@/auth/utils");
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

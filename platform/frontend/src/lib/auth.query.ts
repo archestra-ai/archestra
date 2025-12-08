@@ -1,9 +1,9 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk, type Permissions } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { use } from "react";
-import config from "@/lib/config";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config";
 
 /**
  * Fetch current session
@@ -30,7 +30,26 @@ export function useCurrentOrgMembers() {
     enabled: isAuthenticated,
   });
 }
-type Permissions = Record<string, string[]>;
+
+function hasPermissionStub(_permissionsToCheck: Permissions) {
+  return {
+    data: true,
+    isPending: false,
+    isLoading: false,
+    isError: false,
+    error: null,
+    isSuccess: true,
+    status: "success" as const,
+  };
+}
+
+function permissionMapStub<Key extends string>(_map: Record<Key, Permissions>) {
+  const result: Record<Key, boolean> = {} as Record<Key, boolean>;
+  for (const key of Object.keys(_map)) {
+    result[key as Key] = true;
+  }
+  return result;
+}
 
 /**
  * Checks user permissions, resolving to true or false.
@@ -39,25 +58,17 @@ type Permissions = Record<string, string[]>;
  * Free version: Always returns true (no RBAC enforcement)
  * EE version: Performs actual permission checks
  */
-export function useHasPermissions(
-  permissionsToCheck: Permissions,
-) {
-  const { useHasPermissions } = use(
+export function useHasPermissions(permissionsToCheck: Permissions) {
+  const { useHasPermissions: useHasPermissionsEE } = use(
     config.enterpriseLicenseActivated
-      // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
-      ? import("./auth.query.ee")
+      ? // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
+        import("./auth.query.ee")
       : Promise.resolve({
-          useHasPermissions: () => ({
-            data: true,
-            isLoading: false,
-            isError: false,
-            error: null,
-            isSuccess: true,
-            status: "success" as const,
-          }),
+          useHasPermissions: hasPermissionStub,
+          usePermissionMap: permissionMapStub,
         }),
   );
-  return useHasPermissions(permissionsToCheck);
+  return useHasPermissionsEE(permissionsToCheck);
 }
 
 /**
@@ -69,26 +80,17 @@ export function useHasPermissions(
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
-): Record<Key, boolean> {
-  const { usePermissionMap } = use(
+) {
+  const { usePermissionMap: usePermissionMapEE } = use(
     config.enterpriseLicenseActivated
-      // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
-      ? import("./auth.query.ee")
+      ? // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
+        import("./auth.query.ee")
       : Promise.resolve({
-          usePermissionMap: <Key extends string>(
-            _map: Record<Key, Permissions>,
-          ): Record<Key, boolean> => {
-            return Object.keys(_map).reduce(
-              (acc, key) => {
-                acc[key] = true;
-                return acc;
-              },
-              {},
-            );
-          },
+          useHasPermissions: hasPermissionStub,
+          usePermissionMap: permissionMapStub,
         }),
   );
-  return usePermissionMap(map);
+  return usePermissionMapEE(map);
 }
 
 export function useDefaultCredentialsEnabled() {

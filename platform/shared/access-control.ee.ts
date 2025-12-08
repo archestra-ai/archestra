@@ -17,6 +17,7 @@
  */
 
 import { defaultStatements } from "better-auth/plugins/organization/access";
+import type { Action, Permissions, Resource } from "./permission.types";
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
@@ -25,47 +26,7 @@ import {
 } from "./roles";
 import { RouteId } from "./routes";
 
-export const actions = [
-  "create",
-  "read",
-  "update",
-  "delete",
-  "admin",
-  "cancel",
-] as const;
-
-export const resources = [
-  "profile",
-  "tool",
-  "policy",
-  "interaction",
-  "dualLlmConfig",
-  "dualLlmResult",
-  "organization",
-  "ssoProvider",
-  "member",
-  "invitation",
-  "internalMcpCatalog",
-  "mcpServer",
-  "mcpServerInstallationRequest",
-  "mcpToolCall",
-  "team",
-  "conversation",
-  "limit",
-  "tokenPrice",
-  "chatSettings",
-  "prompt",
-  /**
-   * Better-auth access control resource - needed for organization role management
-   * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
-   *
-   * The "ac" resource is part of better-auth's defaultStatements from organization plugin
-   * and is required for dynamic access control to work correctly with custom roles
-   */
-  "ac",
-] as const;
-
-export const allAvailableActions: Permissions = {
+export const allAvailableActions: Record<Resource, Action[]> = {
   // Start with better-auth defaults
   ...defaultStatements,
   // Override with Archestra-specific actions
@@ -149,10 +110,6 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
 /**
  * Available resources and actions
  */
-
-export type Resource = (typeof resources)[number];
-export type Action = (typeof actions)[number];
-export type Permissions = Partial<Record<Resource, Action[]>>;
 
 /**
  * Routes not configured throws 403.

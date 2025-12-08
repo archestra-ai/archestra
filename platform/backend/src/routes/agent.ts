@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
+import { hasPermission } from "@/auth/utils";
 import { initializeMetrics } from "@/llm-metrics";
 import { AgentLabelModel, AgentModel } from "@/models";
 import {
@@ -16,11 +16,6 @@ import {
   UpdateAgentSchema,
   UuidIdSchema,
 } from "@/types";
-
-const { hasPermission } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: dynamic import for conditional EE loading
-    await import("@/auth/utils.ee")
-  : await import("@/auth/utils");
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

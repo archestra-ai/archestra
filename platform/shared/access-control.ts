@@ -1,17 +1,14 @@
+import type { Permissions } from "./permission.types";
 import type { RouteId } from "./routes";
+export const allAvailableActions: Permissions = {};
 
-export const actions = [] as const;
-export const resources = [] as const;
+export const editorPermissions: Permissions = {};
 
-export const allAvailableActions = {};
-
-export const editorPermissions = {};
-
-export const memberPermissions = {};
+export const memberPermissions: Permissions = {};
 
 // Allows all endpoints
 export const requiredEndpointPermissionsMap = new Proxy(
-  {} as Record<RouteId, Record<string, string[]>>,
+  {} as Record<RouteId, Permissions>,
   {
     get: (_target, _prop) => ({}), // Return empty object for any route
   },
@@ -19,7 +16,7 @@ export const requiredEndpointPermissionsMap = new Proxy(
 
 // Allows all pages
 export const requiredPagePermissionsMap = new Proxy(
-  {} as Record<string, Record<string, string[]>>,
+  {} as Record<string, Permissions>,
   {
     get: (_target, _prop) => ({}),
   },

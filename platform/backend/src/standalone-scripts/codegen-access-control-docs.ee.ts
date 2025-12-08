@@ -2,15 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  type Action,
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
   type PredefinedRoleName,
+  type Resource,
 } from "@shared";
 import {
-  type Action,
   allAvailableActions,
   predefinedPermissionsMap,
-  type Resource,
 } from "@shared/access-control.ee";
 import logger from "@/logging";
 

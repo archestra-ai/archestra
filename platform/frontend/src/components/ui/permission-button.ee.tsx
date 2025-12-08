@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared/access-control.ee";
+import type { Permissions } from "@shared";
 import type React from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {

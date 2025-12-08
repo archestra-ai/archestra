@@ -1,7 +1,7 @@
 import { RouteId, StatisticsTimeFrameSchema } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
+import { hasPermission } from "@/auth/utils";
 import { StatisticsModel } from "@/models";
 import {
   AgentStatisticsSchema,
@@ -15,11 +15,6 @@ import {
 const StatisticsQuerySchema = z.object({
   timeframe: StatisticsTimeFrameSchema.optional().default("24h"),
 });
-
-const { hasPermission } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: dynamic import for conditional EE loading
-    await import("@/auth/utils.ee")
-  : await import("@/auth/utils");
 
 const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

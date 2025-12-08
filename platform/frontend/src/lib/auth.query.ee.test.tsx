@@ -1,12 +1,8 @@
-import { archestraApiSdk } from "@shared";
-import { type Permissions } from "@shared/access-control.ee";
+import { archestraApiSdk, type Permissions } from "@shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  useHasPermissions,
-  usePermissionMap,
-} from "./auth.query.ee";
+import { useHasPermissions, usePermissionMap } from "./auth.query.ee";
 import { authClient } from "./clients/auth/auth-client";
 
 // Mock the auth client and SDK

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type Action,
-  actions,
-  type Permissions,
-  type Resource,
-} from "@shared/access-control.ee";
+import { type Action, actions, type Permissions, type Resource } from "@shared";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";

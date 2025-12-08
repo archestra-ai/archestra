@@ -1,7 +1,6 @@
+import type { Permissions } from "@shared";
 import type React from "react";
 import config from "@/lib/config";
-
-type Permissions = Record<string, string[]>;
 
 type WithPermissionsProps = {
   permissions: Permissions;
@@ -27,7 +26,10 @@ const {
   ? // biome-ignore lint/style/noRestrictedImports: EE-only permission components
     await import("./with-permissions.ee")
   : {
-      WithPermissions: ({ children, noPermissionHandle }: WithPermissionsProps) => {
+      WithPermissions: ({
+        children,
+        noPermissionHandle,
+      }: WithPermissionsProps) => {
         // Free version: always allow, no permission checks
         return typeof children === "function"
           ? children({ hasPermission: true })
@@ -50,5 +52,9 @@ export function WithoutPermissions({
   permissions: Permissions;
   children: React.ReactNode;
 }) {
-  return <WithoutPermissionsEE permissions={permissions}>{children}</WithoutPermissionsEE>;
+  return (
+    <WithoutPermissionsEE permissions={permissions}>
+      {children}
+    </WithoutPermissionsEE>
+  );
 }

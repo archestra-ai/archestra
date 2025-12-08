@@ -1,10 +1,7 @@
 "use client";
 
-import { type archestraApiTypes, } from "@shared";
-import {
-  allAvailableActions,
-  type Permissions,
-} from "@shared/access-control.ee";
+import type { archestraApiTypes, Permissions } from "@shared";
+import { allAvailableActions } from "@shared/access-control.ee";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";

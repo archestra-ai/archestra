@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import config from "@/config";
+import { hasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
@@ -22,11 +22,6 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
-
-const { hasPermission } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: dynamic import for conditional EE loading
-    await import("@/auth/utils.ee")
-  : await import("@/auth/utils");
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared/access-control.ee";
+import type { Permissions } from "@shared";
 import { vi } from "vitest";
 import {
   beforeEach,

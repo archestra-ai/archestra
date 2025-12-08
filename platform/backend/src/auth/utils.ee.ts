@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared/access-control.ee";
+import type { Permissions } from "@shared";
 import { auth as betterAuth } from "./better-auth";
 import logger from '@/logging';
 

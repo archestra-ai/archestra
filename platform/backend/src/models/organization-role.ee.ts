@@ -2,14 +2,12 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  type Permissions,
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
-} from "@shared";
-import {
-  type Permissions,
-  predefinedPermissionsMap,
   type Resource,
-} from "@shared/access-control.ee";
+} from "@shared";
+import { predefinedPermissionsMap } from "@shared/access-control.ee";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";

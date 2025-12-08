@@ -1,4 +1,4 @@
-import type React from "react";
+import type { Permissions } from "@shared";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Tooltip,
@@ -7,37 +7,36 @@ import {
 } from "@/components/ui/tooltip";
 import config from "@/lib/config";
 
-type Permissions = Record<string, string[]>;
-
 type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   tooltip?: string;
 };
 
-const { PermissionButton: PermissionButtonEE } = config.enterpriseLicenseActivated
-  ? // biome-ignore lint/style/noRestrictedImports: EE-only permission component
-    await import("./permission-button.ee")
-  : {
-      PermissionButton: ({
-        permissions: _permissions,
-        tooltip,
-        children,
-        ...props
-      }: PermissionButtonProps) => {
-        // Free version: no permission checks, render button with optional tooltip
-        if (tooltip) {
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button {...props}>{children}</Button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
-            </Tooltip>
-          );
-        }
-        return <Button {...props}>{children}</Button>;
-      },
-    };
+const { PermissionButton: PermissionButtonEE } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only permission component
+      await import("./permission-button.ee")
+    : {
+        PermissionButton: ({
+          permissions: _permissions,
+          tooltip,
+          children,
+          ...props
+        }: PermissionButtonProps) => {
+          // Free version: no permission checks, render button with optional tooltip
+          if (tooltip) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button {...props}>{children}</Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-60">{tooltip}</TooltipContent>
+              </Tooltip>
+            );
+          }
+          return <Button {...props}>{children}</Button>;
+        },
+      };
 
 /**
  * A Button component with built-in permission checking and tooltip.

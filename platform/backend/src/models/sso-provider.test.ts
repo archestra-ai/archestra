@@ -1892,15 +1892,13 @@ describe("resolveSsoRole", () => {
 
       await SsoProviderModel.resolveSsoRole(params);
 
-      // Groups extracted from token
+      // Groups extracted from token (we only use ID token claims now)
       const cachedData = retrieveSsoGroups(
         provider.providerId,
         "tokenuser@example.com",
       );
       expect(cachedData).not.toBeNull();
-      // The combinedClaims spreads tokenClaims first, then userInfo
-      // So userInfo groups should win
-      expect(cachedData?.groups).toEqual(["from-userinfo"]);
+      expect(cachedData?.groups).toEqual(["from-token"]);
     });
   });
 });

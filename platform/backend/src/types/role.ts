@@ -1,4 +1,3 @@
-import { PermissionsSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,6 +5,18 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import config from '@/config';
+
+const { actions, resources, editorPermissions, memberPermissions } =
+  config.enterpriseLicenseActivated
+    ? // biome-ignore lint/style/noRestrictedImports: EE-only enums
+    await import("@shared/access-control.ee")
+    : import("@shared/access-control")
+
+export const PermissionsSchema = z.partialRecord(
+  z.enum(resources),
+  z.array(z.enum(actions)),
+);
 
 export const SelectOrganizationRoleSchema = createSelectSchema(
   schema.organizationRolesTable,

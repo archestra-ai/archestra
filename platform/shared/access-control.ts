@@ -1,5 +1,8 @@
 import type { RouteId } from "./routes";
 
+export const actions = [] as const;
+export const resources = [] as const;
+
 export const allAvailableActions = {};
 
 export const editorPermissions = {};

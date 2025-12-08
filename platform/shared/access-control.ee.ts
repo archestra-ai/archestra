@@ -1,5 +1,22 @@
+/**
+ * This file contains access control stubs for the non-enterprise version of the app.
+ *
+ * Since there is no RBAC in non-enterprise version,
+ * all exports are empty/permissive to allow all operations:
+ *
+ * - actions: Empty array (no actions defined)
+ * - resources: Empty array (no resources defined)
+ * - allAvailableActions: Empty object (no permissions)
+ * - editorPermissions: Empty object (no permissions)
+ * - memberPermissions: Empty object (no permissions)
+ * - requiredEndpointPermissionsMap: Proxy that allows all endpoints (returns {} for any route)
+ * - requiredPagePermissionsMap: Proxy that allows all pages (returns {} for any page)
+ *
+ * For the actual RBAC implementation with real permissions and access control,
+ * see the enterprise edition: access-control.ee.ts
+ */
+
 import { defaultStatements } from "better-auth/plugins/organization/access";
-import { z } from "zod";
 import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
@@ -8,16 +25,16 @@ import {
 } from "./roles";
 import { RouteId } from "./routes";
 
-export const ActionSchema = z.enum([
+export const actions = [
   "create",
   "read",
   "update",
   "delete",
   "admin",
   "cancel",
-]);
+] as const;
 
-const ResourceSchema = z.enum([
+export const resources = [
   "profile",
   "tool",
   "policy",
@@ -46,12 +63,7 @@ const ResourceSchema = z.enum([
    * and is required for dynamic access control to work correctly with custom roles
    */
   "ac",
-]);
-
-export const PermissionsSchema = z.partialRecord(
-  ResourceSchema,
-  z.array(ActionSchema),
-);
+] as const;
 
 export const allAvailableActions: Permissions = {
   // Start with better-auth defaults
@@ -138,9 +150,9 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  * Available resources and actions
  */
 
-export type Resource = z.infer<typeof ResourceSchema>;
-export type Action = z.infer<typeof ActionSchema>;
-export type Permissions = z.infer<typeof PermissionsSchema>;
+export type Resource = (typeof resources)[number];
+export type Action = (typeof actions)[number];
+export type Permissions = Partial<Record<Resource, Action[]>>;
 
 /**
  * Routes not configured throws 403.

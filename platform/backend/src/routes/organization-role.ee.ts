@@ -1,5 +1,4 @@
 import { PredefinedRoleNameSchema, RouteId } from "@shared";
-import { PermissionsSchema } from "@shared/access-control.ee";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
@@ -10,6 +9,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  PermissionsSchema,
   SelectOrganizationRoleSchema,
 } from "@/types";
 

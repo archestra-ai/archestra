@@ -2,7 +2,7 @@
 
 import {
   type Action,
-  ActionSchema,
+  actions,
   type Permissions,
   type Resource,
 } from "@shared/access-control.ee";
@@ -354,7 +354,7 @@ export function RolePermissionBuilder({
                           <Separator className="my-2" />
 
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {ActionSchema.options.map((action) => {
+                            {actions.map((action) => {
                               const isAvailable =
                                 availableActions.includes(action);
                               const isSelected =

@@ -213,10 +213,6 @@ export class McpServerRuntimeManager {
       logger.info(`Registered MCP server pod ${id} in map`);
 
       // If MCP server has a secretId, fetch secret and create K8s Secret
-      // The secretManager handles all secret types:
-      // - DB-stored secrets
-      // - Archestra-managed Vault secrets
-      // - External BYOS Vault secrets (via vaultPath)
       if (mcpServer.secretId) {
         const secret = await secretManager.getSecret(mcpServer.secretId);
 

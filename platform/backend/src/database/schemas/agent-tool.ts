@@ -39,6 +39,11 @@ const agentToolsTable = pgTable(
     executionSourceMcpServerId: uuid(
       "execution_source_mcp_server_id",
     ).references(() => mcpServerTable.id, { onDelete: "set null" }),
+    // When true, credential is resolved dynamically based on the bearer token's team at runtime
+    // Instead of using credentialSourceMcpServerId, finds matching team credential
+    useDynamicTeamCredential: boolean("use_dynamic_team_credential")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

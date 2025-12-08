@@ -107,36 +107,30 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 }
 
 function ProfileTeamsBadges({
-  teamIds,
   teams,
 }: {
-  teamIds: string[];
-  teams:
-    | Array<{ id: string; name: string; description: string | null }>
-    | undefined;
+  teams: Array<{ id: string; name: string }> | undefined;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
-  if (!teams || teamIds.length === 0) {
+  if (!teams || teams.length === 0) {
     return <span className="text-sm text-muted-foreground">None</span>;
   }
 
-  const getTeamById = (teamId: string) => {
-    return teams.find((team) => team.id === teamId);
-  };
-
-  const visibleTeams = teamIds.slice(0, MAX_TEAMS_TO_SHOW);
-  const remainingTeams = teamIds.slice(MAX_TEAMS_TO_SHOW);
+  const visibleTeams = teams.slice(0, MAX_TEAMS_TO_SHOW);
+  const remainingTeams = teams.slice(MAX_TEAMS_TO_SHOW);
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {visibleTeams.map((teamId) => {
-        const team = getTeamById(teamId);
-        return (
-          <Badge key={teamId} variant="secondary" className="text-xs">
-            {team?.name || teamId}
-          </Badge>
-        );
-      })}
+      {visibleTeams.map((team) => (
+        <Badge
+          key={team.id}
+          variant="secondary"
+          className="text-xs"
+          data-testid={`${E2eTestId.ProfileTeamBadge}-${team.name}`}
+        >
+          {team.name}
+        </Badge>
+      ))}
       {remainingTeams.length > 0 && (
         <TooltipProvider>
           <Tooltip>
@@ -147,14 +141,11 @@ function ProfileTeamsBadges({
             </TooltipTrigger>
             <TooltipContent>
               <div className="flex flex-col gap-1">
-                {remainingTeams.map((teamId) => {
-                  const team = getTeamById(teamId);
-                  return (
-                    <div key={teamId} className="text-xs">
-                      {team?.name || teamId}
-                    </div>
-                  );
-                })}
+                {remainingTeams.map((team) => (
+                  <div key={team.id} className="text-xs">
+                    {team.name}
+                  </div>
+                ))}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -234,7 +225,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
   const [editingProfile, setEditingProfile] = useState<{
     id: string;
     name: string;
-    teams: string[];
+    teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
   } | null>(null);
@@ -415,7 +406,14 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
         </Button>
       ),
       cell: ({ row }) => (
-        <ProfileTeamsBadges teamIds={row.original.teams || []} teams={teams} />
+        <ProfileTeamsBadges
+          teams={
+            row.original.teams as unknown as Array<{
+              id: string;
+              name: string;
+            }>
+          }
+        />
       ),
     },
     {
@@ -429,7 +427,19 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
           <ProfileActions
             agent={agent}
             onConnect={setConnectingProfile}
-            onEdit={setEditingProfile}
+            onEdit={(agentData) => {
+              setEditingProfile({
+                id: agentData.id,
+                name: agentData.name,
+                teams:
+                  (agentData.teams as unknown as Array<{
+                    id: string;
+                    name: string;
+                  }>) || [],
+                labels: agentData.labels || [],
+                considerContextUntrusted: agentData.considerContextUntrusted,
+              });
+            }}
             onDelete={setDeletingProfileId}
           />
         );
@@ -651,7 +661,11 @@ function CreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-4xl max-h-[90vh] flex flex-col"
+        className={
+          createdProfile
+            ? "max-w-[90vw] max-h-[90vh] flex flex-col"
+            : "max-w-4xl max-h-[90vh] flex flex-col"
+        }
         onInteractOutside={(e) => e.preventDefault()}
       >
         {!createdProfile ? (
@@ -781,7 +795,7 @@ function CreateProfileDialog({
               </DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto py-4 flex-1">
-              <ProfileConnectionTabs agentId={createdProfile.id} />
+              <ProfileConnectionColumns agentId={createdProfile.id} />
             </div>
             <DialogFooter className="shrink-0">
               <Button
@@ -807,7 +821,7 @@ function EditProfileDialog({
   agent: {
     id: string;
     name: string;
-    teams: string[];
+    teams: Array<{ id: string; name: string }>;
     labels: ProfileLabel[];
     considerContextUntrusted: boolean;
   };
@@ -816,7 +830,7 @@ function EditProfileDialog({
 }) {
   const [name, setName] = useState(agent.name);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
-    agent.teams || [],
+    agent.teams?.map((t) => t.id) || [],
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(agent.labels || []);
   const [considerContextUntrusted, setConsiderContextUntrusted] = useState(
@@ -971,6 +985,7 @@ function EditProfileDialog({
                         <button
                           type="button"
                           onClick={() => handleRemoveTeam(teamId)}
+                          data-testid={`${E2eTestId.RemoveTeamBadge}-${team?.name || teamId}`}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
                           <X className="h-3 w-3" />
@@ -1033,7 +1048,7 @@ function EditProfileDialog({
   );
 }
 
-function ProfileConnectionTabs({ agentId }: { agentId: string }) {
+function ProfileConnectionColumns({ agentId }: { agentId: string }) {
   return (
     <div className="grid grid-cols-2 gap-6">
       <div className="space-y-3">
@@ -1069,12 +1084,12 @@ function ConnectProfileDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-[90vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>How to connect "{agent.name}" to Archestra</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <ProfileConnectionTabs agentId={agent.id} />
+          <ProfileConnectionColumns agentId={agent.id} />
         </div>
         <DialogFooter>
           <Button type="button" onClick={() => onOpenChange(false)}>

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: Archestra Platform
 order: 3
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2025-10-17
+lastUpdated: 2025-12-08
 ---
 
 <!-- 
@@ -38,11 +38,11 @@ Archestra Platform acts as a security proxy between your AI applications and LLM
 
 ## Anthropic
 
-**Status**: Streaming not yet supported
+**Status**: Fully supported
 
 ### Supported Anthropic APIs
 
-- **Messages API** (`/messages`) - ✅ Non-streaming mode supported
+- **Messages API** (`/messages`) - ✅ Fully supported
 
 ### Anthropic Connection Details
 

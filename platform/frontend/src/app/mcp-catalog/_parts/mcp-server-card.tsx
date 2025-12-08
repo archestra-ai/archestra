@@ -347,6 +347,7 @@ export function McpServerCard({
           size="sm"
           variant="link"
           className="h-7 text-xs"
+          data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
         >
           Manage
         </Button>
@@ -580,6 +581,7 @@ export function McpServerCard({
                 responseModifierTemplate: null,
                 credentialSourceMcpServerId: null,
                 executionSourceMcpServerId: null,
+                useDynamicTeamCredential: false,
                 tool: {
                   id: selectedToolForAssignment.id,
                   name: selectedToolForAssignment.name,

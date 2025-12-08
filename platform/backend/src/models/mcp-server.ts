@@ -377,6 +377,59 @@ class McpServerModel {
   }
 
   /**
+   * Find an MCP server by catalogId that has at least one matching team with the provided team IDs.
+   * Returns the first matching server with a secretId for credential resolution.
+   * Used for dynamic team-based credential resolution.
+   */
+  static async findByCatalogIdWithMatchingTeams(
+    catalogId: string,
+    teamIds: string[],
+  ): Promise<McpServer | null> {
+    if (teamIds.length === 0) {
+      return null;
+    }
+
+    // Find MCP servers with the matching catalog
+    const serversFromMatchingCatalogItem = await db
+      .select({
+        server: schema.mcpServersTable,
+      })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+
+    if (serversFromMatchingCatalogItem.length === 0) {
+      return null;
+    }
+
+    // Get unique server IDs
+    const serverIds = serversFromMatchingCatalogItem.map((r) => r.server.id);
+
+    // Get team details for all matching servers
+    const teamDetailsMap =
+      await McpServerTeamModel.getTeamDetailsForMcpServers(serverIds);
+
+    const teamIdsSet = new Set(teamIds);
+
+    // Find a server that has at least one matching team AND has a secretId
+    for (const serverRow of serversFromMatchingCatalogItem) {
+      const server = serverRow.server;
+      const serverTeams = teamDetailsMap.get(server.id) || [];
+      const hasMatchingTeam = serverTeams.some((t) => teamIdsSet.has(t.teamId));
+
+      if (hasMatchingTeam && server.secretId) {
+        // Found a matching server with credentials
+        return {
+          ...server,
+          teams: serverTeams.map((t) => t.teamId),
+          teamDetails: serverTeams,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(

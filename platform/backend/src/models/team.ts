@@ -9,6 +9,7 @@ import type {
   TeamMember,
   UpdateTeam,
 } from "@/types";
+import TeamTokenModel from "./team-token";
 
 class TeamModel {
   /**
@@ -36,6 +37,10 @@ class TeamModel {
         updatedAt: now,
       })
       .returning();
+
+    // Auto-create a team token
+    await TeamTokenModel.createTeamToken(teamId, input.name);
+    logger.debug({ teamId }, "TeamModel.create: created team token");
 
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {

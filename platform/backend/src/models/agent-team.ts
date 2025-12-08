@@ -142,6 +142,39 @@ class AgentTeamModel {
   }
 
   /**
+   * Get team details (id and name) for a specific agent
+   */
+  static async getTeamDetailsForAgent(
+    agentId: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    logger.debug(
+      { agentId },
+      "AgentTeamModel.getTeamDetailsForAgent: fetching team details",
+    );
+    const agentTeams = await db
+      .select({
+        teamId: schema.agentTeamsTable.teamId,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(eq(schema.agentTeamsTable.agentId, agentId));
+
+    const teams = agentTeams.map((at) => ({
+      id: at.teamId,
+      name: at.teamName,
+    }));
+    logger.debug(
+      { agentId, count: teams.length },
+      "AgentTeamModel.getTeamDetailsForAgent: completed",
+    );
+    return teams;
+  }
+
+  /**
    * Sync team assignments for an agent (replaces all existing assignments)
    */
   static async syncAgentTeams(
@@ -276,6 +309,57 @@ class AgentTeamModel {
     logger.debug(
       { agentCount: agentIds.length, assignmentCount: agentTeams.length },
       "AgentTeamModel.getTeamsForAgents: completed",
+    );
+    return teamsMap;
+  }
+
+  /**
+   * Get team details (id and name) for multiple agents in one query to avoid N+1
+   */
+  static async getTeamDetailsForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    logger.debug(
+      { agentCount: agentIds.length },
+      "AgentTeamModel.getTeamDetailsForAgents: fetching team details",
+    );
+    if (agentIds.length === 0) {
+      logger.debug(
+        "AgentTeamModel.getTeamDetailsForAgents: no agents provided",
+      );
+      return new Map();
+    }
+
+    const agentTeams = await db
+      .select({
+        agentId: schema.agentTeamsTable.agentId,
+        teamId: schema.agentTeamsTable.teamId,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.agentTeamsTable)
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.agentTeamsTable.teamId, schema.teamsTable.id),
+      )
+      .where(inArray(schema.agentTeamsTable.agentId, agentIds));
+
+    const teamsMap = new Map<string, Array<{ id: string; name: string }>>();
+
+    // Initialize all agent IDs with empty arrays
+    for (const agentId of agentIds) {
+      teamsMap.set(agentId, []);
+    }
+
+    // Populate the map with team details
+    for (const { agentId, teamId, teamName } of agentTeams) {
+      const teams = teamsMap.get(agentId) || [];
+      teams.push({ id: teamId, name: teamName });
+      teamsMap.set(agentId, teams);
+    }
+
+    logger.debug(
+      { agentCount: agentIds.length, assignmentCount: agentTeams.length },
+      "AgentTeamModel.getTeamDetailsForAgents: completed",
     );
     return teamsMap;
   }

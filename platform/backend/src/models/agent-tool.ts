@@ -249,6 +249,7 @@ class AgentToolModel {
     toolId: string,
     credentialSourceMcpServerId?: string | null,
     executionSourceMcpServerId?: string | null,
+    useDynamicTeamCredential?: boolean,
   ): Promise<{ status: "created" | "updated" | "unchanged" }> {
     // Check if assignment already exists
     const [existing] = await db
@@ -272,6 +273,7 @@ class AgentToolModel {
           | "responseModifierTemplate"
           | "credentialSourceMcpServerId"
           | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
@@ -283,6 +285,10 @@ class AgentToolModel {
         options.executionSourceMcpServerId = executionSourceMcpServerId;
       }
 
+      if (useDynamicTeamCredential !== undefined) {
+        options.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
+
       await AgentToolModel.create(agentId, toolId, options);
       return { status: "created" };
     }
@@ -292,22 +298,30 @@ class AgentToolModel {
       existing.credentialSourceMcpServerId !==
         (credentialSourceMcpServerId ?? null) ||
       existing.executionSourceMcpServerId !==
-        (executionSourceMcpServerId ?? null);
+        (executionSourceMcpServerId ?? null) ||
+      (useDynamicTeamCredential !== undefined &&
+        existing.useDynamicTeamCredential !== useDynamicTeamCredential);
 
     if (needsUpdate) {
       // Update credentials
       const updateData: Partial<
         Pick<
           UpdateAgentTool,
-          "credentialSourceMcpServerId" | "executionSourceMcpServerId"
+          | "credentialSourceMcpServerId"
+          | "executionSourceMcpServerId"
+          | "useDynamicTeamCredential"
         >
       > = {};
 
-      // Always set both fields to ensure they're updated correctly
+      // Always set credential fields to ensure they're updated correctly
       updateData.credentialSourceMcpServerId =
         credentialSourceMcpServerId ?? null;
       updateData.executionSourceMcpServerId =
         executionSourceMcpServerId ?? null;
+
+      if (useDynamicTeamCredential !== undefined) {
+        updateData.useDynamicTeamCredential = useDynamicTeamCredential;
+      }
 
       await AgentToolModel.update(existing.id, updateData);
       return { status: "updated" };

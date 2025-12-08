@@ -106,8 +106,8 @@ describe("AgentModel", () => {
         teams: [team.id],
       });
 
-      expect(agent.teams).toContain(team.id);
       expect(agent.teams).toHaveLength(1);
+      expect(agent.teams[0]).toMatchObject({ id: team.id, name: team.name });
     });
 
     test("admin can see all agents", async ({ makeAdmin }) => {
@@ -261,7 +261,7 @@ describe("AgentModel", () => {
       });
 
       expect(agent.teams).toHaveLength(1);
-      expect(agent.teams).toContain(team1.id);
+      expect(agent.teams[0]).toMatchObject({ id: team1.id, name: team1.name });
 
       // Update to only include team2
       const updatedAgent = await AgentModel.update(agent.id, {
@@ -269,8 +269,11 @@ describe("AgentModel", () => {
       });
 
       expect(updatedAgent?.teams).toHaveLength(1);
-      expect(updatedAgent?.teams).toContain(team2.id);
-      expect(updatedAgent?.teams).not.toContain(team1.id);
+      expect(updatedAgent?.teams[0]).toMatchObject({
+        id: team2.id,
+        name: team2.name,
+      });
+      expect(updatedAgent?.teams.some((t) => t.id === team1.id)).toBe(false);
     });
 
     test("update without teams keeps existing assignments", async ({

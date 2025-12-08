@@ -371,9 +371,7 @@ test.describe("SSO Role Mapping E2E", () => {
     await page.getByText("Role Mapping (Optional)").click();
 
     // Wait for accordion to expand - look for the Add Rule button
-    await expect(
-      page.getByRole("button", { name: "Add Rule" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add Rule" })).toBeVisible();
 
     // Add a rule to map archestra-admins group to admin role
     await page.getByRole("button", { name: "Add Rule" }).click();

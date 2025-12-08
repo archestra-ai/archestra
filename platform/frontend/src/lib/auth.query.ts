@@ -1,5 +1,7 @@
-import { archestraApiSdk, type Permissions } from "@shared";
+import { archestraApiSdk } from "@shared";
 import { useQuery } from "@tanstack/react-query";
+import { use } from "react";
+import config from "@/lib/config";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
@@ -28,118 +30,65 @@ export function useCurrentOrgMembers() {
     enabled: isAuthenticated,
   });
 }
-
-/**
- * Low-level query which fetches the dictionary of all user permissions.
- * Avoid using directly in components and use useHasPermissions instead.
- */
-function useAllPermissions() {
-  const isAuthenticated = useIsAuthenticated();
-
-  return useQuery({
-    queryKey: ["auth", "userPermissions"],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getUserPermissions();
-      return data;
-    },
-    retry: false,
-    throwOnError: false,
-    enabled: isAuthenticated,
-  });
-}
+type Permissions = Record<string, string[]>;
 
 /**
  * Checks user permissions, resolving to true or false.
  * Under the hood, fetches all user permissions and re-uses this permission cache.
+ *
+ * Free version: Always returns true (no RBAC enforcement)
+ * EE version: Performs actual permission checks
  */
-export function useHasPermissions(permissionsToCheck: Permissions) {
-  const { data: userPermissions, ...queryState } = useAllPermissions();
-
-  // Compute permission check result
-  const hasPermissionResult = (() => {
-    // If no permissions to check, allow access
-    if (!permissionsToCheck || Object.keys(permissionsToCheck).length === 0) {
-      return true;
-    }
-
-    // If permissions not loaded yet, deny access
-    if (!userPermissions) {
-      return false;
-    }
-
-    // Check if user has all required permissions
-    for (const [resource, actions] of Object.entries(permissionsToCheck)) {
-      const userActions = userPermissions[resource as keyof Permissions];
-      if (!userActions) {
-        return false;
-      }
-
-      for (const action of actions) {
-        if (!userActions.includes(action)) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  })();
-
-  return {
-    ...queryState,
-    data: hasPermissionResult,
-  };
+export function useHasPermissions(
+  permissionsToCheck: Permissions,
+) {
+  const { useHasPermissions } = use(
+    config.enterpriseLicenseActivated
+      // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
+      ? import("./auth.query.ee")
+      : Promise.resolve({
+          useHasPermissions: () => ({
+            data: true,
+            isLoading: false,
+            isError: false,
+            error: null,
+            isSuccess: true,
+            status: "success" as const,
+          }),
+        }),
+  );
+  return useHasPermissions(permissionsToCheck);
 }
 
 /**
  * Resolves the permission map with given keys and results of permission checks as values.
  * Use in cases where multiple useHasPermissions calls are impossible.
+ *
+ * Free version: Always returns true for all keys (no RBAC enforcement)
+ * EE version: Performs actual permission checks for each key
  */
 export function usePermissionMap<Key extends string>(
   map: Record<Key, Permissions>,
 ): Record<Key, boolean> {
-  const { data: userPermissions } = useAllPermissions();
-
-  const result = {} as Record<Key, boolean>;
-
-  for (const [key, requiredPermissions] of Object.entries(map) as [
-    Key,
-    Permissions,
-  ][]) {
-    // If no permissions required, allow access
-    if (!requiredPermissions || Object.keys(requiredPermissions).length === 0) {
-      result[key] = true;
-      continue;
-    }
-
-    // If permissions not loaded yet, deny access
-    if (!userPermissions) {
-      result[key] = false;
-      continue;
-    }
-
-    // Check if user has all required permissions
-    let hasAllPermissions = true;
-    for (const [resource, actions] of Object.entries(requiredPermissions)) {
-      const userActions = userPermissions[resource as keyof Permissions];
-      if (!userActions) {
-        hasAllPermissions = false;
-        break;
-      }
-
-      for (const action of actions) {
-        if (!userActions.includes(action)) {
-          hasAllPermissions = false;
-          break;
-        }
-      }
-
-      if (!hasAllPermissions) break;
-    }
-
-    result[key] = hasAllPermissions;
-  }
-
-  return result;
+  const { usePermissionMap } = use(
+    config.enterpriseLicenseActivated
+      // biome-ignore lint/style/noRestrictedImports: EE-only permission hook
+      ? import("./auth.query.ee")
+      : Promise.resolve({
+          usePermissionMap: <Key extends string>(
+            _map: Record<Key, Permissions>,
+          ): Record<Key, boolean> => {
+            return Object.keys(_map).reduce(
+              (acc, key) => {
+                acc[key] = true;
+                return acc;
+              },
+              {},
+            );
+          },
+        }),
+  );
+  return usePermissionMap(map);
 }
 
 export function useDefaultCredentialsEnabled() {

@@ -42,7 +42,7 @@ type McpToolWithServerMetadata = {
  */
 export type TokenAuthContext = {
   tokenId: string;
-  tokenTeamId: string | null;
+  teamId: string | null;
   isOrganizationToken: boolean;
   /** Optional user ID for user-owned server priority (set when called from chat) */
   userId?: string;
@@ -400,11 +400,11 @@ class McpClient {
     }
 
     // Priority 2: Server whose owner is a member of the token's team
-    if (tokenAuth.tokenTeamId) {
+    if (tokenAuth.teamId) {
       for (const server of allServers) {
         if (server.ownerId) {
           const ownerInTeam = await TeamModel.isUserInTeam(
-            tokenAuth.tokenTeamId,
+            tokenAuth.teamId,
             server.ownerId,
           );
           if (ownerInTeam) {
@@ -414,7 +414,7 @@ class McpClient {
                 catalogId: tool.catalogId,
                 serverId: server.id,
                 ownerId: server.ownerId,
-                teamId: tokenAuth.tokenTeamId,
+                teamId: tokenAuth.teamId,
               },
               `Dynamic resolution: using server owned by team member ${server.ownerId} of ${server.id} for tool ${toolCall.name}`,
             );
@@ -424,7 +424,7 @@ class McpClient {
       }
     }
 
-    // Priority 3: Otherwise, if organization-wide token is used, use first available server for this catalog item
+    // Priority 3: Otherwise, if organization-wide token is used, use first available server
     if (tokenAuth.isOrganizationToken && allServers.length > 0) {
       logger.info(
         {
@@ -440,8 +440,8 @@ class McpClient {
     // No server found, throw an error
     const context = tokenAuth.userId
       ? `user: ${tokenAuth.userId}`
-      : tokenAuth.tokenTeamId
-        ? `team: ${tokenAuth.tokenTeamId}`
+      : tokenAuth.teamId
+        ? `team: ${tokenAuth.teamId}`
         : "organization";
     return {
       error: await this.createErrorResult(

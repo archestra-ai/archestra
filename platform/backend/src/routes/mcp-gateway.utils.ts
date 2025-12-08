@@ -21,9 +21,10 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
-  isArchestraPrefixedProfileToken,
+  AgentTeamModel,
+  isArchestraPrefixedToken,
   McpToolCallModel,
-  ProfileTokenModel,
+  TeamTokenModel,
   ToolModel,
 } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
@@ -32,9 +33,8 @@ import { type CommonToolCall, UuidIdSchema } from "@/types";
  * Token authentication result
  */
 interface TokenAuthResult {
-  profileId: string;
   tokenId: string;
-  tokenTeamId: string | null;
+  teamId: string | null;
   isOrganizationToken: boolean;
 }
 
@@ -53,7 +53,7 @@ export interface SessionData {
   // Token auth info (only present for archestra_ token auth)
   tokenAuth?: {
     tokenId: string;
-    tokenTeamId: string | null;
+    teamId: string | null;
     isOrganizationToken: boolean;
   };
 }
@@ -321,7 +321,7 @@ export function extractProfileIdAndTokenFromRequest(
 
   // Check if it's a new archestra_ prefixed token
   // If it is, we know this is a new format: /mcp/v1/<profile_id>
-  if (isArchestraPrefixedProfileToken(token)) {
+  if (isArchestraPrefixedToken(token)) {
     const profileId = request.url.split("/").at(-1);
     try {
       const parsedProfileId = UuidIdSchema.parse(profileId);
@@ -343,20 +343,42 @@ export function extractProfileIdAndTokenFromRequest(
 /**
  * Validate an archestra_ prefixed token for a specific profile
  * Returns token auth info if valid, null otherwise
+ *
+ * Validates that:
+ * 1. The token is valid (exists and matches)
+ * 2. The profile is accessible via this token:
+ *    - Org token: profile must belong to the same organization
+ *    - Team token: profile must be assigned to that team
  */
-export async function validateProfileToken(
+export async function validateTeamToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
-  const token = await ProfileTokenModel.validateToken(profileId, tokenValue);
+  // Validate the token itself
+  const token = await TeamTokenModel.validateToken(tokenValue);
   if (!token) {
     return null;
   }
 
+  // Check if profile is accessible via this token
+  if (!token.isOrganizationToken) {
+    // Team token: profile must be assigned to this team
+    const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+    const hasAccess = token.teamId && profileTeamIds.includes(token.teamId);
+    if (!hasAccess) {
+      logger.warn(
+        { profileId, tokenTeamId: token.teamId },
+        "Profile not accessible via team token",
+      );
+      return null;
+    }
+  }
+  // Org token: any profile in the organization is accessible
+  // (organization membership is verified in the route handler)
+
   return {
-    profileId,
     tokenId: token.id,
-    tokenTeamId: token.teamId,
+    teamId: token.teamId,
     isOrganizationToken: token.isOrganizationToken,
   };
 }

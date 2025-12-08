@@ -1,5 +1,6 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { vi } from "vitest";
+import { TeamTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
 
@@ -22,7 +23,8 @@ describe("chat-mcp-client tool caching", () => {
     // Add user to team as a member
     await makeTeamMember(team.id, user.id);
 
-    // Note: AgentModel.create automatically creates team tokens when teams are provided
+    // Create team token for the team
+    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
 

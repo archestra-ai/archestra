@@ -8,7 +8,7 @@ import { z } from "zod";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { McpToolCallModel, ProfileTokenModel } from "@/models";
+import { McpToolCallModel, TeamTokenModel } from "@/models";
 import { UuidIdSchema } from "@/types";
 import {
   activeSessions,
@@ -16,7 +16,7 @@ import {
   createAgentServer,
   createTransport,
   extractProfileIdAndTokenFromRequest,
-  validateProfileToken,
+  validateTeamToken,
 } from "./mcp-gateway.utils";
 
 // =============================================================================
@@ -356,7 +356,7 @@ export const legacyMcpGatewayRoutes: FastifyPluginAsyncZod = async (
   );
 
   // POST endpoint for JSON-RPC requests (handled by MCP SDK)
-  // Legacy auth: Uses profile ID as bearer token, looks up Organization Token for dynamic credentials
+  // Legacy auth: Uses profile ID as bearer token
   fastify.post(
     endpoint,
     {
@@ -381,12 +381,11 @@ export const legacyMcpGatewayRoutes: FastifyPluginAsyncZod = async (
         };
       }
 
-      // Lookup Organization Token to support dynamic credentials with legacy auth
-      const orgToken = await ProfileTokenModel.findOrganizationToken(profileId);
+      const orgToken = await TeamTokenModel.findOrganizationToken();
       const tokenAuthContext: TokenAuthContext | undefined = orgToken
         ? {
             tokenId: orgToken.id,
-            tokenTeamId: null,
+            teamId: null,
             isOrganizationToken: true,
           }
         : undefined;
@@ -465,8 +464,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             tokenAuth: z
               .object({
                 tokenId: z.string(),
+                teamId: z.string().nullable(),
                 isOrganizationToken: z.boolean(),
-                hasTeam: z.boolean(),
               })
               .optional(),
           }),
@@ -490,7 +489,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateProfileToken(profileId, token);
+      const tokenAuth = await validateTeamToken(profileId, token);
 
       reply.type("application/json");
       return {
@@ -504,8 +503,8 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth && {
           tokenAuth: {
             tokenId: tokenAuth.tokenId,
+            teamId: tokenAuth.teamId,
             isOrganizationToken: tokenAuth.isOrganizationToken,
-            hasTeam: tokenAuth.tokenTeamId !== null,
           },
         }),
       };
@@ -542,7 +541,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateProfileToken(profileId, token);
+      const tokenAuth = await validateTeamToken(profileId, token);
       if (!tokenAuth) {
         reply.status(401);
         return {
@@ -557,7 +556,7 @@ export const newMcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tokenAuthContext: TokenAuthContext = {
         tokenId: tokenAuth.tokenId,
-        tokenTeamId: tokenAuth.tokenTeamId,
+        teamId: tokenAuth.teamId,
         isOrganizationToken: tokenAuth.isOrganizationToken,
       };
 

@@ -7,9 +7,9 @@ import {
   InternalMcpCatalogModel,
   MemberModel,
   OrganizationModel,
-  ProfileTokenModel,
   PromptModel,
   TeamModel,
+  TeamTokenModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -507,50 +507,29 @@ server.connect(transport);
 }
 
 /**
- * Creates profile tokens for existing profiles and team assignments
- * - Creates "Organization Token" for profiles missing one
- * - Creates team tokens for profile-team assignments missing one
+ * Creates team tokens for existing teams and organization
+ * - Creates "Organization Token" if missing
+ * - Creates team tokens for each team if missing
  */
-async function seedProfileTokens(): Promise<void> {
-  const allProfiles = await AgentModel.findAll();
+async function seedTeamTokens(): Promise<void> {
+  // Get the default organization
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
 
-  for (const profile of allProfiles) {
-    const tokens = await ProfileTokenModel.findByProfileId(profile.id);
+  // Ensure organization token exists
+  const orgToken = await TeamTokenModel.ensureOrganizationToken();
+  logger.info(
+    { organizationId: org.id, tokenId: orgToken.id },
+    "Ensured organization token exists",
+  );
 
-    // Check for Organization Token
-    const hasOrgToken = tokens.some((t) => t.isOrganizationToken);
-    if (!hasOrgToken) {
-      await ProfileTokenModel.createDefaultToken(profile.id);
-      logger.info(
-        { profileId: profile.id, profileName: profile.name },
-        "Created missing Organization Token",
-      );
-    }
-
-    // Check for team tokens
-    const teams = await AgentTeamModel.getTeamsForAgent(profile.id);
-    for (const teamId of teams) {
-      const hasTeamToken = tokens.some((t) => t.teamId === teamId);
-      if (!hasTeamToken) {
-        const team = await TeamModel.findById(teamId);
-        if (team) {
-          await ProfileTokenModel.createTeamToken(
-            profile.id,
-            teamId,
-            team.name,
-          );
-          logger.info(
-            {
-              profileId: profile.id,
-              profileName: profile.name,
-              teamId,
-              teamName: team.name,
-            },
-            "Created missing team token",
-          );
-        }
-      }
-    }
+  // Get all teams for this organization and ensure they have tokens
+  const teams = await TeamModel.findByOrganization(org.id);
+  for (const team of teams) {
+    const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
+    logger.info(
+      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
+      "Ensured team token exists",
+    );
   }
 }
 
@@ -564,5 +543,5 @@ export async function seedRequiredStartingData(): Promise<void> {
   await seedDefaultRegularPrompts();
   await seedArchestraTools();
   await seedTestMcpServer();
-  await seedProfileTokens();
+  await seedTeamTokens();
 }

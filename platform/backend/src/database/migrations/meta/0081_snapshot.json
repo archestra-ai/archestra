@@ -2532,8 +2532,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.profile_token": {
-      "name": "profile_token",
+    "public.team_token": {
+      "name": "team_token",
       "schema": "",
       "columns": {
         "id": {
@@ -2543,11 +2543,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -2567,19 +2573,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "is_organization_token": {
-          "name": "is_organization_token",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2595,11 +2588,11 @@
         }
       },
       "indexes": {
-        "idx_profile_token_profile_id": {
-          "name": "idx_profile_token_profile_id",
+        "idx_team_token_org_id": {
+          "name": "idx_team_token_org_id",
           "columns": [
             {
-              "expression": "profile_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2610,23 +2603,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_profile_token_secret_id": {
-          "name": "idx_profile_token_secret_id",
-          "columns": [
-            {
-              "expression": "secret_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_profile_token_team_id": {
-          "name": "idx_profile_token_team_id",
+        "idx_team_token_team_id": {
+          "name": "idx_team_token_team_id",
           "columns": [
             {
               "expression": "team_id",
@@ -2642,12 +2620,12 @@
         }
       },
       "foreignKeys": {
-        "profile_token_profile_id_agents_id_fk": {
-          "name": "profile_token_profile_id_agents_id_fk",
-          "tableFrom": "profile_token",
-          "tableTo": "agents",
+        "team_token_organization_id_organization_id_fk": {
+          "name": "team_token_organization_id_organization_id_fk",
+          "tableFrom": "team_token",
+          "tableTo": "organization",
           "columnsFrom": [
-            "profile_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -2655,25 +2633,25 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "profile_token_secret_id_secret_id_fk": {
-          "name": "profile_token_secret_id_secret_id_fk",
-          "tableFrom": "profile_token",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "profile_token_team_id_team_id_fk": {
-          "name": "profile_token_team_id_team_id_fk",
-          "tableFrom": "profile_token",
+        "team_token_team_id_team_id_fk": {
+          "name": "team_token_team_id_team_id_fk",
+          "tableFrom": "team_token",
           "tableTo": "team",
           "columnsFrom": [
             "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_token_secret_id_secret_id_fk": {
+          "name": "team_token_secret_id_secret_id_fk",
+          "tableFrom": "team_token",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -2684,12 +2662,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "profile_token_profile_id_name_unique": {
-          "name": "profile_token_profile_id_name_unique",
+        "team_token_organization_id_team_id_unique": {
+          "name": "team_token_organization_id_team_id_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "profile_id",
-            "name"
+            "organization_id",
+            "team_id"
           ]
         }
       },

@@ -5,7 +5,6 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
-import { ProfileTokenManager } from "@/components/profile-token-manager";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -16,7 +15,8 @@ import {
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth.query";
 import config from "@/lib/config";
-import { useProfileTokens } from "@/lib/profile-token.query";
+import { useTokens } from "@/lib/team-token.query";
+import { WithPermissions } from "./roles/with-permissions";
 
 const { displayProxyUrl: apiBaseUrl } = config.api;
 
@@ -27,10 +27,10 @@ interface McpConnectionInstructionsProps {
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
+  const { data: tokens } = useTokens();
   const { data: hasProfileAdminPermission } = useHasPermissions({
     profile: ["admin"],
   });
-  const { data: tokens } = useProfileTokens(agentId, hasProfileAdminPermission);
 
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedAuth, setCopiedAuth] = useState(false);
@@ -50,9 +50,10 @@ export function McpConnectionInstructions({
     ? tokens?.find((t) => t.id === selectedTokenId)
     : defaultToken;
 
-  const tokenForDisplay = selectedToken?.tokenStart
-    ? `${selectedToken.tokenStart}...`
-    : "ask-admin-for-access-token";
+  const tokenForDisplay =
+    hasProfileAdminPermission && selectedToken
+      ? `${selectedToken.tokenStart}...`
+      : "ask-admin-for-access-token";
 
   const mcpConfig = useMemo(
     () =>
@@ -80,43 +81,43 @@ export function McpConnectionInstructions({
     setTimeout(() => setCopiedUrl(false), 2000);
   }, [mcpUrl]);
 
-  const handleCopyAuthAsNonProfileAdmin = async () => {
+  const handleCopyAuthWithoutRealToken = async () => {
     await navigator.clipboard.writeText(
       `Authorization: Bearer ${tokenForDisplay}`,
     );
     setCopiedAuth(true);
-    toast.success("Authorization header copied");
+    toast.success("Authorization header copied (preview only)");
     setTimeout(() => setCopiedAuth(false), 2000);
   };
 
-  const handleCopyAuthAsProfileAdmin = useCallback(async () => {
-    if (!selectedToken) {
-      toast.error("No token selected");
-      return;
-    }
+  const handleCopyAuthAsUserWithProfileAdminPermission =
+    useCallback(async () => {
+      try {
+        if (!selectedToken) {
+          return;
+        }
 
-    try {
-      // Fetch the full token value from backend
-      const response = await archestraApiSdk.getProfileTokenValue({
-        path: { profileId: agentId, tokenId: selectedToken.id },
-      });
+        // Fetch the full token value from backend
+        const response = await archestraApiSdk.getTokenValue({
+          path: { tokenId: selectedToken.id },
+        });
 
-      if (response.error || !response.data) {
-        throw new Error("Failed to fetch token value");
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch token value");
+        }
+
+        await navigator.clipboard.writeText(
+          `Authorization: Bearer ${(response.data as { value: string }).value}`,
+        );
+        setCopiedAuth(true);
+        toast.success("Authorization header copied");
+        setTimeout(() => setCopiedAuth(false), 2000);
+      } catch {
+        toast.error("Failed to copy authorization header");
       }
+    }, [selectedToken]);
 
-      await navigator.clipboard.writeText(
-        `Authorization: Bearer ${response.data.value}`,
-      );
-      setCopiedAuth(true);
-      toast.success("Authorization header copied");
-      setTimeout(() => setCopiedAuth(false), 2000);
-    } catch {
-      toast.error("Failed to copy authorization header");
-    }
-  }, [agentId, selectedToken]);
-
-  const handleCopyConfigAsNonProfileAdmin = async () => {
+  const handleCopyConfigWithoutRealToken = async () => {
     const fullConfig = JSON.stringify(
       {
         mcpServers: {
@@ -134,57 +135,55 @@ export function McpConnectionInstructions({
 
     await navigator.clipboard.writeText(fullConfig);
     setCopiedConfig(true);
-    toast.success("Configuration copied");
+    toast.success("Configuration copied (preview only)");
     setTimeout(() => setCopiedConfig(false), 2000);
   };
 
-  const handleCopyConfigAsProfileAdmin = useCallback(async () => {
-    if (!selectedToken) {
-      toast.error("No token selected");
-      return;
-    }
-
-    setIsCopyingConfig(true);
-    try {
-      // Fetch the full token value from backend
-      const response = await archestraApiSdk.getProfileTokenValue({
-        path: { profileId: agentId, tokenId: selectedToken.id },
-      });
-
-      if (response.error || !response.data) {
-        throw new Error("Failed to fetch token value");
+  const handleCopyConfigAsUserWithProfileAdminPermission =
+    useCallback(async () => {
+      if (!selectedToken) {
+        return;
       }
 
-      const fullConfig = JSON.stringify(
-        {
-          mcpServers: {
-            archestra: {
-              url: mcpUrl,
-              headers: {
-                Authorization: `Bearer ${response.data.value}`,
+      setIsCopyingConfig(true);
+      try {
+        // Fetch the full token value from backend
+        const response = await archestraApiSdk.getTokenValue({
+          path: { tokenId: selectedToken.id },
+        });
+
+        if (response.error || !response.data) {
+          throw new Error("Failed to fetch token value");
+        }
+
+        const fullConfig = JSON.stringify(
+          {
+            mcpServers: {
+              archestra: {
+                url: mcpUrl,
+                headers: {
+                  Authorization: `Bearer ${(response.data as { value: string }).value}`,
+                },
               },
             },
           },
-        },
-        null,
-        2,
-      );
+          null,
+          2,
+        );
 
-      await navigator.clipboard.writeText(fullConfig);
-      setCopiedConfig(true);
-      toast.success("Configuration copied");
-      setTimeout(() => setCopiedConfig(false), 2000);
-    } catch {
-      toast.error("Failed to copy configuration");
-    } finally {
-      setIsCopyingConfig(false);
-    }
-  }, [agentId, mcpUrl, selectedToken]);
+        await navigator.clipboard.writeText(fullConfig);
+        setCopiedConfig(true);
+        toast.success("Configuration copied");
+        setTimeout(() => setCopiedConfig(false), 2000);
+      } catch {
+        toast.error("Failed to copy configuration");
+      } finally {
+        setIsCopyingConfig(false);
+      }
+    }, [mcpUrl, selectedToken]);
 
   return (
     <div className="space-y-6">
-      <ProfileTokenManager profileId={agentId} />
-
       <div className="space-y-3">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">MCP Gateway URL:</p>
@@ -201,32 +200,37 @@ export function McpConnectionInstructions({
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Authorization Header:
-            </p>
-            {tokens && tokens.length > 0 && (
-              <Select
-                value={selectedTokenId ?? defaultToken?.id ?? ""}
-                onValueChange={setSelectedTokenId}
-              >
-                <SelectTrigger className="w-[200px] h-8">
-                  <SelectValue placeholder="Select token" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tokens.map((token) => (
-                    <SelectItem key={token.id} value={token.id}>
-                      {token.isOrganizationToken
-                        ? "Organization Token"
-                        : token.team?.name
-                          ? `${token.team.name} Token`
-                          : token.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+          <WithPermissions
+            permissions={{ profile: ["admin"] }}
+            noPermissionHandle="hide"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Which token to connect with:
+              </p>
+              {tokens && tokens.length > 0 && (
+                <Select
+                  value={selectedTokenId ?? defaultToken?.id ?? ""}
+                  onValueChange={setSelectedTokenId}
+                >
+                  <SelectTrigger className="w-[200px] h-8">
+                    <SelectValue placeholder="Select token" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tokens.map((token) => (
+                      <SelectItem key={token.id} value={token.id}>
+                        {token.isOrganizationToken
+                          ? "Organization Token"
+                          : token.team?.name
+                            ? `${token.team.name} Token`
+                            : token.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </WithPermissions>
           <div className="bg-muted rounded-md p-3 flex items-center justify-between">
             <CodeText className="text-sm break-all">
               Authorization: Bearer {tokenForDisplay}
@@ -236,8 +240,8 @@ export function McpConnectionInstructions({
               size="icon"
               onClick={
                 hasProfileAdminPermission
-                  ? handleCopyAuthAsProfileAdmin
-                  : handleCopyAuthAsNonProfileAdmin
+                  ? handleCopyAuthAsUserWithProfileAdminPermission
+                  : handleCopyAuthWithoutRealToken
               }
             >
               {copiedAuth ? (
@@ -247,9 +251,15 @@ export function McpConnectionInstructions({
               )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Select a token above, then click Copy to get the full token value.
-          </p>
+          <WithPermissions
+            permissions={{ profile: ["admin"] }}
+            noPermissionHandle="hide"
+          >
+            <p className="text-xs text-muted-foreground">
+              Select a token above, then click Copy to get the full token value.
+              Manage tokens in Settings → Teams.
+            </p>
+          </WithPermissions>
         </div>
 
         <div className="space-y-2">
@@ -269,8 +279,8 @@ export function McpConnectionInstructions({
               className="absolute top-2 right-2"
               onClick={
                 hasProfileAdminPermission
-                  ? handleCopyConfigAsProfileAdmin
-                  : handleCopyConfigAsNonProfileAdmin
+                  ? handleCopyConfigAsUserWithProfileAdminPermission
+                  : handleCopyConfigWithoutRealToken
               }
               disabled={isCopyingConfig}
             >

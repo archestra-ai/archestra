@@ -26,8 +26,6 @@ import type {
 } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
-import ProfileTokenModel from "./profile-token";
-import TeamModel from "./team";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -53,23 +51,6 @@ class AgentModel {
 
     // Assign Archestra built-in tools to the agent
     await ToolModel.assignArchestraToolsToAgent(createdAgent.id);
-
-    // Create default token for MCP Gateway authentication
-    await ProfileTokenModel.createDefaultToken(createdAgent.id);
-
-    // Create team tokens for each assigned team
-    if (teams && teams.length > 0) {
-      for (const teamId of teams) {
-        const team = await TeamModel.findById(teamId);
-        if (team) {
-          await ProfileTokenModel.createTeamToken(
-            createdAgent.id,
-            teamId,
-            team.name,
-          );
-        }
-      }
-    }
 
     // Get team details for the created agent
     const teamDetails =
@@ -512,30 +493,7 @@ class AgentModel {
 
     // Sync team assignments if teams is provided
     if (teams !== undefined) {
-      // Get current teams before sync to detect changes
-      const previousTeams = await AgentTeamModel.getTeamsForAgent(id);
-      const previousTeamSet = new Set(previousTeams);
-      const newTeamSet = new Set(teams);
-
       await AgentTeamModel.syncAgentTeams(id, teams);
-
-      // Create tokens for newly assigned teams
-      const addedTeams = teams.filter((teamId) => !previousTeamSet.has(teamId));
-      for (const teamId of addedTeams) {
-        // Get team name for the token
-        const team = await TeamModel.findById(teamId);
-        if (team) {
-          await ProfileTokenModel.createTeamToken(id, teamId, team.name);
-        }
-      }
-
-      // Delete tokens for removed teams
-      const removedTeams = previousTeams.filter(
-        (teamId) => !newTeamSet.has(teamId),
-      );
-      if (removedTeams.length > 0) {
-        await ProfileTokenModel.deleteTeamTokens(id, removedTeams);
-      }
     }
 
     // Sync label assignments if labels is provided

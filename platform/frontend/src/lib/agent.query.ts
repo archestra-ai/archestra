@@ -5,6 +5,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { DEFAULT_AGENTS_PAGE_SIZE } from "./utils";
 
 const {
   createAgent,
@@ -55,7 +56,7 @@ export function useProfilesPaginated(params?: {
     (sortBy === undefined || sortBy === "createdAt") &&
     (sortDirection === undefined || sortDirection === "desc") &&
     name === undefined &&
-    (limit === undefined || limit === 20);
+    (limit === undefined || limit === DEFAULT_AGENTS_PAGE_SIZE);
 
   return useSuspenseQuery({
     queryKey: ["agents", { limit, offset, sortBy, sortDirection, name }],

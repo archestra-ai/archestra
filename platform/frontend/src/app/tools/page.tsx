@@ -5,6 +5,10 @@ import {
 } from "@shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
+import {
+  transformToolInvocationPolicies,
+  transformToolResultPolicies,
+} from "@/lib/policy.utils";
 import { getServerApiHeaders } from "@/lib/server-utils";
 import { ToolsClient } from "./page.client";
 
@@ -17,6 +21,8 @@ export type ToolsInitialData = {
   agents: archestraApiTypes.GetAllAgentsResponses["200"];
   mcpServers: archestraApiTypes.GetMcpServersResponses["200"];
   internalMcpCatalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  toolInvocationPolicies: ReturnType<typeof transformToolInvocationPolicies>;
+  toolResultPolicies: ReturnType<typeof transformToolResultPolicies>;
 };
 
 export default async function ToolsPage() {
@@ -35,6 +41,8 @@ export default async function ToolsPage() {
     agents: [],
     mcpServers: [],
     internalMcpCatalog: [],
+    toolInvocationPolicies: { all: [], byProfileToolId: {} },
+    toolResultPolicies: { all: [], byProfileToolId: {} },
   };
   try {
     const headers = await getServerApiHeaders();
@@ -56,6 +64,13 @@ export default async function ToolsPage() {
       mcpServers: (await archestraApiSdk.getMcpServers({ headers })).data || [],
       internalMcpCatalog:
         (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
+      toolInvocationPolicies: transformToolInvocationPolicies(
+        (await archestraApiSdk.getToolInvocationPolicies({ headers })).data ||
+          [],
+      ),
+      toolResultPolicies: transformToolResultPolicies(
+        (await archestraApiSdk.getTrustedDataPolicies({ headers })).data || [],
+      ),
     };
   } catch (error) {
     console.error(error);

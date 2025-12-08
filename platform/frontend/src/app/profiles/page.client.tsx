@@ -61,7 +61,7 @@ import {
   useProfilesPaginated,
   useUpdateProfile,
 } from "@/lib/agent.query";
-import { formatDate } from "@/lib/utils";
+import { DEFAULT_AGENTS_PAGE_SIZE, formatDate } from "@/lib/utils";
 import { ProfileActions } from "./agent-actions";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 // Removed ChatConfigDialog - chat configuration is now managed in /chat via Prompt Library
@@ -176,7 +176,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     | null;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || "20");
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_AGENTS_PAGE_SIZE);
   const offset = pageIndex * pageSize;
 
   // Default sorting
@@ -220,7 +220,7 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     name: string;
   } | null>(null);
   const [assigningToolsProfile, setAssigningToolsProfile] = useState<
-    (typeof agents)[number] | null
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number] | null
   >(null);
   const [editingProfile, setEditingProfile] = useState<{
     id: string;
@@ -233,7 +233,8 @@ function Profiles({ initialData }: { initialData?: ProfilesInitialData }) {
     null,
   );
 
-  type ProfileData = (typeof agents)[number];
+  type ProfileData =
+    archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   // Update URL when search query changes
   const handleSearchChange = useCallback(

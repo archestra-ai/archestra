@@ -53,6 +53,7 @@ import {
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { isMcpTool } from "@/lib/tool.utils";
+import { DEFAULT_TOOLS_PAGE_SIZE } from "@/lib/utils";
 import type { ToolsInitialData } from "../page";
 
 type GetAllProfileToolsQueryParams = NonNullable<
@@ -95,8 +96,12 @@ export function AssignedToolsTable({
   const agentToolPatchMutation = useProfileToolPatchMutation();
   const bulkUpdateMutation = useBulkUpdateProfileTools();
   const unassignToolMutation = useUnassignTool();
-  const { data: invocationPolicies } = useToolInvocationPolicies();
-  const { data: resultPolicies } = useToolResultPolicies();
+  const { data: invocationPolicies } = useToolInvocationPolicies(
+    initialData?.toolInvocationPolicies,
+  );
+  const { data: resultPolicies } = useToolResultPolicies(
+    initialData?.toolResultPolicies,
+  );
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
   });
@@ -124,7 +129,7 @@ export function AssignedToolsTable({
   ) as ProfileToolsSortDirectionValues;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || "50");
+  const pageSize = Number(pageSizeFromUrl || DEFAULT_TOOLS_PAGE_SIZE);
 
   // State
   const [searchQuery, setSearchQuery] = useState(searchFromUrl || "");
@@ -150,7 +155,7 @@ export function AssignedToolsTable({
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
     pageIndex === 0 &&
-    pageSize === 50 &&
+    pageSize === DEFAULT_TOOLS_PAGE_SIZE &&
     !searchQuery &&
     agentFilter === "all" &&
     originFilter === "all" &&
